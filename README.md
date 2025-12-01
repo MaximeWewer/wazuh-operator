@@ -578,7 +578,7 @@ kubectl apply -f config/samples/wazuh_v1alpha1_wazuhcluster.yaml
 
 ## Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+We welcome contributions! Please see [CONTRIBUTING.md](docs\dev\contributing\CONTRIBUTING.md) for details.
 
 ## Comparison with Helm Chart
 
