@@ -1,0 +1,46 @@
+name: 'Setup Go Environment'
+description: 'Setup Go with caching for Wazuh Operator builds'
+inputs:
+  go-version:
+    description: 'Go version to use'
+    required: false
+    default: '1.25.x'
+  cache-dependency-path:
+    description: 'Path to go.sum for cache key'
+    required: false
+    default: 'go.sum'
+
+runs:
+  using: 'composite'
+  steps:
+  - name: Setup Go
+    uses: actions/setup-go@v5
+    with:
+      go-version: ${{ inputs.go-version }}
+      cache: true
+      cache-dependency-path: ${{ inputs.cache-dependency-path }}
+
+  - name: Cache Go build cache
+    uses: actions/cache@v4
+    with:
+      path: |
+        ~/.cache/go-build
+        ~/go/pkg/mod
+      key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}
+      restore-keys: |
+        ${{ runner.os }}-go-build-
+
+  - name: Display Go version
+    shell: bash
+    run: go version
+
+  - name: Display Go environment
+    shell: bash
+    run: |
+      echo "GOPATH: $(go env GOPATH)"
+      echo "GOCACHE: $(go env GOCACHE)"
+      echo "GOMODCACHE: $(go env GOMODCACHE)"
+
+  - name: Download dependencies
+    shell: bash
+    run: go mod download

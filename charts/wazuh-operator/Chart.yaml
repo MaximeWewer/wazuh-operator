@@ -7,7 +7,7 @@ type: application
 version: 1.0.0
 
 # Version of the application being deployed
-appVersion: "v1.0.19"
+appVersion: "v1.0.0"
 
 keywords:
   - wazuh
@@ -16,15 +16,14 @@ keywords:
   - operator
   - kubernetes
 
-home: https://github.com/wazuh/wazuh-kubernetes
+home: https://github.com/MaximeWewer/wazuh-operator
 sources:
   - https://github.com/wazuh/wazuh-kubernetes
 
 maintainers:
-  - name: Wazuh Team
-    email: hello@wazuh.com
+  - name: Maxime Wewer
 
-icon: https://wazuh.com/assets/wazuh-logo.svg
+icon: https://wazuh.com/brand-assets/Wazuh-Logo.svg
 
 annotations:
   # Recommended minimum Kubernetes version
@@ -45,7 +44,7 @@ annotations:
   # Screenshots for artifact hub
   artifacthub.io/screenshots: |
     - title: Wazuh Dashboard
-      url: https://wazuh.com/uploads/2023/01/dashboard.png
+      url: https://wazuh.com/wp-content/themes/wazuh-v3/assets/images/home/siem-dashboard.png
 
   # Links
   artifacthub.io/links: |
