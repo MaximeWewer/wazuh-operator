@@ -1,0 +1,189 @@
+# Production-ready WazuhCluster with all configuration options
+# Demonstrates: complete configuration for production deployment
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhCluster
+metadata:
+  name: wazuh-production
+  namespace: wazuh
+  labels:
+    environment: production
+spec:
+  version: "4.9.0"
+
+  manager:
+    # Filebeat SSL verification mode
+    filebeatSSLVerificationMode: "full"  # Options: full, certificate, none
+
+    # API credentials for Wazuh API
+    apiCredentials:
+      secretName: wazuh-api-creds
+      usernameKey: username
+      passwordKey: password
+
+    # OSSEC configuration
+    config:
+      global:
+        jsonoutOutput: true
+        alertsLog: true
+        logAll: false
+        logAllJson: true      # Enable JSON logging for all events
+        emailNotification: true
+        smtpServer: "smtp.internal.company.com"
+        emailFrom: "wazuh@company.com"
+        emailTo: "soc@company.com"
+        emailMaxPerHour: 50
+        agentsDisconnectionTime: "5m"
+        agentsDisconnectionAlertTime: "1h"
+
+      alerts:
+        logAlertLevel: 3
+        emailAlertLevel: 8    # Alert SOC for level 8+
+
+      logging:
+        logFormat: "plain,json"  # Both formats
+
+      remote:
+        connection: "secure"
+        port: 1514
+        protocol: "tcp"
+        queueSize: 262144     # Larger queue for production
+
+      auth:
+        disabled: false
+        port: 1515
+        useSourceIP: true     # Track agent source IPs
+        purge: false          # Don't auto-purge old agents
+        usePassword: true
+        passwordSecretRef:
+          name: wazuh-authd-secret
+          key: enrollment-password
+        enabledOnMasterOnly: true
+        ciphers: "HIGH:!ADH:!EXP:!MD5:!RC4:!3DES:!CAMELLIA:@STRENGTH"
+        sslVerifyHost: true
+
+    master:
+      storageSize: "100Gi"
+      resources:
+        requests:
+          memory: "2Gi"
+          cpu: "1000m"
+        limits:
+          memory: "4Gi"
+          cpu: "2000m"
+      nodeSelector:
+        node-role.kubernetes.io/wazuh: "true"
+      extraConfig: |
+        <vulnerability-detector>
+          <enabled>yes</enabled>
+          <interval>5m</interval>
+        </vulnerability-detector>
+        <sca>
+          <enabled>yes</enabled>
+          <scan_on_start>yes</scan_on_start>
+          <interval>12h</interval>
+        </sca>
+
+    workers:
+      replicas: 3
+      storageSize: "100Gi"
+      resources:
+        requests:
+          memory: "2Gi"
+          cpu: "1000m"
+        limits:
+          memory: "4Gi"
+          cpu: "2000m"
+      nodeSelector:
+        node-role.kubernetes.io/wazuh: "true"
+      podDisruptionBudget:
+        enabled: true
+        minAvailable: 2
+      extraConfig: |
+        <localfile>
+          <log_format>json</log_format>
+          <location>/var/log/containers/*.log</location>
+        </localfile>
+
+    # Log rotation - cleans up old alert/archive logs via CronJob
+    logRotation:
+      enabled: true
+      schedule: "0 0 * * 0"      # Weekly on Sunday at midnight
+      retentionDays: 30          # Keep logs for 30 days
+      maxFileSizeMB: 500         # Also delete files > 500MB
+      combinationMode: "or"      # Delete if old OR large
+      paths:
+        - /var/ossec/logs/alerts/
+        - /var/ossec/logs/archives/
+
+  indexer:
+    replicas: 3
+    storageSize: "500Gi"
+    javaOpts: "-Xms4g -Xmx4g -Dlog4j2.formatMsgNoLookups=true"
+    resources:
+      requests:
+        memory: "8Gi"
+        cpu: "2000m"
+      limits:
+        memory: "16Gi"
+        cpu: "4000m"
+    credentials:
+      secretName: wazuh-indexer-creds
+      usernameKey: username
+      passwordKey: password
+    nodeSelector:
+      node-role.kubernetes.io/wazuh: "true"
+    podDisruptionBudget:
+      enabled: true
+      minAvailable: 2
+
+  dashboard:
+    replicas: 2
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+    ingress:
+      enabled: true
+      ingressClassName: "nginx"
+      hosts:
+        - host: wazuh.company.com
+          paths:
+            - path: /
+              pathType: Prefix
+      tls:
+        - secretName: wazuh-tls
+          hosts:
+            - wazuh.company.com
+---
+# Secrets for production deployment
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wazuh-api-creds
+  namespace: wazuh
+type: Opaque
+stringData:
+  username: "wazuh-wui"
+  password: "GenerateSecurePassword1!"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wazuh-authd-secret
+  namespace: wazuh
+type: Opaque
+stringData:
+  enrollment-password: "AgentEnrollmentSecretKey2024!"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: wazuh-indexer-creds
+  namespace: wazuh
+type: Opaque
+stringData:
+  username: "admin"
+  password: "IndexerAdminSecurePass!"

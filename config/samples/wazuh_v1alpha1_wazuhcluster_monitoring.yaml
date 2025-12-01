@@ -1,0 +1,136 @@
+# WazuhCluster with Prometheus monitoring enabled
+# Requires: Prometheus Operator (ServiceMonitor CRD)
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhCluster
+metadata:
+  name: wazuh-monitored
+  namespace: wazuh
+  labels:
+    prometheus: enabled
+spec:
+  version: "4.9.2"
+
+  # ==========================================================================
+  # Monitoring Configuration
+  # ==========================================================================
+  monitoring:
+    # Enable monitoring (required)
+    enabled: true
+
+    # -------------------------------------------------------------------------
+    # Wazuh Prometheus Exporter (sidecar on manager)
+    # Exposes Wazuh API metrics at /metrics
+    # -------------------------------------------------------------------------
+    wazuhExporter:
+      enabled: true
+      # Docker image for the exporter
+      image: "pytoshka/wazuh-prometheus-exporter:latest"
+      # Port for metrics endpoint
+      port: 9090
+      # Wazuh API protocol
+      apiProtocol: "https"
+      # Verify SSL certificates (set to false for self-signed)
+      apiVerifySSL: false
+      # Log level: DEBUG, INFO, WARNING, ERROR
+      logLevel: "INFO"
+      # Skip specific metrics for performance
+      skipLastLogs: false
+      skipLastRegisteredAgent: false
+      skipWazuhAPIInfo: false
+      # Resource limits
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+
+    # -------------------------------------------------------------------------
+    # OpenSearch Prometheus Plugin (indexer metrics)
+    # Installs prometheus-exporter-plugin-for-opensearch
+    # -------------------------------------------------------------------------
+    indexerExporter:
+      enabled: true
+      # Plugin version (auto-detected from Wazuh version if not specified)
+      # version: "2.13.0.0"
+
+    # -------------------------------------------------------------------------
+    # ServiceMonitor Configuration
+    # Creates Prometheus Operator ServiceMonitor resources
+    # -------------------------------------------------------------------------
+    serviceMonitor:
+      enabled: true
+      # Labels to add to ServiceMonitor (for Prometheus selection)
+      labels:
+        release: prometheus
+        prometheus: main
+      # Scrape interval
+      interval: "30s"
+      # Scrape timeout
+      scrapeTimeout: "10s"
+
+  # Basic manager config for testing
+  manager:
+    master:
+      storageSize: "10Gi"
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+    workers:
+      replicas: 0
+
+  indexer:
+    replicas: 1
+    storageSize: "20Gi"
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+
+  dashboard:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+---
+# Example PrometheusRule for alerting (requires Prometheus Operator)
+# apiVersion: monitoring.coreos.com/v1
+# kind: PrometheusRule
+# metadata:
+#   name: wazuh-alerts
+#   namespace: wazuh
+#   labels:
+#     release: prometheus
+# spec:
+#   groups:
+#     - name: wazuh
+#       rules:
+#         - alert: WazuhAgentDisconnected
+#           expr: wazuh_agents_disconnected > 0
+#           for: 5m
+#           labels:
+#             severity: warning
+#           annotations:
+#             summary: "Wazuh agents disconnected"
+#             description: "{{ $value }} agents are disconnected"
+#
+#         - alert: WazuhClusterNotHealthy
+#           expr: wazuh_cluster_nodes_active < 2
+#           for: 2m
+#           labels:
+#             severity: critical
+#           annotations:
+#             summary: "Wazuh cluster not healthy"
+#             description: "Less than 2 active nodes in cluster"
+#
+#         - alert: OpenSearchClusterRed
+#           expr: opensearch_cluster_status{status="red"} == 1
+#           for: 1m
+#           labels:
+#             severity: critical
+#           annotations:
+#             summary: "OpenSearch cluster health is RED"
+#             description: "OpenSearch cluster is in red state"

@@ -1,0 +1,24 @@
+{{- if and (include "wazuh-operator.installOperator" .) .Values.operator.metrics.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "wazuh-operator.fullname" . }}-metrics
+  namespace: {{ include "wazuh-operator.namespace" . }}
+  labels:
+    {{- include "wazuh-operator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metrics
+  {{- with .Values.operator.metrics.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.operator.metrics.service.type }}
+  ports:
+  - name: metrics
+    port: {{ .Values.operator.metrics.service.port }}
+    targetPort: 8080
+    protocol: TCP
+  selector:
+    {{- include "wazuh-operator.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: controller-manager
+{{- end }}

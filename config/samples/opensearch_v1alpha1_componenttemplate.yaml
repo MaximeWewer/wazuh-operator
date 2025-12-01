@@ -1,0 +1,86 @@
+# Sample OpenSearchComponentTemplate - Reusable index components
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchComponentTemplate
+metadata:
+  name: wazuh-base-settings
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  # Version for template ordering
+  version: 1
+
+  # Template definition
+  template:
+    # Common settings for all Wazuh indices
+    settings:
+      index.number_of_shards: 1
+      index.number_of_replicas: 1
+      index.refresh_interval: "5s"
+      index.codec: "best_compression"
+      index.mapping.total_fields.limit: 2000
+---
+# Mappings component template
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchComponentTemplate
+metadata:
+  name: wazuh-base-mappings
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  version: 1
+
+  template:
+    mappings:
+      dynamic: false
+      properties:
+        "@timestamp":
+          type: date
+        agent:
+          properties:
+            id:
+              type: keyword
+            name:
+              type: keyword
+            ip:
+              type: ip
+        rule:
+          properties:
+            id:
+              type: keyword
+            level:
+              type: integer
+            description:
+              type: text
+            groups:
+              type: keyword
+        location:
+          type: keyword
+        full_log:
+          type: text
+---
+# Hot tier settings component
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchComponentTemplate
+metadata:
+  name: hot-tier-settings
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  version: 1
+
+  template:
+    settings:
+      index.number_of_shards: 3
+      index.number_of_replicas: 1
+      index.refresh_interval: "1s"
+      # index.routing.allocation.require.tier: hot

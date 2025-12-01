@@ -1,0 +1,46 @@
+# Sample OpenSearchUser - creates an analyst user with specific roles
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchUser
+metadata:
+  name: analyst
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  # Password stored in a Kubernetes Secret (using CredentialsSecretRef)
+  # The secretName is required, passwordKey defaults to "password"
+  passwordSecret:
+    secretName: analyst-credentials
+    passwordKey: password       # optional, defaults to "password"
+    # usernameKey is not used for OpenSearchUser, only passwordKey
+
+  # Backend roles for LDAP/AD integration (optional)
+  backendRoles:
+    - analysts
+    - security-team
+
+  # OpenSearch security roles to assign
+  openSearchRoles:
+    - readall
+    - kibana_user
+
+  # Custom attributes
+  attributes:
+    department: "Security Operations"
+    team: "SOC"
+
+  # Description
+  description: "Security analyst user for Wazuh dashboard access"
+---
+# Secret containing the user password
+apiVersion: v1
+kind: Secret
+metadata:
+  name: analyst-credentials
+  namespace: wazuh
+type: Opaque
+stringData:
+  password: "ChangeMe123!"  # Change this in production!

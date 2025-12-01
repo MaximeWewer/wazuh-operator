@@ -1,0 +1,14 @@
+{{- if .Values.cluster.enabled }}
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhCluster
+metadata:
+  name: {{ .Values.cluster.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "wazuh-cluster.labels" . | nindent 4 }}
+    {{- if .Values.sizing.profile }}
+    wazuh.wazuh.com/sizing-profile: {{ .Values.sizing.profile }}
+    {{- end }}
+spec:
+  {{- include "wazuh-cluster.applySizing" . | nindent 2 }}
+{{- end }}

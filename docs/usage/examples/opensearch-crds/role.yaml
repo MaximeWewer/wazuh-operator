@@ -1,0 +1,50 @@
+# Sample OpenSearchRole - creates a custom role for Wazuh alerts access
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchRole
+metadata:
+  name: wazuh-alerts-reader
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  # Cluster-level permissions
+  clusterPermissions:
+    - cluster_composite_ops_ro
+
+  # Index-level permissions
+  indexPermissions:
+    # Read access to Wazuh alerts
+    - indexPatterns:
+        - "wazuh-alerts-*"
+      allowedActions:
+        - read
+        - search
+        - get
+
+    # Read access to Wazuh monitoring
+    - indexPatterns:
+        - "wazuh-monitoring-*"
+      allowedActions:
+        - read
+        - search
+        - get
+
+    # Read access to Wazuh statistics
+    - indexPatterns:
+        - "wazuh-statistics-*"
+      allowedActions:
+        - read
+        - search
+        - get
+
+  # Tenant permissions for Kibana multi-tenancy
+  tenantPermissions:
+    - tenantPatterns:
+        - "global_tenant"
+      allowedActions:
+        - kibana_all_read
+
+  description: "Read-only access to Wazuh alerts and monitoring indices"

@@ -1,0 +1,217 @@
+# Default values for wazuh-operator.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# ============================================
+# Deployment Mode Configuration
+# ============================================
+
+# deploymentMode determines what gets deployed:
+# - "operator": Deploy the operator (without CRDs if crds.install=false)
+# - "crds": Deploy only CRDs (no operator)
+# - "all": Deploy both CRDs and operator
+deploymentMode: "all"
+
+# ============================================
+# CRD Configuration
+# ============================================
+
+crds:
+  # Install CRDs as part of the chart
+  # Set to false if CRDs are managed separately or already installed
+  install: true
+
+  # Keep CRDs on chart uninstall
+  # Recommended: true (to prevent accidental data loss)
+  keep: true
+
+  # Annotations for CRDs
+  annotations: {}
+    # helm.sh/resource-policy: keep
+
+# ============================================
+# Operator Configuration
+# ============================================
+
+operator:
+  # Enable operator deployment
+  # Set to false for CRD-only deployment
+  enabled: true
+
+  image:
+    repository: wazuh/wazuh-operator
+    pullPolicy: IfNotPresent
+    # Overrides the image tag whose default is the chart appVersion
+    tag: ""
+
+  # Image pull secrets for private registries
+  imagePullSecrets: []
+    # - name: docker-registry-secret
+
+  # Operator name
+  name: "wazuh-operator"
+
+  # Health probe configuration
+  healthProbe:
+    bindAddress: ":8081"
+    initialDelaySeconds: 15
+    periodSeconds: 20
+
+  # Metrics configuration
+  metrics:
+    enabled: true
+    bindAddress: ":8080"
+    # Service for metrics
+    service:
+      type: ClusterIP
+      port: 8080
+      annotations: {}
+
+  # Service monitor for Prometheus Operator
+  serviceMonitor:
+    enabled: false
+    # Additional labels for service monitor
+    labels: {}
+      # prometheus: kube-prometheus
+    interval: 30s
+    scrapeTimeout: 10s
+
+  # Resources for operator pod
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+  # Node selector for operator pod
+  nodeSelector: {}
+    # node-role.kubernetes.io/control-plane: ""
+
+  # Tolerations for operator pod
+  tolerations: []
+    # - key: "node-role.kubernetes.io/control-plane"
+    #   operator: "Exists"
+    #   effect: "NoSchedule"
+
+  # Affinity for operator pod
+  affinity: {}
+
+  # Security context for operator pod
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+  # Security context for operator container
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true
+
+  # Pod annotations
+  podAnnotations: {}
+
+  # Service account configuration
+  serviceAccount:
+    # Specifies whether a service account should be created
+    create: true
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name: ""
+
+  # Environment variables for operator
+  env: []
+    # - name: LOG_LEVEL
+    #   value: "info"
+
+  # Extra volumes
+  extraVolumes: []
+    # - name: tmp
+    #   emptyDir: {}
+
+  # Extra volume mounts
+  extraVolumeMounts: []
+    # - name: tmp
+    #   mountPath: /tmp
+
+# ============================================
+# RBAC Configuration
+# ============================================
+
+rbac:
+  # Create RBAC resources
+  create: true
+
+  # Role name
+  # If not set, a name is generated using the fullname template
+  roleName: ""
+
+  # Additional rules for the operator role
+  extraRules: []
+    # - apiGroups: [""]
+    #   resources: ["configmaps"]
+    #   verbs: ["get", "list"]
+
+# ============================================
+# Namespace Configuration
+# ============================================
+
+namespace:
+  # Create namespace for operator
+  create: true
+
+  # Namespace name
+  # If not set, uses Release.Namespace
+  name: ""
+
+  # Namespace labels
+  labels: {}
+    # environment: production
+
+  # Namespace annotations
+  annotations: {}
+
+# ============================================
+# Common Labels
+# ============================================
+
+# Additional labels to add to all resources
+commonLabels: {}
+  # managed-by: helm
+  # environment: production
+
+# Additional annotations to add to all resources
+commonAnnotations: {}
+
+# ============================================
+# Advanced Configuration
+# ============================================
+
+# Additional arguments for the operator
+# Commonly used args:
+# - --zap-log-level=debug     # Set log level (debug, info, error)
+# - --zap-encoder=console     # Use console encoder instead of JSON
+# - --zap-stacktrace-level=error  # Enable stacktraces at error level
+# - --zap-devel=true          # Enable development mode (more verbose)
+extraArgs: []
+  # - --zap-log-level=debug
+  # - --zap-encoder=console
+
+# Certificate test mode - enables short-lived certificates (5 min validity)
+# DO NOT USE IN PRODUCTION - Only for testing certificate renewal
+certTestMode: false
+
+# Non-blocking rollouts - enables parallel certificate renewals
+# When true, certificate renewals don't block waiting for pod rollouts
+# This allows all components to renew certificates in parallel
+# Recommended: true (default)
+nonBlockingRollouts: true
+
+# Termination grace period seconds
+terminationGracePeriodSeconds: 10

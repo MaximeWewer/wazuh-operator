@@ -1,0 +1,44 @@
+# Sample WazuhDecoder - Custom JSON log decoder
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhDecoder
+metadata:
+  name: custom-json-decoder
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  # Decoder name (used for file naming)
+  decoderName: custom_json_decoder
+
+  # Description
+  description: "Custom JSON log decoder for application logs"
+
+  # Deploy to all nodes (master and workers)
+  targetNodes: all
+
+  # Priority (lower values = higher priority)
+  priority: 500
+
+  # Decoder definitions in XML format
+  decoders: |
+    <!-- Parent decoder for custom application JSON logs -->
+    <decoder name="custom-app-json">
+      <prematch>^{"app":</prematch>
+      <plugin_decoder>JSON_Decoder</plugin_decoder>
+    </decoder>
+
+    <!-- Child decoder to extract specific fields -->
+    <decoder name="custom-app-json-fields">
+      <parent>custom-app-json</parent>
+      <regex offset="after_parent">\"level\":\"(\w+)\",\"message\":\"(.+?)\"</regex>
+      <order>level,message</order>
+    </decoder>
+
+    <!-- Decoder for nginx access logs in JSON format -->
+    <decoder name="nginx-json">
+      <prematch>^{"nginx":</prematch>
+      <plugin_decoder>JSON_Decoder</plugin_decoder>
+    </decoder>

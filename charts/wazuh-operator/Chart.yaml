@@ -1,0 +1,55 @@
+apiVersion: v2
+name: wazuh-operator
+description: A Helm chart for Wazuh Kubernetes Operator
+type: application
+
+# Version of the Helm chart
+version: 1.0.0
+
+# Version of the application being deployed
+appVersion: "v1.0.19"
+
+keywords:
+  - wazuh
+  - security
+  - siem
+  - operator
+  - kubernetes
+
+home: https://github.com/wazuh/wazuh-kubernetes
+sources:
+  - https://github.com/wazuh/wazuh-kubernetes
+
+maintainers:
+  - name: Wazuh Team
+    email: hello@wazuh.com
+
+icon: https://wazuh.com/assets/wazuh-logo.svg
+
+annotations:
+  # Recommended minimum Kubernetes version
+  kubernetes.io/minimum-version: "1.24.0"
+
+  # Category for artifact hub
+  category: "Security"
+
+  # Changelog
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial Helm chart release
+    - kind: added
+      description: Support for CRD-only deployment mode
+    - kind: added
+      description: Support for multi-operator architecture
+
+  # Screenshots for artifact hub
+  artifacthub.io/screenshots: |
+    - title: Wazuh Dashboard
+      url: https://wazuh.com/uploads/2023/01/dashboard.png
+
+  # Links
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://documentation.wazuh.com/
+    - name: Support
+      url: https://groups.google.com/g/wazuh

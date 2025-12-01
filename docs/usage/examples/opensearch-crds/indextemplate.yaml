@@ -1,0 +1,61 @@
+# Sample OpenSearchIndexTemplate - custom template for Wazuh alerts
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchIndexTemplate
+metadata:
+  name: wazuh-alerts-template
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  # Index patterns this template applies to
+  indexPatterns:
+    - "wazuh-alerts-*"
+
+  # Priority (higher = more specific)
+  priority: 100
+
+  # Template definition
+  template:
+    # Index settings
+    settings:
+      index:
+        number_of_shards: 1
+        number_of_replicas: 0
+        refresh_interval: "5s"
+        codec: "best_compression"
+
+    # Field mappings
+    mappings:
+      properties:
+        timestamp:
+          type: date
+        agent:
+          properties:
+            id:
+              type: keyword
+            name:
+              type: keyword
+            ip:
+              type: ip
+        rule:
+          properties:
+            id:
+              type: keyword
+            level:
+              type: integer
+            description:
+              type: text
+            groups:
+              type: keyword
+        location:
+          type: keyword
+        full_log:
+          type: text
+
+    # Aliases
+    aliases:
+      wazuh-alerts:
+        is_write_index: true

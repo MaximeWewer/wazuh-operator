@@ -1,0 +1,13 @@
+apiVersion: v2
+name: wazuh-cluster
+description: Helm chart for deploying Wazuh clusters via the Wazuh Operator
+type: application
+version: 0.1.0
+appVersion: "4.9.0"
+keywords:
+  - wazuh
+  - security
+  - siem
+  - xdr
+maintainers:
+  - name: Wazuh Operator Team

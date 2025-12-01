@@ -1,0 +1,53 @@
+# Kustomization file for Wazuh Operator samples
+# These samples are used for development and testing
+# For user documentation, see docs/usage/examples/
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # ===========================================================================
+  # WazuhCluster - Core sample for development
+  # ===========================================================================
+  - wazuh_v1alpha1_wazuhcluster_minimal.yaml
+
+  # Additional WazuhCluster samples (uncomment as needed):
+  # - wazuh_v1alpha1_wazuhcluster_authd_password.yaml  # With agent enrollment password
+  # - wazuh_v1alpha1_wazuhcluster_monitoring.yaml      # With Prometheus monitoring
+  # - wazuh_v1alpha1_wazuhcluster_tls.yaml             # With TLS configuration
+
+  # ===========================================================================
+  # OpenSearch Security CRDs
+  # ===========================================================================
+  - opensearch_v1alpha1_user.yaml
+  - opensearch_v1alpha1_role.yaml
+  - opensearch_v1alpha1_rolemapping.yaml
+  - opensearch_v1alpha1_tenant.yaml
+  - opensearch_v1alpha1_actiongroup.yaml
+
+  # ===========================================================================
+  # OpenSearch Index Management CRDs
+  # ===========================================================================
+  - opensearch_v1alpha1_indextemplate.yaml
+  - opensearch_v1alpha1_ismpolicy.yaml
+  - opensearch_v1alpha1_index.yaml
+  - opensearch_v1alpha1_componenttemplate.yaml
+  - opensearch_v1alpha1_snapshotpolicy.yaml
+
+  # ===========================================================================
+  # OpenSearch Authentication CRDs
+  # ===========================================================================
+  - opensearch_v1alpha1_authconfig_basic.yaml
+
+  # ===========================================================================
+  # Wazuh Configuration CRDs
+  # ===========================================================================
+  - wazuh_v1alpha1_rule.yaml
+  - wazuh_v1alpha1_decoder.yaml
+
+# Common labels for all samples
+commonLabels:
+  app.kubernetes.io/managed-by: wazuh-operator
+  app.kubernetes.io/part-of: wazuh
+
+# Namespace configuration
+namespace: wazuh

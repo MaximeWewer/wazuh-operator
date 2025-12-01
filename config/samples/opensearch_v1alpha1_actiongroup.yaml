@@ -1,0 +1,62 @@
+# Sample OpenSearchActionGroup - Custom action groups for fine-grained access control
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchActionGroup
+metadata:
+  name: wazuh-alerts-read
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  # Type: cluster, index, or all
+  type: index
+
+  # Actions included in this group
+  allowedActions:
+    - indices:data/read/search
+    - indices:data/read/get
+    - indices:data/read/mget
+    - indices:data/read/msearch
+    - indices:admin/mappings/get
+
+  description: "Read-only access to Wazuh alert indices"
+---
+# Action group for managing alerts (read + write)
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchActionGroup
+metadata:
+  name: wazuh-alerts-manage
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+  type: index
+  allowedActions:
+    - wazuh-alerts-read  # Include the read action group
+    - indices:data/write/index
+    - indices:data/write/update
+    - indices:data/write/delete
+    - indices:data/write/bulk
+  description: "Full management access to Wazuh alert indices"
+---
+# Cluster-level action group for monitoring
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchActionGroup
+metadata:
+  name: cluster-monitor
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+  type: cluster
+  allowedActions:
+    - cluster:monitor/health
+    - cluster:monitor/state
+    - cluster:monitor/stats
+    - cluster:monitor/nodes/info
+    - cluster:monitor/nodes/stats
+  description: "Cluster monitoring permissions"

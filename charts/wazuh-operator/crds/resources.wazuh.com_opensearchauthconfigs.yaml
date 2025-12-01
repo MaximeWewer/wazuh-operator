@@ -1,0 +1,569 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.0
+  name: opensearchauthconfigs.resources.wazuh.com
+spec:
+  group: resources.wazuh.com
+  names:
+    kind: OpenSearchAuthConfig
+    listKind: OpenSearchAuthConfigList
+    plural: opensearchauthconfigs
+    shortNames:
+    - osauthconfig
+    - osauth
+    singular: opensearchauthconfig
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.clusterRef.name
+      name: Cluster
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.basicAuth.enabled
+      name: Basic
+      type: boolean
+    - jsonPath: .spec.oidc.enabled
+      name: OIDC
+      type: boolean
+    - jsonPath: .spec.saml.enabled
+      name: SAML
+      type: boolean
+    - jsonPath: .spec.ldap.enabled
+      name: LDAP
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          OpenSearchAuthConfig is the Schema for the opensearchauthconfigs API
+          It manages authentication configuration for OpenSearch clusters including
+          basic auth, OIDC, SAML, and LDAP authentication methods.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: OpenSearchAuthConfigSpec defines the desired state of OpenSearchAuthConfig
+            properties:
+              basicAuth:
+                description: BasicAuth configures HTTP Basic authentication against
+                  internal users database
+                properties:
+                  challenge:
+                    default: true
+                    description: |-
+                      Challenge enables WWW-Authenticate challenge header
+                      Only one auth domain should have challenge enabled when multiple are configured
+                    type: boolean
+                  enabled:
+                    default: true
+                    description: Enabled enables HTTP Basic authentication
+                    type: boolean
+                  httpEnabled:
+                    default: true
+                    description: HTTPEnabled enables authentication on HTTP layer
+                    type: boolean
+                  order:
+                    default: 0
+                    description: |-
+                      Order determines the evaluation order of this auth domain
+                      Lower numbers are evaluated first
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  transportEnabled:
+                    default: true
+                    description: TransportEnabled enables authentication on transport
+                      layer
+                    type: boolean
+                type: object
+              clusterRef:
+                description: ClusterRef references the WazuhCluster this auth config
+                  belongs to
+                properties:
+                  name:
+                    description: Name of the WazuhCluster resource
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the WazuhCluster resource
+                      If empty, assumes the same namespace as the referencing resource
+                    type: string
+                required:
+                - name
+                type: object
+              ldap:
+                description: LDAP configures LDAP/Active Directory authentication
+                properties:
+                  authentication:
+                    description: Authentication configures LDAP authentication settings
+                    properties:
+                      bindDn:
+                        description: |-
+                          BindDN is the DN to bind for LDAP searches
+                          Example: cn=admin,dc=example,dc=com
+                        type: string
+                      bindPasswordRef:
+                        description: BindPasswordRef references a Secret containing
+                          the bind password
+                        properties:
+                          key:
+                            default: password
+                            description: Key is the key in the secret
+                            type: string
+                          name:
+                            description: Name is the secret name
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      userBase:
+                        description: |-
+                          UserBase is the base DN for user searches
+                          Example: ou=users,dc=example,dc=com
+                        type: string
+                      userSearch:
+                        default: (uid={0})
+                        description: |-
+                          UserSearch is the LDAP filter for finding users
+                          Example: (uid={0}) or (sAMAccountName={0}) for AD
+                        type: string
+                      usernameAttribute:
+                        default: uid
+                        description: UsernameAttribute is the attribute containing
+                          the username
+                        type: string
+                    required:
+                    - userBase
+                    type: object
+                  authorization:
+                    description: Authorization configures LDAP authorization/role
+                      mapping
+                    properties:
+                      enabled:
+                        default: true
+                        description: Enabled enables LDAP authorization
+                        type: boolean
+                      resolveNestedRoles:
+                        default: false
+                        description: ResolveNestedRoles enables nested group resolution
+                        type: boolean
+                      roleBase:
+                        description: |-
+                          RoleBase is the base DN for role searches
+                          Example: ou=groups,dc=example,dc=com
+                        type: string
+                      roleName:
+                        default: cn
+                        description: RoleName is the attribute containing the role
+                          name
+                        type: string
+                      roleSearch:
+                        default: (member={0})
+                        description: |-
+                          RoleSearch is the LDAP filter for finding roles
+                          Example: (member={0}) or (memberUid={1})
+                        type: string
+                      skipUsers:
+                        default: false
+                        description: SkipUsers disables user authorization (role-only
+                          mode)
+                        type: boolean
+                      userRoleName:
+                        description: |-
+                          UserRoleName is the user attribute for role membership
+                          Example: memberOf (for AD)
+                        type: string
+                    required:
+                    - roleBase
+                    type: object
+                  challenge:
+                    default: false
+                    description: |-
+                      Challenge enables authentication challenge
+                      Should typically be false when multiple auth methods are enabled
+                    type: boolean
+                  connectionPool:
+                    description: ConnectionPool configures connection pooling
+                    properties:
+                      maxSize:
+                        default: 10
+                        description: MaxSize is the maximum pool size
+                        minimum: 1
+                        type: integer
+                      minSize:
+                        default: 3
+                        description: MinSize is the minimum pool size
+                        minimum: 0
+                        type: integer
+                    type: object
+                  enabled:
+                    default: false
+                    description: Enabled enables LDAP authentication
+                    type: boolean
+                  hosts:
+                    description: Hosts is the list of LDAP server hostnames or IPs
+                    items:
+                      type: string
+                    minItems: 1
+                    type: array
+                  httpEnabled:
+                    default: true
+                    description: HTTPEnabled enables authentication on HTTP layer
+                    type: boolean
+                  order:
+                    default: 3
+                    description: Order determines the evaluation order of this auth
+                      domain
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  tls:
+                    description: TLS configures LDAP TLS/SSL settings
+                    properties:
+                      enableSsl:
+                        default: false
+                        description: EnableSSL enables LDAPS (port 636)
+                        type: boolean
+                      enableStartTls:
+                        default: false
+                        description: EnableStartTLS enables STARTTLS on standard port
+                        type: boolean
+                      pemTrustedCasFilepath:
+                        description: PemTrustedCAsFilepath is the path to trusted
+                          CA certificates
+                        type: string
+                      trustAllCertificates:
+                        default: false
+                        description: TrustAllCertificates disables certificate verification
+                          (insecure)
+                        type: boolean
+                      verifyHostnames:
+                        default: true
+                        description: VerifyHostnames enables hostname verification
+                        type: boolean
+                    type: object
+                  transportEnabled:
+                    default: false
+                    description: TransportEnabled enables authentication on transport
+                      layer
+                    type: boolean
+                required:
+                - authentication
+                type: object
+              oidc:
+                description: OIDC configures OpenID Connect authentication
+                properties:
+                  challenge:
+                    default: false
+                    description: |-
+                      Challenge enables authentication challenge
+                      Should typically be false when multiple auth methods are enabled
+                    type: boolean
+                  clientId:
+                    description: ClientID is the OAuth 2.0 client ID
+                    type: string
+                  clientSecretRef:
+                    description: ClientSecretRef references a Secret containing the
+                      client secret
+                    properties:
+                      key:
+                        default: password
+                        description: Key is the key in the secret
+                        type: string
+                      name:
+                        description: Name is the secret name
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  connectURL:
+                    description: |-
+                      ConnectURL is the OpenID Connect discovery endpoint URL
+                      Example: https://keycloak.example.com/realms/wazuh/.well-known/openid-configuration
+                    type: string
+                  dashboard:
+                    description: Dashboard configures OIDC-specific dashboard settings
+                    properties:
+                      additionalCookies:
+                        description: AdditionalCookies defines extra cookies to set
+                        items:
+                          type: string
+                        type: array
+                      cookiePasswordRef:
+                        description: CookiePassword is the password for cookie encryption
+                          (auto-generated if not set)
+                        properties:
+                          key:
+                            default: password
+                            description: Key is the key in the secret
+                            type: string
+                          name:
+                            description: Name is the secret name
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      cookiePrefix:
+                        default: security_authentication
+                        description: CookiePrefix is the prefix for OIDC cookies
+                        type: string
+                      loginEndpoint:
+                        default: /auth/openid/login
+                        description: LoginEndpoint is the custom login endpoint path
+                        type: string
+                      logoutEndpoint:
+                        default: /auth/openid/logout
+                        description: LogoutEndpoint is the custom logout endpoint
+                          path
+                        type: string
+                      rootUrl:
+                        description: |-
+                          RootURL is the base URL of the dashboard for OIDC callbacks
+                          Example: https://dashboard.example.com
+                        type: string
+                    type: object
+                  enabled:
+                    default: false
+                    description: Enabled enables OIDC authentication
+                    type: boolean
+                  httpEnabled:
+                    default: true
+                    description: HTTPEnabled enables authentication on HTTP layer
+                    type: boolean
+                  logoutUrl:
+                    description: LogoutURL is the URL to redirect after logout
+                    type: string
+                  order:
+                    default: 1
+                    description: Order determines the evaluation order of this auth
+                      domain
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  rolesKey:
+                    default: roles
+                    description: RolesKey is the JWT claim containing user roles
+                    type: string
+                  scope:
+                    default: openid profile email
+                    description: Scope is the OAuth 2.0 scope to request
+                    type: string
+                  subjectKey:
+                    default: preferred_username
+                    description: SubjectKey is the JWT claim to use as the username
+                    type: string
+                required:
+                - clientId
+                - connectURL
+                type: object
+              saml:
+                description: SAML configures SAML 2.0 authentication
+                properties:
+                  challenge:
+                    default: false
+                    description: |-
+                      Challenge enables authentication challenge
+                      Should typically be false when multiple auth methods are enabled
+                    type: boolean
+                  dashboard:
+                    description: Dashboard configures SAML-specific dashboard settings
+                    properties:
+                      requestedAuthnContextRef:
+                        description: RequestedAuthnContextRef specifies the authentication
+                          context requirements
+                        type: string
+                      xsrfAllowlist:
+                        description: |-
+                          XSRFAllowlist specifies URLs to exclude from XSRF protection
+                          Typically includes the SAML ACS endpoint
+                        items:
+                          type: string
+                        type: array
+                    type: object
+                  enabled:
+                    default: false
+                    description: Enabled enables SAML authentication
+                    type: boolean
+                  exchangeKeyRef:
+                    description: |-
+                      ExchangeKeyRef references a Secret containing the HMAC256 exchange key
+                      Used for signing and encrypting SAML messages
+                    properties:
+                      key:
+                        default: password
+                        description: Key is the key in the secret
+                        type: string
+                      name:
+                        description: Name is the secret name
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  httpEnabled:
+                    default: true
+                    description: HTTPEnabled enables authentication on HTTP layer
+                    type: boolean
+                  idpEntityId:
+                    description: IdpEntityID is the entity ID of the Identity Provider
+                    type: string
+                  idpMetadataFile:
+                    description: |-
+                      IdpMetadataFile is the path to IdP metadata XML file
+                      Either IdpMetadataURL or IdpMetadataFile must be specified
+                    type: string
+                  idpMetadataUrl:
+                    description: |-
+                      IdpMetadataURL is the URL to fetch IdP metadata from
+                      Either IdpMetadataURL or IdpMetadataFile must be specified
+                    type: string
+                  kibanaUrl:
+                    description: |-
+                      KibanaURL is the base URL of OpenSearch Dashboard
+                      Used for assertion consumer service URL
+                    type: string
+                  order:
+                    default: 2
+                    description: Order determines the evaluation order of this auth
+                      domain
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  rolesKey:
+                    description: RolesKey is the SAML attribute containing user roles
+                    type: string
+                  spEntityId:
+                    description: |-
+                      SpEntityID is the entity ID of this Service Provider
+                      Usually the Kibana/Dashboard URL
+                    type: string
+                  subjectKey:
+                    default: NameID
+                    description: SubjectKey is the SAML attribute to use as the username
+                    type: string
+                required:
+                - idpEntityId
+                - kibanaUrl
+                - spEntityId
+                type: object
+            required:
+            - clusterRef
+            type: object
+          status:
+            description: OpenSearchAuthConfigStatus defines the observed state of
+              OpenSearchAuthConfig
+            properties:
+              activeAuthDomains:
+                description: ActiveAuthDomains lists the currently active authentication
+                  domains
+                items:
+                  type: string
+                type: array
+              conditions:
+                description: Conditions represent the latest available observations
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              configSynced:
+                description: ConfigSynced indicates if the security config is in sync
+                type: boolean
+              dashboardConfigSynced:
+                description: DashboardConfigSynced indicates if the dashboard config
+                  is in sync
+                type: boolean
+              lastSyncTime:
+                description: LastSyncTime is when the auth config was last synced
+                  to OpenSearch
+                format: date-time
+                type: string
+              message:
+                description: Message provides additional information about the current
+                  phase
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the last observed generation
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the current phase (Pending, Ready, Failed)
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

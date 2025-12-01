@@ -1,0 +1,209 @@
+# Default values for wazuh-cluster
+# This chart deploys WazuhCluster CRDs and associated secrets
+
+# Namespace where the Wazuh cluster will be deployed
+namespace: wazuh
+
+# Create namespace if it doesn't exist
+createNamespace: true
+
+# ============================================
+# Sizing Profiles
+# ============================================
+# Select a pre-configured size profile: S, M, L, XL
+# This automatically configures resources, replicas, and storage
+# Set to "" (empty) to use custom configuration below
+sizing:
+  # Available profiles:
+  # - XS (Extra Small): Minimal testing - 1 indexer, 0 workers, tiny resources
+  # - S  (Small):       Dev/Test - 1 indexer, 1 worker, minimal resources
+  # - M  (Medium):      Small Prod - 3 indexers, 2 workers, moderate resources
+  # - L  (Large):       Production - 3 indexers, 3 workers, high resources
+  # - XL (Extra Large): Enterprise - 5 indexers, 5 workers, maximum resources
+  profile: "M" # Default: Medium
+
+  # Custom storage class (applies to all profiles)
+  # Leave empty to use cluster default
+  storageClassName: ""
+
+# Profile Specifications (read-only, for reference):
+#
+# Profile XS (Extra Small - Minimal Testing):
+#   - Indexer: 1 replica, 1.5Gi-2Gi RAM (1g JVM heap minimum), 0.2-1 CPU, 10Gi storage
+#   - Manager Master: 256Mi-512Mi RAM, 0.1-0.5 CPU, 5Gi storage
+#   - Manager Workers: 0 replicas (disabled)
+#   - Dashboard: 1 replica, 256Mi-512Mi RAM, 0.1-0.5 CPU
+#   - Total: ~3Gi RAM, ~1.5 CPU, ~15Gi storage
+#
+# Profile S (Small - Dev/Test):
+#   - Indexer: 1 replica, 1Gi RAM, 0.5 CPU, 20Gi storage
+#   - Manager Master: 1Gi RAM, 0.5 CPU, 10Gi storage
+#   - Manager Workers: 1 replica, 1Gi RAM, 0.5 CPU, 10Gi storage
+#   - Dashboard: 1 replica, 512Mi RAM, 0.25 CPU
+#   - Total: ~4.5Gi RAM, ~2.25 CPU, ~40Gi storage
+#
+# Profile M (Medium - Small Production):
+#   - Indexer: 3 replicas, 4Gi RAM, 2 CPU, 50Gi storage each
+#   - Manager Master: 2Gi RAM, 1 CPU, 20Gi storage
+#   - Manager Workers: 2 replicas, 2Gi RAM, 1 CPU, 20Gi storage each
+#   - Dashboard: 1 replica, 1Gi RAM, 0.5 CPU
+#   - Total: ~19Gi RAM, ~10 CPU, ~210Gi storage
+#
+# Profile L (Large - Production):
+#   - Indexer: 3 replicas, 8Gi RAM, 4 CPU, 100Gi storage each
+#   - Manager Master: 4Gi RAM, 2 CPU, 50Gi storage
+#   - Manager Workers: 3 replicas, 4Gi RAM, 2 CPU, 50Gi storage each
+#   - Dashboard: 2 replicas, 2Gi RAM, 1 CPU
+#   - Total: ~44Gi RAM, ~22 CPU, ~500Gi storage
+#
+# Profile XL (Extra Large - Enterprise):
+#   - Indexer: 5 replicas, 16Gi RAM, 8 CPU, 200Gi storage each
+#   - Manager Master: 8Gi RAM, 4 CPU, 100Gi storage
+#   - Manager Workers: 5 replicas, 8Gi RAM, 4 CPU, 100Gi storage each
+#   - Dashboard: 3 replicas, 4Gi RAM, 2 CPU
+#   - Total: ~140Gi RAM, ~70 CPU, ~1700Gi storage
+
+# Secrets configuration
+secrets:
+  # Wazuh API credentials (used by Dashboard to connect to Wazuh Manager API)
+  wazuhApi:
+    username: "wazuh-api"
+    password: "CHANGE_ME_STRONG_PASSWORD_HERE"
+
+  # Indexer admin credentials (used by Dashboard and internal components)
+  indexerAdmin:
+    username: "admin"
+    password: "CHANGE_ME_STRONG_PASSWORD_HERE"
+
+  # Wazuh authd password (agent enrollment)
+  wazuhAuthd:
+    enabled: true
+    password: "CHANGE_ME_STRONG_PASSWORD_HERE"
+
+# ============================================
+# WazuhCluster Configuration
+# ============================================
+# One chart deploys ONE WazuhCluster
+cluster:
+  # Enable cluster deployment
+  enabled: true
+
+  # Cluster name
+  name: wazuh-cluster
+
+  # WazuhCluster spec
+  spec:
+    version: "4.9.0"
+
+    # Note: If sizing.profile is set above, replicas/resources/storage are auto-configured
+    # The values below are ONLY used if sizing.profile is empty ("")
+    # To override specific values while using a profile, set them explicitly here
+
+    # Monitoring configuration (optional)
+    # monitoring:
+    #   enabled: true
+    #   wazuhExporter:
+    #     enabled: true
+    #     image: kennyopennix/wazuh-exporter:latest
+    #     port: 9090
+    #   indexerExporter:
+    #     enabled: true
+    #   serviceMonitor:
+    #     enabled: true
+    #     labels:
+    #       prometheus: kube-prometheus
+    #     interval: 30s
+
+    # Indexer configuration
+    # When using sizing.profile, these are auto-configured
+    indexer:
+      {}
+      # Manual override examples (only used if sizing.profile is empty):
+      # replicas: 3
+      # storageSize: 50Gi
+      # javaOpts: "-Xms2g -Xmx2g -Dlog4j2.formatMsgNoLookups=true"
+      # resources:
+      #   requests:
+      #     cpu: "2"
+      #     memory: 4Gi
+      #   limits:
+      #     cpu: "4"
+      #     memory: 8Gi
+
+    # Manager configuration
+    # When using sizing.profile, these are auto-configured
+    manager:
+      master:
+        {}
+        # Manual override examples:
+        # storageSize: 20Gi
+        # resources:
+        #   requests:
+        #     cpu: "1"
+        #     memory: 2Gi
+      workers:
+        {}
+        # Manual override examples:
+        # replicas: 2
+        # storageSize: 20Gi
+
+      # Log rotation configuration (optional)
+      # Automatically cleans up old log files on manager pods
+      # logRotation:
+      #   enabled: true
+      #   # Cron schedule for log rotation (default: weekly on Monday at midnight)
+      #   schedule: "0 0 * * 1"
+      #   # Number of days to retain log files (default: 7)
+      #   retentionDays: 7
+      #   # Maximum file size in MB before deletion (0 = disabled)
+      #   maxFileSizeMB: 0
+      #   # How age and size filters combine: "or" (delete if old OR large) or "and" (both)
+      #   combinationMode: "or"
+      #   # Paths to clean (default: alerts and archives)
+      #   paths:
+      #     - /var/ossec/logs/alerts/
+      #     - /var/ossec/logs/archives/
+      #   # kubectl image for the CronJob
+      #   image: "bitnami/kubectl:latest"
+
+    # Dashboard configuration
+    # When using sizing.profile, these are auto-configured
+    dashboard:
+      {}
+      # Manual override examples:
+      # replicas: 1
+      # resources:
+      #   requests:
+      #     cpu: "500m"
+      #     memory: 1Gi
+
+    # TLS configuration (optional)
+    # tls:
+    #   enabled: true
+    #   certConfig:
+    #     organization: "My Organization"
+    #     organizationalUnit: "Security"
+    #     country: "US"
+    #     state: "California"
+    #     locality: "San Francisco"
+    #     # Node certificate validity (365 days default)
+    #     # Node certs (indexer, dashboard, filebeat) can be renewed more frequently
+    #     # OpenSearch supports hot reload of node certificates without restart
+    #     validityDays: 365
+    #     renewalThresholdDays: 30
+    #     # CA certificate validity (730 days / 2 years default)
+    #     # CA renewal requires indexer restart to reload trust store
+    #     # Recommended: longer validity than node certs (1-2 years)
+    #     caValidityDays: 730
+    #     caRenewalThresholdDays: 60
+    #
+    #   # Hot reload configuration for certificate renewal without pod restart
+    #   # Requires Wazuh >= 4.9.0 (OpenSearch >= 2.13)
+    #   hotReload:
+    #     # Enable hot reload (default: true)
+    #     # When enabled, certificates can be renewed without restarting pods
+    #     enabled: true
+    #     # Force API reload even for versions with automatic hot reload
+    #     # - Wazuh 4.9.x (OpenSearch 2.13-2.18): API call is always required
+    #     # - Wazuh 4.12+ (OpenSearch 2.19+): Automatic, set forceAPIReload if needed
+    #     forceAPIReload: false

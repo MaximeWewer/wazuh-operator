@@ -1,0 +1,89 @@
+# Sample OpenSearchSnapshotPolicy - Automated backup configuration
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchSnapshotPolicy
+metadata:
+  name: daily-backup
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  description: "Daily backup policy for Wazuh indices"
+
+  # Repository configuration
+  repository:
+    name: wazuh-backup-repo
+    type: fs  # Options: fs, s3, azure, gcs
+    settings:
+      location: /mnt/snapshots
+      compress: true
+
+  # What to snapshot
+  snapshotConfig:
+    indices:
+      - "wazuh-alerts-*"
+      - "wazuh-archives-*"
+      - "wazuh-monitoring-*"
+    ignoreUnavailable: true
+    includeGlobalState: false
+    partial: false
+
+  # Creation schedule
+  creation:
+    schedule:
+      expression: "0 2 * * *"  # Every day at 2:00 AM
+      timezone: "UTC"
+    timeLimit: "1h"
+
+  # Retention policy
+  deletion:
+    schedule:
+      expression: "0 3 * * *"  # Every day at 3:00 AM
+      timezone: "UTC"
+    condition:
+      maxAge: "30d"      # Keep snapshots for 30 days
+      minCount: 7        # Always keep at least 7 snapshots
+      maxCount: 60       # Never keep more than 60 snapshots
+---
+# S3 backup policy example
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchSnapshotPolicy
+metadata:
+  name: s3-weekly-backup
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  description: "Weekly backup to S3 for long-term retention"
+
+  repository:
+    name: wazuh-s3-repo
+    type: s3
+    settings:
+      bucket: my-wazuh-backups
+      basePath: snapshots/weekly
+      region: us-east-1
+      compress: true
+      # For custom S3-compatible storage (MinIO, etc.)
+      # endpoint: https://minio.example.com
+
+  snapshotConfig:
+    indices:
+      - "wazuh-alerts-*"
+    ignoreUnavailable: true
+    includeGlobalState: true
+
+  creation:
+    schedule:
+      expression: "0 4 * * 0"  # Every Sunday at 4:00 AM
+      timezone: "UTC"
+    timeLimit: "4h"
+
+  deletion:
+    condition:
+      maxAge: "365d"     # Keep for 1 year
+      minCount: 4        # Always keep at least 4 weekly snapshots

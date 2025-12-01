@@ -1,0 +1,57 @@
+# Sample WazuhRule - Custom SSH brute-force detection rule
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhRule
+metadata:
+  name: ssh-bruteforce-custom
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  # Rule name (used for file naming)
+  ruleName: ssh_bruteforce_custom
+
+  # Description
+  description: "Custom SSH brute-force detection rules for enhanced security monitoring"
+
+  # Deploy to all nodes (master and workers)
+  targetNodes: all
+
+  # Starting rule ID (custom rules should use 100000+)
+  ruleID: 100100
+
+  # Rule groups
+  groups:
+    - sshd
+    - authentication_failures
+    - custom
+
+  # Rule definitions in XML format
+  rules: |
+    <group name="sshd,authentication_failures,custom">
+      <!-- Detect multiple failed SSH login attempts from same IP -->
+      <rule id="100100" level="10" frequency="5" timeframe="120">
+        <if_matched_sid>5710</if_matched_sid>
+        <same_source_ip />
+        <description>SSH brute-force attack detected (5+ failures in 2 minutes)</description>
+        <group>attack,brute_force,pci_dss_11.4,nist_800_53_SI.4,</group>
+      </rule>
+
+      <!-- Detect successful login after multiple failures (possible compromise) -->
+      <rule id="100101" level="14" frequency="3" timeframe="300">
+        <if_matched_sid>5715</if_matched_sid>
+        <same_source_ip />
+        <description>Possible SSH compromise: successful login after multiple failures</description>
+        <group>authentication_success,attack,pci_dss_10.2.4,nist_800_53_AU.14,</group>
+      </rule>
+
+      <!-- Detect SSH connection from unusual country (requires GeoIP) -->
+      <rule id="100102" level="8">
+        <if_sid>5715</if_sid>
+        <geoip_src>!US,!CA,!GB,!DE,!FR</geoip_src>
+        <description>SSH login from unusual geographic location</description>
+        <group>authentication_success,gdpr_IV_35.7.d,</group>
+      </rule>
+    </group>

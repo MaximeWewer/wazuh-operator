@@ -1,0 +1,39 @@
+🎉 Wazuh Cluster deployment initiated!
+
+Namespace: {{ .Values.namespace }}
+{{- if .Values.sizing.profile }}
+Sizing Profile: {{ .Values.sizing.profile }}
+{{- end }}
+
+📦 Secrets created:
+{{- if and .Values.secrets.wazuhApi .Values.secrets.wazuhApi.username .Values.secrets.wazuhApi.password }}
+  ✓ wazuh-api-credentials
+{{- end }}
+{{- if and .Values.secrets.indexerAdmin .Values.secrets.indexerAdmin.username .Values.secrets.indexerAdmin.password }}
+  ✓ indexer-admin-credentials
+{{- end }}
+{{- if .Values.secrets.wazuhAuthd.enabled }}
+  ✓ wazuh-authd-pass
+{{- end }}
+
+{{- if .Values.cluster.enabled }}
+🚀 WazuhCluster resource created:
+  ✓ {{ .Values.cluster.name }}
+
+To check the status of your Wazuh cluster:
+  kubectl get wazuhcluster {{ .Values.cluster.name }} -n {{ .Values.namespace }}
+
+To view detailed status:
+  kubectl describe wazuhcluster {{ .Values.cluster.name }} -n {{ .Values.namespace }}
+
+To access the Wazuh dashboard (once deployed):
+  kubectl get svc {{ .Values.cluster.name }}-dashboard -n {{ .Values.namespace }}
+
+{{- else }}
+ℹ️  Cluster deployment is disabled.
+
+To deploy a cluster, set 'cluster.enabled: true' in your values.yaml.
+{{- end }}
+
+⚠️  SECURITY WARNING:
+Please ensure you update the default passwords in your values.yaml for production use!

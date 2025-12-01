@@ -1,0 +1,151 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  - serviceaccounts
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - servicemonitors
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - resources.wazuh.com
+  resources:
+  - opensearchactiongroups
+  - opensearchauthconfigs
+  - opensearchcomponenttemplates
+  - opensearchdashboards
+  - opensearchindexers
+  - opensearchindextemplates
+  - opensearchindices
+  - opensearchismpolicies
+  - opensearchrolemappings
+  - opensearchroles
+  - opensearchsnapshotpolicies
+  - opensearchtenants
+  - opensearchusers
+  - wazuhcertificates
+  - wazuhclusters
+  - wazuhdecoders
+  - wazuhmanagers
+  - wazuhrules
+  - wazuhworkers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - resources.wazuh.com
+  resources:
+  - opensearchactiongroups/finalizers
+  - opensearchauthconfigs/finalizers
+  - opensearchcomponenttemplates/finalizers
+  - opensearchdashboards/finalizers
+  - opensearchindexers/finalizers
+  - opensearchindextemplates/finalizers
+  - opensearchindices/finalizers
+  - opensearchismpolicies/finalizers
+  - opensearchrolemappings/finalizers
+  - opensearchroles/finalizers
+  - opensearchsnapshotpolicies/finalizers
+  - opensearchtenants/finalizers
+  - opensearchusers/finalizers
+  - wazuhcertificates/finalizers
+  - wazuhclusters/finalizers
+  - wazuhdecoders/finalizers
+  - wazuhmanagers/finalizers
+  - wazuhrules/finalizers
+  - wazuhworkers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - resources.wazuh.com
+  resources:
+  - opensearchactiongroups/status
+  - opensearchauthconfigs/status
+  - opensearchcomponenttemplates/status
+  - opensearchdashboards/status
+  - opensearchindexers/status
+  - opensearchindextemplates/status
+  - opensearchindices/status
+  - opensearchismpolicies/status
+  - opensearchrolemappings/status
+  - opensearchroles/status
+  - opensearchsnapshotpolicies/status
+  - opensearchtenants/status
+  - opensearchusers/status
+  - wazuhcertificates/status
+  - wazuhclusters/status
+  - wazuhdecoders/status
+  - wazuhmanagers/status
+  - wazuhrules/status
+  - wazuhworkers/status
+  verbs:
+  - get
+  - patch
+  - update

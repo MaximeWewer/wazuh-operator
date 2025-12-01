@@ -1,0 +1,75 @@
+# Sample OpenSearchIndex - Custom index configuration
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchIndex
+metadata:
+  name: custom-alerts
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  # Index settings
+  settings:
+    numberOfShards: 3
+    numberOfReplicas: 1
+    refreshInterval: "5s"
+    codec: best_compression
+    # Additional custom settings (raw JSON)
+    # custom:
+    #   index.max_result_window: 50000
+
+  # Index mappings
+  mappings:
+    dynamic: "strict"  # Options: true, false, strict
+    dateDetection: true
+    numericDetection: false
+    # Field properties (raw JSON)
+    properties:
+      timestamp:
+        type: date
+        format: "epoch_millis||strict_date_optional_time"
+      level:
+        type: keyword
+      message:
+        type: text
+        analyzer: standard
+      source_ip:
+        type: ip
+      tags:
+        type: keyword
+      metadata:
+        type: object
+        enabled: true
+
+  # Index aliases
+  aliases:
+    - name: custom-alerts-read
+      isWriteIndex: false
+    - name: custom-alerts-write
+      isWriteIndex: true
+---
+# Hot-warm-cold index example
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchIndex
+metadata:
+  name: logs-hot-001
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  settings:
+    numberOfShards: 5
+    numberOfReplicas: 1
+    refreshInterval: "1s"
+    # custom:
+    #   index.routing.allocation.require.tier: hot
+
+  aliases:
+    - name: logs-write
+      isWriteIndex: true
+    - name: logs-read
+      isWriteIndex: false

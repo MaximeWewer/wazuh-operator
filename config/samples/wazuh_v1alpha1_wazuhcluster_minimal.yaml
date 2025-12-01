@@ -1,0 +1,72 @@
+# Minimal WazuhCluster for development/testing on minikube
+# Resources optimized for 4 vCPU, 6GB RAM environment
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhCluster
+metadata:
+  name: wazuh-test
+  namespace: wazuh
+  labels:
+    environment: development
+spec:
+  # Wazuh version
+  version: "4.9.2"
+
+  # Indexer configuration (OpenSearch)
+  indexer:
+    replicas: 1
+    storageSize: 10Gi
+    # Minimum 1GB heap for OpenSearch + security plugin
+    javaOpts: "-Xms1g -Xmx1g -Dlog4j2.formatMsgNoLookups=true"
+    resources:
+      requests:
+        cpu: 250m
+        memory: 2Gi
+      limits:
+        cpu: 1
+        memory: 2Gi
+    service:
+      type: ClusterIP
+
+  # Manager configuration
+  manager:
+    master:
+      storageSize: 5Gi
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: 500m
+          memory: 1Gi
+      service:
+        type: ClusterIP
+    workers:
+      replicas: 0  # No workers for minimal setup
+      storageSize: 5Gi
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: 500m
+          memory: 1Gi
+
+  # Dashboard configuration
+  dashboard:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 250m
+        memory: 512Mi
+    service:
+      type: NodePort  # For easy access on minikube
+
+  # TLS configuration
+  tls:
+    enabled: true
+    certConfig:
+      organization: "Wazuh Test"
+      country: "US"

@@ -1,0 +1,151 @@
+{{- include "wazuh-operator.validateDeploymentMode" . -}}
+{{ if eq .Values.deploymentMode "crds" }}
+===============================================
+  Wazuh Operator CRDs Installed
+===============================================
+
+The following CRDs have been installed:
+  - WazuhCluster
+  - WazuhCertificate
+  - WazuhDecoder
+  - WazuhRule
+  - OpenSearchActionGroup
+  - OpenSearchComponentTemplate
+  - OpenSearchIndexTemplate
+  - OpenSearchInternalUser
+  - OpenSearchISMPolicy
+  - OpenSearchRole
+  - OpenSearchRolesMapping
+  - OpenSearchSecurityConfig
+
+Next steps:
+1. Deploy an operator instance to manage Wazuh cluster:
+
+   helm install wazuh-operator wazuh-operator/wazuh-operator \
+     --set deploymentMode=operator \
+     --set crds.install=false \
+     --namespace wazuh
+
+2. Create a WazuhCluster resource:
+
+   kubectl apply -f - <<EOF
+   apiVersion: wazuh.wazuh.com/v1alpha1
+   kind: WazuhCluster
+   metadata:
+     name: wazuh-cluster
+   spec:
+     version: "4.9.2"
+   EOF
+
+{{ else if eq .Values.deploymentMode "operator" }}
+===============================================
+  Wazuh Operator Deployed
+===============================================
+
+Operator Name: {{ include "wazuh-operator.operatorName" . }}
+Namespace: {{ include "wazuh-operator.namespace" . }}
+Replicas: 1 (hardcoded, manages one WazuhCluster)
+
+The operator has been deployed successfully.
+The operator will automatically manage WazuhCluster resources in its namespace.
+{{- if not .Values.crds.install }}
+
+⚠️  NOTE: CRDs were not installed (crds.install=false)
+    Make sure CRDs are installed separately before creating WazuhCluster resources.
+{{- end }}
+
+Check the operator status:
+
+  kubectl get deployment {{ include "wazuh-operator.fullname" . }}-controller-manager -n {{ include "wazuh-operator.namespace" . }}
+
+View operator logs:
+
+  kubectl logs -f deployment/{{ include "wazuh-operator.fullname" . }}-controller-manager -n {{ include "wazuh-operator.namespace" . }}
+
+Create a WazuhCluster:
+
+  kubectl apply -f - <<EOF
+  apiVersion: wazuh.wazuh.com/v1alpha1
+  kind: WazuhCluster
+  metadata:
+    name: wazuh-cluster
+    namespace: default
+  spec:
+    version: "4.9.2"
+    indexer:
+      replicas: 3
+    manager:
+      master: {}
+      workers:
+        replicas: 2
+    dashboard:
+      replicas: 1
+  EOF
+
+{{ else }}
+===============================================
+  Wazuh Operator Installed
+===============================================
+
+Operator Name: {{ include "wazuh-operator.operatorName" . }}
+Namespace: {{ include "wazuh-operator.namespace" . }}
+Replicas: 1 (hardcoded, manages one WazuhCluster)
+
+The Wazuh Operator has been successfully installed with CRDs.
+The operator will automatically manage WazuhCluster resources in its namespace.
+
+Check the operator status:
+
+  kubectl get deployment {{ include "wazuh-operator.fullname" . }}-controller-manager -n {{ include "wazuh-operator.namespace" . }}
+
+View operator logs:
+
+  kubectl logs -f deployment/{{ include "wazuh-operator.fullname" . }}-controller-manager -n {{ include "wazuh-operator.namespace" . }}
+
+View installed CRDs:
+
+  kubectl get crds | grep wazuh.wazuh.com
+
+Create your first WazuhCluster:
+
+  kubectl apply -f - <<EOF
+  apiVersion: wazuh.wazuh.com/v1alpha1
+  kind: WazuhCluster
+  metadata:
+    name: wazuh-cluster
+    namespace: default
+  spec:
+    version: "4.9.2"
+    indexer:
+      replicas: 3
+      storageSize: 50Gi
+    manager:
+      master:
+        storageSize: 20Gi
+      workers:
+        replicas: 2
+        storageSize: 20Gi
+    dashboard:
+      replicas: 1
+  EOF
+
+Watch the cluster deployment:
+
+  kubectl get wazuhcluster -A -w
+  kubectl get pods -n default -l app.kubernetes.io/name=wazuh -w
+
+{{ end }}
+
+{{- if .Values.operator.metrics.enabled }}
+
+Metrics:
+  Service: {{ include "wazuh-operator.fullname" . }}-metrics
+  Port: {{ .Values.operator.metrics.service.port }}
+  {{- if .Values.operator.serviceMonitor.enabled }}
+  ServiceMonitor: Enabled
+  {{- end }}
+{{- end }}
+
+Documentation: https://documentation.wazuh.com/
+Support: https://groups.google.com/g/wazuh
+GitHub: https://github.com/wazuh/wazuh-kubernetes

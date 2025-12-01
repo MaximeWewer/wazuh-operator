@@ -1,0 +1,39 @@
+# Sample OpenSearchTenant - Multi-tenancy for dashboard isolation
+# Tenants allow different teams to have isolated saved objects (dashboards, visualizations)
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchTenant
+metadata:
+  name: soc-team
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  # Description of the tenant
+  description: "Security Operations Center team tenant for isolated dashboards"
+---
+# Additional tenant for development team
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchTenant
+metadata:
+  name: dev-team
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+  description: "Development team tenant for application monitoring dashboards"
+---
+# Tenant for compliance reporting
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchTenant
+metadata:
+  name: compliance
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+  description: "Compliance team tenant for audit and regulatory dashboards"

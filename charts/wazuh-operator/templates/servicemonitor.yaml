@@ -1,0 +1,22 @@
+{{- if include "wazuh-operator.createServiceMonitor" . }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "wazuh-operator.fullname" . }}
+  namespace: {{ include "wazuh-operator.namespace" . }}
+  labels:
+    {{- include "wazuh-operator.labels" . | nindent 4 }}
+    {{- with .Values.operator.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "wazuh-operator.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: metrics
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: {{ .Values.operator.serviceMonitor.interval }}
+    scrapeTimeout: {{ .Values.operator.serviceMonitor.scrapeTimeout }}
+{{- end }}

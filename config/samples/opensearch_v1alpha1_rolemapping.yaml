@@ -1,0 +1,27 @@
+# Sample OpenSearchRoleMapping - maps users to the wazuh-alerts-reader role
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchRoleMapping
+metadata:
+  # Name must match the role name being mapped
+  name: wazuh-alerts-reader
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  # Map internal users to this role
+  users:
+    - analyst
+
+  # Map backend roles (from LDAP/AD) to this role
+  backendRoles:
+    - analysts
+    - security-team
+
+  # Optional: Map specific hosts
+  # hosts:
+  #   - "*.example.com"
+
+  description: "Maps analysts to the wazuh-alerts-reader role"

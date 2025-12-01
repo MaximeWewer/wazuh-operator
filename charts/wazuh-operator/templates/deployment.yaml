@@ -1,0 +1,119 @@
+{{- if include "wazuh-operator.installOperator" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wazuh-operator.fullname" . }}-controller-manager
+  namespace: {{ include "wazuh-operator.namespace" . }}
+  labels:
+    {{- include "wazuh-operator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller-manager
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "wazuh-operator.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: controller-manager
+  template:
+    metadata:
+      labels:
+        {{- include "wazuh-operator.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: controller-manager
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+        {{- with .Values.operator.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.operator.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "wazuh-operator.serviceAccountName" . }}
+      {{- with .Values.operator.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: manager
+        image: {{ include "wazuh-operator.image" . }}
+        imagePullPolicy: {{ include "wazuh-operator.imagePullPolicy" . }}
+        command:
+        - /manager
+        args:
+        - --health-probe-bind-address={{ .Values.operator.healthProbe.bindAddress }}
+        {{- if .Values.operator.metrics.enabled }}
+        - --metrics-bind-address={{ .Values.operator.metrics.bindAddress }}
+        {{- else }}
+        - --metrics-bind-address=0
+        {{- end }}
+        {{- if .Values.certTestMode }}
+        - --cert-test-mode
+        {{- end }}
+        {{- if .Values.nonBlockingRollouts }}
+        - --non-blocking-rollouts=true
+        {{- else }}
+        - --non-blocking-rollouts=false
+        {{- end }}
+        {{- with .Values.extraArgs }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: OPERATOR_NAME
+          value: {{ include "wazuh-operator.operatorName" . | quote }}
+        {{- with .Values.operator.env }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.operator.securityContext }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: {{ .Values.operator.healthProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.operator.healthProbe.periodSeconds }}
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        {{- with .Values.operator.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        {{- with .Values.operator.extraVolumeMounts }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      {{- with .Values.operator.extraVolumes }}
+      {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- with .Values.operator.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.operator.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+{{- end }}

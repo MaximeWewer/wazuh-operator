@@ -1,0 +1,70 @@
+# Sample OpenSearchISMPolicy - 90-day retention policy for Wazuh alerts
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchISMPolicy
+metadata:
+  name: wazuh-alerts-retention
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  description: "90-day retention policy for Wazuh alerts with hot-warm-cold-delete lifecycle"
+
+  # Start in the "hot" state
+  defaultState: hot
+
+  # Define the lifecycle states
+  states:
+    # Hot state - newly created indices
+    - name: hot
+      actions:
+        - config:
+            rollover:
+              min_index_age: 1d
+              min_doc_count: 10000000
+          retry:
+            count: 3
+            backoff: exponential
+            delay: "1m"
+      transitions:
+        - stateName: warm
+          conditions:
+            minIndexAge: 7d
+
+    # Warm state - older indices with reduced resources
+    - name: warm
+      actions:
+        - config:
+            replica_count:
+              number_of_replicas: 0
+        - config:
+            force_merge:
+              max_num_segments: 1
+      transitions:
+        - stateName: cold
+          conditions:
+            minIndexAge: 30d
+
+    # Cold state - rarely accessed indices
+    - name: cold
+      actions:
+        - config:
+            read_only: {}
+      transitions:
+        - stateName: delete
+          conditions:
+            minIndexAge: 90d
+
+    # Delete state - remove old indices
+    - name: delete
+      actions:
+        - config:
+            delete: {}
+
+  # Automatically apply this policy to matching indices
+  ismTemplate:
+    - indexPatterns:
+        - "wazuh-alerts-*"
+      priority: 100

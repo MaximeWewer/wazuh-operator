@@ -1,0 +1,15 @@
+{{- if and .Values.namespace.create (include "wazuh-operator.installOperator" .) }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "wazuh-operator.namespace" . }}
+  labels:
+    {{- include "wazuh-operator.labels" . | nindent 4 }}
+    {{- with .Values.namespace.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.namespace.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

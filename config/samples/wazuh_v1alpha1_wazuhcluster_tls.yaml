@@ -1,0 +1,173 @@
+# WazuhCluster with advanced TLS/Certificate configuration examples
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhCluster
+metadata:
+  name: wazuh-tls-custom
+  namespace: wazuh
+spec:
+  version: "4.9.2"
+
+  # ==========================================================================
+  # TLS Configuration - Auto-generated certificates
+  # ==========================================================================
+  tls:
+    enabled: true
+
+    # Certificate generation configuration
+    certConfig:
+      # X.509 Subject fields
+      country: "US"
+      state: "California"
+      locality: "San Francisco"
+      organization: "My Company Inc."
+      organizationalUnit: "Security Operations"
+      commonName: "wazuh-admin"
+
+      # Node certificate validity (default: 365 days)
+      # Can be shorter since hot reload allows seamless renewal
+      validityDays: 90
+
+      # Renewal threshold - certificates renewed when this many days remain
+      renewalThresholdDays: 30
+
+      # CA certificate validity (default: 730 days / 2 years)
+      # Should be longer since CA renewal requires pod restart
+      caValidityDays: 730
+
+      # CA renewal threshold
+      caRenewalThresholdDays: 90
+
+    # Hot reload configuration (Wazuh >= 4.9.0)
+    # Allows certificate renewal without pod restarts
+    hotReload:
+      enabled: true
+      # Force API reload for older OpenSearch versions
+      forceAPIReload: false
+
+  manager:
+    master:
+      storageSize: "10Gi"
+    workers:
+      replicas: 0
+
+  indexer:
+    replicas: 1
+    storageSize: "20Gi"
+
+  dashboard:
+    replicas: 1
+---
+# ==========================================================================
+# Alternative: cert-manager integration
+# Requires cert-manager to be installed in the cluster
+# ==========================================================================
+# apiVersion: resources.wazuh.com/v1alpha1
+# kind: WazuhCluster
+# metadata:
+#   name: wazuh-certmanager
+#   namespace: wazuh
+# spec:
+#   version: "4.9.2"
+#
+#   tls:
+#     enabled: true
+#     certManager:
+#       enabled: true
+#       issuerName: "wazuh-ca-issuer"
+#       issuerKind: "ClusterIssuer"  # or "Issuer" for namespace-scoped
+#
+#   manager:
+#     master:
+#       storageSize: "10Gi"
+#     workers:
+#       replicas: 0
+#   indexer:
+#     replicas: 1
+#   dashboard:
+#     replicas: 1
+---
+# ==========================================================================
+# Alternative: Custom/External certificates
+# For enterprises with existing PKI infrastructure
+# ==========================================================================
+# apiVersion: resources.wazuh.com/v1alpha1
+# kind: WazuhCluster
+# metadata:
+#   name: wazuh-custom-certs
+#   namespace: wazuh
+# spec:
+#   version: "4.9.2"
+#
+#   tls:
+#     enabled: true
+#     customCerts:
+#       # CA certificate
+#       caSecretRef:
+#         name: wazuh-ca-cert
+#         key: ca.crt
+#       # Node certificates (indexer, dashboard)
+#       nodeSecretRef:
+#         name: wazuh-node-cert
+#         key: node.crt
+#       # Admin certificate (for OpenSearch admin operations)
+#       adminSecretRef:
+#         name: wazuh-admin-cert
+#         key: admin.crt
+#       # Filebeat certificate (manager to indexer communication)
+#       filebeatSecretRef:
+#         name: wazuh-filebeat-cert
+#         key: filebeat.crt
+#
+#   manager:
+#     master:
+#       storageSize: "10Gi"
+#     workers:
+#       replicas: 0
+#   indexer:
+#     replicas: 1
+#   dashboard:
+#     replicas: 1
+# ---
+# # Custom CA certificate secret
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: wazuh-ca-cert
+#   namespace: wazuh
+# type: Opaque
+# data:
+#   ca.crt: <base64-encoded-ca-certificate>
+#   ca.key: <base64-encoded-ca-private-key>
+# ---
+# # Custom node certificate secret
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: wazuh-node-cert
+#   namespace: wazuh
+# type: Opaque
+# data:
+#   node.crt: <base64-encoded-node-certificate>
+#   node.key: <base64-encoded-node-private-key>
+# ---
+# # Custom admin certificate secret
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: wazuh-admin-cert
+#   namespace: wazuh
+# type: Opaque
+# data:
+#   admin.crt: <base64-encoded-admin-certificate>
+#   admin.key: <base64-encoded-admin-private-key>
+# ---
+# # Custom filebeat certificate secret
+# apiVersion: v1
+# kind: Secret
+# metadata:
+#   name: wazuh-filebeat-cert
+#   namespace: wazuh
+# type: Opaque
+# data:
+#   filebeat.crt: <base64-encoded-filebeat-certificate>
+#   filebeat.key: <base64-encoded-filebeat-private-key>
