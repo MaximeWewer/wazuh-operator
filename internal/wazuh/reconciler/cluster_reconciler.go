@@ -108,7 +108,10 @@ func (r *ClusterReconciler) ReconcileCertificates(ctx context.Context, cluster *
 	err = r.Get(ctx, types.NamespacedName{Name: clusterKeySecretName, Namespace: cluster.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 		clusterKeyBuilder := secrets.NewClusterKeySecretBuilder(cluster.Name, cluster.Namespace)
-		clusterKey, _ := config.GenerateClusterKey()
+		clusterKey, err := config.GenerateClusterKey()
+		if err != nil {
+			return fmt.Errorf("failed to generate cluster key: %w", err)
+		}
 		clusterKeySecret := clusterKeyBuilder.WithClusterKey(clusterKey).Build()
 
 		if err := controllerutil.SetControllerReference(cluster, clusterKeySecret, r.Scheme); err != nil {
@@ -1032,7 +1035,10 @@ func (r *ClusterReconciler) ensureClusterKeySecret(ctx context.Context, cluster 
 	if err != nil && errors.IsNotFound(err) {
 		// Create cluster key secret
 		clusterKeyBuilder := secrets.NewClusterKeySecretBuilder(cluster.Name, cluster.Namespace)
-		clusterKey, _ := config.GenerateClusterKey()
+		clusterKey, err := config.GenerateClusterKey()
+		if err != nil {
+			return fmt.Errorf("failed to generate cluster key: %w", err)
+		}
 		clusterKeySecret := clusterKeyBuilder.WithClusterKey(clusterKey).Build()
 
 		if err := controllerutil.SetControllerReference(cluster, clusterKeySecret, r.Scheme); err != nil {

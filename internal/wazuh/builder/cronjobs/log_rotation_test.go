@@ -91,37 +91,37 @@ func TestLogRotationCronJobBuilder_WithMethods(t *testing.T) {
 
 func TestLogRotationCronJobBuilder_BuildFindCommand(t *testing.T) {
 	tests := []struct {
-		name           string
-		retentionDays  int32
-		maxFileSizeMB  int32
+		name            string
+		retentionDays   int32
+		maxFileSizeMB   int32
 		combinationMode string
-		paths          []string
-		wantContains   []string
+		paths           []string
+		wantContains    []string
 		wantNotContains []string
 	}{
 		{
-			name:          "age only",
-			retentionDays: 7,
-			maxFileSizeMB: 0,
-			paths:         []string{"/var/ossec/logs/alerts/"},
-			wantContains:  []string{"find /var/ossec/logs/alerts/ -type f -mtime +7 -delete"},
+			name:            "age only",
+			retentionDays:   7,
+			maxFileSizeMB:   0,
+			paths:           []string{"/var/ossec/logs/alerts/"},
+			wantContains:    []string{"find /var/ossec/logs/alerts/ -type f -mtime +7 -delete"},
 			wantNotContains: []string{"-size"},
 		},
 		{
-			name:           "age and size with OR",
-			retentionDays:  7,
-			maxFileSizeMB:  100,
+			name:            "age and size with OR",
+			retentionDays:   7,
+			maxFileSizeMB:   100,
 			combinationMode: "or",
-			paths:          []string{"/var/ossec/logs/alerts/"},
-			wantContains:   []string{"-mtime +7 -o -size +100M"},
+			paths:           []string{"/var/ossec/logs/alerts/"},
+			wantContains:    []string{"-mtime +7 -o -size +100M"},
 		},
 		{
-			name:           "age and size with AND",
-			retentionDays:  14,
-			maxFileSizeMB:  500,
+			name:            "age and size with AND",
+			retentionDays:   14,
+			maxFileSizeMB:   500,
 			combinationMode: "and",
-			paths:          []string{"/var/ossec/logs/alerts/"},
-			wantContains:   []string{"-mtime +14 -size +500M -delete"},
+			paths:           []string{"/var/ossec/logs/alerts/"},
+			wantContains:    []string{"-mtime +14 -size +500M -delete"},
 			wantNotContains: []string{"-o"},
 		},
 		{

@@ -17,7 +17,8 @@ limitations under the License.
 package config
 
 import (
-	"encoding/base64"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
@@ -133,14 +134,15 @@ func (b *ClusterNodeConfigBuilder) BuildOSSECConfig(extraConfig string) (string,
 }
 
 // GenerateClusterKey generates a new random cluster key
+// Equivalent to: openssl rand -hex 16 (generates 32 hex characters from 16 random bytes)
 func GenerateClusterKey() (string, error) {
-	// Generate 32 random bytes
-	key := make([]byte, 32)
-	for i := range key {
-		key[i] = byte(i*7 + 13) // Simple deterministic generation for now
+	// Generate 16 random bytes (will produce 32 hex characters)
+	key := make([]byte, 16)
+	if _, err := rand.Read(key); err != nil {
+		return "", fmt.Errorf("failed to generate cluster key: %w", err)
 	}
-	// In production, use crypto/rand
-	return base64.StdEncoding.EncodeToString(key), nil
+	// Encode to hex string (32 characters)
+	return hex.EncodeToString(key), nil
 }
 
 // GetMasterServiceAddress returns the full service address for the master node

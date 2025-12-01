@@ -546,9 +546,9 @@ const ossecConfTemplate = `<!--
 {{- if .ClusterEnabled }}
   <cluster>
     <name>{{ .ClusterName }}</name>
-    <node_name>{{ .NodeName }}</node_name>
+    <node_name>to_be_replaced_by_hostname</node_name>
     <node_type>{{ .NodeType }}</node_type>
-    <key>{{ .ClusterKey }}</key>
+    <key>to_be_replaced_by_cluster_key</key>
     <port>1516</port>
     <bind_addr>0.0.0.0</bind_addr>
 {{- if eq .NodeType "worker" }}
