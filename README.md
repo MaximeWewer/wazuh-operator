@@ -452,8 +452,6 @@ spec:
     enabled: true
     wazuhExporter:
       enabled: true
-      image: "pytoshka/wazuh-prometheus-exporter:latest"
-      port: 9090
     indexerExporter:
       enabled: true
     serviceMonitor:
