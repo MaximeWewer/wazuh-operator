@@ -378,6 +378,24 @@ jobs:
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
 
+      - name: Create gh-pages branch if not exists
+        run: |
+          # Check if gh-pages branch exists remotely
+          if ! git ls-remote --heads origin gh-pages | grep -q gh-pages; then
+            echo "Creating gh-pages branch..."
+            git checkout --orphan gh-pages
+            git rm -rf .
+            echo "# Helm Chart Repository" > README.md
+            echo "" >> README.md
+            echo "This branch contains Helm chart packages for the Wazuh Operator project." >> README.md
+            git add README.md
+            git commit -m "Initialize gh-pages branch for Helm chart repository"
+            git push origin gh-pages
+            git checkout -
+          else
+            echo "gh-pages branch already exists"
+          fi
+
       - name: Install Helm
         uses: azure/setup-helm@v4
         with:
