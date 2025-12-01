@@ -574,6 +574,29 @@ func (b *DashboardDeploymentBuilder) buildEnvVars() []corev1.EnvVar {
 			Name:  "WAZUH_API_URL",
 			Value: wazuhAPIURL,
 		})
+		// API_USERNAME and API_PASSWORD are used by wazuh_app_config.sh to configure wazuh.yml
+		env = append(env, corev1.EnvVar{
+			Name: "API_USERNAME",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: fmt.Sprintf("%s-api-credentials", b.clusterName),
+					},
+					Key: constants.SecretKeyAPIUsername,
+				},
+			},
+		})
+		env = append(env, corev1.EnvVar{
+			Name: "API_PASSWORD",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: fmt.Sprintf("%s-api-credentials", b.clusterName),
+					},
+					Key: constants.SecretKeyAPIPassword,
+				},
+			},
+		})
 	}
 
 	// Add custom env vars

@@ -132,16 +132,14 @@ func (b *ManagerConfigMapBuilder) Build() *corev1.ConfigMap {
 	data := make(map[string]string)
 
 	// Add ossec.conf if provided
-	// The key must be "etc/ossec.conf" so that the Docker entrypoint copies it to /var/ossec/etc/ossec.conf
-	// The entrypoint does: cp -r /wazuh-config-mount/* /var/ossec/
+	// Key format matches expected path structure in /wazuh-config-mount/etc/ossec.conf
 	if b.ossecConf != "" {
-		data["etc/ossec.conf"] = b.ossecConf
+		data["ossec.conf"] = b.ossecConf
 	}
 
 	// Add filebeat.yml if provided
-	// The key must be "etc/filebeat/filebeat.yml" for the Docker entrypoint
 	if b.filebeatYml != "" {
-		data["etc/filebeat/filebeat.yml"] = b.filebeatYml
+		data["filebeat.yml"] = b.filebeatYml
 	}
 
 	// Add extra configs

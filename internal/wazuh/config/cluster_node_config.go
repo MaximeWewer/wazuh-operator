@@ -130,7 +130,7 @@ func (b *ClusterNodeConfigBuilder) BuildOSSECConfig(extraConfig string) (string,
 	if b.config.NodeType == NodeTypeMaster {
 		return BuildMasterConfig(b.config.ClusterName, b.config.Namespace, b.config.NodeName, b.config.ClusterKey, extraConfig)
 	}
-	return BuildWorkerConfig(b.config.ClusterName, b.config.Namespace, b.config.NodeName, b.config.ClusterKey, b.config.MasterAddress, b.config.MasterPort, extraConfig)
+	return BuildWorkerConfig(b.config.ClusterName, b.config.Namespace, b.config.NodeName, b.config.ClusterKey, b.config.MasterPort, extraConfig)
 }
 
 // GenerateClusterKey generates a new random cluster key

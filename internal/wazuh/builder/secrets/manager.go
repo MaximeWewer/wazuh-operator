@@ -283,8 +283,8 @@ func (b *APICredentialsSecretBuilder) Build() *corev1.Secret {
 		},
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{
-			"username": []byte(b.username),
-			"password": []byte(b.password),
+			constants.SecretKeyAPIUsername: []byte(b.username),
+			constants.SecretKeyAPIPassword: []byte(b.password),
 		},
 	}
 }

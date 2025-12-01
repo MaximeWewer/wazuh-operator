@@ -407,8 +407,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "worker")
 
-	masterAddr := config.GetMasterServiceAddress(cluster.Name, cluster.Namespace)
-	ossecConf, err := config.BuildWorkerConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-worker", "", masterAddr, int(constants.PortManagerCluster), "")
+	// Build ossec.conf for workers - master service name is computed from cluster name
+	ossecConf, err := config.BuildWorkerConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-worker", "", int(constants.PortManagerCluster), "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to build worker ossec.conf: %w", err)
 	}
@@ -535,11 +535,14 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 }
 
 // resolveIndexerCredentials resolves indexer credentials from secret
+// It first checks for custom credentials in cluster.Spec.Indexer.Credentials
+// If not specified, it falls back to the default auto-generated secret: <cluster>-indexer-credentials
 func (r *ClusterReconciler) resolveIndexerCredentials(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (string, string) {
 	log := logf.FromContext(ctx)
 	indexerUsername := ""
 	indexerPassword := ""
 
+	// Check if custom credentials secret is specified in the CRD
 	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Credentials != nil && cluster.Spec.Indexer.Credentials.SecretName != "" {
 		usernameKey := "username"
 		if cluster.Spec.Indexer.Credentials.UsernameKey != "" {
@@ -559,6 +562,22 @@ func (r *ClusterReconciler) resolveIndexerCredentials(ctx context.Context, clust
 		password, err := r.resolveSecretKey(ctx, cluster.Namespace, cluster.Spec.Indexer.Credentials.SecretName, passwordKey)
 		if err != nil {
 			log.Error(err, "Failed to resolve indexer password from secret", "secret", cluster.Spec.Indexer.Credentials.SecretName)
+		} else {
+			indexerPassword = password
+		}
+	} else {
+		// Fall back to the default auto-generated indexer credentials secret
+		defaultSecretName := fmt.Sprintf("%s-indexer-credentials", cluster.Name)
+		username, err := r.resolveSecretKey(ctx, cluster.Namespace, defaultSecretName, constants.SecretKeyAdminUsername)
+		if err != nil {
+			log.V(1).Info("Default indexer credentials secret not found, will use defaults", "secret", defaultSecretName)
+		} else {
+			indexerUsername = username
+		}
+
+		password, err := r.resolveSecretKey(ctx, cluster.Namespace, defaultSecretName, constants.SecretKeyAdminPassword)
+		if err != nil {
+			log.V(1).Info("Default indexer credentials password not found in secret", "secret", defaultSecretName)
 		} else {
 			indexerPassword = password
 		}
@@ -759,8 +778,8 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "worker")
 
-	masterAddr := config.GetMasterServiceAddress(cluster.Name, cluster.Namespace)
-	ossecConf, err := config.BuildWorkerConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-worker", "", masterAddr, int(constants.PortManagerCluster), "")
+	// Build ossec.conf for workers - master service name is computed from cluster name
+	ossecConf, err := config.BuildWorkerConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-worker", "", int(constants.PortManagerCluster), "")
 	if err != nil {
 		return fmt.Errorf("failed to build worker ossec.conf: %w", err)
 	}
@@ -1058,17 +1077,10 @@ func (r *ClusterReconciler) ensureClusterKeySecret(ctx context.Context, cluster 
 }
 
 // ensureAPICredentialsSecret ensures the API credentials secret exists when monitoring is enabled
-// This secret is required by the Wazuh Prometheus exporter sidecar
+// This secret is required by the Wazuh Manager (API_USERNAME/API_PASSWORD env vars)
+// and optionally by the Wazuh Prometheus exporter sidecar
 func (r *ClusterReconciler) ensureAPICredentialsSecret(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
-
-	// Only create if monitoring with Wazuh exporter is enabled
-	if cluster.Spec.Monitoring == nil || !cluster.Spec.Monitoring.Enabled {
-		return nil
-	}
-	if cluster.Spec.Monitoring.WazuhExporter == nil || !cluster.Spec.Monitoring.WazuhExporter.Enabled {
-		return nil
-	}
 
 	secretName := fmt.Sprintf("%s-api-credentials", cluster.Name)
 	found := &corev1.Secret{}

@@ -231,7 +231,10 @@ type OSSECConfig struct {
 	ClusterName string
 	// Cluster key (base64)
 	ClusterKey string
-	// Master node address (for workers)
+	// Master service name (e.g., "wazuh-cluster-manager-master")
+	// Used in <nodes><node> for cluster communication on port 1516
+	MasterServiceName string
+	// Master node address (service address for workers, kept for backwards compatibility)
 	MasterAddress string
 	// Master node port (for workers)
 	MasterPort int
@@ -270,27 +273,28 @@ type OSSECConfig struct {
 // DefaultOSSECConfig returns a default OSSECConfig for master node
 func DefaultOSSECConfig(clusterName, nodeName string) *OSSECConfig {
 	return &OSSECConfig{
-		NodeType:       NodeTypeMaster,
-		NodeName:       nodeName,
-		ClusterName:    clusterName,
-		ClusterKey:     "",
-		MasterAddress:  "",
-		MasterPort:     int(constants.PortManagerCluster),
-		APIProtocol:    "https",
-		APIHost:        "0.0.0.0",
-		APIPort:        int(constants.PortManagerAPI),
-		ClusterEnabled: true,
-		ClusterNodes:   []string{},
-		Hidden:         false,
-		ExtraConfig:    "",
-		IndexerHost:    fmt.Sprintf("%s-indexer", clusterName),
-		Namespace:      "default",
-		Global:         DefaultGlobalConfig(),
-		Alerts:         DefaultAlertsConfig(),
-		Logging:        DefaultLoggingConfig(),
-		Remote:         DefaultRemoteConfig(),
-		Auth:           DefaultAuthConfig(),
-		AuthdPassword:  "",
+		NodeType:          NodeTypeMaster,
+		NodeName:          nodeName,
+		ClusterName:       clusterName,
+		ClusterKey:        "",
+		MasterServiceName: fmt.Sprintf("%s-manager-master", clusterName), // Service name for cluster communication
+		MasterAddress:     "",
+		MasterPort:        int(constants.PortManagerCluster),
+		APIProtocol:       "https",
+		APIHost:           "0.0.0.0",
+		APIPort:           int(constants.PortManagerAPI),
+		ClusterEnabled:    true,
+		ClusterNodes:      []string{},
+		Hidden:            false,
+		ExtraConfig:       "",
+		IndexerHost:       fmt.Sprintf("%s-indexer", clusterName),
+		Namespace:         "default",
+		Global:            DefaultGlobalConfig(),
+		Alerts:            DefaultAlertsConfig(),
+		Logging:           DefaultLoggingConfig(),
+		Remote:            DefaultRemoteConfig(),
+		Auth:              DefaultAuthConfig(),
+		AuthdPassword:     "",
 	}
 }
 
@@ -437,49 +441,51 @@ func (b *OSSECConfigBuilder) SetAuthdPassword(password string) *OSSECConfigBuild
 // BuildMasterConfig builds ossec.conf for a master node
 func BuildMasterConfig(clusterName, namespace, nodeName, clusterKey string, extraConfig string) (string, error) {
 	config := &OSSECConfig{
-		NodeType:       NodeTypeMaster,
-		NodeName:       nodeName,
-		ClusterName:    clusterName,
-		ClusterKey:     clusterKey,
-		APIProtocol:    "https",
-		APIHost:        "0.0.0.0",
-		APIPort:        int(constants.PortManagerAPI),
-		ClusterEnabled: true,
-		Hidden:         false,
-		ExtraConfig:    extraConfig,
-		IndexerHost:    fmt.Sprintf("%s-indexer", clusterName),
-		Namespace:      namespace,
-		Global:         DefaultGlobalConfig(),
-		Alerts:         DefaultAlertsConfig(),
-		Logging:        DefaultLoggingConfig(),
-		Remote:         DefaultRemoteConfig(),
-		Auth:           DefaultAuthConfig(),
+		NodeType:          NodeTypeMaster,
+		NodeName:          nodeName,
+		ClusterName:       clusterName,
+		ClusterKey:        clusterKey,
+		MasterServiceName: fmt.Sprintf("%s-manager-master", clusterName), // Service name for cluster communication
+		APIProtocol:       "https",
+		APIHost:           "0.0.0.0",
+		APIPort:           int(constants.PortManagerAPI),
+		ClusterEnabled:    true,
+		Hidden:            false,
+		ExtraConfig:       extraConfig,
+		IndexerHost:       fmt.Sprintf("%s-indexer", clusterName),
+		Namespace:         namespace,
+		Global:            DefaultGlobalConfig(),
+		Alerts:            DefaultAlertsConfig(),
+		Logging:           DefaultLoggingConfig(),
+		Remote:            DefaultRemoteConfig(),
+		Auth:              DefaultAuthConfig(),
 	}
 	return NewOSSECConfigBuilder(config).Build()
 }
 
 // BuildWorkerConfig builds ossec.conf for a worker node
-func BuildWorkerConfig(clusterName, namespace, nodeName, clusterKey, masterAddress string, masterPort int, extraConfig string) (string, error) {
+// The master service name is computed from clusterName as "<clusterName>-manager-master"
+func BuildWorkerConfig(clusterName, namespace, nodeName, clusterKey string, masterPort int, extraConfig string) (string, error) {
 	config := &OSSECConfig{
-		NodeType:       NodeTypeWorker,
-		NodeName:       nodeName,
-		ClusterName:    clusterName,
-		ClusterKey:     clusterKey,
-		MasterAddress:  masterAddress,
-		MasterPort:     masterPort,
-		APIProtocol:    "https",
-		APIHost:        "0.0.0.0",
-		APIPort:        int(constants.PortManagerAPI),
-		ClusterEnabled: true,
-		Hidden:         false,
-		ExtraConfig:    extraConfig,
-		IndexerHost:    fmt.Sprintf("%s-indexer", clusterName),
-		Namespace:      namespace,
-		Global:         DefaultGlobalConfig(),
-		Alerts:         DefaultAlertsConfig(),
-		Logging:        DefaultLoggingConfig(),
-		Remote:         DefaultRemoteConfig(),
-		Auth:           DefaultAuthConfig(),
+		NodeType:          NodeTypeWorker,
+		NodeName:          nodeName,
+		ClusterName:       clusterName,
+		ClusterKey:        clusterKey,
+		MasterServiceName: fmt.Sprintf("%s-manager-master", clusterName), // Service name for cluster communication
+		MasterPort:        masterPort,
+		APIProtocol:       "https",
+		APIHost:           "0.0.0.0",
+		APIPort:           int(constants.PortManagerAPI),
+		ClusterEnabled:    true,
+		Hidden:            false,
+		ExtraConfig:       extraConfig,
+		IndexerHost:       fmt.Sprintf("%s-indexer", clusterName),
+		Namespace:         namespace,
+		Global:            DefaultGlobalConfig(),
+		Alerts:            DefaultAlertsConfig(),
+		Logging:           DefaultLoggingConfig(),
+		Remote:            DefaultRemoteConfig(),
+		Auth:              DefaultAuthConfig(),
 	}
 	return NewOSSECConfigBuilder(config).Build()
 }
@@ -551,15 +557,9 @@ const ossecConfTemplate = `<!--
     <key>to_be_replaced_by_cluster_key</key>
     <port>1516</port>
     <bind_addr>0.0.0.0</bind_addr>
-{{- if eq .NodeType "worker" }}
     <nodes>
-      <node>{{ .MasterAddress }}</node>
+      <node>{{ .MasterServiceName }}</node>
     </nodes>
-{{- else }}
-    <nodes>
-      <node>NODE_IP</node>
-    </nodes>
-{{- end }}
     <hidden>{{ if .Hidden }}yes{{ else }}no{{ end }}</hidden>
     <disabled>no</disabled>
   </cluster>

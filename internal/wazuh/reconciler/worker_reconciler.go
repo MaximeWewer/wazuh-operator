@@ -480,13 +480,12 @@ func (r *WorkerReconciler) reconcileStandaloneConfigMap(ctx context.Context, wor
 	configBuilder := configmaps.NewManagerConfigMapBuilder(worker.Name, worker.Namespace, "worker")
 
 	// Build configuration based on manager reference
-	masterAddr := config.GetMasterServiceAddress(worker.Spec.ManagerRef, worker.Namespace)
+	// Master service name is computed from worker.Spec.ManagerRef (the cluster name)
 	ossecConf, err := config.BuildWorkerConfig(
-		worker.Name,
+		worker.Spec.ManagerRef, // Use manager ref as cluster name for correct service name
 		worker.Namespace,
 		worker.Name+"-manager-worker",
 		"",
-		masterAddr,
 		int(constants.PortManagerCluster),
 		worker.Spec.ExtraConfig,
 	)

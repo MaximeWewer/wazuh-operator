@@ -247,6 +247,14 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	// Partition 0 means all pods will be updated, but OrderedReady ensures one at a time
 	partition := int32(0)
 
+	// Wazuh manager requires root (uid 0) to run s6, filebeat, and other services
+	runAsRoot := int64(0)
+
+	// Build init containers
+	initContainers := []corev1.Container{
+		b.buildInitContainer(),
+	}
+
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        b.name,
@@ -274,15 +282,24 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 					Annotations: b.podAnnotations,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector: b.nodeSelector,
-					Tolerations:  b.tolerations,
-					Affinity:     b.affinity,
+					NodeSelector:   b.nodeSelector,
+					Tolerations:    b.tolerations,
+					Affinity:       b.affinity,
+					InitContainers: initContainers,
 					Containers: []corev1.Container{
 						{
 							Name:            "wazuh-manager",
 							Image:           image,
 							ImagePullPolicy: corev1.PullIfNotPresent,
 							Resources:       *resources,
+							// SecurityContext: Wazuh manager image runs multiple services via s6 supervisor
+							// (wazuh-manager, filebeat, etc.) which require root privileges and SYS_CHROOT capability
+							SecurityContext: &corev1.SecurityContext{
+								RunAsUser: &runAsRoot,
+								Capabilities: &corev1.Capabilities{
+									Add: []corev1.Capability{"SYS_CHROOT"},
+								},
+							},
 							Ports: []corev1.ContainerPort{
 								{Name: "registration", ContainerPort: constants.PortManagerRegistration, Protocol: corev1.ProtocolTCP},
 								{Name: "cluster", ContainerPort: constants.PortManagerCluster, Protocol: corev1.ProtocolTCP},
@@ -364,14 +381,29 @@ func (b *WorkerStatefulSetBuilder) buildSelectorLabels() map[string]string {
 // buildVolumes builds the volume list
 func (b *WorkerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 	volumes := []corev1.Volume{
+		// ConfigMap source (read-only)
 		{
-			Name: "wazuh-config",
+			Name: "wazuh-config-source",
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: fmt.Sprintf("%s-manager-worker-config", b.clusterName),
 					},
 				},
+			},
+		},
+		// Writable volume for ossec.conf (init container copies here)
+		{
+			Name: "wazuh-config-mount",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		// Writable volume for filebeat.yml (init container copies here)
+		{
+			Name: "filebeat-config",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
 		{
@@ -395,7 +427,7 @@ func (b *WorkerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 					Items: []corev1.KeyToPath{
 						{
 							Key:  constants.SecretKeyCACert,
-							Path: "indexer-ca.pem",
+							Path: "root-ca.pem",
 						},
 					},
 				},
@@ -409,34 +441,33 @@ func (b *WorkerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 	return volumes
 }
 
-// buildVolumeMounts builds the volume mount list
+// buildVolumeMounts builds the volume mount list for the main container
 func (b *WorkerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
 		{
 			Name:      "wazuh-manager-data",
 			MountPath: constants.PathWazuhData,
 		},
+		// Mount writable ossec.conf directory (populated by init container)
+		// The Wazuh entrypoint expects configs at /wazuh-config-mount/etc/
 		{
-			Name:      "wazuh-config",
+			Name:      "wazuh-config-mount",
 			MountPath: "/wazuh-config-mount",
 		},
-		// Mount certificates individually with SubPath (allows container to modify other files)
+		// Mount writable filebeat.yml (populated by init container)
+		{
+			Name:      "filebeat-config",
+			MountPath: "/etc/filebeat",
+		},
+		// Mount certificates as directory for filebeat SSL
+		{
+			Name:      "wazuh-certs",
+			MountPath: "/etc/ssl/certs/wazuh",
+			ReadOnly:  true,
+		},
 		{
 			Name:      "indexer-certs",
-			MountPath: "/etc/ssl/root-ca.pem",
-			SubPath:   "indexer-ca.pem",
-			ReadOnly:  true,
-		},
-		{
-			Name:      "wazuh-certs",
-			MountPath: "/etc/ssl/filebeat.pem",
-			SubPath:   "filebeat.pem",
-			ReadOnly:  true,
-		},
-		{
-			Name:      "wazuh-certs",
-			MountPath: "/etc/ssl/filebeat.key",
-			SubPath:   "filebeat-key.pem",
+			MountPath: "/etc/ssl/certs/indexer",
 			ReadOnly:  true,
 		},
 	}
@@ -447,7 +478,62 @@ func (b *WorkerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 	return mounts
 }
 
+// buildInitContainerVolumeMounts builds the volume mount list for the init container
+func (b *WorkerStatefulSetBuilder) buildInitContainerVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		// Source: ConfigMap (read-only)
+		{
+			Name:      "wazuh-config-source",
+			MountPath: "/config-source",
+			ReadOnly:  true,
+		},
+		// Destination: writable ossec.conf directory
+		{
+			Name:      "wazuh-config-mount",
+			MountPath: "/wazuh-config-mount",
+		},
+		// Destination: writable filebeat config directory
+		{
+			Name:      "filebeat-config",
+			MountPath: "/etc/filebeat",
+		},
+	}
+}
+
+// buildInitContainer creates the init container that copies configs to writable volumes
+func (b *WorkerStatefulSetBuilder) buildInitContainer() corev1.Container {
+	return corev1.Container{
+		Name:  "copy-configs",
+		Image: "busybox:1.36",
+		Command: []string{
+			"/bin/sh",
+			"-c",
+			`echo "Copying configuration files to writable volumes..."
+# Create directory structure for ossec.conf
+mkdir -p /wazuh-config-mount/etc
+# Copy ossec.conf if it exists
+if [ -f /config-source/ossec.conf ]; then
+    cp /config-source/ossec.conf /wazuh-config-mount/etc/ossec.conf
+    chmod 644 /wazuh-config-mount/etc/ossec.conf
+    echo "Copied ossec.conf"
+fi
+# Copy filebeat.yml if it exists
+if [ -f /config-source/filebeat.yml ]; then
+    cp /config-source/filebeat.yml /etc/filebeat/filebeat.yml
+    chmod 644 /etc/filebeat/filebeat.yml
+    echo "Copied filebeat.yml"
+fi
+echo "Configuration copy complete"
+ls -la /wazuh-config-mount/etc/ 2>/dev/null || true
+ls -la /etc/filebeat/ 2>/dev/null || true`,
+		},
+		VolumeMounts: b.buildInitContainerVolumeMounts(),
+	}
+}
+
 // buildEnvVars builds the environment variables
+// Note: Filebeat configuration (indexer URL, credentials, SSL) is now embedded directly
+// in filebeat.yml via the ConfigMap, no longer passed via environment variables
 func (b *WorkerStatefulSetBuilder) buildEnvVars() []corev1.EnvVar {
 	env := []corev1.EnvVar{
 		{
@@ -481,49 +567,27 @@ func (b *WorkerStatefulSetBuilder) buildEnvVars() []corev1.EnvVar {
 			Name:  "WAZUH_MASTER_ADDRESS",
 			Value: b.masterAddress,
 		},
-		// Indexer configuration for filebeat (auto-configured by container)
 		{
-			Name:  "INDEXER_URL",
-			Value: fmt.Sprintf("https://%s-indexer.%s.svc.cluster.local:%d", b.clusterName, b.namespace, constants.PortIndexerREST),
-		},
-		{
-			Name: "INDEXER_USERNAME",
+			Name: "API_USERNAME",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-indexer-credentials", b.clusterName),
+						Name: fmt.Sprintf("%s-api-credentials", b.clusterName),
 					},
-					Key: constants.SecretKeyAdminUsername,
+					Key: constants.SecretKeyAPIUsername,
 				},
 			},
 		},
 		{
-			Name: "INDEXER_PASSWORD",
+			Name: "API_PASSWORD",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-indexer-credentials", b.clusterName),
+						Name: fmt.Sprintf("%s-api-credentials", b.clusterName),
 					},
-					Key: constants.SecretKeyAdminPassword,
+					Key: constants.SecretKeyAPIPassword,
 				},
 			},
-		},
-		// SSL configuration for filebeat
-		{
-			Name:  "FILEBEAT_SSL_VERIFICATION_MODE",
-			Value: "full",
-		},
-		{
-			Name:  "SSL_CERTIFICATE_AUTHORITIES",
-			Value: "/etc/ssl/root-ca.pem",
-		},
-		{
-			Name:  "SSL_CERTIFICATE",
-			Value: "/etc/ssl/filebeat.pem",
-		},
-		{
-			Name:  "SSL_KEY",
-			Value: "/etc/ssl/filebeat.key",
 		},
 	}
 
