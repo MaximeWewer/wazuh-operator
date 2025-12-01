@@ -5,7 +5,7 @@
 namespace: wazuh
 
 # Create namespace if it doesn't exist
-createNamespace: true
+createNamespace: false
 
 # ============================================
 # Sizing Profiles

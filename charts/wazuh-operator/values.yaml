@@ -26,7 +26,8 @@ crds:
   keep: true
 
   # Annotations for CRDs
-  annotations: {}
+  annotations:
+    {}
     # helm.sh/resource-policy: keep
 
 # ============================================
@@ -45,7 +46,8 @@ operator:
     tag: ""
 
   # Image pull secrets for private registries
-  imagePullSecrets: []
+  imagePullSecrets:
+    []
     # - name: docker-registry-secret
 
   # Operator name
@@ -71,7 +73,8 @@ operator:
   serviceMonitor:
     enabled: false
     # Additional labels for service monitor
-    labels: {}
+    labels:
+      {}
       # prometheus: kube-prometheus
     interval: 30s
     scrapeTimeout: 10s
@@ -86,11 +89,13 @@ operator:
       memory: 128Mi
 
   # Node selector for operator pod
-  nodeSelector: {}
+  nodeSelector:
+    {}
     # node-role.kubernetes.io/control-plane: ""
 
   # Tolerations for operator pod
-  tolerations: []
+  tolerations:
+    []
     # - key: "node-role.kubernetes.io/control-plane"
     #   operator: "Exists"
     #   effect: "NoSchedule"
@@ -126,17 +131,20 @@ operator:
     name: ""
 
   # Environment variables for operator
-  env: []
+  env:
+    []
     # - name: LOG_LEVEL
     #   value: "info"
 
   # Extra volumes
-  extraVolumes: []
+  extraVolumes:
+    []
     # - name: tmp
     #   emptyDir: {}
 
   # Extra volume mounts
-  extraVolumeMounts: []
+  extraVolumeMounts:
+    []
     # - name: tmp
     #   mountPath: /tmp
 
@@ -153,7 +161,8 @@ rbac:
   roleName: ""
 
   # Additional rules for the operator role
-  extraRules: []
+  extraRules:
+    []
     # - apiGroups: [""]
     #   resources: ["configmaps"]
     #   verbs: ["get", "list"]
@@ -164,14 +173,15 @@ rbac:
 
 namespace:
   # Create namespace for operator
-  create: true
+  create: false
 
   # Namespace name
   # If not set, uses Release.Namespace
   name: ""
 
   # Namespace labels
-  labels: {}
+  labels:
+    {}
     # environment: production
 
   # Namespace annotations
@@ -182,7 +192,8 @@ namespace:
 # ============================================
 
 # Additional labels to add to all resources
-commonLabels: {}
+commonLabels:
+  {}
   # managed-by: helm
   # environment: production
 
@@ -199,7 +210,8 @@ commonAnnotations: {}
 # - --zap-encoder=console     # Use console encoder instead of JSON
 # - --zap-stacktrace-level=error  # Enable stacktraces at error level
 # - --zap-devel=true          # Enable development mode (more verbose)
-extraArgs: []
+extraArgs:
+  []
   # - --zap-log-level=debug
   # - --zap-encoder=console
 
