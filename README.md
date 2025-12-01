@@ -1,6 +1,8 @@
 # Wazuh Kubernetes Operator
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.24+-blue.svg)](https://kubernetes.io/) [![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8.svg)](https://golang.org/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.24+-blue.svg)](https://kubernetes.io/)
+[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8.svg)](https://golang.org/)
 
 A Kubernetes operator for managing Wazuh clusters, providing a declarative way to deploy and configure Wazuh security monitoring platforms.
 
@@ -47,9 +49,19 @@ The Wazuh operator manages three main components:
 
 #### Using Helm (Recommended)
 
+The Helm charts are published to GitHub Container Registry (GHCR):
+
+- **Operator chart**: `oci://ghcr.io/maximewewer/charts/wazuh-operator`
+- **Cluster chart**: `oci://ghcr.io/maximewewer/charts/wazuh-cluster`
+
 1. **Install the operator**:
 
 ```bash
+# From OCI registry (recommended)
+helm install wazuh-operator oci://ghcr.io/maximewewer/charts/wazuh-operator \
+  -n wazuh-system --create-namespace
+
+# Or from local chart
 helm install wazuh-operator ./charts/wazuh-operator -n wazuh-system --create-namespace
 ```
 
@@ -62,8 +74,15 @@ kubectl get pods -n wazuh-system
 3. **Deploy a Wazuh cluster**:
 
 ```bash
+# From OCI registry (recommended)
+helm install wazuh-cluster oci://ghcr.io/maximewewer/charts/wazuh-cluster \
+  -n wazuh --create-namespace
+
+# Or from local chart
 helm install wazuh-cluster ./charts/wazuh-cluster -n wazuh --create-namespace
 ```
+
+> **Note:** Credentials (OpenSearch admin, Wazuh API) are automatically generated. See [Credentials Management](docs/usage/features/credentials.md) for details.
 
 #### Using kubectl
 
@@ -121,14 +140,18 @@ kubectl port-forward svc/wazuh-cluster-sample-dashboard 5601:5601
 
 Open https://localhost:5601 in your browser.
 
-Default credentials:
+Credentials:
 
 - Username: `admin`
-- Password: Get from secret:
+- Password: Auto-generated. Retrieve from secret:
 
 ```bash
-kubectl get secret indexer-cred -o jsonpath='{.data.password}' | base64 -d
+# Get the auto-generated admin password
+kubectl get secret wazuh-cluster-sample-indexer-credentials \
+  -o jsonpath='{.data.admin-password}' | base64 -d && echo
 ```
+
+> **Security:** All passwords are cryptographically generated. There are no default passwords like "admin" or "wazuh".
 
 ## Custom Resource Definitions
 
@@ -325,6 +348,7 @@ spec:
   - [Installation Guide](docs/usage/getting-started/installation.md) - How to install the operator
   - [Quick Start](docs/usage/getting-started/quick-start.md) - Deploy your first cluster
 - **Feature Guides**:
+  - [Credentials Management](docs/usage/features/credentials.md) - Auto-generated passwords, secrets
   - [TLS Configuration](docs/usage/features/tls.md) - Certificate management
   - [Monitoring](docs/usage/features/monitoring.md) - Prometheus integration
   - [Log Rotation](docs/usage/features/log-rotation.md) - Automated log cleanup
