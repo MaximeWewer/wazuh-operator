@@ -1074,8 +1074,11 @@ func (r *ClusterReconciler) ensureAPICredentialsSecret(ctx context.Context, clus
 	found := &corev1.Secret{}
 	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cluster.Namespace}, found)
 	if errors.IsNotFound(err) {
-		// Create API credentials secret with default Wazuh credentials
+		// Create API credentials secret with generated password
+		// Password is generated with special characters required by Wazuh API
+		generatedPassword := utils.GenerateWazuhAPIPassword(20)
 		apiCredentialsBuilder := secrets.NewAPICredentialsSecretBuilder(cluster.Name, cluster.Namespace)
+		apiCredentialsBuilder.WithCredentials(constants.DefaultWazuhAPIUsername, generatedPassword)
 		if cluster.Spec.Version != "" {
 			apiCredentialsBuilder.WithVersion(cluster.Spec.Version)
 		}

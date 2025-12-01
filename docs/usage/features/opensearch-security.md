@@ -23,13 +23,21 @@ By default, the operator creates an `admin` user automatically when deploying a 
 **Default admin credentials:**
 
 - Username: `admin`
-- Password: Auto-generated and stored in Secret `<cluster-name>-indexer-credentials`
+- Password: **Auto-generated 24-character random password** stored in Secret `<cluster-name>-indexer-credentials`
+
+> **Security Note:** The operator never uses hardcoded default passwords. All passwords are cryptographically generated using `crypto/rand` for maximum security.
 
 ```bash
 # Get admin password
 kubectl get secret -n wazuh wazuh-indexer-credentials \
   -o jsonpath='{.data.admin-password}' | base64 -d
+
+# Get admin username
+kubectl get secret -n wazuh wazuh-indexer-credentials \
+  -o jsonpath='{.data.admin-username}' | base64 -d
 ```
+
+For more details on credential management, see the [Credentials Management Guide](credentials.md).
 
 ### Custom Admin User via CRD
 

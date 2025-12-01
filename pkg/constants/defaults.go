@@ -199,22 +199,15 @@ const (
 )
 
 // Default credentials
-// These are the default credentials used when no custom credentials are provided
-// WARNING: These should be changed in production environments
+// These are the default usernames used when no custom credentials are provided
+// Passwords are ALWAYS generated dynamically for security reasons
 const (
 	// DefaultWazuhAPIUsername is the default Wazuh API admin username
 	// This is also used by the dashboard to authenticate with Wazuh API
 	DefaultWazuhAPIUsername = "wazuh"
 
-	// DefaultWazuhAPIPassword is the default Wazuh API admin password
-	DefaultWazuhAPIPassword = "wazuh"
-
 	// DefaultOpenSearchAdminUsername is the default OpenSearch admin username
 	DefaultOpenSearchAdminUsername = "admin"
-
-	// DefaultOpenSearchAdminPassword is the default OpenSearch admin password
-	DefaultOpenSearchAdminPassword = "admin"
-
 )
 
 // Log rotation defaults

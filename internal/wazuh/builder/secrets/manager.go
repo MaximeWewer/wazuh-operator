@@ -222,7 +222,8 @@ type APICredentialsSecretBuilder struct {
 }
 
 // NewAPICredentialsSecretBuilder creates a new APICredentialsSecretBuilder
-// Default credentials are the Wazuh default admin user
+// Default username is the Wazuh default admin user
+// Password must be set explicitly via WithCredentials() - no default password for security
 func NewAPICredentialsSecretBuilder(clusterName, namespace string) *APICredentialsSecretBuilder {
 	name := fmt.Sprintf("%s-api-credentials", clusterName)
 	return &APICredentialsSecretBuilder{
@@ -231,7 +232,7 @@ func NewAPICredentialsSecretBuilder(clusterName, namespace string) *APICredentia
 		clusterName: clusterName,
 		version:     constants.DefaultWazuhVersion,
 		username:    constants.DefaultWazuhAPIUsername,
-		password:    constants.DefaultWazuhAPIPassword,
+		password:    "", // Must be set explicitly - no default for security
 		labels:      make(map[string]string),
 		annotations: make(map[string]string),
 	}

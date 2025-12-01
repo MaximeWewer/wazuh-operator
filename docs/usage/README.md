@@ -11,6 +11,7 @@ This directory contains documentation for users of the Wazuh Operator.
 
 ### Features
 
+- [Credentials Management](features/credentials.md) - Auto-generated passwords, secrets management
 - [Sizing Profiles](features/sizing.md) - Cluster sizing guide
 - [TLS Configuration](features/tls.md) - Certificate management
 - [Monitoring](features/monitoring.md) - Prometheus integration

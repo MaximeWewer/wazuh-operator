@@ -120,10 +120,28 @@ spec:
 
 ## Credentials Management
 
-### Using Kubernetes Secrets (Recommended)
+### Auto-Generated Credentials
+
+When monitoring with Wazuh exporter is enabled, the operator automatically generates a **20-character random password** with special characters for the Wazuh API.
+
+```bash
+# Get auto-generated API password
+kubectl get secret -n wazuh wazuh-api-credentials \
+  -o jsonpath='{.data.password}' | base64 -d
+
+# Get API username (always "wazuh")
+kubectl get secret -n wazuh wazuh-api-credentials \
+  -o jsonpath='{.data.username}' | base64 -d
+```
+
+> **Security Note:** The operator never uses hardcoded default passwords like "wazuh". All passwords are cryptographically generated and include at least one special character from: `. * + ? -`
+
+For more details, see the [Credentials Management Guide](credentials.md).
+
+### Using Kubernetes Secrets (Custom Credentials)
 
 ```yaml
-# Create the secret
+# Create a custom secret
 apiVersion: v1
 kind: Secret
 metadata:
@@ -132,7 +150,7 @@ metadata:
 type: Opaque
 stringData:
   username: wazuh-wui
-  password: MySecurePassword123!
+  password: MySecurePassword.123
 ---
 # Reference in WazuhCluster
 apiVersion: resources.wazuh.com/v1alpha1

@@ -245,9 +245,9 @@ func (b *DashboardConfigMapBuilder) buildWazuhConfig() string {
 			// Priority for credentials resolution:
 			// 1. Resolved credentials from secretRef (if available in resolvedCredentials map)
 			// 2. Inline credentials from CRD
-			// 3. Default credentials (Wazuh API credentials)
+			// 3. Default username only - password MUST be provided
 			username := constants.DefaultWazuhAPIUsername
-			password := constants.DefaultWazuhAPIPassword
+			password := ""
 
 			// Try resolved credentials first
 			if b.resolvedCredentials != nil {
@@ -260,10 +260,10 @@ func (b *DashboardConfigMapBuilder) buildWazuhConfig() string {
 			}
 
 			// Fall back to inline values if not resolved
-			if username == constants.DefaultWazuhAPIUsername && endpoint.Username != "" {
+			if endpoint.Username != "" {
 				username = endpoint.Username
 			}
-			if password == constants.DefaultWazuhAPIPassword && endpoint.Password != "" {
+			if password == "" && endpoint.Password != "" {
 				password = endpoint.Password
 			}
 
@@ -295,9 +295,9 @@ func (b *DashboardConfigMapBuilder) buildWazuhConfig() string {
 		}
 		sb.WriteString(fmt.Sprintf("      port: %d\n", port))
 
-		// Credentials: try resolved from secret, then defaults (Wazuh API credentials)
+		// Credentials: try resolved from secret - password MUST be provided
 		username := constants.DefaultWazuhAPIUsername
-		password := constants.DefaultWazuhAPIPassword
+		password := ""
 		if b.resolvedCredentials != nil {
 			if resolvedUser, ok := b.resolvedCredentials["default:username"]; ok && resolvedUser != "" {
 				username = resolvedUser

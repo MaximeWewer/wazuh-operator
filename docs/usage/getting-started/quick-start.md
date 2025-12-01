@@ -100,10 +100,15 @@ wazuh   4.9.0     Running   Running   Running   Running     5m
 
 ### Get Admin Password
 
+The operator automatically generates secure random passwords for all components. To retrieve the OpenSearch admin password:
+
 ```bash
+# Get admin password (auto-generated 24-character random password)
 kubectl get secret -n wazuh wazuh-indexer-credentials \
-  -o jsonpath='{.data.admin-password}' | base64 -d
+  -o jsonpath='{.data.admin-password}' | base64 -d && echo
 ```
+
+> **Note:** Passwords are cryptographically generated for each deployment. There are no default passwords like "admin" or "wazuh".
 
 ### Port Forward
 
@@ -119,6 +124,8 @@ Login with:
 
 - Username: `admin`
 - Password: (from step above)
+
+For more credential management options, see the [Credentials Management Guide](../features/credentials.md).
 
 ## Step 5: Verify Components
 
