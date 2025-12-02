@@ -359,65 +359,12 @@ jobs:
           retention-days: 90
 
   # =============================================================================
-  # Job 6: Publish Helm Charts to GitHub Pages (Traditional Helm Repo)
-  # =============================================================================
-  publish-helm-repo:
-    name: Publish Helm Charts to GitHub Pages
-    runs-on: ubuntu-latest
-    needs: [prepare, build-helm-operator, build-helm-cluster]
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Configure Git
-        run: |
-          git config user.name "${{ github.actor }}"
-          git config user.email "${{ github.actor }}@users.noreply.github.com"
-
-      - name: Create gh-pages branch if not exists
-        run: |
-          # Check if gh-pages branch exists remotely
-          if ! git ls-remote --heads origin gh-pages | grep -q gh-pages; then
-            echo "Creating gh-pages branch..."
-            git checkout --orphan gh-pages
-            git rm -rf .
-            echo "# Helm Chart Repository" > README.md
-            echo "" >> README.md
-            echo "This branch contains Helm chart packages for the Wazuh Operator project." >> README.md
-            git add README.md
-            git commit -m "Initialize gh-pages branch for Helm chart repository"
-            git push origin gh-pages
-            git checkout -
-          else
-            echo "gh-pages branch already exists"
-          fi
-
-      - name: Install Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: 'latest'
-
-      - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.7.0
-        with:
-          charts_dir: charts
-          skip_existing: true
-          mark_as_latest: true
-        env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-          CR_SKIP_EXISTING: "true"
-
-  # =============================================================================
-  # Job 7: Create GitHub Release
+  # Job 6: Create GitHub Release
   # =============================================================================
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [prepare, create-multiarch-manifest, build-helm-operator, build-helm-cluster, publish-helm-repo]
+    needs: [prepare, create-multiarch-manifest, build-helm-operator, build-helm-cluster]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -480,22 +427,7 @@ jobs:
           Supported platforms:
           - linux/amd64
 
-          ### Helm Charts
-
-          #### Option 1: Traditional Helm Repository (Recommended for public access)
-
-          \`\`\`bash
-          helm repo add wazuh-operator https://${{ github.repository_owner }}.github.io/wazuh-operator
-          helm repo update
-
-          # Install the operator
-          helm install wazuh-operator wazuh-operator/wazuh-operator --version ${{ needs.prepare.outputs.version }}
-
-          # Install a Wazuh cluster
-          helm install wazuh-cluster wazuh-operator/wazuh-cluster --version ${{ needs.prepare.outputs.version }}
-          \`\`\`
-
-          #### Option 2: OCI Registry
+          ### Helm Charts (OCI Registry)
 
           \`\`\`bash
           # Install the operator
@@ -540,10 +472,9 @@ jobs:
           - \`${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}\`
           - \`${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:latest\`
 
-          #### Helm Charts
-          - Traditional Repo: \`https://${{ github.repository_owner }}.github.io/wazuh-operator\`
-          - OCI Registry (Operator): \`oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/wazuh-operator:${{ needs.prepare.outputs.version }}\`
-          - OCI Registry (Cluster): \`oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/wazuh-cluster:${{ needs.prepare.outputs.version }}\`
+          #### Helm Charts (OCI Registry)
+          - Operator: \`oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/wazuh-operator:${{ needs.prepare.outputs.version }}\`
+          - Cluster: \`oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/wazuh-cluster:${{ needs.prepare.outputs.version }}\`
 
           ### Links
           - [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.version }})
