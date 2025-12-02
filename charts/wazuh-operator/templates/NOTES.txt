@@ -140,7 +140,7 @@ Watch the cluster deployment:
 
 Metrics:
   Service: {{ include "wazuh-operator.fullname" . }}-metrics
-  Port: {{ .Values.operator.metrics.service.port }}
+  Port: {{ .Values.operator.metrics.port }}
   {{- if .Values.operator.serviceMonitor.enabled }}
   ServiceMonitor: Enabled
   {{- end }}

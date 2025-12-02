@@ -15,8 +15,8 @@ spec:
   type: {{ .Values.operator.metrics.service.type }}
   ports:
   - name: metrics
-    port: {{ .Values.operator.metrics.service.port }}
-    targetPort: 8080
+    port: {{ .Values.operator.metrics.port }}
+    targetPort: {{ .Values.operator.metrics.port }}
     protocol: TCP
   selector:
     {{- include "wazuh-operator.selectorLabels" . | nindent 4 }}

@@ -3,6 +3,16 @@
 # Declare variables to be passed into your templates.
 
 # ============================================
+# Name Overrides
+# ============================================
+
+# Override the name of the chart
+nameOverride: ""
+
+# Override the full name of the release
+fullnameOverride: ""
+
+# ============================================
 # Deployment Mode Configuration
 # ============================================
 
@@ -19,16 +29,8 @@ deploymentMode: "all"
 crds:
   # Install CRDs as part of the chart
   # Set to false if CRDs are managed separately or already installed
+  # Note: CRDs in crds/ folder are automatically installed by Helm
   install: true
-
-  # Keep CRDs on chart uninstall
-  # Recommended: true (to prevent accidental data loss)
-  keep: true
-
-  # Annotations for CRDs
-  annotations:
-    {}
-    # helm.sh/resource-policy: keep
 
 # ============================================
 # Operator Configuration
@@ -40,7 +42,7 @@ operator:
   enabled: true
 
   image:
-    repository: wazuh/wazuh-operator
+    repository: ghcr.io/maximewewer/wazuh-operator
     pullPolicy: IfNotPresent
     # Overrides the image tag whose default is the chart appVersion
     tag: ""
@@ -55,18 +57,17 @@ operator:
 
   # Health probe configuration
   healthProbe:
-    bindAddress: ":8081"
+    port: 8081
     initialDelaySeconds: 15
     periodSeconds: 20
 
   # Metrics configuration
   metrics:
     enabled: true
-    bindAddress: ":8080"
+    port: 8080
     # Service for metrics
     service:
       type: ClusterIP
-      port: 8080
       annotations: {}
 
   # Service monitor for Prometheus Operator
@@ -76,8 +77,8 @@ operator:
     labels:
       {}
       # prometheus: kube-prometheus
-    interval: 30s
-    scrapeTimeout: 10s
+    interval: "30s"
+    scrapeTimeout: "10s"
 
   # Resources for operator pod
   resources:

@@ -17,6 +17,6 @@ spec:
   endpoints:
   - port: metrics
     path: /metrics
-    interval: {{ .Values.operator.serviceMonitor.interval }}
-    scrapeTimeout: {{ .Values.operator.serviceMonitor.scrapeTimeout }}
+    interval: {{ .Values.operator.serviceMonitor.interval | quote }}
+    scrapeTimeout: {{ .Values.operator.serviceMonitor.scrapeTimeout | quote }}
 {{- end }}

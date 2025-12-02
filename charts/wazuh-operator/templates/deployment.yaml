@@ -44,9 +44,9 @@ spec:
         command:
         - /manager
         args:
-        - --health-probe-bind-address={{ .Values.operator.healthProbe.bindAddress }}
+        - --health-probe-bind-address=:{{ .Values.operator.healthProbe.port }}
         {{- if .Values.operator.metrics.enabled }}
-        - --metrics-bind-address={{ .Values.operator.metrics.bindAddress }}
+        - --metrics-bind-address=:{{ .Values.operator.metrics.port }}
         {{- else }}
         - --metrics-bind-address=0
         {{- end }}
@@ -78,13 +78,13 @@ spec:
         livenessProbe:
           httpGet:
             path: /healthz
-            port: 8081
+            port: {{ .Values.operator.healthProbe.port }}
           initialDelaySeconds: {{ .Values.operator.healthProbe.initialDelaySeconds }}
           periodSeconds: {{ .Values.operator.healthProbe.periodSeconds }}
         readinessProbe:
           httpGet:
             path: /readyz
-            port: 8081
+            port: {{ .Values.operator.healthProbe.port }}
           initialDelaySeconds: 5
           periodSeconds: 10
         {{- with .Values.operator.resources }}
