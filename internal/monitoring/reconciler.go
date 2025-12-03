@@ -19,6 +19,7 @@ package monitoring
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -94,6 +95,7 @@ func (r *MonitoringReconciler) Reconcile(ctx context.Context, cluster *wazuhv1al
 }
 
 // reconcileServiceMonitor creates or updates a ServiceMonitor
+// If the ServiceMonitor CRD is not installed, logs a warning and returns nil
 func (r *MonitoringReconciler) reconcileServiceMonitor(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, desired *monitoringv1.ServiceMonitor) error {
 	log := logf.FromContext(ctx)
 
@@ -109,7 +111,20 @@ func (r *MonitoringReconciler) reconcileServiceMonitor(ctx context.Context, clus
 		if errors.IsNotFound(err) {
 			// Create new ServiceMonitor
 			log.Info("Creating ServiceMonitor", "name", desired.Name)
-			return r.Client.Create(ctx, desired)
+			if err := r.Client.Create(ctx, desired); err != nil {
+				// If CRD is not installed, log warning and continue
+				if isNoMatchError(err) {
+					log.Info("ServiceMonitor CRD not installed, skipping monitoring setup. Install prometheus-operator to enable monitoring.")
+					return nil
+				}
+				return err
+			}
+			return nil
+		}
+		// If CRD is not installed, log warning and continue
+		if isNoMatchError(err) {
+			log.Info("ServiceMonitor CRD not installed, skipping monitoring setup. Install prometheus-operator to enable monitoring.")
+			return nil
 		}
 		return err
 	}
@@ -139,6 +154,7 @@ func (r *MonitoringReconciler) cleanupMonitoringResources(ctx context.Context, c
 }
 
 // deleteServiceMonitorIfExists deletes a ServiceMonitor if it exists
+// Returns nil if the resource doesn't exist or if the CRD is not installed
 func (r *MonitoringReconciler) deleteServiceMonitorIfExists(ctx context.Context, namespace, name string) error {
 	sm := &monitoringv1.ServiceMonitor{
 		ObjectMeta: metav1.ObjectMeta{
@@ -147,10 +163,28 @@ func (r *MonitoringReconciler) deleteServiceMonitorIfExists(ctx context.Context,
 		},
 	}
 	err := r.Client.Delete(ctx, sm)
-	if err != nil && !errors.IsNotFound(err) {
+	if err != nil {
+		// Ignore "not found" errors (resource doesn't exist)
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		// Ignore "no matches for kind" errors (CRD not installed)
+		if isNoMatchError(err) {
+			return nil
+		}
 		return err
 	}
 	return nil
+}
+
+// isNoMatchError checks if the error is a "no matches for kind" error
+// This happens when the CRD is not installed in the cluster
+func isNoMatchError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check for NoMatchError from discovery
+	return strings.Contains(err.Error(), "no matches for kind")
 }
 
 // IsMonitoringCRDAvailable checks if the ServiceMonitor CRD is installed
