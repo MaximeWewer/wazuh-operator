@@ -55,7 +55,10 @@ func TestGenerateRandomPassword_Uniqueness(t *testing.T) {
 }
 
 func TestGenerateWazuhAPIPassword(t *testing.T) {
-	specialChars := ".*+?-"
+	const lowercase = "abcdefghijklmnopqrstuvwxyz"
+	const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	const digits = "0123456789"
+	const specialChars = ".*+?-@#$%"
 
 	tests := []struct {
 		name           string
@@ -77,7 +80,44 @@ func TestGenerateWazuhAPIPassword(t *testing.T) {
 				t.Errorf("GenerateWazuhAPIPassword(%d) = %q, want length %d, got %d", tt.length, password, tt.expectedLength, len(password))
 			}
 
-			// Check that password contains at least one special character
+			// Check Wazuh password policy requirements:
+			// - At least one lowercase letter
+			hasLower := false
+			for _, c := range password {
+				if strings.ContainsRune(lowercase, c) {
+					hasLower = true
+					break
+				}
+			}
+			if !hasLower {
+				t.Errorf("GenerateWazuhAPIPassword(%d) = %q, should contain at least one lowercase letter", tt.length, password)
+			}
+
+			// - At least one uppercase letter
+			hasUpper := false
+			for _, c := range password {
+				if strings.ContainsRune(uppercase, c) {
+					hasUpper = true
+					break
+				}
+			}
+			if !hasUpper {
+				t.Errorf("GenerateWazuhAPIPassword(%d) = %q, should contain at least one uppercase letter", tt.length, password)
+			}
+
+			// - At least one digit
+			hasDigit := false
+			for _, c := range password {
+				if strings.ContainsRune(digits, c) {
+					hasDigit = true
+					break
+				}
+			}
+			if !hasDigit {
+				t.Errorf("GenerateWazuhAPIPassword(%d) = %q, should contain at least one digit", tt.length, password)
+			}
+
+			// - At least one special character
 			hasSpecial := false
 			for _, c := range password {
 				if strings.ContainsRune(specialChars, c) {
@@ -105,7 +145,7 @@ func TestGenerateWazuhAPIPassword_Uniqueness(t *testing.T) {
 }
 
 func TestGenerateWazuhAPIPassword_SpecialCharDistribution(t *testing.T) {
-	specialChars := ".*+?-"
+	specialChars := ".*+?-@#$%"
 
 	// Generate many passwords and check special char distribution
 	charCounts := make(map[rune]int)

@@ -55,40 +55,50 @@ func GenerateRandomString(length int) string {
 }
 
 // GenerateWazuhAPIPassword generates a secure random password for Wazuh API
-// The password contains alphanumeric characters plus at least one special character
-// from the set: . * + ? -
+// that meets Wazuh's password policy requirements:
+// - Minimum 8 characters
+// - At least one lowercase letter (a-z)
+// - At least one uppercase letter (A-Z)
+// - At least one digit (0-9)
+// - At least one special character
 // Length must be at least 8, defaults to 20 if less
 func GenerateWazuhAPIPassword(length int) string {
 	if length < 8 {
 		length = 20
 	}
 
-	const alphanumeric = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	const specialChars = ".*+?-"
+	const lowercase = "abcdefghijklmnopqrstuvwxyz"
+	const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	const digits = "0123456789"
+	const specialChars = ".*+?-@#$%"
+	const allChars = lowercase + uppercase + digits + specialChars
 
-	// Generate length-1 alphanumeric characters
-	bytes := make([]byte, length)
-	if _, err := rand.Read(bytes); err != nil {
-		return "WazuhAdmin.2025" // Fallback with special char
+	// Generate random bytes for character selection
+	randomBytes := make([]byte, length+10) // Extra bytes for position selection
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "WazuhAdmin.2025!" // Fallback that meets all requirements
 	}
 
-	for i := 0; i < length-1; i++ {
-		bytes[i] = alphanumeric[int(bytes[i])%len(alphanumeric)]
+	password := make([]byte, length)
+
+	// First, ensure at least one character from each required category
+	// Place them at random positions in the first 4 slots
+	password[0] = lowercase[int(randomBytes[0])%len(lowercase)]
+	password[1] = uppercase[int(randomBytes[1])%len(uppercase)]
+	password[2] = digits[int(randomBytes[2])%len(digits)]
+	password[3] = specialChars[int(randomBytes[3])%len(specialChars)]
+
+	// Fill the rest with random characters from all categories
+	for i := 4; i < length; i++ {
+		password[i] = allChars[int(randomBytes[i])%len(allChars)]
 	}
 
-	// Add one random special character at a random position
-	specialByte := make([]byte, 2)
-	if _, err := rand.Read(specialByte); err != nil {
-		bytes[length-1] = '.'
-	} else {
-		specialChar := specialChars[int(specialByte[0])%len(specialChars)]
-		insertPos := int(specialByte[1]) % length
-		// Shift characters and insert special char
-		for i := length - 1; i > insertPos; i-- {
-			bytes[i] = bytes[i-1]
-		}
-		bytes[insertPos] = specialChar
+	// Shuffle the password to randomize positions of required characters
+	// Fisher-Yates shuffle
+	for i := length - 1; i > 0; i-- {
+		j := int(randomBytes[length+i%10]) % (i + 1)
+		password[i], password[j] = password[j], password[i]
 	}
 
-	return string(bytes)
+	return string(password)
 }

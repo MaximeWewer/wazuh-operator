@@ -4,6 +4,7 @@ Combines sizing profiles with credentials and other configurations
 */}}
 {{- define "wazuh-cluster.spec" -}}
 {{- $spec := deepCopy .Values.cluster.spec -}}
+{{- $clusterName := .Values.cluster.name -}}
 
 {{- /* Apply sizing profile if configured */ -}}
 {{- if .Values.sizing.profile -}}
@@ -21,17 +22,21 @@ Combines sizing profiles with credentials and other configurations
 {{- end -}}
 
 {{- /* Apply indexer credentials reference if secrets.indexerAdmin is configured */ -}}
+{{- /* Secret name follows pattern: <cluster-name>-indexer-credentials */ -}}
 {{- if and .Values.secrets.indexerAdmin .Values.secrets.indexerAdmin.password -}}
   {{- $indexer := default dict $spec.indexer -}}
-  {{- $credentials := dict "secretName" "indexer-admin-credentials" "usernameKey" "admin-username" "passwordKey" "admin-password" -}}
+  {{- $secretName := printf "%s-indexer-credentials" $clusterName -}}
+  {{- $credentials := dict "secretName" $secretName "usernameKey" "admin-username" "passwordKey" "admin-password" -}}
   {{- $_ := set $indexer "credentials" $credentials -}}
   {{- $_ := set $spec "indexer" $indexer -}}
 {{- end -}}
 
 {{- /* Apply manager API credentials reference if secrets.wazuhApi is configured */ -}}
+{{- /* Secret name follows pattern: <cluster-name>-api-credentials */ -}}
 {{- if and .Values.secrets.wazuhApi .Values.secrets.wazuhApi.password -}}
   {{- $manager := default dict $spec.manager -}}
-  {{- $apiCredentials := dict "secretName" "wazuh-api-credentials" "usernameKey" "username" "passwordKey" "password" -}}
+  {{- $secretName := printf "%s-api-credentials" $clusterName -}}
+  {{- $apiCredentials := dict "secretName" $secretName "usernameKey" "api-username" "passwordKey" "api-password" -}}
   {{- $_ := set $manager "apiCredentials" $apiCredentials -}}
   {{- $_ := set $spec "manager" $manager -}}
 {{- end -}}
