@@ -10,5 +10,5 @@ metadata:
     wazuh.wazuh.com/sizing-profile: {{ .Values.sizing.profile }}
     {{- end }}
 spec:
-  {{- include "wazuh-cluster.applySizing" . | nindent 2 }}
+  {{- include "wazuh-cluster.spec" . | nindent 2 }}
 {{- end }}

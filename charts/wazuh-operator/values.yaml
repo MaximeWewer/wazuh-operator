@@ -29,7 +29,6 @@ deploymentMode: "all"
 crds:
   # Install CRDs as part of the chart
   # Set to false if CRDs are managed separately or already installed
-  # Note: CRDs in crds/ folder are automatically installed by Helm
   install: true
 
 # ============================================
