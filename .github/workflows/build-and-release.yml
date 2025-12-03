@@ -394,9 +394,10 @@ jobs:
         run: |
           # Fetch all tags from remote to ensure we have the latest
           git fetch --tags
-          
-          # Get the latest tag (previous version)
-          PREVIOUS_TAG=$(git tag -l --sort=-version:refname | head -n 1)
+
+          # Get the previous tag (exclude current version if it exists)
+          CURRENT_VERSION="${{ needs.prepare.outputs.version }}"
+          PREVIOUS_TAG=$(git tag -l --sort=-version:refname | grep -v "^${CURRENT_VERSION}$" | head -n 1)
 
           # Generate changelog
           cat << EOF > release_notes.md
@@ -409,7 +410,8 @@ jobs:
           if [ -n "$PREVIOUS_TAG" ]; then
             echo "Changes since ${PREVIOUS_TAG}:" >> release_notes.md
             echo "" >> release_notes.md
-            git log ${PREVIOUS_TAG}..${{ needs.prepare.outputs.version }} \
+            # Use HEAD instead of the new tag (tag doesn't exist yet locally)
+            git log ${PREVIOUS_TAG}..HEAD \
               --pretty=format:"* %s (%h)" \
               --no-merges >> release_notes.md
           else
