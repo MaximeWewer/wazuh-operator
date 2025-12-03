@@ -39,10 +39,10 @@ type IndexerSpec struct {
 	Tolerations  []corev1.Toleration          `json:"tolerations,omitempty"`
 	Affinity     *corev1.Affinity             `json:"affinity,omitempty"`
 	// Custom pod configuration
-	Env          []corev1.EnvVar       `json:"env,omitempty"`
-	EnvFrom      []corev1.EnvFromSource `json:"envFrom,omitempty"`
-	Labels       map[string]string     `json:"labels,omitempty"`
-	Annotations  map[string]string     `json:"annotations,omitempty"`
+	Env         []corev1.EnvVar        `json:"env,omitempty"`
+	EnvFrom     []corev1.EnvFromSource `json:"envFrom,omitempty"`
+	Labels      map[string]string      `json:"labels,omitempty"`
+	Annotations map[string]string      `json:"annotations,omitempty"`
 	// Monitoring configuration
 	MonitoringEnabled bool `json:"monitoringEnabled,omitempty"`
 }
@@ -57,10 +57,10 @@ type DashboardSpec struct {
 	Tolerations  []corev1.Toleration          `json:"tolerations,omitempty"`
 	Affinity     *corev1.Affinity             `json:"affinity,omitempty"`
 	// Custom pod configuration
-	Env         []corev1.EnvVar       `json:"env,omitempty"`
+	Env         []corev1.EnvVar        `json:"env,omitempty"`
 	EnvFrom     []corev1.EnvFromSource `json:"envFrom,omitempty"`
-	Labels      map[string]string     `json:"labels,omitempty"`
-	Annotations map[string]string     `json:"annotations,omitempty"`
+	Labels      map[string]string      `json:"labels,omitempty"`
+	Annotations map[string]string      `json:"annotations,omitempty"`
 }
 
 // ManagerMasterSpec contains fields from WazuhCluster.Spec.Manager.Master used for hash computation
@@ -73,10 +73,10 @@ type ManagerMasterSpec struct {
 	Tolerations  []corev1.Toleration          `json:"tolerations,omitempty"`
 	Affinity     *corev1.Affinity             `json:"affinity,omitempty"`
 	// Custom pod configuration
-	Env         []corev1.EnvVar       `json:"env,omitempty"`
+	Env         []corev1.EnvVar        `json:"env,omitempty"`
 	EnvFrom     []corev1.EnvFromSource `json:"envFrom,omitempty"`
-	Labels      map[string]string     `json:"labels,omitempty"`
-	Annotations map[string]string     `json:"annotations,omitempty"`
+	Labels      map[string]string      `json:"labels,omitempty"`
+	Annotations map[string]string      `json:"annotations,omitempty"`
 	// Monitoring configuration
 	MonitoringEnabled bool `json:"monitoringEnabled,omitempty"`
 }
@@ -92,10 +92,10 @@ type ManagerWorkersSpec struct {
 	Tolerations  []corev1.Toleration          `json:"tolerations,omitempty"`
 	Affinity     *corev1.Affinity             `json:"affinity,omitempty"`
 	// Custom pod configuration
-	Env         []corev1.EnvVar       `json:"env,omitempty"`
+	Env         []corev1.EnvVar        `json:"env,omitempty"`
 	EnvFrom     []corev1.EnvFromSource `json:"envFrom,omitempty"`
-	Labels      map[string]string     `json:"labels,omitempty"`
-	Annotations map[string]string     `json:"annotations,omitempty"`
+	Labels      map[string]string      `json:"labels,omitempty"`
+	Annotations map[string]string      `json:"annotations,omitempty"`
 }
 
 // ComputeSpecHash computes a SHA256 hash of spec fields for change detection

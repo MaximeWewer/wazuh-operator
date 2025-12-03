@@ -18,7 +18,7 @@ limitations under the License.
 package certificates
 
 // CertificateOptions holds the certificate generation options from the CRD
-// These options are used to configure certificate validity and renewal thresholds
+// These options are used to configure certificate validity, renewal thresholds, and subject fields
 type CertificateOptions struct {
 	// CAValidityDays is the validity period for CA certificates in days
 	// Default: 3650 (10 years)
@@ -55,6 +55,32 @@ type CertificateOptions struct {
 	// RenewalThresholdMinutes is the node cert renewal threshold in minutes (only used in TestMode)
 	// Default: 3
 	RenewalThresholdMinutes int
+
+	// Certificate Subject Fields (from CRD TLS.CertConfig)
+
+	// Country is the country code for certificate subject (e.g., "US", "FR")
+	// Default: "US"
+	Country string
+
+	// State is the state/province for certificate subject
+	// Default: "California"
+	State string
+
+	// Locality is the city/locality for certificate subject
+	// Default: "California"
+	Locality string
+
+	// Organization is the organization name for certificate subject
+	// Default: "Wazuh"
+	Organization string
+
+	// OrganizationalUnit is the organizational unit for certificate subject
+	// Default: "Wazuh"
+	OrganizationalUnit string
+
+	// CommonName is the common name for certificates (may be overridden per cert)
+	// Default: derived from cluster name
+	CommonName string
 }
 
 // DefaultCertificateOptions returns the default certificate options
@@ -69,6 +95,12 @@ func DefaultCertificateOptions() *CertificateOptions {
 		CARenewalThresholdMinutes: 5,  // 5 minutes before CA expiry in test mode
 		ValidityMinutes:           8,  // 8 minutes for node certs in test mode
 		RenewalThresholdMinutes:   3,  // 3 minutes before node cert expiry in test mode
+		// Certificate subject defaults
+		Country:            DefaultCountry,
+		State:              DefaultState,
+		Locality:           DefaultLocality,
+		Organization:       DefaultOrganization,
+		OrganizationalUnit: DefaultOrganizationalUnit,
 	}
 }
 
@@ -84,6 +116,12 @@ func TestModeCertificateOptions() *CertificateOptions {
 		CARenewalThresholdMinutes: 5,  // 5 minutes before CA expiry in test mode
 		ValidityMinutes:           8,  // 8 minutes for node certs in test mode
 		RenewalThresholdMinutes:   3,  // 3 minutes before node cert expiry in test mode
+		// Certificate subject defaults
+		Country:            DefaultCountry,
+		State:              DefaultState,
+		Locality:           DefaultLocality,
+		Organization:       DefaultOrganization,
+		OrganizationalUnit: DefaultOrganizationalUnit,
 	}
 }
 

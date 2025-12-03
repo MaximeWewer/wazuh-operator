@@ -93,6 +93,26 @@ func (r *CertificateReconciler) getCertOptions(cluster *wazuhv1alpha1.WazuhClust
 		if cfg.CARenewalThresholdDays > 0 {
 			opts.CARenewalThresholdDays = cfg.CARenewalThresholdDays
 		}
+
+		// Set certificate subject fields from CRD
+		if cfg.Country != "" {
+			opts.Country = cfg.Country
+		}
+		if cfg.State != "" {
+			opts.State = cfg.State
+		}
+		if cfg.Locality != "" {
+			opts.Locality = cfg.Locality
+		}
+		if cfg.Organization != "" {
+			opts.Organization = cfg.Organization
+		}
+		if cfg.OrganizationalUnit != "" {
+			opts.OrganizationalUnit = cfg.OrganizationalUnit
+		}
+		if cfg.CommonName != "" {
+			opts.CommonName = cfg.CommonName
+		}
 	}
 
 	return opts
@@ -380,9 +400,16 @@ func (r *CertificateReconciler) reconcileCA(ctx context.Context, cluster *wazuhv
 	}
 
 	// Generate new CA using options from CRD
-	log.Info("Generating new CA certificate", "name", secretName, "testMode", certOpts.TestMode, "validityDays", certOpts.GetCAValidityDays())
+	log.Info("Generating new CA certificate", "name", secretName, "testMode", certOpts.TestMode, "validityDays", certOpts.GetCAValidityDays(),
+		"country", certOpts.Country, "state", certOpts.State, "locality", certOpts.Locality,
+		"organization", certOpts.Organization, "organizationalUnit", certOpts.OrganizationalUnit)
 	caConfig := certificates.DefaultCAConfig(cluster.Name + "-ca")
-	caConfig.Organization = cluster.Name
+	// Apply subject fields from CRD configuration
+	caConfig.Country = certOpts.Country
+	caConfig.State = certOpts.State
+	caConfig.Locality = certOpts.Locality
+	caConfig.Organization = certOpts.Organization
+	caConfig.OrganizationalUnit = certOpts.OrganizationalUnit
 	if certOpts.TestMode {
 		caConfig.ValidityMinutes = certOpts.GetCAValidityMinutes() // Use separate CA validity in test mode (default: 15 min)
 	} else {
@@ -526,6 +553,12 @@ func (r *CertificateReconciler) reconcileDashboardCerts(ctx context.Context, clu
 	dashboardConfig := certificates.DefaultDashboardCertConfig()
 	dashboardConfig.CommonName = cluster.Name + "-dashboard"
 	dashboardConfig.DNSNames = certificates.GenerateDashboardSANs(cluster.Name, cluster.Namespace)
+	// Apply subject fields from CRD configuration
+	dashboardConfig.Country = certOpts.Country
+	dashboardConfig.State = certOpts.State
+	dashboardConfig.Locality = certOpts.Locality
+	dashboardConfig.Organization = certOpts.Organization
+	dashboardConfig.OrganizationalUnit = certOpts.OrganizationalUnit
 	if certOpts.TestMode {
 		dashboardConfig.ValidityMinutes = certOpts.GetValidityMinutes()
 	} else {
@@ -625,6 +658,12 @@ func (r *CertificateReconciler) reconcileFilebeatCerts(ctx context.Context, clus
 	filebeatConfig := certificates.DefaultFilebeatCertConfig()
 	filebeatConfig.CommonName = cluster.Name + "-filebeat"
 	filebeatConfig.DNSNames = certificates.GenerateFilebeatSANs(cluster.Name, cluster.Namespace, workerReplicas)
+	// Apply subject fields from CRD configuration
+	filebeatConfig.Country = certOpts.Country
+	filebeatConfig.State = certOpts.State
+	filebeatConfig.Locality = certOpts.Locality
+	filebeatConfig.Organization = certOpts.Organization
+	filebeatConfig.OrganizationalUnit = certOpts.OrganizationalUnit
 	if certOpts.TestMode {
 		filebeatConfig.ValidityMinutes = certOpts.GetValidityMinutes()
 	} else {
@@ -717,6 +756,12 @@ func (r *CertificateReconciler) reconcileAdminCerts(ctx context.Context, cluster
 	// Generate new admin certificate using options from CRD
 	log.Info("Generating new admin certificate", "name", secretName, "testMode", certOpts.TestMode, "validityDays", certOpts.GetNodeValidityDays())
 	adminConfig := certificates.DefaultAdminCertConfig()
+	// Apply subject fields from CRD configuration
+	adminConfig.Country = certOpts.Country
+	adminConfig.State = certOpts.State
+	adminConfig.Locality = certOpts.Locality
+	adminConfig.Organization = certOpts.Organization
+	adminConfig.OrganizationalUnit = certOpts.OrganizationalUnit
 	if certOpts.TestMode {
 		adminConfig.ValidityMinutes = certOpts.GetValidityMinutes()
 	} else {
@@ -805,6 +850,24 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 		if nodeConfig.ValidityDays == 0 {
 			nodeConfig.ValidityDays = 365
 		}
+		// Apply subject fields from standalone certificate spec
+		if cert.Spec.DistinguishedName != nil {
+			if cert.Spec.DistinguishedName.Country != "" {
+				nodeConfig.Country = cert.Spec.DistinguishedName.Country
+			}
+			if cert.Spec.DistinguishedName.State != "" {
+				nodeConfig.State = cert.Spec.DistinguishedName.State
+			}
+			if cert.Spec.DistinguishedName.Locality != "" {
+				nodeConfig.Locality = cert.Spec.DistinguishedName.Locality
+			}
+			if cert.Spec.DistinguishedName.Organization != "" {
+				nodeConfig.Organization = cert.Spec.DistinguishedName.Organization
+			}
+			if cert.Spec.DistinguishedName.OrganizationalUnit != "" {
+				nodeConfig.OrganizationalUnit = cert.Spec.DistinguishedName.OrganizationalUnit
+			}
+		}
 		nodeCert, err := certificates.GenerateNodeCert(nodeConfig, caResult)
 		if err != nil {
 			return fmt.Errorf("failed to generate node certificate: %w", err)
@@ -819,6 +882,24 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 		adminConfig.ValidityDays = cert.Spec.ValidityDays
 		if adminConfig.ValidityDays == 0 {
 			adminConfig.ValidityDays = 365
+		}
+		// Apply subject fields from standalone certificate spec
+		if cert.Spec.DistinguishedName != nil {
+			if cert.Spec.DistinguishedName.Country != "" {
+				adminConfig.Country = cert.Spec.DistinguishedName.Country
+			}
+			if cert.Spec.DistinguishedName.State != "" {
+				adminConfig.State = cert.Spec.DistinguishedName.State
+			}
+			if cert.Spec.DistinguishedName.Locality != "" {
+				adminConfig.Locality = cert.Spec.DistinguishedName.Locality
+			}
+			if cert.Spec.DistinguishedName.Organization != "" {
+				adminConfig.Organization = cert.Spec.DistinguishedName.Organization
+			}
+			if cert.Spec.DistinguishedName.OrganizationalUnit != "" {
+				adminConfig.OrganizationalUnit = cert.Spec.DistinguishedName.OrganizationalUnit
+			}
 		}
 		adminCert, err := certificates.GenerateAdminCert(adminConfig, caResult)
 		if err != nil {
@@ -841,6 +922,24 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 		if filebeatConfig.ValidityDays == 0 {
 			filebeatConfig.ValidityDays = 365
 		}
+		// Apply subject fields from standalone certificate spec
+		if cert.Spec.DistinguishedName != nil {
+			if cert.Spec.DistinguishedName.Country != "" {
+				filebeatConfig.Country = cert.Spec.DistinguishedName.Country
+			}
+			if cert.Spec.DistinguishedName.State != "" {
+				filebeatConfig.State = cert.Spec.DistinguishedName.State
+			}
+			if cert.Spec.DistinguishedName.Locality != "" {
+				filebeatConfig.Locality = cert.Spec.DistinguishedName.Locality
+			}
+			if cert.Spec.DistinguishedName.Organization != "" {
+				filebeatConfig.Organization = cert.Spec.DistinguishedName.Organization
+			}
+			if cert.Spec.DistinguishedName.OrganizationalUnit != "" {
+				filebeatConfig.OrganizationalUnit = cert.Spec.DistinguishedName.OrganizationalUnit
+			}
+		}
 		filebeatCert, err := certificates.GenerateFilebeatCert(filebeatConfig, caResult)
 		if err != nil {
 			return fmt.Errorf("failed to generate filebeat certificate: %w", err)
@@ -861,6 +960,24 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 		dashboardConfig.ValidityDays = cert.Spec.ValidityDays
 		if dashboardConfig.ValidityDays == 0 {
 			dashboardConfig.ValidityDays = 365
+		}
+		// Apply subject fields from standalone certificate spec
+		if cert.Spec.DistinguishedName != nil {
+			if cert.Spec.DistinguishedName.Country != "" {
+				dashboardConfig.Country = cert.Spec.DistinguishedName.Country
+			}
+			if cert.Spec.DistinguishedName.State != "" {
+				dashboardConfig.State = cert.Spec.DistinguishedName.State
+			}
+			if cert.Spec.DistinguishedName.Locality != "" {
+				dashboardConfig.Locality = cert.Spec.DistinguishedName.Locality
+			}
+			if cert.Spec.DistinguishedName.Organization != "" {
+				dashboardConfig.Organization = cert.Spec.DistinguishedName.Organization
+			}
+			if cert.Spec.DistinguishedName.OrganizationalUnit != "" {
+				dashboardConfig.OrganizationalUnit = cert.Spec.DistinguishedName.OrganizationalUnit
+			}
 		}
 		dashboardCert, err := certificates.GenerateDashboardCert(dashboardConfig, caResult)
 		if err != nil {
@@ -1038,6 +1155,12 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 	log.Info("Generating new node certificate", "name", secretName, "component", componentName, "testMode", certOpts.TestMode, "validityDays", certOpts.GetNodeValidityDays())
 	nodeConfig := certificates.DefaultNodeCertConfig(cluster.Name + "-" + componentName)
 	nodeConfig.DNSNames = sans
+	// Apply subject fields from CRD configuration
+	nodeConfig.Country = certOpts.Country
+	nodeConfig.State = certOpts.State
+	nodeConfig.Locality = certOpts.Locality
+	nodeConfig.Organization = certOpts.Organization
+	nodeConfig.OrganizationalUnit = certOpts.OrganizationalUnit
 	if certOpts.TestMode {
 		nodeConfig.ValidityMinutes = certOpts.GetValidityMinutes()
 	} else {

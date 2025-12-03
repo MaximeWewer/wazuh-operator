@@ -515,7 +515,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	// Extract worker spec fields with defaults
 	var (
 		replicas     int32 = 0
-		version      = cluster.Spec.Version
+		version            = cluster.Spec.Version
 		resources    *corev1.ResourceRequirements
 		storageSize  = constants.DefaultManagerStorageSize
 		nodeSelector map[string]string
