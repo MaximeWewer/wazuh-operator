@@ -480,13 +480,41 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 	log := logf.FromContext(ctx)
 
 	// Extract spec values for hash computation
-	replicas := cluster.Spec.Dashboard.Replicas
-	version := cluster.Spec.Version
-	resources := cluster.Spec.Dashboard.Resources
-	image := "" // Will use default from builder
+	var (
+		replicas     = cluster.Spec.Dashboard.Replicas
+		version      = cluster.Spec.Version
+		resources    = cluster.Spec.Dashboard.Resources
+		image        string
+		nodeSelector map[string]string
+		tolerations  []corev1.Toleration
+		affinity     *corev1.Affinity
+		env          []corev1.EnvVar
+		envFrom      []corev1.EnvFromSource
+		annotations  map[string]string
+	)
 
-	// Compute spec hash for change detection
-	specHash, err := patch.ComputeDashboardSpecHash(replicas, version, resources, image)
+	if cluster.Spec.Dashboard != nil {
+		nodeSelector = cluster.Spec.Dashboard.NodeSelector
+		tolerations = cluster.Spec.Dashboard.Tolerations
+		affinity = cluster.Spec.Dashboard.Affinity
+		env = cluster.Spec.Dashboard.Env
+		envFrom = cluster.Spec.Dashboard.EnvFrom
+		annotations = cluster.Spec.Dashboard.Annotations
+	}
+
+	// Compute spec hash for change detection (includes all configurable fields)
+	specHash, err := patch.ComputeDashboardSpecHashFull(patch.DashboardSpecInput{
+		Replicas:     replicas,
+		Version:      version,
+		Resources:    resources,
+		Image:        image,
+		NodeSelector: nodeSelector,
+		Tolerations:  tolerations,
+		Affinity:     affinity,
+		Env:          env,
+		EnvFrom:      envFrom,
+		Annotations:  annotations,
+	})
 	if err != nil {
 		log.Error(err, "Failed to compute dashboard spec hash, continuing without spec tracking")
 		specHash = ""
@@ -506,6 +534,24 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 	}
 	if cluster.Spec.Dashboard.Resources != nil {
 		deployBuilder.WithResources(cluster.Spec.Dashboard.Resources)
+	}
+	if nodeSelector != nil {
+		deployBuilder.WithNodeSelector(nodeSelector)
+	}
+	if tolerations != nil {
+		deployBuilder.WithTolerations(tolerations)
+	}
+	if affinity != nil {
+		deployBuilder.WithAffinity(affinity)
+	}
+	if len(env) > 0 {
+		deployBuilder.WithEnv(env)
+	}
+	if len(envFrom) > 0 {
+		deployBuilder.WithEnvFrom(envFrom)
+	}
+	if len(annotations) > 0 {
+		deployBuilder.WithAnnotations(annotations)
 	}
 
 	if certHash != "" {

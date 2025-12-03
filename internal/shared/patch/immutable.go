@@ -172,6 +172,27 @@ func CanUpdateStatefulSet(current, desired *appsv1.StatefulSet) (bool, string) {
 	return true, ""
 }
 
+// NeedsStatefulSetRecreation checks if a StatefulSet needs to be deleted and recreated
+// due to changes in fields that cannot be updated in-place
+// Returns true if recreation is needed, along with a reason
+func NeedsStatefulSetRecreation(current, desired *appsv1.StatefulSet) (bool, string) {
+	// Check PodManagementPolicy - this is immutable and requires recreation
+	if current.Spec.PodManagementPolicy != desired.Spec.PodManagementPolicy {
+		return true, fmt.Sprintf("PodManagementPolicy changed from %s to %s",
+			current.Spec.PodManagementPolicy, desired.Spec.PodManagementPolicy)
+	}
+
+	// Check SecurityContext changes that require pod recreation
+	currentSC := current.Spec.Template.Spec.SecurityContext
+	desiredSC := desired.Spec.Template.Spec.SecurityContext
+
+	if !equality.Semantic.DeepEqual(currentSC, desiredSC) {
+		return true, "SecurityContext changed"
+	}
+
+	return false, ""
+}
+
 // CanUpdateDeployment checks if a Deployment can be updated without recreation
 // Returns true if safe to update, false if recreation is required
 func CanUpdateDeployment(current, desired *appsv1.Deployment) (bool, string) {

@@ -402,6 +402,43 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 		return fmt.Errorf("failed to get indexer statefulset: %w", err)
 	}
 
+	// Check if recreation is needed due to immutable field changes (SecurityContext, PodManagementPolicy)
+	needsRecreation, recreationReason := patch.NeedsStatefulSetRecreation(found, sts)
+	if needsRecreation {
+		log.Info("Indexer StatefulSet requires recreation due to immutable field change",
+			"name", sts.Name,
+			"reason", recreationReason)
+
+		// Delete the old StatefulSet (PVCs will be preserved)
+		if err := r.Delete(ctx, found); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete indexer statefulset for recreation: %w", err)
+		}
+
+		// Create the new StatefulSet
+		if err := r.Create(ctx, sts); err != nil {
+			return fmt.Errorf("failed to create indexer statefulset after recreation: %w", err)
+		}
+
+		// Wait for the StatefulSet to be ready after recreation
+		log.Info("Waiting for Indexer StatefulSet to be ready after recreation",
+			"name", sts.Name,
+			"timeout", utils.DefaultRolloutTimeout)
+
+		waiter := utils.NewRolloutWaiter(r.Client)
+		result := waiter.WaitForStatefulSetReadyWithResult(ctx, sts.Namespace, sts.Name)
+		if result.TimedOut {
+			log.Error(result.Error, "Timeout waiting for Indexer StatefulSet to be ready after recreation",
+				"name", sts.Name)
+			return nil
+		}
+		if result.Error != nil {
+			return fmt.Errorf("error waiting for indexer statefulset to be ready after recreation: %w", result.Error)
+		}
+
+		log.Info("Indexer StatefulSet is ready after recreation", "name", sts.Name)
+		return nil
+	}
+
 	// Check if update is needed (cert hash changed)
 	existingCertHash := ""
 	if found.Spec.Template.Annotations != nil {
@@ -525,12 +562,23 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 	log := logf.FromContext(ctx)
 
 	// Extract spec values for hash computation
-	var replicas int32 = constants.DefaultIndexerReplicas
-	var resources *corev1.ResourceRequirements
-	var storageSize = constants.DefaultIndexerStorageSize
-	var javaOpts = constants.DefaultIndexerJavaOpts
-	var image string
+	var (
+		replicas     int32 = constants.DefaultIndexerReplicas
+		resources    *corev1.ResourceRequirements
+		storageSize  = constants.DefaultIndexerStorageSize
+		javaOpts     = constants.DefaultIndexerJavaOpts
+		image        string
+		nodeSelector map[string]string
+		tolerations  []corev1.Toleration
+		affinity     *corev1.Affinity
+		env          []corev1.EnvVar
+		envFrom      []corev1.EnvFromSource
+		annotations  map[string]string
+	)
 	version := cluster.Spec.Version
+
+	// Check if monitoring is enabled
+	monitoringEnabled := cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Enabled
 
 	if cluster.Spec.Indexer != nil {
 		if cluster.Spec.Indexer.Replicas > 0 {
@@ -543,10 +591,30 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		if cluster.Spec.Indexer.JavaOpts != "" {
 			javaOpts = cluster.Spec.Indexer.JavaOpts
 		}
+		nodeSelector = cluster.Spec.Indexer.NodeSelector
+		tolerations = cluster.Spec.Indexer.Tolerations
+		affinity = cluster.Spec.Indexer.Affinity
+		env = cluster.Spec.Indexer.Env
+		envFrom = cluster.Spec.Indexer.EnvFrom
+		annotations = cluster.Spec.Indexer.Annotations
 	}
 
-	// Compute spec hash for change detection
-	specHash, err := patch.ComputeIndexerSpecHash(replicas, version, resources, storageSize, javaOpts, image)
+	// Compute spec hash for change detection (includes all configurable fields)
+	specHash, err := patch.ComputeIndexerSpecHashFull(patch.IndexerSpecInput{
+		Replicas:          replicas,
+		Version:           version,
+		Resources:         resources,
+		StorageSize:       storageSize,
+		JavaOpts:          javaOpts,
+		Image:             image,
+		NodeSelector:      nodeSelector,
+		Tolerations:       tolerations,
+		Affinity:          affinity,
+		Env:               env,
+		EnvFrom:           envFrom,
+		Annotations:       annotations,
+		MonitoringEnabled: monitoringEnabled,
+	})
 	if err != nil {
 		log.Error(err, "Failed to compute indexer spec hash, proceeding without spec hash tracking")
 		specHash = ""
@@ -576,6 +644,24 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		}
 		if cluster.Spec.Indexer.JavaOpts != "" {
 			stsBuilder.WithJavaOpts(javaOpts)
+		}
+		if nodeSelector != nil {
+			stsBuilder.WithNodeSelector(nodeSelector)
+		}
+		if tolerations != nil {
+			stsBuilder.WithTolerations(tolerations)
+		}
+		if affinity != nil {
+			stsBuilder.WithAffinity(affinity)
+		}
+		if len(env) > 0 {
+			stsBuilder.WithEnv(env)
+		}
+		if len(envFrom) > 0 {
+			stsBuilder.WithEnvFrom(envFrom)
+		}
+		if len(annotations) > 0 {
+			stsBuilder.WithAnnotations(annotations)
 		}
 	}
 
@@ -622,6 +708,33 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		}, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("failed to get indexer statefulset: %w", err)
+	}
+
+	// Check if recreation is needed due to immutable field changes (SecurityContext, PodManagementPolicy)
+	needsRecreation, recreationReason := patch.NeedsStatefulSetRecreation(found, sts)
+	if needsRecreation {
+		log.Info("Indexer StatefulSet requires recreation due to immutable field change",
+			"name", sts.Name,
+			"reason", recreationReason)
+
+		// Delete the old StatefulSet (PVCs will be preserved)
+		if err := r.Delete(ctx, found); err != nil && !errors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to delete indexer statefulset for recreation: %w", err)
+		}
+
+		// Create the new StatefulSet
+		if err := r.Create(ctx, sts); err != nil {
+			return nil, fmt.Errorf("failed to create indexer statefulset after recreation: %w", err)
+		}
+
+		return &utils.PendingRollout{
+			Component: "indexer",
+			Namespace: sts.Namespace,
+			Name:      sts.Name,
+			Type:      utils.RolloutTypeStatefulSet,
+			StartTime: time.Now(),
+			Reason:    "recreation-" + recreationReason,
+		}, nil
 	}
 
 	// Check if update is needed

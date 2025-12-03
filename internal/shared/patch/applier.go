@@ -41,6 +41,7 @@ func NewApplier(c client.Client) *Applier {
 }
 
 // ApplyStatefulSet creates or updates a StatefulSet based on the change result
+// If immutable fields have changed, it will delete and recreate the StatefulSet
 func (a *Applier) ApplyStatefulSet(ctx context.Context, desired *appsv1.StatefulSet, result *ChangeResult, specHash string) error {
 	logger := log.FromContext(ctx).WithValues(
 		"statefulset", desired.Name,
@@ -76,7 +77,17 @@ func (a *Applier) ApplyStatefulSet(ctx context.Context, desired *appsv1.Stateful
 		return fmt.Errorf("failed to get current StatefulSet: %w", err)
 	}
 
-	// Check immutable fields before applying
+	// Check if recreation is needed due to immutable field changes
+	needsRecreation, recreationReason := NeedsStatefulSetRecreation(current, desired)
+	if needsRecreation {
+		logger.Info("StatefulSet requires recreation due to immutable field change",
+			"reason", recreationReason,
+			"statefulset", desired.Name,
+		)
+		return a.RecreateStatefulSet(ctx, current, desired, specHash)
+	}
+
+	// Check truly immutable fields (selector, serviceName, volumeClaimTemplates)
 	if err := CheckStatefulSetImmutableFields(current, desired); err != nil {
 		return err
 	}
@@ -99,6 +110,43 @@ func (a *Applier) ApplyStatefulSet(ctx context.Context, desired *appsv1.Stateful
 	)
 
 	if err := a.client.Update(ctx, desired); err != nil {
+		return NewUpdateFailedError("StatefulSet", desired.Name, err)
+	}
+
+	return nil
+}
+
+// RecreateStatefulSet deletes and recreates a StatefulSet
+// This is used when immutable fields need to change (e.g., PodManagementPolicy, SecurityContext)
+// The PVCs are preserved (orphaned) so data is not lost
+func (a *Applier) RecreateStatefulSet(ctx context.Context, current, desired *appsv1.StatefulSet, specHash string) error {
+	logger := log.FromContext(ctx).WithValues(
+		"statefulset", desired.Name,
+		"namespace", desired.Namespace,
+	)
+
+	// Delete the current StatefulSet with orphan policy to preserve pods temporarily
+	// This allows the new StatefulSet to adopt the existing PVCs
+	logger.Info("Deleting StatefulSet for recreation (preserving PVCs)")
+
+	// Use default delete (cascade) - pods will be deleted but PVCs preserved
+	if err := a.client.Delete(ctx, current); err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to delete StatefulSet for recreation: %w", err)
+	}
+
+	// Set spec hash annotation before creation
+	if specHash != "" {
+		if desired.Annotations == nil {
+			desired.Annotations = make(map[string]string)
+		}
+		desired.Annotations[constants.AnnotationSpecHash] = specHash
+	}
+
+	// Clear ResourceVersion for creation
+	desired.ResourceVersion = ""
+
+	logger.Info("Creating new StatefulSet after recreation")
+	if err := a.client.Create(ctx, desired); err != nil {
 		return NewUpdateFailedError("StatefulSet", desired.Name, err)
 	}
 

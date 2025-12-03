@@ -251,11 +251,13 @@ func (r *ManagerReconciler) reconcileStatefulSet(ctx context.Context, cluster *w
 	// Extract spec values for hash computation
 	version := cluster.Spec.Version
 	resources := cluster.Spec.Manager.Master.Resources
-	storageSize := "" // Using default from builder
-	image := ""       // Using default from builder
+	storageSize := cluster.Spec.Manager.Master.StorageSize
+	nodeSelector := cluster.Spec.Manager.Master.NodeSelector
+	tolerations := cluster.Spec.Manager.Master.Tolerations
+	affinity := cluster.Spec.Manager.Master.Affinity
 
-	// Compute spec hash for change detection
-	specHash, err := patch.ComputeManagerMasterSpecHash(version, resources, storageSize, image)
+	// Compute spec hash for change detection (includes scheduling options)
+	specHash, err := patch.ComputeManagerMasterSpecHash(version, resources, storageSize, "", nodeSelector, tolerations, affinity)
 	if err != nil {
 		log.Error(err, "Failed to compute manager master spec hash, continuing without spec tracking")
 		specHash = ""

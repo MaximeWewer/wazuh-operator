@@ -36,6 +36,7 @@ import (
 
 	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/cronjobs"
@@ -272,7 +273,29 @@ func (r *ClusterReconciler) ReconcileManagerNonBlocking(ctx context.Context, clu
 func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, certHash string) (*utils.PendingRollout, error) {
 	log := logf.FromContext(ctx)
 
-	// Build ConfigMap (same as blocking version)
+	// Extract master spec fields with defaults
+	var (
+		version      = cluster.Spec.Version
+		resources    *corev1.ResourceRequirements
+		storageSize  = constants.DefaultManagerStorageSize
+		nodeSelector map[string]string
+		tolerations  []corev1.Toleration
+		affinity     *corev1.Affinity
+	)
+
+	if cluster.Spec.Manager != nil {
+		if cluster.Spec.Manager.Master.Resources != nil {
+			resources = cluster.Spec.Manager.Master.Resources
+		}
+		if cluster.Spec.Manager.Master.StorageSize != "" {
+			storageSize = cluster.Spec.Manager.Master.StorageSize
+		}
+		nodeSelector = cluster.Spec.Manager.Master.NodeSelector
+		tolerations = cluster.Spec.Manager.Master.Tolerations
+		affinity = cluster.Spec.Manager.Master.Affinity
+	}
+
+	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "master")
 
 	ossecConf, err := config.BuildMasterConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-master", "", "")
@@ -311,7 +334,10 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		return nil, fmt.Errorf("failed to reconcile master configmap: %w", err)
 	}
 
-	// Build Services (same as blocking version)
+	// Compute configHash for change detection (ossec.conf + filebeat.yml)
+	configHash := patch.ComputeConfigHash(configMap.Data)
+
+	// Build Services
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -329,16 +355,41 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		return nil, fmt.Errorf("failed to reconcile master headless service: %w", err)
 	}
 
-	// Build StatefulSet
-	stsBuilder := deployments.NewManagerStatefulSetBuilder(cluster.Name, cluster.Namespace, "master")
-	if cluster.Spec.Version != "" {
-		stsBuilder.WithVersion(cluster.Spec.Version)
+	// Compute specHash for change detection (version is included in image tag)
+	specHash, err := patch.ComputeManagerMasterSpecHash(version, resources, storageSize, "", nodeSelector, tolerations, affinity)
+	if err != nil {
+		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
+		specHash = ""
 	}
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Resources != nil {
-		stsBuilder.WithResources(cluster.Spec.Manager.Master.Resources)
+
+	// Build StatefulSet with all fields
+	stsBuilder := deployments.NewManagerStatefulSetBuilder(cluster.Name, cluster.Namespace, "master")
+	if version != "" {
+		stsBuilder.WithVersion(version)
+	}
+	if resources != nil {
+		stsBuilder.WithResources(resources)
+	}
+	if storageSize != "" {
+		stsBuilder.WithStorageSize(storageSize)
+	}
+	if nodeSelector != nil {
+		stsBuilder.WithNodeSelector(nodeSelector)
+	}
+	if tolerations != nil {
+		stsBuilder.WithTolerations(tolerations)
+	}
+	if affinity != nil {
+		stsBuilder.WithAffinity(affinity)
 	}
 	if certHash != "" {
 		stsBuilder.WithCertHash(certHash)
+	}
+	if configHash != "" {
+		stsBuilder.WithConfigHash(configHash)
+	}
+	if specHash != "" {
+		stsBuilder.WithSpecHash(specHash)
 	}
 	// Set cluster reference for monitoring sidecar
 	stsBuilder.WithCluster(cluster)
@@ -351,11 +402,10 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	found := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Master StatefulSet", "name", sts.Name, "certHash", utils.ShortHash(certHash))
+		log.Info("Creating Master StatefulSet", "name", sts.Name, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash))
 		if err := r.Create(ctx, sts); err != nil {
 			return nil, fmt.Errorf("failed to create master statefulset: %w", err)
 		}
-		// New StatefulSet - return pending rollout to track initial readiness
 		return &utils.PendingRollout{
 			Component: "manager-master",
 			Namespace: sts.Namespace,
@@ -368,31 +418,89 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		return nil, fmt.Errorf("failed to get master statefulset: %w", err)
 	}
 
-	// Check if update is needed (cert hash changed)
-	existingCertHash := ""
-	if found.Spec.Template.Annotations != nil {
-		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
-	}
-
-	if certHash != "" && certHash != existingCertHash {
-		log.Info("Updating Master StatefulSet due to certificate hash change (non-blocking)",
+	// Check if recreation is needed due to immutable field changes (SecurityContext, PodManagementPolicy)
+	needsRecreation, recreationReason := patch.NeedsStatefulSetRecreation(found, sts)
+	if needsRecreation {
+		log.Info("Master StatefulSet requires recreation due to immutable field change",
 			"name", sts.Name,
-			"oldHash", utils.ShortHash(existingCertHash),
-			"newHash", utils.ShortHash(certHash))
+			"reason", recreationReason)
 
-		sts.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, sts); err != nil {
-			return nil, fmt.Errorf("failed to update master statefulset: %w", err)
+		if err := r.Delete(ctx, found); err != nil && !errors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to delete master statefulset for recreation: %w", err)
 		}
-
-		// Return pending rollout instead of waiting
+		if err := r.Create(ctx, sts); err != nil {
+			return nil, fmt.Errorf("failed to create master statefulset after recreation: %w", err)
+		}
 		return &utils.PendingRollout{
 			Component: "manager-master",
 			Namespace: sts.Namespace,
 			Name:      sts.Name,
 			Type:      utils.RolloutTypeStatefulSet,
 			StartTime: time.Now(),
-			Reason:    "certificate-renewal",
+			Reason:    "recreation-" + recreationReason,
+		}, nil
+	}
+
+	// Check if update is needed (any hash changed: cert, config, or spec)
+	existingCertHash := ""
+	existingConfigHash := ""
+	existingSpecHash := ""
+	if found.Spec.Template.Annotations != nil {
+		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
+		existingConfigHash = found.Spec.Template.Annotations[constants.AnnotationConfigHash]
+	}
+	if found.Annotations != nil {
+		existingSpecHash = found.Annotations[constants.AnnotationSpecHash]
+	}
+
+	needsUpdate := false
+	var updateReason string
+
+	if certHash != "" && certHash != existingCertHash {
+		needsUpdate = true
+		updateReason = "certificate-change"
+		log.Info("Master StatefulSet needs update due to certificate hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingCertHash),
+			"newHash", utils.ShortHash(certHash))
+	}
+	if configHash != "" && configHash != existingConfigHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+config-change"
+		} else {
+			updateReason = "config-change"
+		}
+		log.Info("Master StatefulSet needs update due to config hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingConfigHash),
+			"newHash", utils.ShortHash(configHash))
+	}
+	if specHash != "" && specHash != existingSpecHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+spec-change"
+		} else {
+			updateReason = "spec-change"
+		}
+		log.Info("Master StatefulSet needs update due to spec hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingSpecHash),
+			"newHash", utils.ShortHash(specHash))
+	}
+
+	if needsUpdate {
+		sts.SetResourceVersion(found.GetResourceVersion())
+		if err := r.Update(ctx, sts); err != nil {
+			return nil, fmt.Errorf("failed to update master statefulset: %w", err)
+		}
+		return &utils.PendingRollout{
+			Component: "manager-master",
+			Namespace: sts.Namespace,
+			Name:      sts.Name,
+			Type:      utils.RolloutTypeStatefulSet,
+			StartTime: time.Now(),
+			Reason:    updateReason,
 		}, nil
 	}
 
@@ -403,6 +511,30 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 // Returns a PendingRollout if a rollout was initiated, nil otherwise
 func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, certHash string) (*utils.PendingRollout, error) {
 	log := logf.FromContext(ctx)
+
+	// Extract worker spec fields with defaults
+	var (
+		replicas     int32 = 0
+		version      = cluster.Spec.Version
+		resources    *corev1.ResourceRequirements
+		storageSize  = constants.DefaultManagerStorageSize
+		nodeSelector map[string]string
+		tolerations  []corev1.Toleration
+		affinity     *corev1.Affinity
+	)
+
+	if cluster.Spec.Manager != nil {
+		replicas = cluster.Spec.Manager.Workers.GetReplicas()
+		if cluster.Spec.Manager.Workers.Resources != nil {
+			resources = cluster.Spec.Manager.Workers.Resources
+		}
+		if cluster.Spec.Manager.Workers.StorageSize != "" {
+			storageSize = cluster.Spec.Manager.Workers.StorageSize
+		}
+		nodeSelector = cluster.Spec.Manager.Workers.NodeSelector
+		tolerations = cluster.Spec.Manager.Workers.Tolerations
+		affinity = cluster.Spec.Manager.Workers.Affinity
+	}
 
 	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "worker")
@@ -444,6 +576,9 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		return nil, fmt.Errorf("failed to reconcile worker configmap: %w", err)
 	}
 
+	// Compute configHash for change detection (ossec.conf + filebeat.yml)
+	configHash := patch.ComputeConfigHash(configMap.Data)
+
 	// Build Services
 	serviceBuilder := services.NewWorkerServiceBuilder(cluster.Name, cluster.Namespace)
 	service := serviceBuilder.Build()
@@ -462,22 +597,42 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		return nil, fmt.Errorf("failed to reconcile worker headless service: %w", err)
 	}
 
-	// Build StatefulSet
+	// Compute specHash for change detection (version is included in image tag)
+	specHash, err := patch.ComputeManagerWorkersSpecHash(replicas, version, resources, storageSize, "", nodeSelector, tolerations, affinity)
+	if err != nil {
+		log.Error(err, "Failed to compute worker spec hash, continuing without spec hash")
+		specHash = ""
+	}
+
+	// Build StatefulSet with all fields
 	stsBuilder := deployments.NewWorkerStatefulSetBuilder(cluster.Name, cluster.Namespace)
-	if cluster.Spec.Version != "" {
-		stsBuilder.WithVersion(cluster.Spec.Version)
+	stsBuilder.WithReplicas(replicas)
+	if version != "" {
+		stsBuilder.WithVersion(version)
 	}
-	// Always set replicas from spec (including 0 for no workers)
-	var workerReplicas int32 = 0
-	if cluster.Spec.Manager != nil {
-		workerReplicas = cluster.Spec.Manager.Workers.GetReplicas()
-		if cluster.Spec.Manager.Workers.Resources != nil {
-			stsBuilder.WithResources(cluster.Spec.Manager.Workers.Resources)
-		}
+	if resources != nil {
+		stsBuilder.WithResources(resources)
 	}
-	stsBuilder.WithReplicas(workerReplicas)
+	if storageSize != "" {
+		stsBuilder.WithStorageSize(storageSize)
+	}
+	if nodeSelector != nil {
+		stsBuilder.WithNodeSelector(nodeSelector)
+	}
+	if tolerations != nil {
+		stsBuilder.WithTolerations(tolerations)
+	}
+	if affinity != nil {
+		stsBuilder.WithAffinity(affinity)
+	}
 	if certHash != "" {
 		stsBuilder.WithCertHash(certHash)
+	}
+	if configHash != "" {
+		stsBuilder.WithConfigHash(configHash)
+	}
+	if specHash != "" {
+		stsBuilder.WithSpecHash(specHash)
 	}
 
 	sts := stsBuilder.Build()
@@ -488,7 +643,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	found := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Worker StatefulSet", "name", sts.Name, "replicas", workerReplicas, "certHash", utils.ShortHash(certHash))
+		log.Info("Creating Worker StatefulSet", "name", sts.Name, "replicas", replicas, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash))
 		if err := r.Create(ctx, sts); err != nil {
 			return nil, fmt.Errorf("failed to create worker statefulset: %w", err)
 		}
@@ -504,21 +659,21 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		return nil, fmt.Errorf("failed to get worker statefulset: %w", err)
 	}
 
-	// Check if update is needed (cert hash changed)
-	existingCertHash := ""
-	if found.Spec.Template.Annotations != nil {
-		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
-	}
-
-	if certHash != "" && certHash != existingCertHash {
-		log.Info("Updating Worker StatefulSet due to certificate hash change (non-blocking)",
+	// Check if recreation is needed due to immutable field changes (SecurityContext, PodManagementPolicy)
+	needsRecreation, recreationReason := patch.NeedsStatefulSetRecreation(found, sts)
+	if needsRecreation {
+		log.Info("Worker StatefulSet requires recreation due to immutable field change",
 			"name", sts.Name,
-			"oldHash", utils.ShortHash(existingCertHash),
-			"newHash", utils.ShortHash(certHash))
+			"reason", recreationReason)
 
-		sts.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, sts); err != nil {
-			return nil, fmt.Errorf("failed to update worker statefulset: %w", err)
+		// Delete the old StatefulSet (PVCs will be preserved)
+		if err := r.Delete(ctx, found); err != nil && !errors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to delete worker statefulset for recreation: %w", err)
+		}
+
+		// Create the new StatefulSet
+		if err := r.Create(ctx, sts); err != nil {
+			return nil, fmt.Errorf("failed to create worker statefulset after recreation: %w", err)
 		}
 
 		return &utils.PendingRollout{
@@ -527,7 +682,70 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 			Name:      sts.Name,
 			Type:      utils.RolloutTypeStatefulSet,
 			StartTime: time.Now(),
-			Reason:    "certificate-renewal",
+			Reason:    "recreation-" + recreationReason,
+		}, nil
+	}
+
+	// Check if update is needed (any hash changed: cert, config, or spec)
+	existingCertHash := ""
+	existingConfigHash := ""
+	existingSpecHash := ""
+	if found.Spec.Template.Annotations != nil {
+		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
+		existingConfigHash = found.Spec.Template.Annotations[constants.AnnotationConfigHash]
+	}
+	if found.Annotations != nil {
+		existingSpecHash = found.Annotations[constants.AnnotationSpecHash]
+	}
+
+	needsUpdate := false
+	var updateReason string
+
+	if certHash != "" && certHash != existingCertHash {
+		needsUpdate = true
+		updateReason = "certificate-change"
+		log.Info("Worker StatefulSet needs update due to certificate hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingCertHash),
+			"newHash", utils.ShortHash(certHash))
+	}
+	if configHash != "" && configHash != existingConfigHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+config-change"
+		} else {
+			updateReason = "config-change"
+		}
+		log.Info("Worker StatefulSet needs update due to config hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingConfigHash),
+			"newHash", utils.ShortHash(configHash))
+	}
+	if specHash != "" && specHash != existingSpecHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+spec-change"
+		} else {
+			updateReason = "spec-change"
+		}
+		log.Info("Worker StatefulSet needs update due to spec hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingSpecHash),
+			"newHash", utils.ShortHash(specHash))
+	}
+
+	if needsUpdate {
+		sts.SetResourceVersion(found.GetResourceVersion())
+		if err := r.Update(ctx, sts); err != nil {
+			return nil, fmt.Errorf("failed to update worker statefulset: %w", err)
+		}
+		return &utils.PendingRollout{
+			Component: "manager-worker",
+			Namespace: sts.Namespace,
+			Name:      sts.Name,
+			Type:      utils.RolloutTypeStatefulSet,
+			StartTime: time.Now(),
+			Reason:    updateReason,
 		}, nil
 	}
 

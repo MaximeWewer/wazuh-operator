@@ -304,11 +304,13 @@ func (r *WorkerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wa
 	replicas := cluster.Spec.Manager.Workers.GetReplicas()
 	version := cluster.Spec.Version
 	resources := cluster.Spec.Manager.Workers.Resources
-	storageSize := "" // Using default from builder
-	image := ""       // Using default from builder
+	storageSize := cluster.Spec.Manager.Workers.StorageSize
+	nodeSelector := cluster.Spec.Manager.Workers.NodeSelector
+	tolerations := cluster.Spec.Manager.Workers.Tolerations
+	affinity := cluster.Spec.Manager.Workers.Affinity
 
-	// Compute spec hash for change detection
-	specHash, err := patch.ComputeManagerWorkersSpecHash(replicas, version, resources, storageSize, image)
+	// Compute spec hash for change detection (includes scheduling options)
+	specHash, err := patch.ComputeManagerWorkersSpecHash(replicas, version, resources, storageSize, "", nodeSelector, tolerations, affinity)
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec tracking")
 		specHash = ""
