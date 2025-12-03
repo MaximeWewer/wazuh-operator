@@ -259,7 +259,7 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	runAsUser := int64(1000)
 
 	// Configure RollingUpdate strategy for graceful rollout
-	// Partition 0 means all pods will be updated, but OrderedReady ensures one at a time
+	// Partition 0 means all pods will be updated
 	partition := int32(0)
 
 	sts := &appsv1.StatefulSet{
@@ -272,8 +272,9 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &b.replicas,
 			ServiceName: b.name + "-headless",
-			// OrderedReady ensures pods are updated sequentially and each must be Ready before the next
-			PodManagementPolicy: appsv1.OrderedReadyPodManagement,
+			// Parallel allows all pods to start simultaneously, which is required for
+			// OpenSearch cluster formation - nodes need to discover each other at startup
+			PodManagementPolicy: appsv1.ParallelPodManagement,
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 				Type: appsv1.RollingUpdateStatefulSetStrategyType,
 				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
