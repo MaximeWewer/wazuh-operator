@@ -392,8 +392,11 @@ jobs:
       - name: Generate release notes
         id: release_notes
         run: |
-          # Get previous tag
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 ${{ needs.prepare.outputs.version }}^ 2>/dev/null || echo "")
+          # Fetch all tags from remote to ensure we have the latest
+          git fetch --tags
+          
+          # Get the latest tag (previous version)
+          PREVIOUS_TAG=$(git tag -l --sort=-version:refname | head -n 1)
 
           # Generate changelog
           cat << EOF > release_notes.md
