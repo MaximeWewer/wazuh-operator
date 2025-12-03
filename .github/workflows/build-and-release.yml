@@ -408,12 +408,38 @@ jobs:
           EOF
 
           if [ -n "$PREVIOUS_TAG" ]; then
-            echo "Changes since ${PREVIOUS_TAG}:" >> release_notes.md
+            echo "Changes since ${PREVIOUS_TAG} (last 10 events):" >> release_notes.md
             echo "" >> release_notes.md
-            # Use HEAD instead of the new tag (tag doesn't exist yet locally)
-            git log ${PREVIOUS_TAG}..HEAD \
-              --pretty=format:"* %s (%h)" \
-              --no-merges >> release_notes.md
+
+            # Create a temporary file to store all events with timestamps
+            TEMP_EVENTS=$(mktemp)
+            
+            # Get all commits with their timestamps (excluding merge commits)
+            git log --all --pretty=format:"%at|commit|%h|%s" --grep="Merge pull request\|Merge branch" --invert-grep -n 20 > "$TEMP_EVENTS"
+            
+            # Get merged PRs with timestamps
+            gh pr list --state merged --limit 20 --json number,title,url,mergedAt --jq '.[] | "\(.mergedAt | fromdateiso8601)|pr|#\(.number)|\(.title)|\(.url)"' >> "$TEMP_EVENTS" 2>/dev/null || true
+            
+            # Sort by timestamp (newest first) and take only the first 10
+            EVENTS_LIST=$(sort -t'|' -k1 -rn "$TEMP_EVENTS" | head -10 | while IFS='|' read -r timestamp type id title url; do
+              if [ "$type" = "commit" ]; then
+                echo "- **Commit** $id: $title"
+              elif [ "$type" = "pr" ]; then
+                echo "- **Pull request** [#${id}](${url}): ${title}"
+              fi
+            done)
+            
+            # Clean up temp file
+            rm -f "$TEMP_EVENTS"
+            
+            # Build the changelog content
+            if [ -n "$EVENTS_LIST" ]; then
+              CHANGELOG_CONTENT="$EVENTS_LIST"
+            else
+              CHANGELOG_CONTENT="No changes found."
+            fi
+
+            echo "$CHANGELOG_CONTENT" >> release_notes.md
           else
             echo "Initial release" >> release_notes.md
           fi
