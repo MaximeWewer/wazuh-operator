@@ -572,6 +572,66 @@ All CRDs include these status fields:
 | `conflictsWith`      | string      | Conflicting CRD name                 |
 | `ownershipClaimed`   | bool        | CRD owns the resource                |
 
+### WazuhCluster Additional Status Fields
+
+The WazuhCluster CRD includes additional status fields for volume expansion tracking:
+
+| Field             | Type                                            | Description                        |
+| ----------------- | ----------------------------------------------- | ---------------------------------- |
+| `volumeExpansion` | [VolumeExpansionStatus](#volumeexpansionstatus) | Storage expansion progress tracker |
+
+#### VolumeExpansionStatus
+
+Tracks storage expansion progress for all cluster components:
+
+| Field                     | Type                                                  | Description                     |
+| ------------------------- | ----------------------------------------------------- | ------------------------------- |
+| `indexerExpansion`        | [ComponentExpansionStatus](#componentexpansionstatus) | Indexer PVC expansion status    |
+| `managerMasterExpansion`  | [ComponentExpansionStatus](#componentexpansionstatus) | Manager master expansion status |
+| `managerWorkersExpansion` | [ComponentExpansionStatus](#componentexpansionstatus) | Manager workers expansion status |
+
+#### ComponentExpansionStatus
+
+Tracks expansion status for a specific component:
+
+| Field                | Type     | Description                                          |
+| -------------------- | -------- | ---------------------------------------------------- |
+| `phase`              | string   | Expansion phase: Pending, InProgress, Completed, Failed |
+| `requestedSize`      | string   | Target storage size (e.g., "100Gi")                  |
+| `currentSize`        | string   | Current storage size                                 |
+| `message`            | string   | Human-readable status message                        |
+| `lastTransitionTime` | Time     | When the phase last changed                          |
+| `pvcsExpanded`       | []string | List of PVCs that have completed expansion           |
+| `pvcsPending`        | []string | List of PVCs still pending expansion                 |
+
+**Example status:**
+
+```yaml
+status:
+  volumeExpansion:
+    indexerExpansion:
+      phase: InProgress
+      requestedSize: "100Gi"
+      currentSize: "50Gi"
+      message: "Expanding PVCs: 2 completed, 1 pending"
+      pvcsExpanded:
+        - data-wazuh-indexer-0
+        - data-wazuh-indexer-1
+      pvcsPending:
+        - data-wazuh-indexer-2
+      lastTransitionTime: "2025-01-15T10:30:00Z"
+    managerMasterExpansion:
+      phase: Completed
+      requestedSize: "40Gi"
+      currentSize: "40Gi"
+      message: "All 1 PVC(s) expanded successfully to 40Gi"
+      pvcsExpanded:
+        - data-wazuh-manager-master-0
+      lastTransitionTime: "2025-01-15T10:28:00Z"
+```
+
+See [Volume Expansion Guide](./features/volume-expansion.md) for detailed usage instructions.
+
 ---
 
 ## Sample Files

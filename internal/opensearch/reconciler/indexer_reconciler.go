@@ -45,6 +45,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/config"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/storage"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -92,6 +93,11 @@ func (r *IndexerReconciler) Reconcile(ctx context.Context, cluster *wazuhv1alpha
 	// Reconcile StatefulSet
 	if err := r.reconcileStatefulSet(ctx, cluster); err != nil {
 		return fmt.Errorf("failed to reconcile indexer statefulset: %w", err)
+	}
+
+	// Reconcile Volume Expansion (after StatefulSet to ensure PVCs exist)
+	if err := r.reconcileVolumeExpansion(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to reconcile indexer volume expansion: %w", err)
 	}
 
 	log.Info("Indexer reconciliation completed")
@@ -1348,4 +1354,211 @@ func (r *IndexerReconciler) ResolveAndSetDefaultAdmin(ctx context.Context, clust
 		"source", creds.Source)
 
 	return nil
+}
+
+// reconcileVolumeExpansion handles PVC volume expansion for indexer pods
+func (r *IndexerReconciler) reconcileVolumeExpansion(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	// Get requested storage size from spec
+	requestedSize := constants.DefaultIndexerStorageSize
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.StorageSize != "" {
+		requestedSize = cluster.Spec.Indexer.StorageSize
+	}
+
+	// List all indexer PVCs
+	pvcList, err := r.getIndexerPVCs(ctx, cluster)
+	if err != nil {
+		return fmt.Errorf("failed to list indexer PVCs: %w", err)
+	}
+
+	// If no PVCs found, nothing to expand
+	if len(pvcList.Items) == 0 {
+		log.V(1).Info("No indexer PVCs found, skipping volume expansion check")
+		return nil
+	}
+
+	// Track expansion progress
+	var pvcsExpanded []string
+	var pvcsPending []string
+	var expansionNeeded bool
+	var expansionError error
+
+	for i := range pvcList.Items {
+		pvc := &pvcList.Items[i]
+
+		// Validate expansion
+		validationResult, err := storage.ValidateExpansion(ctx, r.Client, pvc, requestedSize)
+		if err != nil {
+			log.Error(err, "Failed to validate expansion for PVC", "pvc", pvc.Name)
+			expansionError = err
+			continue
+		}
+
+		// Handle validation failures
+		if !validationResult.Valid {
+			if validationResult.ErrorMessage != "" {
+				// Check if this is a shrink request
+				isShrink, _ := storage.IsShrinkRequest(validationResult.CurrentSize.String(), requestedSize)
+				if isShrink {
+					// Emit shrink rejected event
+					if r.Recorder != nil {
+						r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonStorageSizeDecreaseRejected,
+							fmt.Sprintf("Cannot decrease storage size for PVC %s: Kubernetes does not support shrinking PVCs", pvc.Name))
+					}
+					log.Info("Storage size decrease rejected",
+						"pvc", pvc.Name,
+						"currentSize", validationResult.CurrentSize.String(),
+						"requestedSize", requestedSize)
+					continue
+				}
+
+				// Check if StorageClass doesn't support expansion
+				if !validationResult.StorageClassSupportsExpansion && validationResult.NeedsExpansion {
+					if r.Recorder != nil {
+						r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonStorageClassNotExpandable,
+							fmt.Sprintf("StorageClass for PVC %s does not support volume expansion", pvc.Name))
+					}
+					log.Info("StorageClass does not support volume expansion",
+						"pvc", pvc.Name,
+						"error", validationResult.ErrorMessage)
+					expansionError = fmt.Errorf("storage class does not support expansion: %s", validationResult.ErrorMessage)
+					continue
+				}
+			}
+			continue
+		}
+
+		// Check if expansion is needed
+		if !validationResult.NeedsExpansion {
+			// Already at requested size
+			pvcsExpanded = append(pvcsExpanded, pvc.Name)
+			continue
+		}
+
+		// Expansion is needed
+		expansionNeeded = true
+		pvcsPending = append(pvcsPending, pvc.Name)
+
+		// Check current expansion state
+		condition := storage.GetPVCExpansionCondition(pvc)
+		if !condition.IsComplete {
+			log.V(1).Info("PVC expansion already in progress",
+				"pvc", pvc.Name,
+				"phase", condition.Phase,
+				"message", condition.Message)
+			continue
+		}
+
+		// Emit expansion started event (only once at the start)
+		if len(pvcsPending) == 1 && len(pvcsExpanded) == 0 {
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonVolumeExpansionStarted,
+					fmt.Sprintf("Starting volume expansion for indexer PVCs to %s", requestedSize))
+			}
+		}
+
+		// Perform expansion
+		log.Info("Expanding indexer PVC",
+			"pvc", pvc.Name,
+			"currentSize", validationResult.CurrentSize.String(),
+			"requestedSize", requestedSize)
+
+		if err := storage.ExpandPVC(ctx, r.Client, pvc, requestedSize); err != nil {
+			log.Error(err, "Failed to expand PVC", "pvc", pvc.Name)
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonVolumeExpansionFailed,
+					fmt.Sprintf("Failed to expand PVC %s: %v", pvc.Name, err))
+			}
+			expansionError = err
+			continue
+		}
+
+		log.Info("PVC expansion initiated",
+			"pvc", pvc.Name,
+			"newSize", requestedSize)
+	}
+
+	// Update expansion status
+	r.updateIndexerExpansionStatus(ctx, cluster, requestedSize, pvcsExpanded, pvcsPending, expansionError)
+
+	// Emit completion event if all PVCs are expanded
+	if len(pvcsPending) == 0 && len(pvcsExpanded) > 0 && expansionNeeded {
+		if r.Recorder != nil {
+			r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonVolumeExpansionCompleted,
+				fmt.Sprintf("All indexer PVCs expanded successfully to %s", requestedSize))
+		}
+	}
+
+	return nil
+}
+
+// getIndexerPVCs lists all PVCs belonging to the indexer StatefulSet
+func (r *IndexerReconciler) getIndexerPVCs(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*corev1.PersistentVolumeClaimList, error) {
+	pvcList := &corev1.PersistentVolumeClaimList{}
+
+	// Indexer PVCs are labeled with app.kubernetes.io/component=indexer
+	listOpts := []client.ListOption{
+		client.InNamespace(cluster.Namespace),
+		client.MatchingLabels{
+			constants.LabelInstance:  cluster.Name,
+			constants.LabelComponent: constants.ComponentIndexer,
+		},
+	}
+
+	if err := r.List(ctx, pvcList, listOpts...); err != nil {
+		return nil, fmt.Errorf("failed to list indexer PVCs: %w", err)
+	}
+
+	return pvcList, nil
+}
+
+// updateIndexerExpansionStatus updates the indexer expansion status in the cluster status
+func (r *IndexerReconciler) updateIndexerExpansionStatus(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, requestedSize string, pvcsExpanded, pvcsPending []string, expansionError error) {
+	log := logf.FromContext(ctx)
+
+	// Initialize VolumeExpansion status if needed
+	if cluster.Status.VolumeExpansion == nil {
+		cluster.Status.VolumeExpansion = &wazuhv1alpha1.VolumeExpansionStatus{}
+	}
+
+	var update storage.ExpansionStatusUpdate
+
+	// Determine current size from first expanded PVC or use requested size
+	currentSize := requestedSize
+	if len(pvcsExpanded) == 0 && len(pvcsPending) > 0 {
+		// Try to get current size from a pending PVC
+		pvcList, err := r.getIndexerPVCs(ctx, cluster)
+		if err == nil && len(pvcList.Items) > 0 {
+			currentSize = storage.GetPVCStorageSize(&pvcList.Items[0])
+		}
+	}
+
+	// Determine the phase and create status update
+	if expansionError != nil {
+		update = storage.CreateFailedStatus(requestedSize, currentSize, expansionError.Error(), pvcsExpanded, pvcsPending)
+	} else if len(pvcsPending) > 0 {
+		if len(pvcsExpanded) > 0 {
+			update = storage.CreateInProgressStatus(requestedSize, currentSize, pvcsExpanded, pvcsPending)
+		} else {
+			update = storage.CreatePendingStatus(requestedSize, currentSize, pvcsPending)
+		}
+	} else if len(pvcsExpanded) > 0 {
+		update = storage.CreateCompletedStatus(requestedSize, pvcsExpanded)
+	} else {
+		// No PVCs found or no expansion needed - clear the status
+		cluster.Status.VolumeExpansion.IndexerExpansion = nil
+		return
+	}
+
+	// Update the status
+	cluster.Status.VolumeExpansion.IndexerExpansion = storage.UpdateComponentExpansionStatus(
+		cluster.Status.VolumeExpansion.IndexerExpansion,
+		update,
+	)
+
+	log.V(1).Info("Updated indexer expansion status",
+		"phase", update.Phase,
+		"pvcsExpanded", len(pvcsExpanded),
+		"pvcsPending", len(pvcsPending))
 }

@@ -14698,6 +14698,130 @@ spec:
               version:
                 description: Version currently deployed
                 type: string
+              volumeExpansion:
+                description: VolumeExpansion tracks storage expansion progress for
+                  all components
+                properties:
+                  indexerExpansion:
+                    description: IndexerExpansion tracks indexer PVC expansion status
+                    properties:
+                      currentSize:
+                        description: CurrentSize is the current actual storage size
+                        type: string
+                      lastTransitionTime:
+                        description: LastTransitionTime is when the phase last changed
+                        format: date-time
+                        type: string
+                      message:
+                        description: Message provides details about the expansion
+                          status
+                        type: string
+                      phase:
+                        description: Phase indicates the current expansion phase
+                        enum:
+                        - Pending
+                        - InProgress
+                        - Completed
+                        - Failed
+                        type: string
+                      pvcsExpanded:
+                        description: PVCsExpanded lists which PVCs have completed
+                          expansion
+                        items:
+                          type: string
+                        type: array
+                      pvcsPending:
+                        description: PVCsPending lists PVCs still pending expansion
+                        items:
+                          type: string
+                        type: array
+                      requestedSize:
+                        description: RequestedSize is the new requested storage size
+                        type: string
+                    required:
+                    - phase
+                    type: object
+                  managerMasterExpansion:
+                    description: ManagerMasterExpansion tracks manager master PVC
+                      expansion status
+                    properties:
+                      currentSize:
+                        description: CurrentSize is the current actual storage size
+                        type: string
+                      lastTransitionTime:
+                        description: LastTransitionTime is when the phase last changed
+                        format: date-time
+                        type: string
+                      message:
+                        description: Message provides details about the expansion
+                          status
+                        type: string
+                      phase:
+                        description: Phase indicates the current expansion phase
+                        enum:
+                        - Pending
+                        - InProgress
+                        - Completed
+                        - Failed
+                        type: string
+                      pvcsExpanded:
+                        description: PVCsExpanded lists which PVCs have completed
+                          expansion
+                        items:
+                          type: string
+                        type: array
+                      pvcsPending:
+                        description: PVCsPending lists PVCs still pending expansion
+                        items:
+                          type: string
+                        type: array
+                      requestedSize:
+                        description: RequestedSize is the new requested storage size
+                        type: string
+                    required:
+                    - phase
+                    type: object
+                  managerWorkersExpansion:
+                    description: ManagerWorkersExpansion tracks manager workers PVC
+                      expansion status
+                    properties:
+                      currentSize:
+                        description: CurrentSize is the current actual storage size
+                        type: string
+                      lastTransitionTime:
+                        description: LastTransitionTime is when the phase last changed
+                        format: date-time
+                        type: string
+                      message:
+                        description: Message provides details about the expansion
+                          status
+                        type: string
+                      phase:
+                        description: Phase indicates the current expansion phase
+                        enum:
+                        - Pending
+                        - InProgress
+                        - Completed
+                        - Failed
+                        type: string
+                      pvcsExpanded:
+                        description: PVCsExpanded lists which PVCs have completed
+                          expansion
+                        items:
+                          type: string
+                        type: array
+                      pvcsPending:
+                        description: PVCsPending lists PVCs still pending expansion
+                        items:
+                          type: string
+                        type: array
+                      requestedSize:
+                        description: RequestedSize is the new requested storage size
+                        type: string
+                    required:
+                    - phase
+                    type: object
+                type: object
             type: object
         type: object
     served: true

@@ -32,6 +32,7 @@ import (
 
 	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/storage"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/deployments"
@@ -84,6 +85,11 @@ func (r *WorkerReconciler) Reconcile(ctx context.Context, cluster *wazuhv1alpha1
 	// Reconcile StatefulSet
 	if err := r.reconcileStatefulSet(ctx, cluster); err != nil {
 		return fmt.Errorf("failed to reconcile worker statefulset: %w", err)
+	}
+
+	// Reconcile volume expansion for workers
+	if err := r.reconcileVolumeExpansion(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to reconcile worker volume expansion: %w", err)
 	}
 
 	log.Info("Worker reconciliation completed")
@@ -590,6 +596,193 @@ func (r *WorkerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, w
 	}
 
 	return nil
+}
+
+// reconcileVolumeExpansion handles volume expansion for worker PVCs
+func (r *WorkerReconciler) reconcileVolumeExpansion(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	// Get requested storage size from spec
+	requestedSize := cluster.Spec.Manager.Workers.StorageSize
+	if requestedSize == "" {
+		// No storage size specified, clear any expansion status
+		if cluster.Status.VolumeExpansion != nil && cluster.Status.VolumeExpansion.ManagerWorkersExpansion != nil {
+			r.updateManagerWorkersExpansionStatus(ctx, cluster, nil)
+		}
+		return nil
+	}
+
+	// Get all worker PVCs
+	pvcList, err := r.getManagerWorkerPVCs(ctx, cluster)
+	if err != nil {
+		return fmt.Errorf("failed to get worker PVCs: %w", err)
+	}
+
+	if len(pvcList.Items) == 0 {
+		log.V(1).Info("No worker PVCs found, skipping volume expansion")
+		return nil
+	}
+
+	// Track expansion progress
+	var pvcsExpanded []string
+	var pvcsPending []string
+	var expansionError error
+
+	for i := range pvcList.Items {
+		pvc := &pvcList.Items[i]
+
+		// Validate expansion for this PVC
+		validationResult, err := storage.ValidateExpansion(ctx, r.Client, pvc, requestedSize)
+		if err != nil {
+			log.Error(err, "Failed to validate expansion for PVC", "pvc", pvc.Name)
+			expansionError = err
+			pvcsPending = append(pvcsPending, pvc.Name)
+			continue
+		}
+
+		// Handle validation result
+		if !validationResult.NeedsExpansion {
+			if validationResult.Valid {
+				// Size already matches or is larger
+				pvcsExpanded = append(pvcsExpanded, pvc.Name)
+			} else {
+				// Check if this is a shrink request (not supported)
+				isShrink, _ := storage.IsShrinkRequest(validationResult.CurrentSize.String(), requestedSize)
+				if isShrink {
+					if r.Recorder != nil {
+						r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonStorageSizeDecreaseRejected,
+							fmt.Sprintf("Storage size decrease not supported for worker PVC %s: cannot shrink from %s to %s",
+								pvc.Name, validationResult.CurrentSize.String(), requestedSize))
+					}
+				}
+				pvcsPending = append(pvcsPending, pvc.Name)
+			}
+			continue
+		}
+
+		// Check if validation passed (storage class supports expansion)
+		if !validationResult.Valid {
+			if !validationResult.StorageClassSupportsExpansion {
+				if r.Recorder != nil {
+					r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonStorageClassNotExpandable,
+						fmt.Sprintf("StorageClass for worker PVC %s does not support volume expansion", pvc.Name))
+				}
+			}
+			pvcsPending = append(pvcsPending, pvc.Name)
+			continue
+		}
+
+		// Check if expansion is already in progress
+		condition := storage.GetPVCExpansionCondition(pvc)
+		if !condition.IsComplete {
+			log.V(1).Info("PVC expansion already in progress",
+				"pvc", pvc.Name,
+				"phase", condition.Phase,
+				"message", condition.Message)
+			pvcsPending = append(pvcsPending, pvc.Name)
+			continue
+		}
+
+		// Initiate expansion
+		log.Info("Expanding worker PVC", "pvc", pvc.Name, "from", validationResult.CurrentSize.String(), "to", requestedSize)
+		if r.Recorder != nil {
+			r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonVolumeExpansionStarted,
+				fmt.Sprintf("Starting volume expansion for worker PVC %s from %s to %s",
+					pvc.Name, validationResult.CurrentSize.String(), requestedSize))
+		}
+
+		if err := storage.ExpandPVC(ctx, r.Client, pvc, requestedSize); err != nil {
+			log.Error(err, "Failed to expand PVC", "pvc", pvc.Name)
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonVolumeExpansionFailed,
+					fmt.Sprintf("Failed to expand worker PVC %s: %v", pvc.Name, err))
+			}
+			expansionError = err
+			pvcsPending = append(pvcsPending, pvc.Name)
+			continue
+		}
+
+		// PVC patch submitted, mark as pending until complete
+		pvcsPending = append(pvcsPending, pvc.Name)
+	}
+
+	// Update expansion status
+	var update storage.ExpansionStatusUpdate
+	currentSize := requestedSize
+	if len(pvcList.Items) > 0 {
+		currentSize = storage.GetPVCStorageSize(&pvcList.Items[0])
+	}
+
+	if expansionError != nil {
+		update = storage.CreateFailedStatus(requestedSize, currentSize, expansionError.Error(), pvcsExpanded, pvcsPending)
+	} else if len(pvcsPending) > 0 {
+		if len(pvcsExpanded) > 0 {
+			update = storage.CreateInProgressStatus(requestedSize, currentSize, pvcsExpanded, pvcsPending)
+		} else {
+			update = storage.CreatePendingStatus(requestedSize, currentSize, pvcsPending)
+		}
+	} else if len(pvcsExpanded) > 0 {
+		update = storage.CreateCompletedStatus(requestedSize, pvcsExpanded)
+		if r.Recorder != nil {
+			r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonVolumeExpansionCompleted,
+				fmt.Sprintf("All %d worker PVC(s) expanded successfully to %s", len(pvcsExpanded), requestedSize))
+		}
+	} else {
+		// No PVCs found or no expansion needed - clear the status
+		cluster.Status.VolumeExpansion.ManagerWorkersExpansion = nil
+		return nil
+	}
+
+	r.updateManagerWorkersExpansionStatus(ctx, cluster, &update)
+	return nil
+}
+
+// getManagerWorkerPVCs returns all PVCs associated with the manager worker StatefulSet
+func (r *WorkerReconciler) getManagerWorkerPVCs(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*corev1.PersistentVolumeClaimList, error) {
+	pvcList := &corev1.PersistentVolumeClaimList{}
+
+	// List PVCs with labels matching worker StatefulSet
+	listOpts := []client.ListOption{
+		client.InNamespace(cluster.Namespace),
+		client.MatchingLabels{
+			constants.LabelInstance:  cluster.Name,
+			constants.LabelComponent: "manager-worker",
+		},
+	}
+
+	if err := r.List(ctx, pvcList, listOpts...); err != nil {
+		return nil, fmt.Errorf("failed to list worker PVCs: %w", err)
+	}
+
+	return pvcList, nil
+}
+
+// updateManagerWorkersExpansionStatus updates the manager workers expansion status in the cluster
+func (r *WorkerReconciler) updateManagerWorkersExpansionStatus(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, update *storage.ExpansionStatusUpdate) {
+	log := logf.FromContext(ctx)
+
+	if cluster.Status.VolumeExpansion == nil {
+		cluster.Status.VolumeExpansion = &wazuhv1alpha1.VolumeExpansionStatus{}
+	}
+
+	if update == nil {
+		cluster.Status.VolumeExpansion.ManagerWorkersExpansion = nil
+	} else {
+		cluster.Status.VolumeExpansion.ManagerWorkersExpansion = storage.UpdateComponentExpansionStatus(
+			cluster.Status.VolumeExpansion.ManagerWorkersExpansion,
+			*update,
+		)
+	}
+
+	// Note: The actual status update will be handled by the main controller
+	// This just updates the in-memory status object
+	log.V(1).Info("Updated manager workers volume expansion status",
+		"phase", func() string {
+			if update != nil {
+				return update.Phase
+			}
+			return "cleared"
+		}())
 }
 
 // createOrUpdate creates or updates a resource with retry on conflict

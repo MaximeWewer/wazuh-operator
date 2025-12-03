@@ -584,6 +584,52 @@ type ServiceMonitorConfig struct {
 	ScrapeTimeout string `json:"scrapeTimeout,omitempty"`
 }
 
+// VolumeExpansionStatus tracks storage expansion progress for all components
+type VolumeExpansionStatus struct {
+	// IndexerExpansion tracks indexer PVC expansion status
+	// +optional
+	IndexerExpansion *ComponentExpansionStatus `json:"indexerExpansion,omitempty"`
+
+	// ManagerMasterExpansion tracks manager master PVC expansion status
+	// +optional
+	ManagerMasterExpansion *ComponentExpansionStatus `json:"managerMasterExpansion,omitempty"`
+
+	// ManagerWorkersExpansion tracks manager workers PVC expansion status
+	// +optional
+	ManagerWorkersExpansion *ComponentExpansionStatus `json:"managerWorkersExpansion,omitempty"`
+}
+
+// ComponentExpansionStatus tracks expansion progress for a single component type
+type ComponentExpansionStatus struct {
+	// Phase indicates the current expansion phase
+	// +kubebuilder:validation:Enum=Pending;InProgress;Completed;Failed
+	Phase string `json:"phase"`
+
+	// RequestedSize is the new requested storage size
+	// +optional
+	RequestedSize string `json:"requestedSize,omitempty"`
+
+	// CurrentSize is the current actual storage size
+	// +optional
+	CurrentSize string `json:"currentSize,omitempty"`
+
+	// Message provides details about the expansion status
+	// +optional
+	Message string `json:"message,omitempty"`
+
+	// LastTransitionTime is when the phase last changed
+	// +optional
+	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
+
+	// PVCsExpanded lists which PVCs have completed expansion
+	// +optional
+	PVCsExpanded []string `json:"pvcsExpanded,omitempty"`
+
+	// PVCsPending lists PVCs still pending expansion
+	// +optional
+	PVCsPending []string `json:"pvcsPending,omitempty"`
+}
+
 // WazuhClusterStatus defines the observed state of WazuhCluster
 type WazuhClusterStatus struct {
 	// Phase of the cluster
@@ -617,6 +663,10 @@ type WazuhClusterStatus struct {
 	// Upgrade tracks version upgrade progress
 	// +optional
 	Upgrade *UpgradeStatus `json:"upgrade,omitempty"`
+
+	// VolumeExpansion tracks storage expansion progress for all components
+	// +optional
+	VolumeExpansion *VolumeExpansionStatus `json:"volumeExpansion,omitempty"`
 
 	// Observed generation
 	// +optional

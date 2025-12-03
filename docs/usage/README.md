@@ -13,6 +13,7 @@ This directory contains documentation for users of the Wazuh Operator.
 
 - [Credentials Management](features/credentials.md) - Auto-generated passwords, secrets management
 - [Sizing Profiles](features/sizing.md) - Cluster sizing guide
+- [Volume Expansion](features/volume-expansion.md) - Online PVC storage expansion
 - [TLS Configuration](features/tls.md) - Certificate management
 - [Monitoring](features/monitoring.md) - Prometheus integration
 - [Log Rotation](features/log-rotation.md) - Automated log cleanup

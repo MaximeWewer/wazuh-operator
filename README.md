@@ -606,7 +606,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](docs/dev/contributing/CON
 - [ ] Implementation of node type support (Cluster manager, Data, Ingest, etc)
 - [ ] Setup Wazuh filebeat template
 - [ ] Drain strategy for scale up/down
-- [ ] Scaling nodes disks - increase disk size.
+- [x] Scaling PVC - increase disk size
 - [ ] Ability to deploy multiple clusters
 - [ ] More tests
 - [ ] NetworkPolicies

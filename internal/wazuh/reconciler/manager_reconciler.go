@@ -32,6 +32,7 @@ import (
 
 	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/storage"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/deployments"
@@ -78,6 +79,11 @@ func (r *ManagerReconciler) Reconcile(ctx context.Context, cluster *wazuhv1alpha
 	// Reconcile StatefulSet
 	if err := r.reconcileStatefulSet(ctx, cluster); err != nil {
 		return fmt.Errorf("failed to reconcile manager statefulset: %w", err)
+	}
+
+	// Reconcile Volume Expansion (after StatefulSet to ensure PVC exists)
+	if err := r.reconcileVolumeExpansion(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to reconcile manager master volume expansion: %w", err)
 	}
 
 	log.Info("Manager (master) reconciliation completed")
@@ -654,4 +660,191 @@ func (r *ManagerReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 		obj.SetResourceVersion(existing.GetResourceVersion())
 		return r.Update(ctx, obj)
 	})
+}
+
+// reconcileVolumeExpansion handles PVC volume expansion for manager master pod
+func (r *ManagerReconciler) reconcileVolumeExpansion(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	// Get requested storage size from spec
+	requestedSize := constants.DefaultManagerStorageSize
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.StorageSize != "" {
+		requestedSize = cluster.Spec.Manager.Master.StorageSize
+	}
+
+	// Get manager master PVC
+	pvc, err := r.getManagerMasterPVC(ctx, cluster)
+	if err != nil {
+		return fmt.Errorf("failed to get manager master PVC: %w", err)
+	}
+
+	// If no PVC found, nothing to expand
+	if pvc == nil {
+		log.V(1).Info("No manager master PVC found, skipping volume expansion check")
+		return nil
+	}
+
+	// Track expansion progress
+	var pvcsExpanded []string
+	var pvcsPending []string
+	var expansionError error
+
+	// Validate expansion
+	validationResult, err := storage.ValidateExpansion(ctx, r.Client, pvc, requestedSize)
+	if err != nil {
+		log.Error(err, "Failed to validate expansion for manager master PVC", "pvc", pvc.Name)
+		expansionError = err
+	} else if !validationResult.Valid {
+		if validationResult.ErrorMessage != "" {
+			// Check if this is a shrink request
+			isShrink, _ := storage.IsShrinkRequest(validationResult.CurrentSize.String(), requestedSize)
+			if isShrink {
+				if r.Recorder != nil {
+					r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonStorageSizeDecreaseRejected,
+						fmt.Sprintf("Cannot decrease storage size for manager master PVC %s: Kubernetes does not support shrinking PVCs", pvc.Name))
+				}
+				log.Info("Storage size decrease rejected",
+					"pvc", pvc.Name,
+					"currentSize", validationResult.CurrentSize.String(),
+					"requestedSize", requestedSize)
+			} else if !validationResult.StorageClassSupportsExpansion && validationResult.NeedsExpansion {
+				if r.Recorder != nil {
+					r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonStorageClassNotExpandable,
+						fmt.Sprintf("StorageClass for manager master PVC %s does not support volume expansion", pvc.Name))
+				}
+				log.Info("StorageClass does not support volume expansion",
+					"pvc", pvc.Name,
+					"error", validationResult.ErrorMessage)
+				expansionError = fmt.Errorf("storage class does not support expansion: %s", validationResult.ErrorMessage)
+			}
+		}
+	} else if !validationResult.NeedsExpansion {
+		// Already at requested size
+		pvcsExpanded = append(pvcsExpanded, pvc.Name)
+	} else {
+		// Expansion is needed
+		pvcsPending = append(pvcsPending, pvc.Name)
+
+		// Check current expansion state
+		condition := storage.GetPVCExpansionCondition(pvc)
+		if !condition.IsComplete {
+			log.V(1).Info("Manager master PVC expansion already in progress",
+				"pvc", pvc.Name,
+				"phase", condition.Phase,
+				"message", condition.Message)
+		} else {
+			// Emit expansion started event
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonVolumeExpansionStarted,
+					fmt.Sprintf("Starting volume expansion for manager master PVC to %s", requestedSize))
+			}
+
+			// Perform expansion
+			log.Info("Expanding manager master PVC",
+				"pvc", pvc.Name,
+				"currentSize", validationResult.CurrentSize.String(),
+				"requestedSize", requestedSize)
+
+			if err := storage.ExpandPVC(ctx, r.Client, pvc, requestedSize); err != nil {
+				log.Error(err, "Failed to expand manager master PVC", "pvc", pvc.Name)
+				if r.Recorder != nil {
+					r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonVolumeExpansionFailed,
+						fmt.Sprintf("Failed to expand manager master PVC %s: %v", pvc.Name, err))
+				}
+				expansionError = err
+			} else {
+				log.Info("Manager master PVC expansion initiated",
+					"pvc", pvc.Name,
+					"newSize", requestedSize)
+			}
+		}
+	}
+
+	// Update expansion status
+	r.updateManagerMasterExpansionStatus(ctx, cluster, requestedSize, pvcsExpanded, pvcsPending, expansionError)
+
+	// Emit completion event if expansion completed
+	if len(pvcsPending) == 0 && len(pvcsExpanded) > 0 {
+		if r.Recorder != nil {
+			r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonVolumeExpansionCompleted,
+				fmt.Sprintf("Manager master PVC expanded successfully to %s", requestedSize))
+		}
+	}
+
+	return nil
+}
+
+// getManagerMasterPVC gets the PVC for the manager master StatefulSet
+func (r *ManagerReconciler) getManagerMasterPVC(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*corev1.PersistentVolumeClaim, error) {
+	pvcList := &corev1.PersistentVolumeClaimList{}
+
+	// Manager master PVCs are labeled with app.kubernetes.io/component=manager and wazuh.com/manager-node-type=master
+	listOpts := []client.ListOption{
+		client.InNamespace(cluster.Namespace),
+		client.MatchingLabels{
+			constants.LabelInstance:        cluster.Name,
+			constants.LabelComponent:       constants.ComponentManager,
+			constants.LabelManagerNodeType: constants.NodeRoleMaster,
+		},
+	}
+
+	if err := r.List(ctx, pvcList, listOpts...); err != nil {
+		return nil, fmt.Errorf("failed to list manager master PVCs: %w", err)
+	}
+
+	if len(pvcList.Items) == 0 {
+		return nil, nil
+	}
+
+	// Return the first PVC (master has only one replica)
+	return &pvcList.Items[0], nil
+}
+
+// updateManagerMasterExpansionStatus updates the manager master expansion status in the cluster status
+func (r *ManagerReconciler) updateManagerMasterExpansionStatus(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, requestedSize string, pvcsExpanded, pvcsPending []string, expansionError error) {
+	log := logf.FromContext(ctx)
+
+	// Initialize VolumeExpansion status if needed
+	if cluster.Status.VolumeExpansion == nil {
+		cluster.Status.VolumeExpansion = &wazuhv1alpha1.VolumeExpansionStatus{}
+	}
+
+	var update storage.ExpansionStatusUpdate
+
+	// Determine current size
+	currentSize := requestedSize
+	if len(pvcsExpanded) == 0 && len(pvcsPending) > 0 {
+		pvc, err := r.getManagerMasterPVC(ctx, cluster)
+		if err == nil && pvc != nil {
+			currentSize = storage.GetPVCStorageSize(pvc)
+		}
+	}
+
+	// Determine the phase and create status update
+	if expansionError != nil {
+		update = storage.CreateFailedStatus(requestedSize, currentSize, expansionError.Error(), pvcsExpanded, pvcsPending)
+	} else if len(pvcsPending) > 0 {
+		if len(pvcsExpanded) > 0 {
+			update = storage.CreateInProgressStatus(requestedSize, currentSize, pvcsExpanded, pvcsPending)
+		} else {
+			update = storage.CreatePendingStatus(requestedSize, currentSize, pvcsPending)
+		}
+	} else if len(pvcsExpanded) > 0 {
+		update = storage.CreateCompletedStatus(requestedSize, pvcsExpanded)
+	} else {
+		// No PVC found or no expansion needed - clear the status
+		cluster.Status.VolumeExpansion.ManagerMasterExpansion = nil
+		return
+	}
+
+	// Update the status
+	cluster.Status.VolumeExpansion.ManagerMasterExpansion = storage.UpdateComponentExpansionStatus(
+		cluster.Status.VolumeExpansion.ManagerMasterExpansion,
+		update,
+	)
+
+	log.V(1).Info("Updated manager master expansion status",
+		"phase", update.Phase,
+		"pvcsExpanded", len(pvcsExpanded),
+		"pvcsPending", len(pvcsPending))
 }

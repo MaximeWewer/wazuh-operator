@@ -98,3 +98,14 @@ const (
 	// AnnotationPrometheusPath specifies the metrics path
 	AnnotationPrometheusPath = "prometheus.io/path"
 )
+
+// Volume expansion annotations
+const (
+	// AnnotationRequestedStorageSize tracks the requested storage size for expansion
+	// This is used to detect when a storage size change has been requested
+	AnnotationRequestedStorageSize = "wazuh.com/requested-storage-size"
+
+	// AnnotationLastExpansionTime tracks when expansion was last requested
+	// Format: RFC3339 timestamp
+	AnnotationLastExpansionTime = "wazuh.com/last-expansion-time"
+)
