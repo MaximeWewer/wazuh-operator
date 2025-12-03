@@ -206,8 +206,19 @@ filebeat.modules:
     archives:
       enabled: false
 
+# TODO : Add the ability to manage the Filebeat configuration from a CRD
+# filebeat.overwrite_pipelines: true
+
+# setup.template.overwrite: true
+# setup.template.json.enabled: true
+# setup.template.json.path: '/etc/filebeat/wazuh-template.json'
+# setup.template.json.name: 'wazuh'
+
 setup.template.json.enabled: true
-setup.ilm.enabled: true
+
+# ILM (Index Lifecycle Management) is an Elasticsearch feature not supported by OpenSearch
+# Must be disabled for Wazuh Indexer (OpenSearch)
+setup.ilm.enabled: false
 
 output.elasticsearch:
 {{- if .SSLEnabled }}
