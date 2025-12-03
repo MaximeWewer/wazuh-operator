@@ -249,5 +249,16 @@ logging.files:
   path: /var/log/filebeat
   name: filebeat
   keepfiles: 7
-  permissions: 0640
+  permissions: 0644
+
+logging.metrics.enabled: false
+
+# Seccomp configuration to avoid pthread_create failures in containerized environments
+# The rseq syscall is needed for thread creation on modern kernels
+seccomp:
+  default_action: allow
+  syscalls:
+  - action: allow
+    names:
+    - rseq
 `
