@@ -327,8 +327,9 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &b.replicas,
 			ServiceName: b.name,
-			// OrderedReady ensures pods are updated sequentially and each must be Ready before the next
-			PodManagementPolicy: appsv1.OrderedReadyPodManagement,
+			// Parallel allows all pods to start simultaneously
+			// This is the recommended policy for Wazuh manager as per official Wazuh Kubernetes deployment
+			PodManagementPolicy: appsv1.ParallelPodManagement,
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 				Type: appsv1.RollingUpdateStatefulSetStrategyType,
 				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
@@ -344,9 +345,18 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 					Annotations: b.podAnnotations,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector:   b.nodeSelector,
-					Tolerations:    b.tolerations,
-					Affinity:       b.affinity,
+					NodeSelector: b.nodeSelector,
+					Tolerations:  b.tolerations,
+					Affinity:     b.affinity,
+					// SecurityContext at pod level - fsGroup 101 is the wazuh group in the official image
+					// SeccompProfile Unconfined is needed on some environments (WSL2, certain kernels)
+					// to allow Filebeat's Go runtime to create threads (pthread_create)
+					SecurityContext: &corev1.PodSecurityContext{
+						FSGroup: func() *int64 { v := int64(101); return &v }(),
+						SeccompProfile: &corev1.SeccompProfile{
+							Type: corev1.SeccompProfileTypeUnconfined,
+						},
+					},
 					InitContainers: initContainers,
 					Containers:     containers,
 					Volumes:        volumes,
