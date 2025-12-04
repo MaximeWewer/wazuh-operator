@@ -17,6 +17,7 @@ This directory contains documentation for users of the Wazuh Operator.
 - [TLS Configuration](features/tls.md) - Certificate management
 - [Monitoring](features/monitoring.md) - Prometheus integration
 - [Log Rotation](features/log-rotation.md) - Automated log cleanup
+- [Filebeat Configuration](features/filebeat-configuration.md) - Declarative Filebeat management (template, pipeline)
 - [Wazuh Multi-API Hosts](features/wazuh-api-hosts.md) - Multiple Wazuh Manager APIs
 - [OpenSearch Security](features/opensearch-security.md) - Users, roles, tenants
 - [OpenSearch Index Management](features/opensearch-indices.md) - Templates, ISM policies

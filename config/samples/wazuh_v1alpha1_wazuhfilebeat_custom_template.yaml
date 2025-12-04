@@ -1,0 +1,112 @@
+# Sample WazuhFilebeat - Using custom template and pipeline from ConfigMaps
+# This example shows how to use fully custom configurations
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhFilebeat
+metadata:
+  name: wazuh-filebeat-custom
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  # Enable alerts
+  alerts:
+    enabled: true
+
+  # Reference a custom template from ConfigMap
+  template:
+    customTemplateRef:
+      name: custom-wazuh-template
+      key: wazuh-template.json
+
+  # Reference a custom pipeline from ConfigMap
+  pipeline:
+    customPipelineRef:
+      name: custom-wazuh-pipeline
+      key: pipeline.json
+
+  # Standard logging
+  logging:
+    level: info
+    keepFiles: 7
+---
+# Example ConfigMap for custom template
+# Users should create this with their custom wazuh-template.json
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-wazuh-template
+  namespace: wazuh
+data:
+  wazuh-template.json: |
+    {
+      "order": 1,
+      "index_patterns": ["wazuh-alerts-4.x-*"],
+      "settings": {
+        "index.refresh_interval": "5s",
+        "index.number_of_shards": "3",
+        "index.number_of_replicas": "1"
+      },
+      "mappings": {
+        "dynamic_templates": [
+          {
+            "string_as_keyword": {
+              "match_mapping_type": "string",
+              "mapping": { "type": "keyword" }
+            }
+          }
+        ],
+        "properties": {
+          "@timestamp": { "type": "date" },
+          "agent": {
+            "properties": {
+              "id": { "type": "keyword" },
+              "name": { "type": "keyword" }
+            }
+          },
+          "rule": {
+            "properties": {
+              "id": { "type": "keyword" },
+              "level": { "type": "integer" },
+              "description": { "type": "text" }
+            }
+          }
+        }
+      }
+    }
+---
+# Example ConfigMap for custom pipeline
+# Users should create this with their custom pipeline.json
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: custom-wazuh-pipeline
+  namespace: wazuh
+data:
+  pipeline.json: |
+    {
+      "description": "Custom Wazuh alerts pipeline",
+      "processors": [
+        {
+          "json": {
+            "field": "message",
+            "add_to_root": true
+          }
+        },
+        {
+          "date": {
+            "field": "timestamp",
+            "target_field": "@timestamp",
+            "formats": ["ISO8601"]
+          }
+        },
+        {
+          "remove": {
+            "field": ["message"],
+            "ignore_missing": true
+          }
+        }
+      ]
+    }

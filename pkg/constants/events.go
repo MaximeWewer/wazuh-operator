@@ -73,3 +73,33 @@ const (
 	// Kubernetes does not support shrinking PVCs natively
 	EventReasonStorageSizeDecreaseRejected = "StorageSizeDecreaseRejected"
 )
+
+// Filebeat configuration event reasons
+const (
+	// EventReasonFilebeatConfigCreated indicates Filebeat ConfigMap was created
+	EventReasonFilebeatConfigCreated = "FilebeatConfigCreated"
+
+	// EventReasonFilebeatConfigUpdated indicates Filebeat ConfigMap was updated
+	EventReasonFilebeatConfigUpdated = "FilebeatConfigUpdated"
+
+	// EventReasonFilebeatConfigFailed indicates Filebeat ConfigMap creation/update failed
+	EventReasonFilebeatConfigFailed = "FilebeatConfigFailed"
+
+	// EventReasonTemplateApplied indicates index template configuration was applied
+	EventReasonTemplateApplied = "TemplateApplied"
+
+	// EventReasonPipelineApplied indicates ingest pipeline configuration was applied
+	EventReasonPipelineApplied = "PipelineApplied"
+
+	// EventReasonCustomTemplateLoaded indicates custom template was loaded from ConfigMap
+	EventReasonCustomTemplateLoaded = "CustomTemplateLoaded"
+
+	// EventReasonCustomPipelineLoaded indicates custom pipeline was loaded from ConfigMap
+	EventReasonCustomPipelineLoaded = "CustomPipelineLoaded"
+
+	// EventReasonClusterNotFound indicates the referenced WazuhCluster was not found
+	EventReasonClusterNotFound = "ClusterNotFound"
+
+	// EventReasonClusterNotReady indicates the referenced WazuhCluster is not ready
+	EventReasonClusterNotReady = "ClusterNotReady"
+)

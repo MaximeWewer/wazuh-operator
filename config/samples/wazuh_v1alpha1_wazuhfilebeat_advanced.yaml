@@ -1,0 +1,50 @@
+# Sample WazuhFilebeat - Advanced configuration with custom template and pipeline settings
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhFilebeat
+metadata:
+  name: wazuh-filebeat-advanced
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  # Enable both alerts and archives
+  alerts:
+    enabled: true
+  archives:
+    enabled: true
+
+  # Custom index template settings
+  template:
+    # Number of primary shards for large deployments
+    shards: 5
+    # Number of replica shards for HA
+    replicas: 1
+    # Refresh interval for better indexing performance
+    refreshInterval: "10s"
+    # Field limit for custom field support
+    fieldLimit: 15000
+
+  # Custom ingest pipeline settings
+  pipeline:
+    # Enable GeoIP enrichment
+    geoipEnabled: true
+    # Custom index prefix for multi-tenant deployments
+    indexPrefix: "wazuh-alerts-4.x"
+    # Additional fields to remove from indexed documents
+    additionalRemoveFields:
+      - "custom_debug_field"
+      - "internal_metadata"
+    # Timestamp format
+    timestampFormat: "ISO8601"
+
+  # Verbose logging for debugging
+  logging:
+    level: debug
+    keepFiles: 14
+
+  # SSL configuration
+  ssl:
+    verificationMode: full

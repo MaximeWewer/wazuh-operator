@@ -126,6 +126,7 @@ rules:
   - wazuhclusters
   - wazuhcertificates
   - wazuhdecoders
+  - wazuhfilebeats
   - wazuhrules
   - wazuhmanagers
   - wazuhworkers
@@ -156,6 +157,7 @@ rules:
   - wazuhclusters/finalizers
   - wazuhcertificates/finalizers
   - wazuhdecoders/finalizers
+  - wazuhfilebeats/finalizers
   - wazuhrules/finalizers
   - wazuhmanagers/finalizers
   - wazuhworkers/finalizers
@@ -180,6 +182,7 @@ rules:
   - wazuhclusters/status
   - wazuhcertificates/status
   - wazuhdecoders/status
+  - wazuhfilebeats/status
   - wazuhrules/status
   - wazuhmanagers/status
   - wazuhworkers/status

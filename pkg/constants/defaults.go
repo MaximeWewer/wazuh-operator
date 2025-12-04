@@ -257,6 +257,47 @@ const (
 	DefaultLogRotationImage = "bitnami/kubectl:latest"
 )
 
+// Filebeat defaults
+// These configure the Filebeat sidecar in Manager pods
+const (
+	// DefaultFilebeatLoggingLevel is the default Filebeat logging level
+	DefaultFilebeatLoggingLevel = "info"
+
+	// DefaultFilebeatLoggingKeepFiles is the default number of log files to retain
+	DefaultFilebeatLoggingKeepFiles int32 = 7
+
+	// DefaultFilebeatSSLVerification is the default SSL verification mode
+	DefaultFilebeatSSLVerification = "full"
+
+	// DefaultFilebeatIndexPrefix is the default index prefix for Wazuh alerts
+	// Note: This is without the trailing dash, used in pipeline configuration
+	DefaultFilebeatIndexPrefix = "wazuh-alerts-4.x"
+
+	// DefaultFilebeatTimestampFormat is the default timestamp format for parsing
+	DefaultFilebeatTimestampFormat = "ISO8601"
+
+	// DefaultFilebeatTemplateShards is the default number of primary shards
+	DefaultFilebeatTemplateShards int32 = 3
+
+	// DefaultFilebeatTemplateReplicas is the default number of replica shards
+	DefaultFilebeatTemplateReplicas int32 = 0
+
+	// DefaultFilebeatTemplateRefreshInterval is the default index refresh interval
+	DefaultFilebeatTemplateRefreshInterval = "5s"
+
+	// DefaultFilebeatTemplateFieldLimit is the default maximum fields per document
+	DefaultFilebeatTemplateFieldLimit int32 = 10000
+)
+
+// Protocol constants
+const (
+	// ProtocolHTTPS is the HTTPS protocol
+	ProtocolHTTPS = "https"
+
+	// ProtocolHTTP is the HTTP protocol
+	ProtocolHTTP = "http"
+)
+
 // DefaultLogRotationPaths are the paths to clean during log rotation
 var DefaultLogRotationPaths = []string{
 	"/var/ossec/logs/alerts/",

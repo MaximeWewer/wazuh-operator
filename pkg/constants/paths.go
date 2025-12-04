@@ -101,6 +101,9 @@ const (
 
 	// PathFilebeatCerts is the certificates directory
 	PathFilebeatCerts = "/etc/filebeat/certs"
+
+	// PathFilebeatLogs is the logs directory for Filebeat
+	PathFilebeatLogs = "/var/log/filebeat"
 )
 
 // TLS Secret key names (Kubernetes convention)
@@ -231,6 +234,9 @@ const (
 	// PathFilebeatTemplate is the path to Wazuh template file for Filebeat
 	PathFilebeatTemplate = "/etc/filebeat/wazuh-template.json"
 
+	// PathFilebeatPipeline is the path to the ingest pipeline file for Filebeat
+	PathFilebeatPipeline = "/etc/filebeat/pipeline.json"
+
 	// PathFilebeatCertFile is the path to Filebeat certificate
 	PathFilebeatCertFile = "/etc/ssl/certs/wazuh/filebeat.pem"
 
@@ -238,5 +244,15 @@ const (
 	PathFilebeatKeyFile = "/etc/ssl/certs/wazuh/filebeat-key.pem"
 
 	// PathFilebeatCAFile is the path to CA certificate for Filebeat
-	PathFilebeatCAFile = "/etc/ssl/certs/indexer/ca.crt"
+	// Uses root-ca.pem to match the manager secrets builder format
+	PathFilebeatCAFile = "/etc/ssl/certs/indexer/root-ca.pem"
+)
+
+// ConfigMap key names for WazuhFilebeat CRD
+const (
+	// ConfigMapKeyWazuhTemplate is the key for wazuh-template.json in ConfigMap
+	ConfigMapKeyWazuhTemplate = "wazuh-template.json"
+
+	// ConfigMapKeyPipeline is the key for pipeline.json in ConfigMap
+	ConfigMapKeyPipeline = "pipeline.json"
 )

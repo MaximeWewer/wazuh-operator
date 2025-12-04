@@ -11,6 +11,7 @@ A Kubernetes operator for managing Wazuh clusters, providing a declarative way t
 - **Declarative Cluster Management**: Define your entire Wazuh cluster using Kubernetes custom resources
 - **Automated Deployment**: Automatically provisions Manager (master/workers), Indexer, and Dashboard components
 - **Rule & Decoder Management**: Manage Wazuh detection rules and log decoders as Kubernetes resources
+- **Filebeat Configuration**: Declarative management of Filebeat config, index templates, and ingest pipelines
 - **OpenSearch Security CRDs**: Manage users, roles, role mappings, and tenants declaratively
 - **Index Lifecycle Management**: Configure ISM policies, index templates, and snapshot policies via CRDs
 - **TLS Automation**: Auto-generated certificates with hot reload support (Wazuh 4.9+)
@@ -157,12 +158,12 @@ kubectl get secret wazuh-cluster-sample-indexer-credentials \
 
 **API Group**: `resources.wazuh.com/v1alpha1`
 
-The operator provides 17 CRDs organized into categories:
+The operator provides 18 CRDs organized into categories:
 
 | Category                | CRDs                                                                                                                 | Short Names                            |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
 | **Wazuh Core**          | WazuhCluster, WazuhManager, WazuhIndexer, WazuhDashboard                                                             | wc, wmgr, widx, wdash                  |
-| **Wazuh Config**        | WazuhRule, WazuhDecoder, WazuhCertificate                                                                            | wrule, wdec, wcert                     |
+| **Wazuh Config**        | WazuhRule, WazuhDecoder, WazuhCertificate, WazuhFilebeat                                                             | wrule, wdec, wcert, wfb                |
 | **OpenSearch Security** | OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchActionGroup, OpenSearchTenant                       | osuser, osrole, osrmap, osag, ostenant |
 | **OpenSearch Index**    | OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchISMPolicy, OpenSearchIndex, OpenSearchSnapshotPolicy | osidxt, osctpl, osism, osidx, ossnap   |
 
@@ -352,6 +353,7 @@ spec:
   - [TLS Configuration](docs/usage/features/tls.md) - Certificate management
   - [Monitoring](docs/usage/features/monitoring.md) - Prometheus integration
   - [Log Rotation](docs/usage/features/log-rotation.md) - Automated log cleanup
+  - [Filebeat Configuration](docs/usage/features/filebeat-configuration.md) - Index templates, ingest pipelines
 - **Examples**:
   - [Quick Start Examples](docs/usage/examples/quick-start/) - Minimal deployment
   - [Production Examples](docs/usage/examples/production/) - Production configuration
@@ -603,8 +605,8 @@ We welcome contributions! Please see [CONTRIBUTING.md](docs/dev/contributing/CON
 - [x] Wazuh (master/worker) log rotation CronJob
 - [x] Helm charts for operator and cluster
 - [x] Prometheus monitoring integration
+- [x] WazuhFilebeat CRD for declarative Filebeat configuration
 - [ ] Implementation of node type support (Cluster manager, Data, Ingest, etc)
-- [ ] Setup Wazuh filebeat template
 - [ ] Drain strategy for scale up/down
 - [x] Scaling PVC - increase disk size
 - [ ] Ability to deploy multiple clusters

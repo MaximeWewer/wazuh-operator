@@ -44,6 +44,14 @@ resources:
   - wazuh_v1alpha1_rule.yaml
   - wazuh_v1alpha1_decoder.yaml
 
+  # ===========================================================================
+  # Wazuh Filebeat CRDs
+  # ===========================================================================
+  - wazuh_v1alpha1_wazuhfilebeat_basic.yaml
+  # Additional WazuhFilebeat samples (uncomment as needed):
+  # - wazuh_v1alpha1_wazuhfilebeat_advanced.yaml       # With custom template/pipeline settings
+  # - wazuh_v1alpha1_wazuhfilebeat_custom_template.yaml # With custom ConfigMap references
+
 # Common labels for all samples
 commonLabels:
   app.kubernetes.io/managed-by: wazuh-operator

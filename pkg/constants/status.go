@@ -54,3 +54,18 @@ const (
 	// ComponentPhaseDeleting indicates the component is being deleted
 	ComponentPhaseDeleting = "Deleting"
 )
+
+// Filebeat condition type constants
+const (
+	// ConditionTypeConfigMapReady indicates ConfigMap has been created/updated
+	ConditionTypeConfigMapReady = "ConfigMapReady"
+
+	// ConditionTypeTemplateApplied indicates index template configuration is valid
+	ConditionTypeTemplateApplied = "TemplateApplied"
+
+	// ConditionTypePipelineApplied indicates pipeline configuration is valid
+	ConditionTypePipelineApplied = "PipelineApplied"
+
+	// ConditionTypeReconciled indicates overall reconciliation status
+	ConditionTypeReconciled = "Reconciled"
+)

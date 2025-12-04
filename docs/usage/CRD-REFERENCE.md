@@ -21,6 +21,7 @@ This document provides a complete reference for all Custom Resource Definitions 
 - [Wazuh Configuration CRDs](#wazuh-configuration-crds)
   - [WazuhRule](#wazuhrule)
   - [WazuhDecoder](#wazuhdecoder)
+  - [WazuhFilebeat](#wazuhfilebeat)
 
 ---
 
@@ -57,18 +58,18 @@ The main CRD for deploying a complete Wazuh stack (Manager, Indexer, Dashboard).
 
 ### CertificateConfig
 
-| Field                    | Type   | Required | Default      | Description                 |
-| ------------------------ | ------ | -------- | ------------ | --------------------------- |
-| `country`                | string | No       | `US`         | X.509 Country               |
-| `state`                  | string | No       | `California` | X.509 State                 |
-| `locality`               | string | No       | `California` | X.509 Locality              |
-| `organization`           | string | No       | `Wazuh`      | X.509 Organization          |
-| `organizationalUnit`     | string | No       | `Wazuh`      | X.509 OU                    |
-| `commonName`             | string | No       | `admin`      | X.509 CN                    |
-| `validityDays`           | int    | No       | `365`        | Certs validity (days)       |
-| `renewalThresholdDays`   | int    | No       | `30`         | Certs renewal threshold     |
-| `caValidityDays`         | int    | No       | `730`        | CA validity (days)          |
-| `caRenewalThresholdDays` | int    | No       | `60`         | CA renewal threshold        |
+| Field                    | Type   | Required | Default      | Description             |
+| ------------------------ | ------ | -------- | ------------ | ----------------------- |
+| `country`                | string | No       | `US`         | X.509 Country           |
+| `state`                  | string | No       | `California` | X.509 State             |
+| `locality`               | string | No       | `California` | X.509 Locality          |
+| `organization`           | string | No       | `Wazuh`      | X.509 Organization      |
+| `organizationalUnit`     | string | No       | `Wazuh`      | X.509 OU                |
+| `commonName`             | string | No       | `admin`      | X.509 CN                |
+| `validityDays`           | int    | No       | `365`        | Certs validity (days)   |
+| `renewalThresholdDays`   | int    | No       | `30`         | Certs renewal threshold |
+| `caValidityDays`         | int    | No       | `730`        | CA validity (days)      |
+| `caRenewalThresholdDays` | int    | No       | `60`         | CA renewal threshold    |
 
 ### HotReloadConfig
 
@@ -88,15 +89,15 @@ The main CRD for deploying a complete Wazuh stack (Manager, Indexer, Dashboard).
 
 ### WazuhExporterConfig
 
-| Field          | Type                 | Required | Default                                     | Description         |
-| -------------- | -------------------- | -------- | ------------------------------------------- | ------------------- |
-| `enabled`      | bool                 | No       | `false`                                     | Enable exporter     |
-| `image`        | string               | No       | `kennyopennix/wazuh-exporter:latest`        | Exporter image      |
-| `port`         | int32                | No       | `9090`                                      | Metrics port        |
-| `apiProtocol`  | string               | No       | `https`                                     | API protocol        |
-| `apiVerifySSL` | bool                 | No       | `false`                                     | Verify SSL          |
-| `logLevel`     | string               | No       | `INFO`                                      | Log level           |
-| `resources`    | ResourceRequirements | No       | -                                           | Container resources |
+| Field          | Type                 | Required | Default                              | Description         |
+| -------------- | -------------------- | -------- | ------------------------------------ | ------------------- |
+| `enabled`      | bool                 | No       | `false`                              | Enable exporter     |
+| `image`        | string               | No       | `kennyopennix/wazuh-exporter:latest` | Exporter image      |
+| `port`         | int32                | No       | `9090`                               | Metrics port        |
+| `apiProtocol`  | string               | No       | `https`                              | API protocol        |
+| `apiVerifySSL` | bool                 | No       | `false`                              | Verify SSL          |
+| `logLevel`     | string               | No       | `INFO`                               | Log level           |
+| `resources`    | ResourceRequirements | No       | -                                    | Container resources |
 
 ### IndexerExporterConfig
 
@@ -130,15 +131,15 @@ The main CRD for deploying a complete Wazuh stack (Manager, Indexer, Dashboard).
 
 ### LogRotationSpec
 
-| Field             | Type     | Required | Default               | Description                                                   |
-| ----------------- | -------- | -------- | --------------------- | ------------------------------------------------------------- |
-| `enabled`         | bool     | No       | `false`               | Enable log rotation CronJob                                   |
-| `schedule`        | string   | No       | `0 0 * * 1`           | Cron schedule (default: weekly on Monday at midnight)         |
-| `retentionDays`   | int32    | No       | `7`                   | Days to retain log files                                      |
-| `maxFileSizeMB`   | int32    | No       | `0`                   | Max file size in MB (0 = disabled)                            |
-| `combinationMode` | string   | No       | `or`                  | How age/size filters combine: `or` (delete if old OR large), `and` (both) |
-| `paths`           | []string | No       | alerts/, archives/    | Log paths to clean                                            |
-| `image`           | string   | No       | `bitnami/kubectl:latest` | kubectl image for CronJob                                  |
+| Field             | Type     | Required | Default                  | Description                                                               |
+| ----------------- | -------- | -------- | ------------------------ | ------------------------------------------------------------------------- |
+| `enabled`         | bool     | No       | `false`                  | Enable log rotation CronJob                                               |
+| `schedule`        | string   | No       | `0 0 * * 1`              | Cron schedule (default: weekly on Monday at midnight)                     |
+| `retentionDays`   | int32    | No       | `7`                      | Days to retain log files                                                  |
+| `maxFileSizeMB`   | int32    | No       | `0`                      | Max file size in MB (0 = disabled)                                        |
+| `combinationMode` | string   | No       | `or`                     | How age/size filters combine: `or` (delete if old OR large), `and` (both) |
+| `paths`           | []string | No       | alerts/, archives/       | Log paths to clean                                                        |
+| `image`           | string   | No       | `bitnami/kubectl:latest` | kubectl image for CronJob                                                 |
 
 ### WazuhConfigSpec
 
@@ -178,8 +179,8 @@ The main CRD for deploying a complete Wazuh stack (Manager, Indexer, Dashboard).
 
 ### OSSECLoggingSpec
 
-| Field       | Type   | Required | Default | Description                              |
-| ----------- | ------ | -------- | ------- | ---------------------------------------- |
+| Field       | Type   | Required | Default | Description                               |
+| ----------- | ------ | -------- | ------- | ----------------------------------------- |
 | `logFormat` | string | No       | `plain` | Log format: `plain`, `json`, `plain,json` |
 
 ### OSSECRemoteSpec
@@ -270,25 +271,25 @@ Includes all fields from MasterSpec, plus:
 
 ### DashboardSpec
 
-| Field                      | Type                                    | Required | Default | Description            |
-| -------------------------- | --------------------------------------- | -------- | ------- | ---------------------- |
-| `replicas`                 | int32                                   | No       | `2`     | Number of replicas     |
-| `enableSSL`                | bool                                    | No       | `false` | Enable SSL             |
-| `image`                    | [ImageSpec](#imagespec)                 | No       | -       | Image override         |
-| `resources`                | ResourceRequirements                    | No       | -       | Resources              |
-| `wazuhPlugin`              | object                                  | No       | -       | Wazuh plugin config    |
-| `service`                  | [ServiceSpec](#servicespec)             | No       | -       | Service config         |
-| `nodeSelector`             | map[string]string                       | No       | -       | Node selector          |
-| `tolerations`              | []Toleration                            | No       | -       | Tolerations            |
-| `affinity`                 | Affinity                                | No       | -       | Affinity rules         |
-| `podDisruptionBudget`      | [PDBSpec](#pdbspec)                     | No       | -       | PDB config             |
-| `annotations`              | map[string]string                       | No       | -       | Deployment annotations |
-| `podAnnotations`           | map[string]string                       | No       | -       | Pod annotations        |
-| `ingress`                  | [IngressSpec](#ingressspec)             | No       | -       | Ingress config         |
-| `env`                      | []EnvVar                                | No       | -       | Environment variables  |
-| `envFrom`                  | []EnvFromSource                         | No       | -       | Env from sources       |
-| `securityContext`          | PodSecurityContext                      | No       | -       | Pod security           |
-| `containerSecurityContext` | SecurityContext                         | No       | -       | Container security     |
+| Field                      | Type                        | Required | Default | Description            |
+| -------------------------- | --------------------------- | -------- | ------- | ---------------------- |
+| `replicas`                 | int32                       | No       | `2`     | Number of replicas     |
+| `enableSSL`                | bool                        | No       | `false` | Enable SSL             |
+| `image`                    | [ImageSpec](#imagespec)     | No       | -       | Image override         |
+| `resources`                | ResourceRequirements        | No       | -       | Resources              |
+| `wazuhPlugin`              | object                      | No       | -       | Wazuh plugin config    |
+| `service`                  | [ServiceSpec](#servicespec) | No       | -       | Service config         |
+| `nodeSelector`             | map[string]string           | No       | -       | Node selector          |
+| `tolerations`              | []Toleration                | No       | -       | Tolerations            |
+| `affinity`                 | Affinity                    | No       | -       | Affinity rules         |
+| `podDisruptionBudget`      | [PDBSpec](#pdbspec)         | No       | -       | PDB config             |
+| `annotations`              | map[string]string           | No       | -       | Deployment annotations |
+| `podAnnotations`           | map[string]string           | No       | -       | Pod annotations        |
+| `ingress`                  | [IngressSpec](#ingressspec) | No       | -       | Ingress config         |
+| `env`                      | []EnvVar                    | No       | -       | Environment variables  |
+| `envFrom`                  | []EnvFromSource             | No       | -       | Env from sources       |
+| `securityContext`          | PodSecurityContext          | No       | -       | Pod security           |
+| `containerSecurityContext` | SecurityContext             | No       | -       | Container security     |
 
 ### Common Types
 
@@ -555,6 +556,86 @@ Manages custom log decoders.
 
 ---
 
+### WazuhFilebeat
+
+Manages Filebeat configuration for shipping Wazuh alerts and archives to OpenSearch.
+
+**Short Name:** `wfb`
+
+| Field        | Type                   | Required | Default | Description                     |
+| ------------ | ---------------------- | -------- | ------- | ------------------------------- |
+| `clusterRef` | WazuhClusterReference  | **Yes**  | -       | Cluster reference               |
+| `alerts`     | FilebeatAlertsConfig   | No       | -       | Alerts module configuration     |
+| `archives`   | FilebeatArchivesConfig | No       | -       | Archives module configuration   |
+| `template`   | FilebeatTemplateConfig | No       | -       | Index template configuration    |
+| `pipeline`   | FilebeatPipelineConfig | No       | -       | Ingest pipeline configuration   |
+| `logging`    | FilebeatLoggingConfig  | No       | -       | Filebeat logging settings       |
+| `ssl`        | FilebeatSSLConfig      | No       | -       | SSL/TLS settings                |
+| `output`     | FilebeatOutputConfig   | No       | -       | OpenSearch output configuration |
+
+#### FilebeatAlertsConfig
+
+| Field     | Type | Default | Description                    |
+| --------- | ---- | ------- | ------------------------------ |
+| `enabled` | bool | `true`  | Enable/disable alerts shipping |
+
+#### FilebeatArchivesConfig
+
+| Field     | Type | Default | Description                      |
+| --------- | ---- | ------- | -------------------------------- |
+| `enabled` | bool | `false` | Enable/disable archives shipping |
+
+#### FilebeatTemplateConfig
+
+| Field                | Type                 | Default | Description                               |
+| -------------------- | -------------------- | ------- | ----------------------------------------- |
+| `shards`             | int32                | `3`     | Number of primary shards (1-100)          |
+| `replicas`           | int32                | `0`     | Number of replica shards (0-10)           |
+| `refreshInterval`    | string               | `5s`    | Index refresh interval                    |
+| `fieldLimit`         | int32                | `10000` | Maximum fields per document (1000-100000) |
+| `customTemplateRef`  | ConfigMapKeySelector | -       | Custom template from ConfigMap            |
+| `additionalMappings` | object               | -       | Custom field mappings (raw JSON)          |
+
+#### FilebeatPipelineConfig
+
+| Field                    | Type                 | Default            | Description                        |
+| ------------------------ | -------------------- | ------------------ | ---------------------------------- |
+| `geoipEnabled`           | bool                 | `true`             | Enable GeoIP enrichment processors |
+| `indexPrefix`            | string               | `wazuh-alerts-4.x` | Index name prefix                  |
+| `additionalRemoveFields` | []string             | -                  | Additional fields to remove        |
+| `timestampFormat`        | string               | `ISO8601`          | Timestamp parsing format           |
+| `customPipelineRef`      | ConfigMapKeySelector | -                  | Custom pipeline from ConfigMap     |
+
+#### FilebeatLoggingConfig
+
+| Field       | Type   | Default | Description                                    |
+| ----------- | ------ | ------- | ---------------------------------------------- |
+| `level`     | string | `info`  | Log level: `debug`, `info`, `warning`, `error` |
+| `toFiles`   | bool   | `true`  | Enable logging to files                        |
+| `keepFiles` | int32  | `7`     | Number of log files to retain (1-100)          |
+
+#### FilebeatSSLConfig
+
+| Field                 | Type         | Default | Description                      |
+| --------------------- | ------------ | ------- | -------------------------------- |
+| `verificationMode`    | string       | `full`  | `full`, `certificate`, or `none` |
+| `caCertSecretRef`     | SecretKeyRef | -       | CA certificate secret reference  |
+| `clientCertSecretRef` | SecretKeyRef | -       | Client certificate secret        |
+| `clientKeySecretRef`  | SecretKeyRef | -       | Client key secret                |
+
+#### FilebeatOutputConfig
+
+| Field                  | Type                 | Default | Description                  |
+| ---------------------- | -------------------- | ------- | ---------------------------- |
+| `hosts`                | []string             | -       | OpenSearch host list         |
+| `credentialsSecretRef` | CredentialsSecretRef | -       | Credentials secret reference |
+| `protocol`             | string               | `https` | `http` or `https`            |
+| `port`                 | int32                | `9200`  | OpenSearch port (1-65535)    |
+
+See [Filebeat Configuration Guide](./features/filebeat-configuration.md) for detailed usage and examples.
+
+---
+
 ## Common Status Fields
 
 All CRDs include these status fields:
@@ -584,25 +665,25 @@ The WazuhCluster CRD includes additional status fields for volume expansion trac
 
 Tracks storage expansion progress for all cluster components:
 
-| Field                     | Type                                                  | Description                     |
-| ------------------------- | ----------------------------------------------------- | ------------------------------- |
-| `indexerExpansion`        | [ComponentExpansionStatus](#componentexpansionstatus) | Indexer PVC expansion status    |
-| `managerMasterExpansion`  | [ComponentExpansionStatus](#componentexpansionstatus) | Manager master expansion status |
+| Field                     | Type                                                  | Description                      |
+| ------------------------- | ----------------------------------------------------- | -------------------------------- |
+| `indexerExpansion`        | [ComponentExpansionStatus](#componentexpansionstatus) | Indexer PVC expansion status     |
+| `managerMasterExpansion`  | [ComponentExpansionStatus](#componentexpansionstatus) | Manager master expansion status  |
 | `managerWorkersExpansion` | [ComponentExpansionStatus](#componentexpansionstatus) | Manager workers expansion status |
 
 #### ComponentExpansionStatus
 
 Tracks expansion status for a specific component:
 
-| Field                | Type     | Description                                          |
-| -------------------- | -------- | ---------------------------------------------------- |
+| Field                | Type     | Description                                             |
+| -------------------- | -------- | ------------------------------------------------------- |
 | `phase`              | string   | Expansion phase: Pending, InProgress, Completed, Failed |
-| `requestedSize`      | string   | Target storage size (e.g., "100Gi")                  |
-| `currentSize`        | string   | Current storage size                                 |
-| `message`            | string   | Human-readable status message                        |
-| `lastTransitionTime` | Time     | When the phase last changed                          |
-| `pvcsExpanded`       | []string | List of PVCs that have completed expansion           |
-| `pvcsPending`        | []string | List of PVCs still pending expansion                 |
+| `requestedSize`      | string   | Target storage size (e.g., "100Gi")                     |
+| `currentSize`        | string   | Current storage size                                    |
+| `message`            | string   | Human-readable status message                           |
+| `lastTransitionTime` | Time     | When the phase last changed                             |
+| `pvcsExpanded`       | []string | List of PVCs that have completed expansion              |
+| `pvcsPending`        | []string | List of PVCs still pending expansion                    |
 
 **Example status:**
 

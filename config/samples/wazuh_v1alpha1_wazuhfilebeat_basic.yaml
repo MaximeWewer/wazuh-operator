@@ -1,0 +1,28 @@
+# Sample WazuhFilebeat - Basic configuration with default settings
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhFilebeat
+metadata:
+  name: wazuh-filebeat
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster
+  clusterRef:
+    name: wazuh-test
+    namespace: wazuh
+
+  # Alerts configuration (enabled by default)
+  alerts:
+    enabled: true
+
+  # Archives configuration (disabled by default)
+  archives:
+    enabled: false
+
+  # Logging configuration
+  logging:
+    level: info
+    keepFiles: 7
+
+  # SSL configuration
+  ssl:
+    verificationMode: full
