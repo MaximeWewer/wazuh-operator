@@ -605,10 +605,10 @@ We welcome contributions! Please see [CONTRIBUTING.md](docs/dev/contributing/CON
 - [x] Wazuh (master/worker) log rotation CronJob
 - [x] Helm charts for operator and cluster
 - [x] Prometheus monitoring integration
-- [x] WazuhFilebeat CRD for declarative Filebeat configuration
+- [x] WazuhFilebeat CRD for declarative Filebeat configuration (not released)
 - [ ] Implementation of node type support (Cluster manager, Data, Ingest, etc)
-- [ ] Drain strategy for scale up/down
-- [x] Scaling PVC - increase disk size
+- [x] Drain strategy for scale down (not released)
+- [x] Scaling PVC - increase disk size (not released)
 - [ ] Ability to deploy multiple clusters
 - [ ] More tests
 - [ ] NetworkPolicies

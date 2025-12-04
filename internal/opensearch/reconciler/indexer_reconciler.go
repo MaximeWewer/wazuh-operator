@@ -38,15 +38,18 @@ import (
 
 	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/deployments"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/secrets"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/config"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/drain"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/storage"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
+	drainstate "github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -55,6 +58,11 @@ type IndexerReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
+
+	// drainer handles indexer drain operations for safe scale-down
+	drainer *drain.IndexerDrainerImpl
+	// osClient is the OpenSearch API client for drain operations
+	osClient *api.Client
 }
 
 // NewIndexerReconciler creates a new IndexerReconciler
@@ -853,6 +861,310 @@ func (r *IndexerReconciler) GetStatus(ctx context.Context, cluster *wazuhv1alpha
 		ReadyReplicas: sts.Status.ReadyReplicas,
 		Phase:         getStatefulSetPhase(sts),
 	}, nil
+}
+
+// DrainCheckResult represents the result of a drain check
+type DrainCheckResult struct {
+	// NeedsDrain indicates if drain is required before scale-down
+	NeedsDrain bool
+	// DrainInProgress indicates if drain is currently running
+	DrainInProgress bool
+	// DrainComplete indicates if drain has completed successfully
+	DrainComplete bool
+	// TargetPod is the pod to be drained
+	TargetPod string
+	// Progress is the current drain progress (if in progress)
+	Progress *drain.DrainProgress
+	// Error if any occurred
+	Error error
+}
+
+// CheckScaleDownDrain checks if an indexer scale-down requires drain and handles it
+// Returns true if scale-down should proceed, false if waiting for drain
+func (r *IndexerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, desiredReplicas int32) (*DrainCheckResult, error) {
+	log := logf.FromContext(ctx)
+	result := &DrainCheckResult{}
+
+	// Get the current StatefulSet
+	sts := &appsv1.StatefulSet{}
+	stsName := fmt.Sprintf("%s-indexer", cluster.Name)
+	if err := r.Get(ctx, types.NamespacedName{Name: stsName, Namespace: cluster.Namespace}, sts); err != nil {
+		if errors.IsNotFound(err) {
+			// No StatefulSet yet, no drain needed
+			return result, nil
+		}
+		return nil, fmt.Errorf("failed to get indexer StatefulSet: %w", err)
+	}
+
+	// Detect scale-down
+	scaleInfo := drainstate.DetectStatefulSetScaleDown(sts, desiredReplicas)
+	if !scaleInfo.Detected {
+		// No scale-down detected
+		return result, nil
+	}
+
+	log.Info("Scale-down detected for indexer",
+		"currentReplicas", scaleInfo.CurrentReplicas,
+		"desiredReplicas", scaleInfo.TargetReplicas,
+		"targetPod", scaleInfo.TargetPodName)
+
+	result.NeedsDrain = true
+	result.TargetPod = scaleInfo.TargetPodName
+
+	// Check if drain configuration is enabled
+	if cluster.Spec.Drain == nil || cluster.Spec.Drain.Indexer == nil ||
+		cluster.Spec.Drain.Indexer.Enabled == nil || !*cluster.Spec.Drain.Indexer.Enabled {
+		log.Info("Indexer drain is not enabled, proceeding with scale-down without drain")
+		result.NeedsDrain = false
+		return result, nil
+	}
+
+	// Initialize or get drain status
+	drainStatus := r.getOrInitDrainStatus(cluster)
+
+	// Check current drain phase
+	switch drainStatus.Phase {
+	case wazuhv1alpha1.DrainPhaseIdle, "":
+		// Start new drain
+		log.Info("Starting indexer drain for scale-down", "targetPod", scaleInfo.TargetPodName)
+		if err := r.startDrain(ctx, cluster, scaleInfo, drainStatus); err != nil {
+			result.Error = err
+			return result, err
+		}
+		result.DrainInProgress = true
+		return result, nil
+
+	case wazuhv1alpha1.DrainPhasePending, wazuhv1alpha1.DrainPhaseDraining:
+		// Drain in progress, check status
+		result.DrainInProgress = true
+		progress, err := r.monitorDrainProgress(ctx, cluster, scaleInfo.TargetPodName, drainStatus)
+		if err != nil {
+			result.Error = err
+			return result, nil // Continue reconciliation, don't fail
+		}
+		result.Progress = progress
+		return result, nil
+
+	case wazuhv1alpha1.DrainPhaseVerifying:
+		// Verify completion
+		complete, err := r.verifyDrainComplete(ctx, cluster, scaleInfo.TargetPodName, drainStatus)
+		if err != nil {
+			result.Error = err
+			return result, nil
+		}
+		if complete {
+			result.DrainComplete = true
+			result.DrainInProgress = false
+		} else {
+			result.DrainInProgress = true
+		}
+		return result, nil
+
+	case wazuhv1alpha1.DrainPhaseComplete:
+		// Drain complete, proceed with scale-down
+		log.Info("Indexer drain complete, proceeding with scale-down")
+		result.DrainComplete = true
+		return result, nil
+
+	case wazuhv1alpha1.DrainPhaseFailed:
+		// Drain failed - check if we should retry or skip
+		log.Info("Previous drain failed", "message", drainStatus.Message)
+		result.Error = fmt.Errorf("drain failed: %s", drainStatus.Message)
+		return result, nil
+
+	default:
+		log.Info("Unknown drain phase", "phase", drainStatus.Phase)
+		return result, nil
+	}
+}
+
+// getOrInitDrainStatus returns the current drain status or initializes a new one
+func (r *IndexerReconciler) getOrInitDrainStatus(cluster *wazuhv1alpha1.WazuhCluster) *wazuhv1alpha1.ComponentDrainStatus {
+	if cluster.Status.Drain == nil {
+		cluster.Status.Drain = &wazuhv1alpha1.DrainStatus{}
+	}
+	if cluster.Status.Drain.Indexer == nil {
+		cluster.Status.Drain.Indexer = &wazuhv1alpha1.ComponentDrainStatus{
+			Phase: wazuhv1alpha1.DrainPhaseIdle,
+		}
+	}
+	return cluster.Status.Drain.Indexer
+}
+
+// startDrain initiates the drain process for an indexer node
+func (r *IndexerReconciler) startDrain(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, scaleInfo drainstate.ScaleDownInfo, status *wazuhv1alpha1.ComponentDrainStatus) error {
+	log := logf.FromContext(ctx)
+
+	// Initialize OpenSearch client if needed
+	if err := r.ensureOpenSearchClient(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to create OpenSearch client: %w", err)
+	}
+
+	// Get drain configuration
+	var drainConfig *wazuhv1alpha1.IndexerDrainConfig
+	if cluster.Spec.Drain != nil {
+		drainConfig = cluster.Spec.Drain.Indexer
+	}
+
+	// Create drainer if not exists
+	if r.drainer == nil {
+		r.drainer = drain.NewIndexerDrainer(r.osClient, log, drainConfig)
+	}
+
+	// Get the node name from the pod name (for OpenSearch)
+	// In OpenSearch, the node name typically matches the pod hostname
+	nodeName := scaleInfo.TargetPodName
+
+	// Update status to pending
+	if err := drainstate.StartDrain(status, nodeName, scaleInfo.CurrentReplicas, scaleInfo.TargetReplicas); err != nil {
+		return fmt.Errorf("failed to transition drain state: %w", err)
+	}
+
+	// Emit event
+	if r.Recorder != nil {
+		r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.DrainEventReasonStarted,
+			fmt.Sprintf("Starting indexer drain for node %s before scale-down", nodeName))
+	}
+
+	// Start the actual drain
+	if err := r.drainer.StartDrain(ctx, nodeName); err != nil {
+		// Mark as failed
+		drainstate.MarkFailed(status, fmt.Sprintf("Failed to start drain: %v", err))
+		if r.Recorder != nil {
+			r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.DrainEventReasonFailed,
+				fmt.Sprintf("Failed to start indexer drain: %v", err))
+		}
+		return err
+	}
+
+	// Transition to draining phase
+	if err := drainstate.TransitionTo(status, wazuhv1alpha1.DrainPhaseDraining, "Relocating shards from node"); err != nil {
+		log.Error(err, "Failed to transition to draining phase")
+	}
+
+	log.Info("Indexer drain started successfully", "node", nodeName)
+	return nil
+}
+
+// monitorDrainProgress checks the current drain progress
+func (r *IndexerReconciler) monitorDrainProgress(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, nodeName string, status *wazuhv1alpha1.ComponentDrainStatus) (*drain.DrainProgress, error) {
+	log := logf.FromContext(ctx)
+
+	if r.drainer == nil {
+		return nil, fmt.Errorf("drainer not initialized")
+	}
+
+	progress, err := r.drainer.MonitorProgress(ctx, nodeName)
+	if err != nil {
+		log.Error(err, "Failed to monitor drain progress")
+		return nil, err
+	}
+
+	// Update status
+	drainstate.UpdateProgress(status, progress.Percent, progress.Message)
+	drainstate.UpdateShardCount(status, progress.ShardsRemaining)
+
+	log.V(1).Info("Drain progress",
+		"node", nodeName,
+		"percent", progress.Percent,
+		"shardsRemaining", progress.ShardsRemaining,
+		"relocating", progress.ShardsRelocating,
+		"complete", progress.IsComplete)
+
+	// Check for completion
+	if progress.IsComplete {
+		if err := drainstate.TransitionTo(status, wazuhv1alpha1.DrainPhaseVerifying, "Verifying drain completion"); err != nil {
+			log.Error(err, "Failed to transition to verifying phase")
+		}
+	}
+
+	return &progress, nil
+}
+
+// verifyDrainComplete verifies that drain is fully complete
+func (r *IndexerReconciler) verifyDrainComplete(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, nodeName string, status *wazuhv1alpha1.ComponentDrainStatus) (bool, error) {
+	log := logf.FromContext(ctx)
+
+	if r.drainer == nil {
+		return false, fmt.Errorf("drainer not initialized")
+	}
+
+	complete, err := r.drainer.VerifyComplete(ctx, nodeName)
+	if err != nil {
+		log.Error(err, "Failed to verify drain completion")
+		return false, err
+	}
+
+	if complete {
+		// Mark as complete
+		if err := drainstate.MarkComplete(status); err != nil {
+			log.Error(err, "Failed to mark drain as complete")
+		}
+
+		// Clear allocation exclusion
+		if err := r.drainer.CancelDrain(ctx); err != nil {
+			log.Error(err, "Failed to clear allocation exclusion after drain")
+			// Don't fail, drain is still complete
+		}
+
+		// Emit event
+		if r.Recorder != nil {
+			r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.DrainEventReasonCompleted,
+				fmt.Sprintf("Indexer drain completed for node %s", nodeName))
+		}
+
+		log.Info("Indexer drain verified complete", "node", nodeName)
+	}
+
+	return complete, nil
+}
+
+// ensureOpenSearchClient creates or reuses an OpenSearch client
+func (r *IndexerReconciler) ensureOpenSearchClient(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+	if r.osClient != nil {
+		return nil
+	}
+
+	clientFactory := security.NewOpenSearchClientFactory(r.Client)
+	client, err := clientFactory.GetClientForCluster(ctx, cluster)
+	if err != nil {
+		return err
+	}
+
+	r.osClient = client
+	return nil
+}
+
+// ResetDrainState resets the drain state after a successful scale-down
+func (r *IndexerReconciler) ResetDrainState(cluster *wazuhv1alpha1.WazuhCluster) {
+	if cluster.Status.Drain != nil && cluster.Status.Drain.Indexer != nil {
+		drainstate.Reset(cluster.Status.Drain.Indexer)
+	}
+	// Clear cached drainer for next operation
+	r.drainer = nil
+}
+
+// EvaluateDrainFeasibility evaluates if drain is feasible (for dry-run mode)
+func (r *IndexerReconciler) EvaluateDrainFeasibility(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, nodeName string) (*wazuhv1alpha1.DryRunResult, error) {
+	// Initialize OpenSearch client if needed
+	if err := r.ensureOpenSearchClient(ctx, cluster); err != nil {
+		return &wazuhv1alpha1.DryRunResult{
+			Feasible:    false,
+			EvaluatedAt: metav1.Now(),
+			Component:   constants.DrainComponentIndexer,
+			Blockers:    []string{fmt.Sprintf("Cannot connect to OpenSearch: %v", err)},
+		}, nil
+	}
+
+	// Get drain configuration
+	var drainConfig *wazuhv1alpha1.IndexerDrainConfig
+	if cluster.Spec.Drain != nil {
+		drainConfig = cluster.Spec.Drain.Indexer
+	}
+
+	// Create drainer for evaluation
+	drainer := drain.NewIndexerDrainer(r.osClient, logf.FromContext(ctx), drainConfig)
+	return drainer.EvaluateFeasibility(ctx, nodeName)
 }
 
 // createOrUpdate creates or updates a resource with retry on conflict

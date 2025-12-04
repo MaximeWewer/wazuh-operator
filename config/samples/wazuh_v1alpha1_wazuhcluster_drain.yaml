@@ -1,0 +1,90 @@
+# Example WazuhCluster with drain strategy configuration
+# This example demonstrates safe scale-down with drain configuration for indexers and managers
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhCluster
+metadata:
+  name: wazuh-cluster-drain-example
+  namespace: wazuh
+spec:
+  version: "4.9.0"
+
+  # Drain configuration for safe scale-down operations
+  drain:
+    # Enable dry-run mode to preview scale-down feasibility without making changes
+    # When enabled, the operator evaluates if scale-down is safe and reports results in status
+    dryRun: false
+
+    # Indexer drain configuration (OpenSearch shard relocation)
+    indexer:
+      # Timeout for shard relocation (default: 30m)
+      timeout: 30m
+      # Interval between shard status checks (default: 10s)
+      healthCheckInterval: 10s
+      # Wait time for cluster green health before proceeding (default: 5m)
+      minGreenHealthTimeout: 5m
+
+    # Manager drain configuration (event queue processing)
+    manager:
+      # Timeout for queue drain (default: 15m)
+      timeout: 15m
+      # Interval between queue depth checks (default: 5s)
+      queueCheckInterval: 5s
+      # Grace period after queue is empty (default: 30s)
+      gracePeriod: 30s
+
+    # Retry configuration for failed drain operations
+    retry:
+      # Maximum retry attempts before giving up (default: 3)
+      maxAttempts: 3
+      # Initial delay before first retry (default: 5m)
+      initialDelay: 5m
+      # Exponential backoff multiplier (default: 2.0)
+      backoffMultiplier: 2.0
+      # Maximum delay between retries (default: 30m)
+      maxDelay: 30m
+
+  # Indexer configuration with 3 replicas
+  indexer:
+    replicas: 3
+    storage:
+      size: 10Gi
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "2"
+        memory: "4Gi"
+
+  # Manager configuration
+  manager:
+    master:
+      replicas: 1
+    worker:
+      replicas: 2
+    storage:
+      size: 5Gi
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "2Gi"
+
+  # Dashboard with PDB protection
+  dashboard:
+    replicas: 2
+    # PodDisruptionBudget configuration
+    podDisruptionBudget:
+      # Enable PDB protection (default: true when dashboard is configured)
+      enabled: true
+      # Minimum available pods during voluntary disruptions
+      minAvailable: 1
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "2Gi"

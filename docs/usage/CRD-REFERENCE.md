@@ -35,16 +35,17 @@ The main CRD for deploying a complete Wazuh stack (Manager, Indexer, Dashboard).
 
 ### Spec Fields
 
-| Field              | Type                                  | Required | Default | Description                   |
-| ------------------ | ------------------------------------- | -------- | ------- | ----------------------------- |
-| `version`          | string                                | **Yes**  | -       | Wazuh version (format: X.Y.Z) |
-| `storageClassName` | string                                | No       | -       | Storage class for all PVCs    |
-| `imagePullSecrets` | []LocalObjectReference                | No       | -       | Image pull secrets            |
-| `tls`              | [TLSConfig](#tlsconfig)               | No       | -       | TLS configuration             |
-| `monitoring`       | [MonitoringConfig](#monitoringconfig) | No       | -       | Prometheus monitoring         |
-| `manager`          | [ManagerSpec](#managerspec)           | No       | -       | Manager configuration         |
-| `indexer`          | [IndexerSpec](#indexerspec)           | No       | -       | Indexer configuration         |
-| `dashboard`        | [DashboardSpec](#dashboardspec)       | No       | -       | Dashboard configuration       |
+| Field              | Type                                      | Required | Default | Description                   |
+| ------------------ | ----------------------------------------- | -------- | ------- | ----------------------------- |
+| `version`          | string                                    | **Yes**  | -       | Wazuh version (format: X.Y.Z) |
+| `storageClassName` | string                                    | No       | -       | Storage class for all PVCs    |
+| `imagePullSecrets` | []LocalObjectReference                    | No       | -       | Image pull secrets            |
+| `tls`              | [TLSConfig](#tlsconfig)                   | No       | -       | TLS configuration             |
+| `monitoring`       | [MonitoringConfig](#monitoringconfig)     | No       | -       | Prometheus monitoring         |
+| `drain`            | [DrainConfiguration](#drainconfiguration) | No       | -       | Drain strategy configuration  |
+| `manager`          | [ManagerSpec](#managerspec)               | No       | -       | Manager configuration         |
+| `indexer`          | [IndexerSpec](#indexerspec)               | No       | -       | Indexer configuration         |
+| `dashboard`        | [DashboardSpec](#dashboardspec)           | No       | -       | Dashboard configuration       |
 
 ### TLSConfig
 
@@ -86,6 +87,42 @@ The main CRD for deploying a complete Wazuh stack (Manager, Indexer, Dashboard).
 | `wazuhExporter`   | [WazuhExporterConfig](#wazuhexporterconfig)     | No       | -       | Wazuh exporter sidecar  |
 | `indexerExporter` | [IndexerExporterConfig](#indexerexporterconfig) | No       | -       | OpenSearch plugin       |
 | `serviceMonitor`  | [ServiceMonitorConfig](#servicemonitorconfig)   | No       | -       | ServiceMonitor settings |
+
+### DrainConfiguration
+
+Configuration for safe scale-down operations. See [Drain Strategy](features/drain-strategy.md) for detailed documentation.
+
+| Field     | Type                                      | Required | Default | Description                           |
+| --------- | ----------------------------------------- | -------- | ------- | ------------------------------------- |
+| `dryRun`  | bool                                      | No       | `false` | Preview mode without making changes   |
+| `indexer` | [IndexerDrainConfig](#indexerdrainconfig) | No       | -       | Indexer drain settings                |
+| `manager` | [ManagerDrainConfig](#managerdrainconfig) | No       | -       | Manager drain settings                |
+| `retry`   | [DrainRetryConfig](#drainretryconfig)     | No       | -       | Retry configuration for failed drains |
+
+### IndexerDrainConfig
+
+| Field                   | Type     | Required | Default | Description                          |
+| ----------------------- | -------- | -------- | ------- | ------------------------------------ |
+| `timeout`               | Duration | No       | `30m`   | Maximum time for shard relocation    |
+| `healthCheckInterval`   | Duration | No       | `10s`   | Interval between shard status checks |
+| `minGreenHealthTimeout` | Duration | No       | `5m`    | Wait time for cluster green health   |
+
+### ManagerDrainConfig
+
+| Field                | Type     | Required | Default | Description                         |
+| -------------------- | -------- | -------- | ------- | ----------------------------------- |
+| `timeout`            | Duration | No       | `15m`   | Maximum time for queue drain        |
+| `queueCheckInterval` | Duration | No       | `5s`    | Interval between queue depth checks |
+| `gracePeriod`        | Duration | No       | `30s`   | Wait time after queue is empty      |
+
+### DrainRetryConfig
+
+| Field               | Type     | Required | Default | Description                      |
+| ------------------- | -------- | -------- | ------- | -------------------------------- |
+| `maxAttempts`       | int32    | No       | `3`     | Maximum retry attempts           |
+| `initialDelay`      | Duration | No       | `5m`    | Initial delay before first retry |
+| `backoffMultiplier` | float64  | No       | `2.0`   | Exponential backoff factor       |
+| `maxDelay`          | Duration | No       | `30m`   | Maximum delay between retries    |
 
 ### WazuhExporterConfig
 

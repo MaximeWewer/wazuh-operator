@@ -14,6 +14,7 @@ resources:
   # - wazuh_v1alpha1_wazuhcluster_authd_password.yaml  # With agent enrollment password
   # - wazuh_v1alpha1_wazuhcluster_monitoring.yaml      # With Prometheus monitoring
   # - wazuh_v1alpha1_wazuhcluster_tls.yaml             # With TLS configuration
+  # - wazuh_v1alpha1_wazuhcluster_drain.yaml           # With drain strategy configuration
 
   # ===========================================================================
   # OpenSearch Security CRDs

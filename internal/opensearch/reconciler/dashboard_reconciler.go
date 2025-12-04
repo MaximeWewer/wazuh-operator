@@ -24,6 +24,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -41,6 +42,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
+	"github.com/MaximeWewer/wazuh-operator/pkg/resources/pdb"
 )
 
 // DashboardReconciler handles reconciliation of OpenSearch Dashboard
@@ -86,6 +88,11 @@ func (r *DashboardReconciler) Reconcile(ctx context.Context, cluster *wazuhv1alp
 	// Reconcile Deployment
 	if err := r.reconcileDeployment(ctx, cluster); err != nil {
 		return fmt.Errorf("failed to reconcile dashboard deployment: %w", err)
+	}
+
+	// Reconcile PodDisruptionBudget
+	if err := r.reconcilePDB(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to reconcile dashboard PDB: %w", err)
 	}
 
 	log.Info("Dashboard reconciliation completed")
@@ -407,6 +414,59 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 	return nil
 }
 
+// reconcilePDB reconciles the PodDisruptionBudget for dashboard pods
+func (r *DashboardReconciler) reconcilePDB(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	pdbName := pdb.GetPDBName(cluster.Name)
+
+	// Check if PDB should exist
+	if !pdb.ShouldCreatePDB(cluster) {
+		// If PDB should not exist, delete it if it does
+		existing := &policyv1.PodDisruptionBudget{}
+		err := r.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: cluster.Namespace}, existing)
+		if err == nil {
+			log.Info("Deleting Dashboard PDB (no longer needed)", "name", pdbName)
+			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+				return fmt.Errorf("failed to delete dashboard PDB: %w", err)
+			}
+		} else if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get dashboard PDB: %w", err)
+		}
+		return nil
+	}
+
+	// Build the PDB
+	builder := pdb.NewDashboardPDBBuilder(cluster)
+	dashboardPDB := builder.Build()
+
+	if err := controllerutil.SetControllerReference(cluster, dashboardPDB, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for dashboard PDB: %w", err)
+	}
+
+	// Check if PDB exists
+	existing := &policyv1.PodDisruptionBudget{}
+	err := r.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: cluster.Namespace}, existing)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating Dashboard PDB", "name", pdbName)
+		if err := r.Create(ctx, dashboardPDB); err != nil {
+			return fmt.Errorf("failed to create dashboard PDB: %w", err)
+		}
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("failed to get dashboard PDB: %w", err)
+	}
+
+	// Update PDB if needed
+	dashboardPDB.SetResourceVersion(existing.GetResourceVersion())
+	log.V(1).Info("Updating Dashboard PDB", "name", pdbName)
+	if err := r.Update(ctx, dashboardPDB); err != nil {
+		return fmt.Errorf("failed to update dashboard PDB: %w", err)
+	}
+
+	return nil
+}
+
 // ReconcileWithCertHash reconciles the OpenSearch Dashboard with certificate hash for pod restart
 // DEPRECATED: Use ReconcileNonBlocking for non-blocking rollouts
 func (r *DashboardReconciler) ReconcileWithCertHash(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, certHash string) error {
@@ -430,6 +490,11 @@ func (r *DashboardReconciler) ReconcileWithCertHash(ctx context.Context, cluster
 	// Reconcile Deployment with cert hash
 	if err := r.reconcileDeploymentWithCertHash(ctx, cluster, certHash); err != nil {
 		return fmt.Errorf("failed to reconcile dashboard deployment: %w", err)
+	}
+
+	// Reconcile PodDisruptionBudget
+	if err := r.reconcilePDB(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to reconcile dashboard PDB: %w", err)
 	}
 
 	log.Info("Dashboard reconciliation completed")
@@ -468,6 +533,11 @@ func (r *DashboardReconciler) ReconcileNonBlocking(ctx context.Context, cluster 
 	pendingRollout, err := r.reconcileDeploymentNonBlocking(ctx, cluster, certHash)
 	if err != nil {
 		return DashboardReconcileResult{Error: fmt.Errorf("failed to reconcile dashboard deployment: %w", err)}
+	}
+
+	// Reconcile PodDisruptionBudget
+	if err := r.reconcilePDB(ctx, cluster); err != nil {
+		return DashboardReconcileResult{Error: fmt.Errorf("failed to reconcile dashboard PDB: %w", err)}
 	}
 
 	log.Info("Dashboard reconciliation completed (non-blocking)", "hasPendingRollout", pendingRollout != nil)

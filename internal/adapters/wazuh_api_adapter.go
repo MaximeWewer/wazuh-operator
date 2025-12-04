@@ -228,3 +228,131 @@ func (a *WazuhAPIAdapter) IsHealthy(ctx context.Context) bool {
 	_, err := a.GetManagerInfo(ctx)
 	return err == nil
 }
+
+// QueueStatus represents the status of a Wazuh queue
+type QueueStatus struct {
+	Name     string `json:"name"`
+	Size     int64  `json:"size"`
+	FilePath string `json:"path"`
+	Status   string `json:"status"`
+}
+
+// QueueStatusResponse represents the response from queue status API
+type QueueStatusResponse struct {
+	EventQueue   *QueueStatus `json:"event_queue,omitempty"`
+	AlertQueue   *QueueStatus `json:"alert_queue,omitempty"`
+	ArchiveQueue *QueueStatus `json:"archive_queue,omitempty"`
+	TotalEvents  int64        `json:"total_events"`
+}
+
+// GetQueueStatus returns the queue status for a specific node
+// This helps determine if a worker has events that need to be processed
+// before safe shutdown
+func (a *WazuhAPIAdapter) GetQueueStatus(ctx context.Context, nodeName string) (*QueueStatusResponse, error) {
+	path := "/manager/stats"
+	if nodeName != "" {
+		path = fmt.Sprintf("/cluster/%s/stats", nodeName)
+	}
+
+	resp, err := a.doRequest(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get queue status: %s", string(body))
+	}
+
+	// Parse the response - Wazuh stats API returns queue info
+	var result struct {
+		Data struct {
+			AffectedItems []struct {
+				QueueSizeTotal      int64 `json:"queue_size_total"`
+				QueueSizeRemote     int64 `json:"queue_size_remote"`
+				QueueSizeIntegrated int64 `json:"queue_size_integrated"`
+			} `json:"affected_items"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode queue status: %w", err)
+	}
+
+	// Aggregate queue sizes
+	status := &QueueStatusResponse{}
+	for _, item := range result.Data.AffectedItems {
+		status.TotalEvents += item.QueueSizeTotal
+	}
+
+	return status, nil
+}
+
+// ClusterNodeStatus represents detailed status of a cluster node
+type ClusterNodeStatus struct {
+	Name          string `json:"name"`
+	Type          string `json:"type"` // master, worker
+	Version       string `json:"version"`
+	IP            string `json:"ip"`
+	Status        string `json:"status"` // connected, disconnected
+	Synced        bool   `json:"synced"`
+	AgentsCount   int    `json:"agents_count"`
+	QueueSize     int64  `json:"queue_size"`
+	LastKeepAlive string `json:"last_keep_alive,omitempty"`
+}
+
+// GetClusterNodeStatus returns the detailed status of a specific node in the cluster
+func (a *WazuhAPIAdapter) GetClusterNodeStatus(ctx context.Context, nodeName string) (*ClusterNodeStatus, error) {
+	path := fmt.Sprintf("/cluster/nodes?select=name,type,version,ip&node_name=%s", nodeName)
+
+	resp, err := a.doRequest(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get node status: %s", string(body))
+	}
+
+	var result struct {
+		Data struct {
+			AffectedItems []ClusterNodeStatus `json:"affected_items"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode node status: %w", err)
+	}
+
+	if len(result.Data.AffectedItems) == 0 {
+		return nil, fmt.Errorf("node %s not found", nodeName)
+	}
+
+	return &result.Data.AffectedItems[0], nil
+}
+
+// GetAllNodesStatus returns status of all nodes in the cluster
+func (a *WazuhAPIAdapter) GetAllNodesStatus(ctx context.Context) ([]ClusterNodeStatus, error) {
+	resp, err := a.doRequest(ctx, "GET", "/cluster/nodes", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get all nodes status: %s", string(body))
+	}
+
+	var result struct {
+		Data struct {
+			AffectedItems []ClusterNodeStatus `json:"affected_items"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode nodes status: %w", err)
+	}
+
+	return result.Data.AffectedItems, nil
+}

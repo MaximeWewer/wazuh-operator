@@ -21,6 +21,7 @@ This directory contains documentation for users of the Wazuh Operator.
 - [Wazuh Multi-API Hosts](features/wazuh-api-hosts.md) - Multiple Wazuh Manager APIs
 - [OpenSearch Security](features/opensearch-security.md) - Users, roles, tenants
 - [OpenSearch Index Management](features/opensearch-indices.md) - Templates, ISM policies
+- [Drain Strategy](features/drain-strategy.md) - Safe scale-down with shard relocation and queue drain
 
 ### Examples
 

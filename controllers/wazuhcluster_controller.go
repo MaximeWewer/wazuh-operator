@@ -37,7 +37,9 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
+	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 const (
@@ -51,6 +53,9 @@ const (
 
 	// RequeueIntervalTestMode is the requeue interval when test mode is enabled
 	RequeueIntervalTestMode = 5 * time.Second
+
+	// RequeueIntervalDrainInProgress is the requeue interval when a drain is in progress
+	RequeueIntervalDrainInProgress = 10 * time.Second
 )
 
 // WazuhClusterReconciler reconciles a WazuhCluster object
@@ -64,13 +69,21 @@ type WazuhClusterReconciler struct {
 	CertificateReconciler *wazuhreconciler.CertificateReconciler
 	IndexerReconciler     *opensearchreconciler.IndexerReconciler
 	DashboardReconciler   *opensearchreconciler.DashboardReconciler
+	WorkerReconciler      *wazuhreconciler.WorkerReconciler
 	MonitoringReconciler  *monitoring.MonitoringReconciler
+
+	// Drain management
+	RollbackManager *drain.RollbackManagerImpl
+	RetryManager    *drain.RetryManagerImpl
 
 	// CertTestMode enables faster reconciliation for certificate testing
 	CertTestMode bool
 
 	// UseNonBlockingRollouts enables non-blocking certificate rollouts
 	UseNonBlockingRollouts bool
+
+	// drainInProgress tracks if a drain operation is currently active
+	drainInProgress bool
 }
 
 // +kubebuilder:rbac:groups=resources.wazuh.com,resources=wazuhclusters,verbs=get;list;watch;create;update;patch;delete
@@ -85,6 +98,7 @@ type WazuhClusterReconciler struct {
 // +kubebuilder:rbac:groups="",resources=persistentvolumeclaims,verbs=get;list;watch;patch
 // +kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch
 // +kubebuilder:rbac:groups=batch,resources=cronjobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;create;update;patch;delete
@@ -133,6 +147,17 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// Check and update pending rollouts from previous reconciliation
 	hasPendingRollouts := r.checkAndUpdatePendingRollouts(ctx, cluster)
 
+	// Check if any rollback is in progress and verify completion
+	if err := r.verifyRollbackComplete(ctx, cluster); err != nil {
+		log.Error(err, "Failed to verify rollback completion")
+	}
+
+	// Check if any retry is due and handle it
+	if retryNeeded, result := r.checkAndHandleRetry(ctx, cluster); retryNeeded {
+		log.Info("Drain retry handling in progress")
+		return result, nil
+	}
+
 	// Update test mode metric
 	if r.CertTestMode {
 		metrics.SetCertificateTestMode(cluster.Name, cluster.Namespace, true)
@@ -163,7 +188,66 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// Track new pending rollouts
 	var newPendingRollouts []utils.PendingRollout
 
-	// 2. Reconcile Indexer
+	// 2. Check dry-run mode - evaluate feasibility without executing
+	if cluster.Spec.Drain != nil && cluster.Spec.Drain.DryRun {
+		result := r.evaluateDryRun(ctx, cluster)
+		if result != nil {
+			// Update status with dry-run result
+			if cluster.Status.Drain == nil {
+				cluster.Status.Drain = &wazuhv1alpha1.DrainStatus{}
+			}
+			cluster.Status.Drain.LastDryRun = result
+
+			// Emit event with dry-run result
+			r.emitDryRunEvent(cluster, result)
+
+			log.Info("Dry-run evaluation complete",
+				"feasible", result.Feasible,
+				"blockers", len(result.Blockers),
+				"warnings", len(result.Warnings))
+		}
+
+		// Update status and return - don't proceed with actual drain
+		return ctrl.Result{RequeueAfter: RequeueIntervalNormal}, r.updateDrainStatus(ctx, cluster)
+	}
+
+	// 3. Check for indexer scale-down and handle drain if needed
+	if cluster.Spec.Indexer != nil {
+		desiredReplicas := cluster.Spec.Indexer.Replicas
+		if desiredReplicas == 0 {
+			desiredReplicas = 3 // Default
+		}
+
+		drainResult, err := r.IndexerReconciler.CheckScaleDownDrain(ctx, cluster, desiredReplicas)
+		if err != nil {
+			log.Error(err, "Failed to check indexer scale-down drain")
+			// Don't fail reconciliation, proceed without drain
+		} else if drainResult != nil && drainResult.DrainInProgress {
+			// Drain is in progress, wait for it to complete before proceeding with scale-down
+			log.Info("Indexer drain in progress, waiting for completion",
+				"targetPod", drainResult.TargetPod,
+				"progress", drainResult.Progress)
+			r.drainInProgress = true
+
+			// Update drain status in cluster
+			if cluster.Status.Drain == nil {
+				cluster.Status.Drain = &wazuhv1alpha1.DrainStatus{}
+			}
+
+			// Requeue to check drain progress
+			return ctrl.Result{RequeueAfter: RequeueIntervalDrainInProgress}, r.updateDrainStatus(ctx, cluster)
+		} else if drainResult != nil && drainResult.DrainComplete {
+			// Drain is complete, proceed with normal reconciliation
+			log.Info("Indexer drain complete, proceeding with scale-down")
+			r.drainInProgress = false
+			// Reset drain state after scale-down is applied
+			defer r.IndexerReconciler.ResetDrainState(cluster)
+		} else {
+			r.drainInProgress = false
+		}
+	}
+
+	// 3. Reconcile Indexer
 	// OpenSearch supports hot reload of ALL certificates (node + CA) via plugins.security.ssl_cert_reload_enabled.
 	// See PR: https://github.com/opensearch-project/security/pull/4880
 	// The key requirement is that certificates must be mounted as a directory (not with subPath)
@@ -207,7 +291,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
-	// 3. Check Security Initialization (after indexer is up)
+	// 4. Check Security Initialization (after indexer is up)
 	securityInitialized, err := r.IndexerReconciler.CheckSecurityInitialization(ctx, cluster)
 	if err != nil {
 		log.Error(err, "Failed to check security initialization")
@@ -234,7 +318,43 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		r.updateCondition(cluster, wazuhv1alpha1.ConditionTypeSecurityReady, metav1.ConditionFalse, "SecurityPending", "Waiting for OpenSearch security to initialize")
 	}
 
-	// 5. Reconcile Manager with certificate hashes for pod restart on cert renewal
+	// 5. Check for manager worker scale-down and handle drain if needed
+	if cluster.Spec.Manager != nil && r.WorkerReconciler != nil {
+		desiredReplicas := cluster.Spec.Manager.Workers.GetReplicas()
+
+		drainResult, err := r.WorkerReconciler.CheckScaleDownDrain(ctx, cluster, desiredReplicas)
+		if err != nil {
+			log.Error(err, "Failed to check manager worker scale-down drain")
+			// Don't fail reconciliation, proceed without drain
+		} else if drainResult != nil && drainResult.DrainInProgress {
+			// Drain is in progress, wait for it to complete before proceeding with scale-down
+			log.Info("Manager worker drain in progress, waiting for completion",
+				"targetPod", drainResult.TargetPod,
+				"progress", drainResult.Progress)
+			r.drainInProgress = true
+
+			// Update drain status in cluster
+			if cluster.Status.Drain == nil {
+				cluster.Status.Drain = &wazuhv1alpha1.DrainStatus{}
+			}
+
+			// Requeue to check drain progress
+			return ctrl.Result{RequeueAfter: RequeueIntervalDrainInProgress}, r.updateDrainStatus(ctx, cluster)
+		} else if drainResult != nil && drainResult.DrainComplete {
+			// Drain is complete, proceed with normal reconciliation
+			log.Info("Manager worker drain complete, proceeding with scale-down")
+			r.drainInProgress = false
+			// Reset drain state after scale-down is applied
+			defer r.WorkerReconciler.ResetDrainState(cluster)
+		} else {
+			// No drain needed or drain not configured
+			if r.drainInProgress {
+				r.drainInProgress = false
+			}
+		}
+	}
+
+	// 6. Reconcile Manager with certificate hashes for pod restart on cert renewal
 	if certHashes != nil {
 		if r.UseNonBlockingRollouts {
 			result := r.ClusterReconciler.ReconcileManagerNonBlocking(ctx, cluster, certHashes.ManagerMasterCertHash, certHashes.ManagerWorkerCertHash)
@@ -260,13 +380,13 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
-	// 6. Reconcile Log Rotation CronJob (if enabled)
+	// 7. Reconcile Log Rotation CronJob (if enabled)
 	if err := r.ClusterReconciler.ReconcileLogRotation(ctx, cluster); err != nil {
 		log.Error(err, "Failed to reconcile log rotation")
 		// Non-fatal, continue - log rotation is an optional feature
 	}
 
-	// 7. Reconcile Dashboard with certificate hash for pod restart on cert renewal
+	// 8. Reconcile Dashboard with certificate hash for pod restart on cert renewal
 	if certHashes != nil {
 		if r.UseNonBlockingRollouts {
 			result := r.DashboardReconciler.ReconcileNonBlocking(ctx, cluster, certHashes.DashboardCertHash)
@@ -294,7 +414,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
-	// 8. Reconcile Monitoring resources (ServiceMonitors) if enabled
+	// 9. Reconcile Monitoring resources (ServiceMonitors) if enabled
 	if r.MonitoringReconciler != nil {
 		if err := r.MonitoringReconciler.Reconcile(ctx, cluster); err != nil {
 			log.Error(err, "Failed to reconcile Monitoring resources")
@@ -302,7 +422,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
-	// 9. Check for indexer restart and re-sync if needed
+	// 10. Check for indexer restart and re-sync if needed
 	if restarted, err := r.IndexerReconciler.DetectIndexerRestart(ctx, cluster); err != nil {
 		log.Error(err, "Failed to detect indexer restart")
 	} else if restarted && securityInitialized {
@@ -312,7 +432,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
-	// 10. Update pending rollouts status
+	// 11. Update pending rollouts status
 	if len(newPendingRollouts) > 0 {
 		r.addPendingRollouts(cluster, newPendingRollouts)
 		hasPendingRollouts = true
@@ -463,6 +583,11 @@ func (r *WazuhClusterReconciler) determineRequeueInterval(hasPendingRollouts boo
 		return RequeueIntervalTestMode
 	}
 
+	// Drain in progress uses faster requeue
+	if r.drainInProgress {
+		return RequeueIntervalDrainInProgress
+	}
+
 	// Pending rollouts use faster requeue
 	if hasPendingRollouts {
 		return RequeueIntervalPendingRollout
@@ -575,6 +700,9 @@ func (r *WazuhClusterReconciler) updateStatus(ctx context.Context, cluster *wazu
 		latestCluster.Status.CertificateRollouts = cluster.Status.CertificateRollouts
 		latestCluster.Status.Security = cluster.Status.Security
 
+		// Copy drain status from working cluster
+		latestCluster.Status.Drain = cluster.Status.Drain
+
 		// Update overall phase
 		if allReady && latestCluster.Status.Indexer != nil && latestCluster.Status.Manager != nil && latestCluster.Status.Dashboard != nil {
 			latestCluster.Status.Phase = wazuhv1alpha1.ClusterPhaseRunning
@@ -591,6 +719,378 @@ func (r *WazuhClusterReconciler) updateStatus(ctx context.Context, cluster *wazu
 
 		return r.Status().Update(ctx, latestCluster)
 	})
+}
+
+// updateDrainStatus updates the drain status in the cluster
+func (r *WazuhClusterReconciler) updateDrainStatus(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	return utils.RetryOnConflict(ctx, func() error {
+		// Re-fetch the latest cluster to avoid conflicts
+		latestCluster := &wazuhv1alpha1.WazuhCluster{}
+		if err := r.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, latestCluster); err != nil {
+			return err
+		}
+
+		// Copy drain status from working cluster
+		latestCluster.Status.Drain = cluster.Status.Drain
+
+		now := metav1.Now()
+		latestCluster.Status.LastUpdateTime = &now
+
+		if err := r.Status().Update(ctx, latestCluster); err != nil {
+			log.Error(err, "Failed to update drain status")
+			return err
+		}
+
+		return nil
+	})
+}
+
+// evaluateDryRun performs dry-run evaluation of drain feasibility
+func (r *WazuhClusterReconciler) evaluateDryRun(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) *wazuhv1alpha1.DryRunResult {
+	log := logf.FromContext(ctx)
+	log.Info("Starting dry-run evaluation", "cluster", cluster.Name)
+
+	result := &wazuhv1alpha1.DryRunResult{
+		Feasible:    true,
+		EvaluatedAt: metav1.Now(),
+		Component:   "all",
+	}
+
+	// Evaluate indexer drain if configured
+	if cluster.Spec.Drain != nil && cluster.Spec.Drain.Indexer != nil &&
+		cluster.Spec.Drain.Indexer.Enabled != nil && *cluster.Spec.Drain.Indexer.Enabled {
+
+		// Get target node for indexer
+		var targetNode string
+		if cluster.Status.Drain != nil && cluster.Status.Drain.Indexer != nil {
+			targetNode = cluster.Status.Drain.Indexer.TargetPod
+		}
+
+		if targetNode == "" {
+			// Try to determine from spec/status
+			var desiredReplicas int32 = 3
+			if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Replicas > 0 {
+				desiredReplicas = cluster.Spec.Indexer.Replicas
+			}
+			var currentReplicas int32 = 0
+			if cluster.Status.Indexer != nil {
+				currentReplicas = cluster.Status.Indexer.Replicas
+			}
+			if desiredReplicas < currentReplicas {
+				targetNode = fmt.Sprintf("%s-indexer-%d", cluster.Name, currentReplicas-1)
+			}
+		}
+
+		if targetNode != "" && r.IndexerReconciler != nil {
+			indexerResult, err := r.IndexerReconciler.EvaluateDrainFeasibility(ctx, cluster, targetNode)
+			if err != nil {
+				log.Error(err, "Failed to evaluate indexer drain feasibility")
+				result.Warnings = append(result.Warnings,
+					fmt.Sprintf("[indexer] Evaluation failed: %v", err))
+			} else if indexerResult != nil {
+				if !indexerResult.Feasible {
+					result.Feasible = false
+				}
+				for _, blocker := range indexerResult.Blockers {
+					result.Blockers = append(result.Blockers, fmt.Sprintf("[indexer] %s", blocker))
+				}
+				for _, warning := range indexerResult.Warnings {
+					result.Warnings = append(result.Warnings, fmt.Sprintf("[indexer] %s", warning))
+				}
+				if indexerResult.EstimatedDuration != nil && result.EstimatedDuration == nil {
+					result.EstimatedDuration = indexerResult.EstimatedDuration
+				}
+			}
+		} else {
+			result.Warnings = append(result.Warnings, "[indexer] No scale-down detected")
+		}
+	}
+
+	// Evaluate manager drain if configured
+	if cluster.Spec.Drain != nil && cluster.Spec.Drain.Manager != nil &&
+		cluster.Spec.Drain.Manager.Enabled != nil && *cluster.Spec.Drain.Manager.Enabled {
+
+		// Get target node for manager
+		var targetNode string
+		if cluster.Status.Drain != nil && cluster.Status.Drain.Manager != nil {
+			targetNode = cluster.Status.Drain.Manager.TargetPod
+		}
+
+		if targetNode == "" {
+			// Try to determine from spec
+			var desiredReplicas int32 = 0
+			if cluster.Spec.Manager != nil {
+				desiredReplicas = cluster.Spec.Manager.Workers.GetReplicas()
+			}
+			// Check if drain status has previous replicas
+			var currentReplicas int32 = 0
+			if cluster.Status.Drain != nil && cluster.Status.Drain.Manager != nil &&
+				cluster.Status.Drain.Manager.PreviousReplicas != nil {
+				currentReplicas = *cluster.Status.Drain.Manager.PreviousReplicas
+			}
+			if desiredReplicas < currentReplicas {
+				targetNode = fmt.Sprintf("%s-manager-worker-%d", cluster.Name, currentReplicas-1)
+			}
+		}
+
+		if targetNode != "" && r.WorkerReconciler != nil {
+			managerResult, err := r.WorkerReconciler.EvaluateDrainFeasibility(ctx, cluster, targetNode)
+			if err != nil {
+				log.Error(err, "Failed to evaluate manager drain feasibility")
+				result.Warnings = append(result.Warnings,
+					fmt.Sprintf("[manager] Evaluation failed: %v", err))
+			} else if managerResult != nil {
+				if !managerResult.Feasible {
+					result.Feasible = false
+				}
+				for _, blocker := range managerResult.Blockers {
+					result.Blockers = append(result.Blockers, fmt.Sprintf("[manager] %s", blocker))
+				}
+				for _, warning := range managerResult.Warnings {
+					result.Warnings = append(result.Warnings, fmt.Sprintf("[manager] %s", warning))
+				}
+				if managerResult.EstimatedDuration != nil {
+					if result.EstimatedDuration != nil {
+						// Add durations
+						combined := result.EstimatedDuration.Duration + managerResult.EstimatedDuration.Duration
+						result.EstimatedDuration = &metav1.Duration{Duration: combined}
+					} else {
+						result.EstimatedDuration = managerResult.EstimatedDuration
+					}
+				}
+			}
+		} else {
+			result.Warnings = append(result.Warnings, "[manager] No scale-down detected")
+		}
+	}
+
+	// Dashboard evaluation is simpler - just check PDB if it exists
+	if cluster.Spec.Dashboard != nil {
+		result.Warnings = append(result.Warnings, "[dashboard] PDB protection not yet implemented")
+	}
+
+	return result
+}
+
+// emitDryRunEvent emits a Kubernetes event with the dry-run result
+func (r *WazuhClusterReconciler) emitDryRunEvent(cluster *wazuhv1alpha1.WazuhCluster, result *wazuhv1alpha1.DryRunResult) {
+	if r.IndexerReconciler == nil || r.IndexerReconciler.Recorder == nil {
+		return
+	}
+
+	recorder := r.IndexerReconciler.Recorder
+
+	var message string
+	if result.Feasible {
+		message = fmt.Sprintf("Dry-run: scale-down is feasible")
+		if result.EstimatedDuration != nil {
+			message += fmt.Sprintf(" (estimated duration: %v)", result.EstimatedDuration.Duration)
+		}
+		if len(result.Warnings) > 0 {
+			message += fmt.Sprintf(" with %d warning(s)", len(result.Warnings))
+		}
+		recorder.Event(cluster, corev1.EventTypeNormal, constants.DrainEventReasonDryRun, message)
+	} else {
+		message = fmt.Sprintf("Dry-run: scale-down blocked by %d issue(s)", len(result.Blockers))
+		if len(result.Blockers) > 0 {
+			message += fmt.Sprintf(": %s", result.Blockers[0])
+		}
+		recorder.Event(cluster, corev1.EventTypeWarning, constants.DrainEventReasonDryRun, message)
+	}
+}
+
+// handleDrainFailure triggers rollback and schedules retry for a failed drain operation
+func (r *WazuhClusterReconciler) handleDrainFailure(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, component string, failureReason string) error {
+	log := logf.FromContext(ctx).WithValues("component", component)
+	log.Info("Handling drain failure", "reason", failureReason)
+
+	// Get drain status for the component
+	var drainStatus *wazuhv1alpha1.ComponentDrainStatus
+	if cluster.Status.Drain == nil {
+		cluster.Status.Drain = &wazuhv1alpha1.DrainStatus{}
+	}
+
+	switch component {
+	case constants.DrainComponentIndexer:
+		if cluster.Status.Drain.Indexer == nil {
+			cluster.Status.Drain.Indexer = &wazuhv1alpha1.ComponentDrainStatus{}
+		}
+		drainStatus = cluster.Status.Drain.Indexer
+	case constants.DrainComponentManager:
+		if cluster.Status.Drain.Manager == nil {
+			cluster.Status.Drain.Manager = &wazuhv1alpha1.ComponentDrainStatus{}
+		}
+		drainStatus = cluster.Status.Drain.Manager
+	default:
+		return fmt.Errorf("unknown component: %s", component)
+	}
+
+	// Update status to Failed
+	drainStatus.Phase = wazuhv1alpha1.DrainPhaseFailed
+	drainStatus.Message = failureReason
+	now := metav1.Now()
+	drainStatus.LastTransitionTime = &now
+
+	// Check if retry is allowed
+	retryConfig := r.getRetryConfig(cluster)
+	if r.RetryManager != nil && r.RetryManager.ShouldRetry(drainStatus, retryConfig) {
+		// Trigger rollback
+		if r.RollbackManager != nil {
+			drainStatus.Phase = wazuhv1alpha1.DrainPhaseRollingBack
+			if err := r.RollbackManager.ExecuteRollback(ctx, cluster, component); err != nil {
+				log.Error(err, "Failed to execute rollback")
+				drainStatus.Message = fmt.Sprintf("Rollback failed: %v", err)
+				r.emitDrainEvent(cluster, component, constants.DrainEventReasonRollbackFailed, drainStatus.Message)
+			} else {
+				// Schedule retry
+				r.RetryManager.IncrementAttempt(drainStatus, retryConfig)
+				drainStatus.Message = fmt.Sprintf("Rollback complete. Retry %d/%d scheduled for %v",
+					drainStatus.AttemptCount, retryConfig.MaxAttempts, drainStatus.NextRetryTime.Time)
+				r.emitDrainEvent(cluster, component, constants.DrainEventReasonRollback, drainStatus.Message)
+				log.Info("Rollback complete, retry scheduled",
+					"attemptCount", drainStatus.AttemptCount,
+					"nextRetry", drainStatus.NextRetryTime)
+			}
+		}
+	} else {
+		// Max retries reached
+		drainStatus.Message = fmt.Sprintf("Drain failed: %s. Max retry attempts (%d) reached. Manual intervention required.",
+			failureReason, retryConfig.MaxAttempts)
+		r.emitDrainEvent(cluster, component, constants.DrainEventReasonMaxRetries, drainStatus.Message)
+		log.Info("Max retry attempts reached, manual intervention required")
+	}
+
+	return r.updateDrainStatus(ctx, cluster)
+}
+
+// checkAndHandleRetry checks if a retry is due and initiates it
+func (r *WazuhClusterReconciler) checkAndHandleRetry(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (bool, ctrl.Result) {
+	log := logf.FromContext(ctx)
+
+	if cluster.Status.Drain == nil {
+		return false, ctrl.Result{}
+	}
+
+	// Check indexer retry
+	if cluster.Status.Drain.Indexer != nil {
+		drainStatus := cluster.Status.Drain.Indexer
+		if drainStatus.Phase == wazuhv1alpha1.DrainPhaseFailed || drainStatus.Phase == wazuhv1alpha1.DrainPhaseRollingBack {
+			if r.RetryManager != nil && r.RetryManager.IsRetryDue(drainStatus) {
+				log.Info("Indexer drain retry is due", "attemptCount", drainStatus.AttemptCount)
+				// Reset to pending to restart the drain
+				drainStatus.Phase = wazuhv1alpha1.DrainPhasePending
+				drainStatus.Message = fmt.Sprintf("Retry attempt %d starting", drainStatus.AttemptCount)
+				r.emitDrainEvent(cluster, constants.DrainComponentIndexer, constants.DrainEventReasonRetry, drainStatus.Message)
+				if err := r.updateDrainStatus(ctx, cluster); err != nil {
+					log.Error(err, "Failed to update drain status for retry")
+				}
+				return true, ctrl.Result{Requeue: true}
+			} else if drainStatus.NextRetryTime != nil {
+				// Calculate time until next retry
+				waitDuration := time.Until(drainStatus.NextRetryTime.Time)
+				if waitDuration > 0 {
+					log.V(1).Info("Waiting for indexer drain retry", "waitDuration", waitDuration)
+					return true, ctrl.Result{RequeueAfter: waitDuration}
+				}
+			}
+		}
+	}
+
+	// Check manager retry
+	if cluster.Status.Drain.Manager != nil {
+		drainStatus := cluster.Status.Drain.Manager
+		if drainStatus.Phase == wazuhv1alpha1.DrainPhaseFailed || drainStatus.Phase == wazuhv1alpha1.DrainPhaseRollingBack {
+			if r.RetryManager != nil && r.RetryManager.IsRetryDue(drainStatus) {
+				log.Info("Manager drain retry is due", "attemptCount", drainStatus.AttemptCount)
+				// Reset to pending to restart the drain
+				drainStatus.Phase = wazuhv1alpha1.DrainPhasePending
+				drainStatus.Message = fmt.Sprintf("Retry attempt %d starting", drainStatus.AttemptCount)
+				r.emitDrainEvent(cluster, constants.DrainComponentManager, constants.DrainEventReasonRetry, drainStatus.Message)
+				if err := r.updateDrainStatus(ctx, cluster); err != nil {
+					log.Error(err, "Failed to update drain status for retry")
+				}
+				return true, ctrl.Result{Requeue: true}
+			} else if drainStatus.NextRetryTime != nil {
+				// Calculate time until next retry
+				waitDuration := time.Until(drainStatus.NextRetryTime.Time)
+				if waitDuration > 0 {
+					log.V(1).Info("Waiting for manager drain retry", "waitDuration", waitDuration)
+					return true, ctrl.Result{RequeueAfter: waitDuration}
+				}
+			}
+		}
+	}
+
+	return false, ctrl.Result{}
+}
+
+// verifyRollbackComplete checks if rollback has completed for both components
+func (r *WazuhClusterReconciler) verifyRollbackComplete(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	if r.RollbackManager == nil || cluster.Status.Drain == nil {
+		return nil
+	}
+
+	// Check indexer rollback
+	if cluster.Status.Drain.Indexer != nil && cluster.Status.Drain.Indexer.Phase == wazuhv1alpha1.DrainPhaseRollingBack {
+		complete, err := r.RollbackManager.VerifyRollbackComplete(ctx, cluster, constants.DrainComponentIndexer)
+		if err != nil {
+			log.Error(err, "Failed to verify indexer rollback")
+			return err
+		}
+		if complete {
+			cluster.Status.Drain.Indexer.Phase = wazuhv1alpha1.DrainPhaseFailed
+			cluster.Status.Drain.Indexer.Message = "Rollback complete, waiting for retry"
+			log.Info("Indexer rollback verified complete")
+		}
+	}
+
+	// Check manager rollback
+	if cluster.Status.Drain.Manager != nil && cluster.Status.Drain.Manager.Phase == wazuhv1alpha1.DrainPhaseRollingBack {
+		complete, err := r.RollbackManager.VerifyRollbackComplete(ctx, cluster, constants.DrainComponentManager)
+		if err != nil {
+			log.Error(err, "Failed to verify manager rollback")
+			return err
+		}
+		if complete {
+			cluster.Status.Drain.Manager.Phase = wazuhv1alpha1.DrainPhaseFailed
+			cluster.Status.Drain.Manager.Message = "Rollback complete, waiting for retry"
+			log.Info("Manager rollback verified complete")
+		}
+	}
+
+	return nil
+}
+
+// getRetryConfig returns the retry configuration from the cluster spec or defaults
+func (r *WazuhClusterReconciler) getRetryConfig(cluster *wazuhv1alpha1.WazuhCluster) *wazuhv1alpha1.DrainRetryConfig {
+	if cluster.Spec.Drain != nil && cluster.Spec.Drain.Retry != nil {
+		return cluster.Spec.Drain.Retry
+	}
+	// Return default configuration
+	return &wazuhv1alpha1.DrainRetryConfig{
+		MaxAttempts:       constants.DefaultDrainRetryMaxAttempts,
+		InitialDelay:      &metav1.Duration{Duration: constants.DefaultDrainRetryInitialDelay},
+		BackoffMultiplier: fmt.Sprintf("%.1f", constants.DefaultDrainRetryBackoffMultiplier),
+		MaxDelay:          &metav1.Duration{Duration: constants.DefaultDrainRetryMaxDelay},
+	}
+}
+
+// emitDrainEvent emits a Kubernetes event for drain operations
+func (r *WazuhClusterReconciler) emitDrainEvent(cluster *wazuhv1alpha1.WazuhCluster, component, reason, message string) {
+	if r.IndexerReconciler == nil || r.IndexerReconciler.Recorder == nil {
+		return
+	}
+
+	recorder := r.IndexerReconciler.Recorder
+	eventType := corev1.EventTypeNormal
+	if reason == constants.DrainEventReasonFailed || reason == constants.DrainEventReasonRollbackFailed || reason == constants.DrainEventReasonMaxRetries {
+		eventType = corev1.EventTypeWarning
+	}
+	recorder.Event(cluster, eventType, reason, fmt.Sprintf("[%s] %s", component, message))
 }
 
 // SetupWithManager sets up the controller with the Manager

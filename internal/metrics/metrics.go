@@ -175,6 +175,8 @@ func RegisterMetrics() {
 	)
 	// Register certificate-specific metrics
 	RegisterCertificateMetrics()
+	// Register drain-specific metrics
+	RegisterDrainMetrics()
 }
 
 // RecordReconciliation records a reconciliation event

@@ -2417,6 +2417,92 @@ spec:
                 required:
                 - name
                 type: object
+              drain:
+                description: Drain strategy configuration for safe scale-down operations
+                properties:
+                  dryRun:
+                    default: false
+                    description: |-
+                      DryRun mode evaluates feasibility without executing
+                      When enabled, the operator will analyze the scale-down operation
+                      and report results in status without making actual changes
+                    type: boolean
+                  indexer:
+                    description: Indexer drain configuration
+                    properties:
+                      enabled:
+                        default: true
+                        description: |-
+                          Enabled enables drain strategy for indexer scale-down
+                          When enabled, shards will be relocated before pod termination
+                        type: boolean
+                      healthCheckInterval:
+                        default: 10s
+                        description: HealthCheckInterval between shard relocation
+                          status checks
+                        type: string
+                      minGreenHealthTimeout:
+                        default: 5m
+                        description: MinGreenHealthTimeout waits for cluster green
+                          health before drain
+                        type: string
+                      timeout:
+                        default: 30m
+                        description: Timeout for shard relocation to complete
+                        type: string
+                    type: object
+                  manager:
+                    description: Manager drain configuration
+                    properties:
+                      enabled:
+                        default: true
+                        description: |-
+                          Enabled enables drain strategy for manager worker scale-down
+                          When enabled, queues will be drained before pod termination
+                        type: boolean
+                      gracePeriod:
+                        default: 30s
+                        description: |-
+                          GracePeriod after queue is empty before termination
+                          Allows any in-flight processing to complete
+                        type: string
+                      queueCheckInterval:
+                        default: 5s
+                        description: QueueCheckInterval between queue depth checks
+                        type: string
+                      timeout:
+                        default: 15m
+                        description: Timeout for queue drain to complete
+                        type: string
+                    type: object
+                  retry:
+                    description: Retry configuration (applies to all components)
+                    properties:
+                      backoffMultiplier:
+                        default: "2.0"
+                        description: |-
+                          BackoffMultiplier for exponential backoff
+                          Delay increases by this factor after each retry
+                        type: string
+                      initialDelay:
+                        default: 5m
+                        description: InitialDelay before first retry
+                        type: string
+                      maxAttempts:
+                        default: 3
+                        description: |-
+                          MaxAttempts before giving up (0 = no retry)
+                          After max attempts, manual intervention is required
+                        format: int32
+                        maximum: 10
+                        minimum: 0
+                        type: integer
+                      maxDelay:
+                        default: 30m
+                        description: MaxDelay caps the backoff delay
+                        type: string
+                    type: object
+                type: object
               imagePullSecrets:
                 description: Image pull secrets for private registries
                 items:
@@ -14529,6 +14615,186 @@ spec:
                     description: SpecHash is the hash of the component's spec for
                       change detection
                     type: string
+                type: object
+              drain:
+                description: Drain tracks drain operation status for scale-down operations
+                properties:
+                  indexer:
+                    description: Indexer drain status
+                    properties:
+                      attemptCount:
+                        description: AttemptCount is the current retry attempt number
+                          (1-based)
+                        format: int32
+                        type: integer
+                      lastTransitionTime:
+                        description: LastTransitionTime when phase last changed
+                        format: date-time
+                        type: string
+                      message:
+                        description: Message describes current state or error details
+                        type: string
+                      nextRetryTime:
+                        description: NextRetryTime is when the next retry will be
+                          attempted
+                        format: date-time
+                        type: string
+                      phase:
+                        allOf:
+                        - enum:
+                          - Idle
+                          - Pending
+                          - Draining
+                          - Verifying
+                          - Complete
+                          - Failed
+                          - RollingBack
+                        - enum:
+                          - Idle
+                          - Pending
+                          - Draining
+                          - Verifying
+                          - Complete
+                          - Failed
+                          - RollingBack
+                        description: Phase of the drain operation
+                        type: string
+                      previousReplicas:
+                        description: PreviousReplicas before scale-down (for rollback)
+                        format: int32
+                        type: integer
+                      progress:
+                        description: Progress percentage (0-100)
+                        format: int32
+                        type: integer
+                      queueDepth:
+                        description: QueueDepth is the remaining items in queue (manager
+                          only)
+                        format: int64
+                        type: integer
+                      shardCount:
+                        description: ShardCount is the remaining shards on target
+                          node (indexer only)
+                        format: int32
+                        type: integer
+                      startTime:
+                        description: StartTime when drain started
+                        format: date-time
+                        type: string
+                      targetPod:
+                        description: TargetPod is the name of the pod being drained
+                        type: string
+                      targetReplicas:
+                        description: TargetReplicas is the requested replica count
+                        format: int32
+                        type: integer
+                    required:
+                    - phase
+                    type: object
+                  lastDryRun:
+                    description: LastDryRun contains the most recent dry-run result
+                    properties:
+                      blockers:
+                        description: Blockers are reasons preventing the operation
+                        items:
+                          type: string
+                        type: array
+                      component:
+                        description: Component that was evaluated (indexer, manager,
+                          dashboard)
+                        type: string
+                      estimatedDuration:
+                        description: EstimatedDuration for the operation if feasible
+                        type: string
+                      evaluatedAt:
+                        description: EvaluatedAt is when the dry-run was performed
+                        format: date-time
+                        type: string
+                      feasible:
+                        description: Feasible indicates if the operation can succeed
+                        type: boolean
+                      warnings:
+                        description: Warnings that don't block but should be noted
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - component
+                    - evaluatedAt
+                    - feasible
+                    type: object
+                  manager:
+                    description: Manager drain status
+                    properties:
+                      attemptCount:
+                        description: AttemptCount is the current retry attempt number
+                          (1-based)
+                        format: int32
+                        type: integer
+                      lastTransitionTime:
+                        description: LastTransitionTime when phase last changed
+                        format: date-time
+                        type: string
+                      message:
+                        description: Message describes current state or error details
+                        type: string
+                      nextRetryTime:
+                        description: NextRetryTime is when the next retry will be
+                          attempted
+                        format: date-time
+                        type: string
+                      phase:
+                        allOf:
+                        - enum:
+                          - Idle
+                          - Pending
+                          - Draining
+                          - Verifying
+                          - Complete
+                          - Failed
+                          - RollingBack
+                        - enum:
+                          - Idle
+                          - Pending
+                          - Draining
+                          - Verifying
+                          - Complete
+                          - Failed
+                          - RollingBack
+                        description: Phase of the drain operation
+                        type: string
+                      previousReplicas:
+                        description: PreviousReplicas before scale-down (for rollback)
+                        format: int32
+                        type: integer
+                      progress:
+                        description: Progress percentage (0-100)
+                        format: int32
+                        type: integer
+                      queueDepth:
+                        description: QueueDepth is the remaining items in queue (manager
+                          only)
+                        format: int64
+                        type: integer
+                      shardCount:
+                        description: ShardCount is the remaining shards on target
+                          node (indexer only)
+                        format: int32
+                        type: integer
+                      startTime:
+                        description: StartTime when drain started
+                        format: date-time
+                        type: string
+                      targetPod:
+                        description: TargetPod is the name of the pod being drained
+                        type: string
+                      targetReplicas:
+                        description: TargetReplicas is the requested replica count
+                        format: int32
+                        type: integer
+                    required:
+                    - phase
+                    type: object
                 type: object
               indexer:
                 description: Indexer status

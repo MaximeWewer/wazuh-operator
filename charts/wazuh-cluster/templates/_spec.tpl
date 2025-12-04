@@ -48,5 +48,10 @@ Combines sizing profiles with credentials and other configurations
   {{- $_ := set $spec "manager" $manager -}}
 {{- end -}}
 
+{{- /* Apply drain config if set in values */ -}}
+{{- if .Values.cluster.spec.drain -}}
+  {{- $_ := set $spec "drain" .Values.cluster.spec.drain -}}
+{{- end -}}
+
 {{- toYaml $spec -}}
 {{- end -}}

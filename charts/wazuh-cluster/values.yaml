@@ -207,3 +207,39 @@ cluster:
     #     # - Wazuh 4.9.x (OpenSearch 2.13-2.18): API call is always required
     #     # - Wazuh 4.12+ (OpenSearch 2.19+): Automatic, set forceAPIReload if needed
     #     forceAPIReload: false
+
+    # Drain strategy configuration (optional)
+    # Controls safe scale-down operations for indexers and managers
+    # See docs: docs/usage/features/drain-strategy.md
+    # drain:
+    #   # Enable dry-run mode to preview scale-down feasibility without making changes
+    #   dryRun: false
+    #
+    #   # Indexer drain settings (OpenSearch shard relocation)
+    #   indexer:
+    #     # Timeout for shard relocation (default: 30m)
+    #     timeout: 30m
+    #     # Interval between shard status checks (default: 10s)
+    #     healthCheckInterval: 10s
+    #     # Wait time for cluster green health before proceeding (default: 5m)
+    #     minGreenHealthTimeout: 5m
+    #
+    #   # Manager drain settings (event queue processing)
+    #   manager:
+    #     # Timeout for queue drain (default: 15m)
+    #     timeout: 15m
+    #     # Interval between queue depth checks (default: 5s)
+    #     queueCheckInterval: 5s
+    #     # Grace period after queue is empty (default: 30s)
+    #     gracePeriod: 30s
+    #
+    #   # Retry configuration for failed drain operations
+    #   retry:
+    #     # Maximum retry attempts before giving up (default: 3)
+    #     maxAttempts: 3
+    #     # Initial delay before first retry (default: 5m)
+    #     initialDelay: 5m
+    #     # Exponential backoff multiplier (default: 2.0)
+    #     backoffMultiplier: 2.0
+    #     # Maximum delay between retries (default: 30m)
+    #     maxDelay: 30m

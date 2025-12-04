@@ -75,6 +75,10 @@ type WazuhClusterSpec struct {
 	// Monitoring configuration
 	// +optional
 	Monitoring *MonitoringConfig `json:"monitoring,omitempty"`
+
+	// Drain strategy configuration for safe scale-down operations
+	// +optional
+	Drain *DrainConfiguration `json:"drain,omitempty"`
 }
 
 // WazuhManagerClusterSpec defines the Wazuh manager cluster configuration (inline in WazuhCluster)
@@ -667,6 +671,10 @@ type WazuhClusterStatus struct {
 	// VolumeExpansion tracks storage expansion progress for all components
 	// +optional
 	VolumeExpansion *VolumeExpansionStatus `json:"volumeExpansion,omitempty"`
+
+	// Drain tracks drain operation status for scale-down operations
+	// +optional
+	Drain *DrainStatus `json:"drain,omitempty"`
 
 	// Observed generation
 	// +optional

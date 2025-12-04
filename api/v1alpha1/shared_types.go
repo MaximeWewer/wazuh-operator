@@ -637,3 +637,209 @@ type OSSECAuthSpec struct {
 	// +kubebuilder:default=true
 	EnabledOnMasterOnly *bool `json:"enabledOnMasterOnly,omitempty"`
 }
+
+// ============================================================================
+// Drain Strategy Types
+// ============================================================================
+
+// DrainPhase represents the phase of a drain operation
+// +kubebuilder:validation:Enum=Idle;Pending;Draining;Verifying;Complete;Failed;RollingBack
+type DrainPhase string
+
+const (
+	DrainPhaseIdle        DrainPhase = "Idle"
+	DrainPhasePending     DrainPhase = "Pending"
+	DrainPhaseDraining    DrainPhase = "Draining"
+	DrainPhaseVerifying   DrainPhase = "Verifying"
+	DrainPhaseComplete    DrainPhase = "Complete"
+	DrainPhaseFailed      DrainPhase = "Failed"
+	DrainPhaseRollingBack DrainPhase = "RollingBack"
+)
+
+// DrainConfiguration defines drain strategy settings for scale-down operations
+type DrainConfiguration struct {
+	// Indexer drain configuration
+	// +optional
+	Indexer *IndexerDrainConfig `json:"indexer,omitempty"`
+
+	// Manager drain configuration
+	// +optional
+	Manager *ManagerDrainConfig `json:"manager,omitempty"`
+
+	// Retry configuration (applies to all components)
+	// +optional
+	Retry *DrainRetryConfig `json:"retry,omitempty"`
+
+	// DryRun mode evaluates feasibility without executing
+	// When enabled, the operator will analyze the scale-down operation
+	// and report results in status without making actual changes
+	// +optional
+	// +kubebuilder:default=false
+	DryRun bool `json:"dryRun,omitempty"`
+}
+
+// IndexerDrainConfig defines drain settings for OpenSearch indexer scale-down
+type IndexerDrainConfig struct {
+	// Enabled enables drain strategy for indexer scale-down
+	// When enabled, shards will be relocated before pod termination
+	// +optional
+	// +kubebuilder:default=true
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Timeout for shard relocation to complete
+	// +optional
+	// +kubebuilder:default="30m"
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+
+	// HealthCheckInterval between shard relocation status checks
+	// +optional
+	// +kubebuilder:default="10s"
+	HealthCheckInterval *metav1.Duration `json:"healthCheckInterval,omitempty"`
+
+	// MinGreenHealthTimeout waits for cluster green health before drain
+	// +optional
+	// +kubebuilder:default="5m"
+	MinGreenHealthTimeout *metav1.Duration `json:"minGreenHealthTimeout,omitempty"`
+}
+
+// ManagerDrainConfig defines drain settings for Wazuh manager worker scale-down
+type ManagerDrainConfig struct {
+	// Enabled enables drain strategy for manager worker scale-down
+	// When enabled, queues will be drained before pod termination
+	// +optional
+	// +kubebuilder:default=true
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// Timeout for queue drain to complete
+	// +optional
+	// +kubebuilder:default="15m"
+	Timeout *metav1.Duration `json:"timeout,omitempty"`
+
+	// QueueCheckInterval between queue depth checks
+	// +optional
+	// +kubebuilder:default="5s"
+	QueueCheckInterval *metav1.Duration `json:"queueCheckInterval,omitempty"`
+
+	// GracePeriod after queue is empty before termination
+	// Allows any in-flight processing to complete
+	// +optional
+	// +kubebuilder:default="30s"
+	GracePeriod *metav1.Duration `json:"gracePeriod,omitempty"`
+}
+
+// DrainRetryConfig defines retry behavior for failed drain operations
+type DrainRetryConfig struct {
+	// MaxAttempts before giving up (0 = no retry)
+	// After max attempts, manual intervention is required
+	// +optional
+	// +kubebuilder:default=3
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=10
+	MaxAttempts int32 `json:"maxAttempts,omitempty"`
+
+	// InitialDelay before first retry
+	// +optional
+	// +kubebuilder:default="5m"
+	InitialDelay *metav1.Duration `json:"initialDelay,omitempty"`
+
+	// BackoffMultiplier for exponential backoff
+	// Delay increases by this factor after each retry
+	// +optional
+	// +kubebuilder:default="2.0"
+	BackoffMultiplier string `json:"backoffMultiplier,omitempty"`
+
+	// MaxDelay caps the backoff delay
+	// +optional
+	// +kubebuilder:default="30m"
+	MaxDelay *metav1.Duration `json:"maxDelay,omitempty"`
+}
+
+// DrainStatus tracks the current state of drain operations
+type DrainStatus struct {
+	// Indexer drain status
+	// +optional
+	Indexer *ComponentDrainStatus `json:"indexer,omitempty"`
+
+	// Manager drain status
+	// +optional
+	Manager *ComponentDrainStatus `json:"manager,omitempty"`
+
+	// LastDryRun contains the most recent dry-run result
+	// +optional
+	LastDryRun *DryRunResult `json:"lastDryRun,omitempty"`
+}
+
+// ComponentDrainStatus tracks drain state for a single component
+type ComponentDrainStatus struct {
+	// Phase of the drain operation
+	// +kubebuilder:validation:Enum=Idle;Pending;Draining;Verifying;Complete;Failed;RollingBack
+	Phase DrainPhase `json:"phase"`
+
+	// TargetPod is the name of the pod being drained
+	// +optional
+	TargetPod string `json:"targetPod,omitempty"`
+
+	// PreviousReplicas before scale-down (for rollback)
+	// +optional
+	PreviousReplicas *int32 `json:"previousReplicas,omitempty"`
+
+	// TargetReplicas is the requested replica count
+	// +optional
+	TargetReplicas *int32 `json:"targetReplicas,omitempty"`
+
+	// Progress percentage (0-100)
+	// +optional
+	Progress int32 `json:"progress,omitempty"`
+
+	// StartTime when drain started
+	// +optional
+	StartTime *metav1.Time `json:"startTime,omitempty"`
+
+	// LastTransitionTime when phase last changed
+	// +optional
+	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+
+	// AttemptCount is the current retry attempt number (1-based)
+	// +optional
+	AttemptCount int32 `json:"attemptCount,omitempty"`
+
+	// NextRetryTime is when the next retry will be attempted
+	// +optional
+	NextRetryTime *metav1.Time `json:"nextRetryTime,omitempty"`
+
+	// Message describes current state or error details
+	// +optional
+	Message string `json:"message,omitempty"`
+
+	// ShardCount is the remaining shards on target node (indexer only)
+	// +optional
+	ShardCount *int32 `json:"shardCount,omitempty"`
+
+	// QueueDepth is the remaining items in queue (manager only)
+	// +optional
+	QueueDepth *int64 `json:"queueDepth,omitempty"`
+}
+
+// DryRunResult contains the result of a dry-run feasibility check
+type DryRunResult struct {
+	// Feasible indicates if the operation can succeed
+	Feasible bool `json:"feasible"`
+
+	// EvaluatedAt is when the dry-run was performed
+	EvaluatedAt metav1.Time `json:"evaluatedAt"`
+
+	// Component that was evaluated (indexer, manager, dashboard)
+	Component string `json:"component"`
+
+	// Blockers are reasons preventing the operation
+	// +optional
+	Blockers []string `json:"blockers,omitempty"`
+
+	// Warnings that don't block but should be noted
+	// +optional
+	Warnings []string `json:"warnings,omitempty"`
+
+	// EstimatedDuration for the operation if feasible
+	// +optional
+	EstimatedDuration *metav1.Duration `json:"estimatedDuration,omitempty"`
+}
