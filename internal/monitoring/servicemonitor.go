@@ -51,12 +51,12 @@ func NewManagerServiceMonitor(cluster *wazuhv1alpha1.WazuhCluster) *monitoringv1
 	}
 
 	// Get configuration values
-	interval := "30s"
+	interval := constants.ServiceMonitorIntervalDefault
 	if cluster.Spec.Monitoring.ServiceMonitor.Interval != "" {
 		interval = cluster.Spec.Monitoring.ServiceMonitor.Interval
 	}
 
-	scrapeTimeout := "10s"
+	scrapeTimeout := constants.ServiceMonitorScrapeTimeoutDefault
 	if cluster.Spec.Monitoring.ServiceMonitor.ScrapeTimeout != "" {
 		scrapeTimeout = cluster.Spec.Monitoring.ServiceMonitor.ScrapeTimeout
 	}
@@ -110,22 +110,22 @@ func NewIndexerServiceMonitor(cluster *wazuhv1alpha1.WazuhCluster) *monitoringv1
 	}
 
 	// Get configuration values
-	interval := "30s"
+	interval := constants.ServiceMonitorIntervalDefault
 	if cluster.Spec.Monitoring.ServiceMonitor.Interval != "" {
 		interval = cluster.Spec.Monitoring.ServiceMonitor.Interval
 	}
 
-	scrapeTimeout := "10s"
+	scrapeTimeout := constants.ServiceMonitorScrapeTimeoutDefault
 	if cluster.Spec.Monitoring.ServiceMonitor.ScrapeTimeout != "" {
 		scrapeTimeout = cluster.Spec.Monitoring.ServiceMonitor.ScrapeTimeout
 	}
 
 	// Get the credentials secret name
-	credentialsSecretName := fmt.Sprintf("%s-indexer-credentials", cluster.Name)
+	credentialsSecretName := constants.IndexerCredentialsName(cluster.Name)
 
 	return &monitoringv1.ServiceMonitor{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-indexer-metrics", cluster.Name),
+			Name:      constants.IndexerMetricsName(cluster.Name),
 			Namespace: cluster.Namespace,
 			Labels:    labels,
 		},

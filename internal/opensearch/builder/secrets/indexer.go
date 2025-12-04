@@ -18,8 +18,6 @@ limitations under the License.
 package secrets
 
 import (
-	"fmt"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -39,9 +37,8 @@ type IndexerCertsSecretBuilder struct {
 
 // NewIndexerCertsSecretBuilder creates a new IndexerCertsSecretBuilder
 func NewIndexerCertsSecretBuilder(clusterName, namespace string) *IndexerCertsSecretBuilder {
-	name := fmt.Sprintf("%s-indexer-certs", clusterName)
 	return &IndexerCertsSecretBuilder{
-		name:        name,
+		name:        constants.IndexerCertsName(clusterName),
 		namespace:   namespace,
 		clusterName: clusterName,
 		version:     constants.DefaultWazuhVersion,
@@ -93,13 +90,13 @@ func (b *IndexerCertsSecretBuilder) WithNodeKey(key []byte) *IndexerCertsSecretB
 
 // WithAdminCert adds the admin certificate
 func (b *IndexerCertsSecretBuilder) WithAdminCert(cert []byte) *IndexerCertsSecretBuilder {
-	b.data["admin.crt"] = cert
+	b.data[constants.SecretKeyAdminCert] = cert
 	return b
 }
 
 // WithAdminKey adds the admin private key
 func (b *IndexerCertsSecretBuilder) WithAdminKey(key []byte) *IndexerCertsSecretBuilder {
-	b.data["admin.key"] = key
+	b.data[constants.SecretKeyAdminKey] = key
 	return b
 }
 
@@ -149,9 +146,8 @@ type IndexerSecuritySecretBuilder struct {
 
 // NewIndexerSecuritySecretBuilder creates a new IndexerSecuritySecretBuilder
 func NewIndexerSecuritySecretBuilder(clusterName, namespace string) *IndexerSecuritySecretBuilder {
-	name := fmt.Sprintf("%s-indexer-security", clusterName)
 	return &IndexerSecuritySecretBuilder{
-		name:        name,
+		name:        constants.IndexerSecurityName(clusterName),
 		namespace:   namespace,
 		clusterName: clusterName,
 		version:     constants.DefaultWazuhVersion,
@@ -185,37 +181,37 @@ func (b *IndexerSecuritySecretBuilder) WithAnnotations(annotations map[string]st
 
 // WithInternalUsers adds the internal_users.yml content
 func (b *IndexerSecuritySecretBuilder) WithInternalUsers(content []byte) *IndexerSecuritySecretBuilder {
-	b.data["internal_users.yml"] = content
+	b.data[constants.SecretKeyInternalUsers] = content
 	return b
 }
 
 // WithRoles adds the roles.yml content
 func (b *IndexerSecuritySecretBuilder) WithRoles(content []byte) *IndexerSecuritySecretBuilder {
-	b.data["roles.yml"] = content
+	b.data[constants.SecretKeyRoles] = content
 	return b
 }
 
 // WithRolesMapping adds the roles_mapping.yml content
 func (b *IndexerSecuritySecretBuilder) WithRolesMapping(content []byte) *IndexerSecuritySecretBuilder {
-	b.data["roles_mapping.yml"] = content
+	b.data[constants.SecretKeyRolesMapping] = content
 	return b
 }
 
 // WithActionGroups adds the action_groups.yml content
 func (b *IndexerSecuritySecretBuilder) WithActionGroups(content []byte) *IndexerSecuritySecretBuilder {
-	b.data["action_groups.yml"] = content
+	b.data[constants.SecretKeyActionGroups] = content
 	return b
 }
 
 // WithTenants adds the tenants.yml content
 func (b *IndexerSecuritySecretBuilder) WithTenants(content []byte) *IndexerSecuritySecretBuilder {
-	b.data["tenants.yml"] = content
+	b.data[constants.SecretKeyTenants] = content
 	return b
 }
 
 // WithConfig adds the config.yml content
 func (b *IndexerSecuritySecretBuilder) WithConfig(content []byte) *IndexerSecuritySecretBuilder {
-	b.data["config.yml"] = content
+	b.data[constants.SecretKeySecurityConfig] = content
 	return b
 }
 
@@ -267,9 +263,8 @@ type IndexerCredentialsSecretBuilder struct {
 
 // NewIndexerCredentialsSecretBuilder creates a new IndexerCredentialsSecretBuilder
 func NewIndexerCredentialsSecretBuilder(clusterName, namespace string) *IndexerCredentialsSecretBuilder {
-	name := fmt.Sprintf("%s-indexer-credentials", clusterName)
 	return &IndexerCredentialsSecretBuilder{
-		name:          name,
+		name:          constants.IndexerCredentialsName(clusterName),
 		namespace:     namespace,
 		clusterName:   clusterName,
 		version:       constants.DefaultWazuhVersion,
@@ -327,7 +322,7 @@ func (b *IndexerCredentialsSecretBuilder) Build() *corev1.Secret {
 	}
 
 	if b.kibanaPassword != "" {
-		data["kibana-password"] = []byte(b.kibanaPassword)
+		data[constants.SecretKeyKibanaPassword] = []byte(b.kibanaPassword)
 	}
 
 	return &corev1.Secret{
@@ -355,9 +350,8 @@ type DashboardCertsSecretBuilder struct {
 
 // NewDashboardCertsSecretBuilder creates a new DashboardCertsSecretBuilder
 func NewDashboardCertsSecretBuilder(clusterName, namespace string) *DashboardCertsSecretBuilder {
-	name := fmt.Sprintf("%s-dashboard-certs", clusterName)
 	return &DashboardCertsSecretBuilder{
-		name:        name,
+		name:        constants.DashboardCertsName(clusterName),
 		namespace:   namespace,
 		clusterName: clusterName,
 		version:     constants.DefaultWazuhVersion,
@@ -391,19 +385,19 @@ func (b *DashboardCertsSecretBuilder) WithAnnotations(annotations map[string]str
 
 // WithCACert adds the CA certificate
 func (b *DashboardCertsSecretBuilder) WithCACert(cert []byte) *DashboardCertsSecretBuilder {
-	b.data["root-ca.pem"] = cert
+	b.data[constants.SecretKeyRootCA] = cert
 	return b
 }
 
 // WithDashboardCert adds the dashboard certificate
 func (b *DashboardCertsSecretBuilder) WithDashboardCert(cert []byte) *DashboardCertsSecretBuilder {
-	b.data["dashboard.pem"] = cert
+	b.data[constants.SecretKeyDashboardCert] = cert
 	return b
 }
 
 // WithDashboardKey adds the dashboard private key
 func (b *DashboardCertsSecretBuilder) WithDashboardKey(key []byte) *DashboardCertsSecretBuilder {
-	b.data["dashboard-key.pem"] = key
+	b.data[constants.SecretKeyDashboardKey] = key
 	return b
 }
 

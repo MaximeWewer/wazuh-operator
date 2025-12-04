@@ -61,8 +61,8 @@ func (b *WorkerPVCBuilder) Build() *corev1.PersistentVolumeClaim {
 		constants.LabelName:      "wazuh-manager",
 		constants.LabelInstance:  b.clusterName,
 		constants.LabelComponent: "manager-worker",
-		constants.LabelPartOf:    "wazuh",
-		constants.LabelManagedBy: "wazuh-operator",
+		constants.LabelPartOf:    constants.AppName,
+		constants.LabelManagedBy: constants.OperatorName,
 	}
 
 	pvc := &corev1.PersistentVolumeClaim{
@@ -98,8 +98,8 @@ func (b *WorkerPVCBuilder) BuildVolumeClaimTemplate() corev1.PersistentVolumeCla
 		constants.LabelName:      "wazuh-manager",
 		constants.LabelInstance:  b.clusterName,
 		constants.LabelComponent: "manager-worker",
-		constants.LabelPartOf:    "wazuh",
-		constants.LabelManagedBy: "wazuh-operator",
+		constants.LabelPartOf:    constants.AppName,
+		constants.LabelManagedBy: constants.OperatorName,
 	}
 
 	pvc := corev1.PersistentVolumeClaim{

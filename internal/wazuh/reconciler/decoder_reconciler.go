@@ -76,7 +76,7 @@ func (r *DecoderReconciler) reconcileConfigMap(ctx context.Context, decoder *waz
 			Labels: map[string]string{
 				constants.LabelName:      "wazuh-decoder",
 				constants.LabelInstance:  decoder.Name,
-				constants.LabelManagedBy: "wazuh-operator",
+				constants.LabelManagedBy: constants.OperatorName,
 				constants.LabelComponent: "decoder",
 			},
 		},

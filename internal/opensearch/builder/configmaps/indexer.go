@@ -18,8 +18,6 @@ limitations under the License.
 package configmaps
 
 import (
-	"fmt"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -52,9 +50,8 @@ type IndexerConfigMapBuilder struct {
 
 // NewIndexerConfigMapBuilder creates a new IndexerConfigMapBuilder
 func NewIndexerConfigMapBuilder(clusterName, namespace string) *IndexerConfigMapBuilder {
-	name := fmt.Sprintf("%s-indexer-config", clusterName)
 	return &IndexerConfigMapBuilder{
-		name:        name,
+		name:        constants.IndexerConfigName(clusterName),
 		namespace:   namespace,
 		clusterName: clusterName,
 		version:     constants.DefaultWazuhVersion,

@@ -61,7 +61,7 @@ func NewWorkerHealthChecker(host string) *WorkerHealthChecker {
 	return &WorkerHealthChecker{
 		host:    host,
 		port:    constants.PortManagerAPI,
-		timeout: 10 * time.Second,
+		timeout: constants.TimeoutHealthCheck,
 		tlsConfig: &tls.Config{
 			InsecureSkipVerify: true,
 		},
@@ -218,7 +218,7 @@ func (c *WorkerHealthChecker) IsHealthy(ctx context.Context) (bool, error) {
 // WaitForReady waits for the worker to become ready
 func (c *WorkerHealthChecker) WaitForReady(ctx context.Context, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(constants.PollIntervalHealthCheck)
 	defer ticker.Stop()
 
 	for {

@@ -76,7 +76,7 @@ func (r *RuleReconciler) reconcileConfigMap(ctx context.Context, rule *wazuhv1al
 			Labels: map[string]string{
 				constants.LabelName:      "wazuh-rule",
 				constants.LabelInstance:  rule.Name,
-				constants.LabelManagedBy: "wazuh-operator",
+				constants.LabelManagedBy: constants.OperatorName,
 				constants.LabelComponent: "rule",
 			},
 		},

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // SecurityHealthResponse represents the response from /_plugins/_security/health
@@ -93,7 +94,7 @@ func (c *SecurityInitializationChecker) checkSecurityHealth(ctx context.Context)
 
 // checkSecurityIndexExists verifies the .opendistro_security index exists
 func (c *SecurityInitializationChecker) checkSecurityIndexExists(ctx context.Context) (bool, error) {
-	resp, err := c.client.Get(ctx, "/.opendistro_security")
+	resp, err := c.client.Get(ctx, "/"+constants.IndexOpenDistroSecurity)
 	if err != nil {
 		return false, err
 	}
@@ -116,7 +117,7 @@ func (c *SecurityInitializationChecker) WaitForInitialization(ctx context.Contex
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(constants.PollIntervalHealthCheck)
 	defer ticker.Stop()
 
 	for {

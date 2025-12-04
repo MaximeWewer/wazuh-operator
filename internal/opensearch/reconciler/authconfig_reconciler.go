@@ -30,6 +30,7 @@ import (
 	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/config"
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // AuthConfigReconciler handles reconciliation of OpenSearch authentication configuration
@@ -209,10 +210,10 @@ func (r *AuthConfigReconciler) reconcileIndexerSecurityConfig(
 			Name:      configMapName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/name":       "opensearch-security-config",
-				"app.kubernetes.io/instance":   clusterName,
-				"app.kubernetes.io/component":  "security",
-				"app.kubernetes.io/managed-by": "wazuh-operator",
+				constants.LabelName:      constants.AppName + "-security-config",
+				constants.LabelInstance:  clusterName,
+				constants.LabelComponent: constants.ComponentSecurity,
+				constants.LabelManagedBy: constants.OperatorName,
 			},
 		},
 		Data: map[string]string{
@@ -270,16 +271,16 @@ func (r *AuthConfigReconciler) reconcileDashboardConfig(
 	authSection := builder.BuildAuthSection()
 
 	// Create ConfigMap for dashboard auth config
-	configMapName := fmt.Sprintf("%s-dashboard-auth-config", clusterName)
+	configMapName := constants.DashboardAuthConfigName(clusterName)
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      configMapName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/name":       "opensearch-dashboard-auth",
-				"app.kubernetes.io/instance":   clusterName,
-				"app.kubernetes.io/component":  "dashboard-auth",
-				"app.kubernetes.io/managed-by": "wazuh-operator",
+				constants.LabelName:      constants.AppName + "-dashboard-auth",
+				constants.LabelInstance:  clusterName,
+				constants.LabelComponent: constants.ComponentDashboardAuth,
+				constants.LabelManagedBy: constants.OperatorName,
 			},
 		},
 		Data: map[string]string{

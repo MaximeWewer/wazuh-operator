@@ -19,12 +19,12 @@ package metrics
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
-const (
-	// MetricsSubsystemOpenSearch is the subsystem for OpenSearch-specific metrics
-	MetricsSubsystemOpenSearch = "opensearch"
-)
+// Re-export opensearch subsystem constant for backwards compatibility
+const MetricsSubsystemOpenSearch = constants.MetricsSubsystemOpenSearch
 
 var (
 	// OpenSearchClusterHealth tracks the health of OpenSearch clusters

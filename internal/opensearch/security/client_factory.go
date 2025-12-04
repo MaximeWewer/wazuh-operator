@@ -83,7 +83,7 @@ func (f *OpenSearchClientFactory) GetClientForCluster(ctx context.Context, clust
 
 // getCredentials retrieves admin credentials from the indexer-credentials secret
 func (f *OpenSearchClientFactory) getCredentials(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (username, password string, err error) {
-	secretName := fmt.Sprintf("%s-indexer-credentials", cluster.Name)
+	secretName := constants.IndexerCredentialsName(cluster.Name)
 	secretKey := types.NamespacedName{
 		Name:      secretName,
 		Namespace: cluster.Namespace,
@@ -109,7 +109,7 @@ func (f *OpenSearchClientFactory) getCredentials(ctx context.Context, cluster *w
 
 // getCACertificate retrieves the CA certificate from the indexer-certs secret
 func (f *OpenSearchClientFactory) getCACertificate(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) ([]byte, error) {
-	secretName := fmt.Sprintf("%s-indexer-certs", cluster.Name)
+	secretName := constants.IndexerCertsName(cluster.Name)
 	secretKey := types.NamespacedName{
 		Name:      secretName,
 		Namespace: cluster.Namespace,
@@ -131,9 +131,8 @@ func (f *OpenSearchClientFactory) getCACertificate(ctx context.Context, cluster 
 // buildServiceURL builds the internal service URL for the indexer
 func (f *OpenSearchClientFactory) buildServiceURL(cluster *wazuhv1alpha1.WazuhCluster) string {
 	// Format: https://{cluster-name}-indexer.{namespace}.svc.cluster.local:9200
-	return fmt.Sprintf("https://%s-indexer.%s.svc.cluster.local:%d",
-		cluster.Name,
-		cluster.Namespace,
+	return fmt.Sprintf("https://%s:%d",
+		constants.IndexerServiceFQDN(cluster.Name, cluster.Namespace),
 		constants.PortIndexerREST,
 	)
 }

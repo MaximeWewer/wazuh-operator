@@ -27,6 +27,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // Client provides access to the OpenSearch API
@@ -81,7 +83,7 @@ func NewClient(config ClientConfig) (*Client, error) {
 
 	timeout := config.Timeout
 	if timeout == 0 {
-		timeout = 30 * time.Second
+		timeout = constants.TimeoutOpenSearchRequest
 	}
 
 	return &Client{

@@ -52,8 +52,8 @@ func (b *FilebeatConfigMapBuilder) Build() *corev1.ConfigMap {
 		constants.LabelName:      "filebeat",
 		constants.LabelInstance:  b.clusterName,
 		constants.LabelComponent: "filebeat",
-		constants.LabelPartOf:    "wazuh",
-		constants.LabelManagedBy: "wazuh-operator",
+		constants.LabelPartOf:    constants.AppName,
+		constants.LabelManagedBy: constants.OperatorName,
 	}
 
 	return &corev1.ConfigMap{

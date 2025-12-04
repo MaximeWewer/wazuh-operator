@@ -18,8 +18,6 @@ limitations under the License.
 package services
 
 import (
-	"fmt"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -42,9 +40,8 @@ type IndexerServiceBuilder struct {
 
 // NewIndexerServiceBuilder creates a new IndexerServiceBuilder
 func NewIndexerServiceBuilder(clusterName, namespace string) *IndexerServiceBuilder {
-	name := fmt.Sprintf("%s-indexer", clusterName)
 	return &IndexerServiceBuilder{
-		name:        name,
+		name:        constants.IndexerName(clusterName),
 		namespace:   namespace,
 		clusterName: clusterName,
 		version:     constants.DefaultWazuhVersion,

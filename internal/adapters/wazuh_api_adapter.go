@@ -24,6 +24,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // WazuhAPIAdapter provides access to the Wazuh Manager API
@@ -53,7 +55,7 @@ func NewWazuhAPIAdapter(config WazuhAPIConfig) *WazuhAPIAdapter {
 
 	timeout := config.Timeout
 	if timeout == 0 {
-		timeout = 30 * time.Second
+		timeout = constants.TimeoutAPIRequest
 	}
 
 	return &WazuhAPIAdapter{
@@ -106,7 +108,7 @@ func (a *WazuhAPIAdapter) Authenticate(ctx context.Context) error {
 	}
 
 	a.token = authResp.Data.Token
-	a.tokenExp = time.Now().Add(15 * time.Minute) // Token valid for 15 minutes
+	a.tokenExp = time.Now().Add(constants.TokenValidityDuration)
 
 	return nil
 }

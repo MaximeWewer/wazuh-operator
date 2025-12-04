@@ -68,8 +68,8 @@ func (b *CertificateSecretBuilder) Build() *corev1.Secret {
 		constants.LabelName:      b.componentName,
 		constants.LabelInstance:  b.clusterName,
 		constants.LabelComponent: b.componentName,
-		constants.LabelPartOf:    "wazuh",
-		constants.LabelManagedBy: "wazuh-operator",
+		constants.LabelPartOf:    constants.AppName,
+		constants.LabelManagedBy: constants.OperatorName,
 	}
 
 	data := map[string][]byte{}
@@ -137,8 +137,8 @@ func (b *FilebeatCertSecretBuilder) Build() *corev1.Secret {
 		constants.LabelName:      "filebeat",
 		constants.LabelInstance:  b.clusterName,
 		constants.LabelComponent: "filebeat",
-		constants.LabelPartOf:    "wazuh",
-		constants.LabelManagedBy: "wazuh-operator",
+		constants.LabelPartOf:    constants.AppName,
+		constants.LabelManagedBy: constants.OperatorName,
 	}
 
 	data := map[string][]byte{}

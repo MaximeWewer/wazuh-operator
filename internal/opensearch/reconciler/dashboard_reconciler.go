@@ -97,14 +97,14 @@ func (r *DashboardReconciler) reconcileSecrets(ctx context.Context, cluster *waz
 	log := logf.FromContext(ctx)
 
 	// Check if certificates already exist
-	certsSecretName := fmt.Sprintf("%s-dashboard-certs", cluster.Name)
+	certsSecretName := constants.DashboardCertsName(cluster.Name)
 	found := &corev1.Secret{}
 	err := r.Get(ctx, types.NamespacedName{Name: certsSecretName, Namespace: cluster.Namespace}, found)
 
 	if err != nil && errors.IsNotFound(err) {
 		// Get CA from indexer certificates
 		indexerCertsSecret := &corev1.Secret{}
-		indexerCertsName := fmt.Sprintf("%s-indexer-certs", cluster.Name)
+		indexerCertsName := constants.IndexerCertsName(cluster.Name)
 		if err := r.Get(ctx, types.NamespacedName{Name: indexerCertsName, Namespace: cluster.Namespace}, indexerCertsSecret); err != nil {
 			return fmt.Errorf("failed to get indexer certificates (required for dashboard): %w", err)
 		}
@@ -158,7 +158,7 @@ func (r *DashboardReconciler) generateDashboardCertificates(ctx context.Context,
 
 	// Generate a self-signed CA for dashboard's HTTPS server certificate
 	// This is separate from the indexer CA (which is used for OpenSearch connection)
-	caConfig := certificates.DefaultCAConfig(fmt.Sprintf("%s-dashboard-ca", cluster.Name))
+	caConfig := certificates.DefaultCAConfig(constants.DashboardCAName(cluster.Name))
 	ca, err := certificates.GenerateCA(caConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate CA: %w", err)
@@ -217,7 +217,7 @@ func (r *DashboardReconciler) reconcileConfigMap(ctx context.Context, cluster *w
 
 // getConfigHash retrieves the current config hash from the dashboard ConfigMap
 func (r *DashboardReconciler) getConfigHash(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) string {
-	configMapName := fmt.Sprintf("%s-dashboard-config", cluster.Name)
+	configMapName := constants.DashboardConfigName(cluster.Name)
 	configMap := &corev1.ConfigMap{}
 	err := r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: cluster.Namespace}, configMap)
 	if err != nil {
@@ -689,7 +689,7 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 // GetStatus gets the dashboard status
 func (r *DashboardReconciler) GetStatus(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*wazuhv1alpha1.ComponentStatus, error) {
 	dep := &appsv1.Deployment{}
-	name := fmt.Sprintf("%s-dashboard", cluster.Name)
+	name := constants.DashboardName(cluster.Name)
 
 	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: cluster.Namespace}, dep); err != nil {
 		if errors.IsNotFound(err) {
@@ -787,7 +787,7 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 	configBuilder := configmaps.NewDashboardConfigMapBuilder(dashboard.Name, dashboard.Namespace)
 	// Use IndexerRef to determine the indexer host
 	if dashboard.Spec.IndexerRef != "" {
-		indexerHost := fmt.Sprintf("%s-indexer.%s.svc.cluster.local", dashboard.Spec.IndexerRef, dashboard.Namespace)
+		indexerHost := constants.IndexerServiceFQDN(dashboard.Spec.IndexerRef, dashboard.Namespace)
 		configBuilder.WithIndexerHost(indexerHost)
 	}
 	// Pass wazuhPlugin configuration if defined

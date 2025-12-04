@@ -17,6 +17,10 @@ limitations under the License.
 // Package certificates provides certificate generation utilities
 package certificates
 
+import (
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
+)
+
 // CertificateOptions holds the certificate generation options from the CRD
 // These options are used to configure certificate validity, renewal thresholds, and subject fields
 type CertificateOptions struct {
@@ -86,15 +90,15 @@ type CertificateOptions struct {
 // DefaultCertificateOptions returns the default certificate options
 func DefaultCertificateOptions() *CertificateOptions {
 	return &CertificateOptions{
-		CAValidityDays:            DefaultCAValidityDays,   // 3650 (10 years)
-		CARenewalThresholdDays:    60,                      // 60 days before CA expiry
-		NodeValidityDays:          DefaultNodeValidityDays, // 365 (1 year)
-		RenewalThresholdDays:      30,                      // 30 days before expiry
+		CAValidityDays:            DefaultCAValidityDays,
+		CARenewalThresholdDays:    constants.CertRenewalThresholdCADays,
+		NodeValidityDays:          DefaultNodeValidityDays,
+		RenewalThresholdDays:      constants.CertRenewalThresholdNodeDays,
 		TestMode:                  false,
-		CAValidityMinutes:         15, // 15 minutes for CA in test mode
-		CARenewalThresholdMinutes: 5,  // 5 minutes before CA expiry in test mode
-		ValidityMinutes:           8,  // 8 minutes for node certs in test mode
-		RenewalThresholdMinutes:   3,  // 3 minutes before node cert expiry in test mode
+		CAValidityMinutes:         constants.TestModeCAValidityMinutes,
+		CARenewalThresholdMinutes: constants.TestModeCARenewalThresholdMinutes,
+		ValidityMinutes:           constants.TestModeNodeValidityMinutes,
+		RenewalThresholdMinutes:   constants.TestModeNodeRenewalThresholdMinutes,
 		// Certificate subject defaults
 		Country:            DefaultCountry,
 		State:              DefaultState,
@@ -108,14 +112,14 @@ func DefaultCertificateOptions() *CertificateOptions {
 func TestModeCertificateOptions() *CertificateOptions {
 	return &CertificateOptions{
 		CAValidityDays:            DefaultCAValidityDays,
-		CARenewalThresholdDays:    60,
+		CARenewalThresholdDays:    constants.CertRenewalThresholdCADays,
 		NodeValidityDays:          DefaultNodeValidityDays,
-		RenewalThresholdDays:      30,
+		RenewalThresholdDays:      constants.CertRenewalThresholdNodeDays,
 		TestMode:                  true,
-		CAValidityMinutes:         15, // 15 minutes for CA in test mode
-		CARenewalThresholdMinutes: 5,  // 5 minutes before CA expiry in test mode
-		ValidityMinutes:           8,  // 8 minutes for node certs in test mode
-		RenewalThresholdMinutes:   3,  // 3 minutes before node cert expiry in test mode
+		CAValidityMinutes:         constants.TestModeCAValidityMinutes,
+		CARenewalThresholdMinutes: constants.TestModeCARenewalThresholdMinutes,
+		ValidityMinutes:           constants.TestModeNodeValidityMinutes,
+		RenewalThresholdMinutes:   constants.TestModeNodeRenewalThresholdMinutes,
 		// Certificate subject defaults
 		Country:            DefaultCountry,
 		State:              DefaultState,
@@ -146,7 +150,7 @@ func (o *CertificateOptions) GetCARenewalThresholdDays() int {
 	if o.CARenewalThresholdDays > 0 {
 		return o.CARenewalThresholdDays
 	}
-	return 60
+	return constants.CertRenewalThresholdCADays
 }
 
 // GetRenewalThresholdDays returns the node cert renewal threshold in days
@@ -154,7 +158,7 @@ func (o *CertificateOptions) GetRenewalThresholdDays() int {
 	if o.RenewalThresholdDays > 0 {
 		return o.RenewalThresholdDays
 	}
-	return 30
+	return constants.CertRenewalThresholdNodeDays
 }
 
 // GetCAValidityMinutes returns the CA validity period in minutes for test mode
@@ -162,7 +166,7 @@ func (o *CertificateOptions) GetCAValidityMinutes() int {
 	if o.CAValidityMinutes > 0 {
 		return o.CAValidityMinutes
 	}
-	return 15
+	return constants.TestModeCAValidityMinutes
 }
 
 // GetCARenewalThresholdMinutes returns the CA renewal threshold in minutes for test mode
@@ -170,7 +174,7 @@ func (o *CertificateOptions) GetCARenewalThresholdMinutes() int {
 	if o.CARenewalThresholdMinutes > 0 {
 		return o.CARenewalThresholdMinutes
 	}
-	return 5
+	return constants.TestModeCARenewalThresholdMinutes
 }
 
 // GetValidityMinutes returns the node cert validity period in minutes for test mode
@@ -178,7 +182,7 @@ func (o *CertificateOptions) GetValidityMinutes() int {
 	if o.ValidityMinutes > 0 {
 		return o.ValidityMinutes
 	}
-	return 8
+	return constants.TestModeNodeValidityMinutes
 }
 
 // GetRenewalThresholdMinutes returns the node cert renewal threshold in minutes for test mode
@@ -186,7 +190,7 @@ func (o *CertificateOptions) GetRenewalThresholdMinutes() int {
 	if o.RenewalThresholdMinutes > 0 {
 		return o.RenewalThresholdMinutes
 	}
-	return 3
+	return constants.TestModeNodeRenewalThresholdMinutes
 }
 
 // ShouldRenewCA checks if a CA certificate should be renewed based on options

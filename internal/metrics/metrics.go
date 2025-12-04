@@ -20,17 +20,15 @@ package metrics
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
+// Re-export constants for backwards compatibility within the metrics package
 const (
-	// MetricsNamespace is the namespace for all Wazuh operator metrics
-	MetricsNamespace = "wazuh_operator"
-
-	// MetricsSubsystemReconciler is the subsystem for reconciler metrics
-	MetricsSubsystemReconciler = "reconciler"
-
-	// MetricsSubsystemCluster is the subsystem for cluster metrics
-	MetricsSubsystemCluster = "cluster"
+	MetricsNamespace           = constants.MetricsNamespace
+	MetricsSubsystemReconciler = constants.MetricsSubsystemReconciler
+	MetricsSubsystemCluster    = constants.MetricsSubsystemCluster
 )
 
 var (

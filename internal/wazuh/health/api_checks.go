@@ -59,7 +59,7 @@ func NewAPIHealthChecker(host string) *APIHealthChecker {
 	return &APIHealthChecker{
 		host:    host,
 		port:    constants.PortManagerAPI,
-		timeout: 10 * time.Second,
+		timeout: constants.TimeoutHealthCheck,
 		tlsConfig: &tls.Config{
 			InsecureSkipVerify: true,
 		},
@@ -189,7 +189,7 @@ func (c *APIHealthChecker) IsAuthenticated(ctx context.Context) (bool, error) {
 // WaitForAvailable waits for the API to become available
 func (c *APIHealthChecker) WaitForAvailable(ctx context.Context, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(constants.PollIntervalHealthCheck)
 	defer ticker.Stop()
 
 	for {

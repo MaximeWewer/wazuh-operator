@@ -28,6 +28,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// Rollout timing constants
+// These are defined here to avoid import cycle with pkg/constants
 const (
 	// DefaultRolloutTimeout is the default timeout for waiting for a rollout to complete
 	DefaultRolloutTimeout = 5 * time.Minute

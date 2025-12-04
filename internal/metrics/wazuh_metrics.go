@@ -19,12 +19,12 @@ package metrics
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
-const (
-	// MetricsSubsystemWazuh is the subsystem for Wazuh-specific metrics
-	MetricsSubsystemWazuh = "wazuh"
-)
+// Re-export wazuh subsystem constant for backwards compatibility
+const MetricsSubsystemWazuh = constants.MetricsSubsystemWazuh
 
 var (
 	// WazuhClusterStatus tracks the status of Wazuh clusters

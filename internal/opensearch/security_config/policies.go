@@ -16,6 +16,8 @@ limitations under the License.
 
 package security_config
 
+import "github.com/MaximeWewer/wazuh-operator/pkg/constants"
+
 // ISMPolicyBuilder builds OpenSearch ISM policies
 type ISMPolicyBuilder struct {
 	policyID     string
@@ -140,45 +142,45 @@ func (b *ISMPolicyBuilder) Build() map[string]interface{} {
 
 // DefaultWazuhISMPolicy returns the default Wazuh ISM policy for index lifecycle
 func DefaultWazuhISMPolicy() map[string]interface{} {
-	return NewISMPolicyBuilder("wazuh-alerts-policy").
-		WithDescription("Wazuh alerts index lifecycle policy").
-		WithDefaultState("hot").
+	return NewISMPolicyBuilder(constants.ISMPolicyName).
+		WithDescription(constants.ISMPolicyDescription).
+		WithDefaultState(constants.ISMDefaultState).
 		AddState(ISMState{
-			Name: "hot",
+			Name: constants.ISMStateHot,
 			Actions: []ISMAction{
 				{Type: "rollover", Config: map[string]interface{}{
-					"min_index_age": "1d",
-					"min_doc_count": 100000000,
+					"min_index_age": constants.ISMHotStateMinIndexAge,
+					"min_doc_count": constants.ISMHotStateMinDocCount,
 				}},
 			},
 			Transitions: []ISMTransition{
-				{StateName: "warm", Conditions: map[string]interface{}{
-					"min_index_age": "7d",
+				{StateName: constants.ISMStateWarm, Conditions: map[string]interface{}{
+					"min_index_age": constants.ISMWarmStateMinIndexAge,
 				}},
 			},
 		}).
 		AddState(ISMState{
-			Name: "warm",
+			Name: constants.ISMStateWarm,
 			Actions: []ISMAction{
 				{Type: "replica_count", Config: map[string]interface{}{
-					"number_of_replicas": 0,
+					"number_of_replicas": constants.ISMWarmStateReplicas,
 				}},
 			},
 			Transitions: []ISMTransition{
-				{StateName: "delete", Conditions: map[string]interface{}{
-					"min_index_age": "30d",
+				{StateName: constants.ISMStateDelete, Conditions: map[string]interface{}{
+					"min_index_age": constants.ISMDeleteStateMinIndexAge,
 				}},
 			},
 		}).
 		AddState(ISMState{
-			Name: "delete",
+			Name: constants.ISMStateDelete,
 			Actions: []ISMAction{
 				{Type: "delete", Config: map[string]interface{}{}},
 			},
 		}).
 		AddTemplate(ISMTemplate{
-			IndexPatterns: []string{"wazuh-alerts-*"},
-			Priority:      100,
+			IndexPatterns: []string{constants.ISMTemplateIndexPattern},
+			Priority:      constants.ISMTemplatePriority,
 		}).
 		Build()
 }

@@ -90,7 +90,7 @@ func NewIndexerHealthChecker(host string) *IndexerHealthChecker {
 	return &IndexerHealthChecker{
 		host:    host,
 		port:    constants.PortIndexerREST,
-		timeout: 10 * time.Second,
+		timeout: constants.TimeoutHealthCheck,
 		tlsConfig: &tls.Config{
 			InsecureSkipVerify: true, // Default to skip verify for internal checks
 		},
@@ -211,7 +211,7 @@ func (c *IndexerHealthChecker) IsGreen(ctx context.Context) (bool, error) {
 // WaitForGreen waits for the cluster to become green
 func (c *IndexerHealthChecker) WaitForGreen(ctx context.Context, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(constants.PollIntervalHealthCheck)
 	defer ticker.Stop()
 
 	for {
@@ -236,7 +236,7 @@ func (c *IndexerHealthChecker) WaitForGreen(ctx context.Context, timeout time.Du
 // WaitForReady waits for the cluster to become ready (not red)
 func (c *IndexerHealthChecker) WaitForReady(ctx context.Context, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(constants.PollIntervalHealthCheck)
 	defer ticker.Stop()
 
 	for {

@@ -19,6 +19,8 @@ package config
 import (
 	"fmt"
 	"strings"
+
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // IndexPermission represents permissions for index patterns
@@ -157,8 +159,8 @@ func DefaultRolesConfig() *RolesConfig {
 						IndexPatterns: []string{
 							".kibana",
 							".kibana-*",
-							".opensearch_dashboards",
-							".opensearch_dashboards-*",
+							constants.IndexOpenSearchDashboards,
+							constants.IndexOpenSearchDashboardsWildcard,
 						},
 						AllowedActions: []string{
 							"read",
@@ -189,8 +191,8 @@ func DefaultRolesConfig() *RolesConfig {
 						IndexPatterns: []string{
 							".kibana",
 							".kibana-*",
-							".opensearch_dashboards",
-							".opensearch_dashboards-*",
+							constants.IndexOpenSearchDashboards,
+							constants.IndexOpenSearchDashboardsWildcard,
 						},
 						AllowedActions: []string{"indices_all"},
 					},

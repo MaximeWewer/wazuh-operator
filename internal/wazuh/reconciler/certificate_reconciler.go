@@ -320,37 +320,37 @@ func (r *CertificateReconciler) collectCertHashes(ctx context.Context, cluster *
 	}
 
 	// Dashboard hash
-	result.DashboardCertHash, err = getSecretHash(cluster.Name + "-dashboard-certs")
+	result.DashboardCertHash, err = getSecretHash(constants.DashboardCertsName(cluster.Name))
 	if err != nil {
 		return result, fmt.Errorf("failed to get dashboard secret hash: %w", err)
 	}
 
 	// Indexer hash
-	result.IndexerCertHash, err = getSecretHash(cluster.Name + "-indexer-certs")
+	result.IndexerCertHash, err = getSecretHash(constants.IndexerCertsName(cluster.Name))
 	if err != nil {
 		return result, fmt.Errorf("failed to get indexer secret hash: %w", err)
 	}
 
 	// Manager master hash
-	result.ManagerMasterCertHash, err = getSecretHash(cluster.Name + "-manager-master-certs")
+	result.ManagerMasterCertHash, err = getSecretHash(constants.ManagerMasterCertsName(cluster.Name))
 	if err != nil {
 		return result, fmt.Errorf("failed to get manager master secret hash: %w", err)
 	}
 
 	// Manager worker hash
-	result.ManagerWorkerCertHash, err = getSecretHash(cluster.Name + "-manager-worker-certs")
+	result.ManagerWorkerCertHash, err = getSecretHash(constants.ManagerWorkerCertsName(cluster.Name))
 	if err != nil {
 		return result, fmt.Errorf("failed to get manager worker secret hash: %w", err)
 	}
 
 	// Filebeat hash
-	result.FilebeatCertHash, err = getSecretHash(cluster.Name + "-filebeat-certs")
+	result.FilebeatCertHash, err = getSecretHash(constants.FilebeatCertsName(cluster.Name))
 	if err != nil {
 		return result, fmt.Errorf("failed to get filebeat secret hash: %w", err)
 	}
 
 	// Admin hash
-	result.AdminCertHash, err = getSecretHash(cluster.Name + "-admin-certs")
+	result.AdminCertHash, err = getSecretHash(constants.AdminCertsName(cluster.Name))
 	if err != nil {
 		return result, fmt.Errorf("failed to get admin secret hash: %w", err)
 	}
@@ -429,8 +429,8 @@ func (r *CertificateReconciler) reconcileCA(ctx context.Context, cluster *wazuhv
 				constants.LabelName:         "wazuh-ca",
 				constants.LabelInstance:     cluster.Name,
 				constants.LabelComponent:    "certificates",
-				constants.LabelPartOf:       "wazuh",
-				constants.LabelManagedBy:    "wazuh-operator",
+				constants.LabelPartOf:       constants.AppName,
+				constants.LabelManagedBy:    constants.OperatorName,
 				constants.LabelWazuhCluster: cluster.Name,
 			},
 		},
@@ -485,14 +485,14 @@ func (r *CertificateReconciler) reconcileManagerCerts(ctx context.Context, clust
 	sans := certificates.GenerateManagerNodeSANs(cluster.Name, cluster.Namespace, workerReplicas)
 
 	// Master certificate
-	masterSecretName := cluster.Name + "-manager-master-certs"
-	if err := r.reconcileNodeCert(ctx, cluster, masterSecretName, "manager-master", sans, caResult, certOpts); err != nil {
+	masterSecretName := constants.ManagerMasterCertsName(cluster.Name)
+	if err := r.reconcileNodeCert(ctx, cluster, masterSecretName, constants.CertComponentManagerMaster, sans, caResult, certOpts); err != nil {
 		return fmt.Errorf("failed to reconcile master certificate: %w", err)
 	}
 
 	// Worker certificate
-	workerSecretName := cluster.Name + "-manager-worker-certs"
-	if err := r.reconcileNodeCert(ctx, cluster, workerSecretName, "manager-worker", sans, caResult, certOpts); err != nil {
+	workerSecretName := constants.ManagerWorkerCertsName(cluster.Name)
+	if err := r.reconcileNodeCert(ctx, cluster, workerSecretName, constants.CertComponentManagerWorker, sans, caResult, certOpts); err != nil {
 		return fmt.Errorf("failed to reconcile worker certificate: %w", err)
 	}
 
@@ -509,14 +509,14 @@ func (r *CertificateReconciler) reconcileIndexerCerts(ctx context.Context, clust
 	}
 	sans := certificates.GenerateIndexerNodeSANs(cluster.Name, cluster.Namespace, replicas)
 
-	secretName := cluster.Name + "-indexer-certs"
-	return r.reconcileNodeCertWithRenewalStatus(ctx, cluster, secretName, "indexer", sans, caResult, certOpts)
+	secretName := constants.IndexerCertsName(cluster.Name)
+	return r.reconcileNodeCertWithRenewalStatus(ctx, cluster, secretName, constants.CertComponentIndexer, sans, caResult, certOpts)
 }
 
 // reconcileDashboardCerts reconciles dashboard certificates
 func (r *CertificateReconciler) reconcileDashboardCerts(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) error {
 	log := logf.FromContext(ctx)
-	secretName := cluster.Name + "-dashboard-certs"
+	secretName := constants.DashboardCertsName(cluster.Name)
 
 	// Check if secret exists
 	found := &corev1.Secret{}
@@ -578,8 +578,8 @@ func (r *CertificateReconciler) reconcileDashboardCerts(ctx context.Context, clu
 				constants.LabelName:         "wazuh-dashboard",
 				constants.LabelInstance:     cluster.Name,
 				constants.LabelComponent:    "dashboard",
-				constants.LabelPartOf:       "wazuh",
-				constants.LabelManagedBy:    "wazuh-operator",
+				constants.LabelPartOf:       constants.AppName,
+				constants.LabelManagedBy:    constants.OperatorName,
 				constants.LabelWazuhCluster: cluster.Name,
 			},
 		},
@@ -616,7 +616,7 @@ func (r *CertificateReconciler) reconcileDashboardCerts(ctx context.Context, clu
 // reconcileFilebeatCerts reconciles filebeat certificates
 func (r *CertificateReconciler) reconcileFilebeatCerts(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) error {
 	log := logf.FromContext(ctx)
-	secretName := cluster.Name + "-filebeat-certs"
+	secretName := constants.FilebeatCertsName(cluster.Name)
 
 	// Check if secret exists
 	found := &corev1.Secret{}
@@ -683,8 +683,8 @@ func (r *CertificateReconciler) reconcileFilebeatCerts(ctx context.Context, clus
 				constants.LabelName:         "wazuh-filebeat",
 				constants.LabelInstance:     cluster.Name,
 				constants.LabelComponent:    "filebeat",
-				constants.LabelPartOf:       "wazuh",
-				constants.LabelManagedBy:    "wazuh-operator",
+				constants.LabelPartOf:       constants.AppName,
+				constants.LabelManagedBy:    constants.OperatorName,
 				constants.LabelWazuhCluster: cluster.Name,
 			},
 		},
@@ -721,7 +721,7 @@ func (r *CertificateReconciler) reconcileFilebeatCerts(ctx context.Context, clus
 // reconcileAdminCerts reconciles admin certificates
 func (r *CertificateReconciler) reconcileAdminCerts(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) error {
 	log := logf.FromContext(ctx)
-	secretName := cluster.Name + "-admin-certs"
+	secretName := constants.AdminCertsName(cluster.Name)
 
 	// Check if secret exists
 	found := &corev1.Secret{}
@@ -781,8 +781,8 @@ func (r *CertificateReconciler) reconcileAdminCerts(ctx context.Context, cluster
 				constants.LabelName:         "wazuh-admin",
 				constants.LabelInstance:     cluster.Name,
 				constants.LabelComponent:    "certificates",
-				constants.LabelPartOf:       "wazuh",
-				constants.LabelManagedBy:    "wazuh-operator",
+				constants.LabelPartOf:       constants.AppName,
+				constants.LabelManagedBy:    constants.OperatorName,
 				constants.LabelWazuhCluster: cluster.Name,
 			},
 		},
@@ -1001,8 +1001,8 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 				constants.LabelName:      "wazuh-certificate",
 				constants.LabelInstance:  cert.Name,
 				constants.LabelComponent: string(cert.Spec.Type),
-				constants.LabelPartOf:    "wazuh",
-				constants.LabelManagedBy: "wazuh-operator",
+				constants.LabelPartOf:    constants.AppName,
+				constants.LabelManagedBy: constants.OperatorName,
 			},
 		},
 		Type: corev1.SecretTypeOpaque,
@@ -1180,8 +1180,8 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 				constants.LabelName:         fmt.Sprintf("wazuh-%s", componentName),
 				constants.LabelInstance:     cluster.Name,
 				constants.LabelComponent:    componentName,
-				constants.LabelPartOf:       "wazuh",
-				constants.LabelManagedBy:    "wazuh-operator",
+				constants.LabelPartOf:       constants.AppName,
+				constants.LabelManagedBy:    constants.OperatorName,
 				constants.LabelWazuhCluster: cluster.Name,
 			},
 		},

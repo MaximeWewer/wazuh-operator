@@ -258,7 +258,7 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	// Build containers list
 	containers := []corev1.Container{
 		{
-			Name:            "wazuh-manager",
+			Name:            constants.ContainerNameWazuhManager,
 			Image:           image,
 			ImagePullPolicy: corev1.PullIfNotPresent,
 			Resources:       *resources,
@@ -365,7 +365,7 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:   "wazuh-manager-data",
+						Name:   constants.VolumeNameWazuhData,
 						Labels: selectorLabels,
 					},
 					Spec: corev1.PersistentVolumeClaimSpec{
@@ -407,34 +407,34 @@ func (b *ManagerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 	volumes := []corev1.Volume{
 		// ConfigMap source (read-only)
 		{
-			Name: "wazuh-config-source",
+			Name: constants.VolumeNameWazuhConfigSource,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-manager-%s-config", b.clusterName, b.nodeType),
+						Name: constants.ManagerConfigName(b.clusterName, b.nodeType),
 					},
 				},
 			},
 		},
 		// Writable volume for ossec.conf (init container copies here)
 		{
-			Name: "wazuh-config-mount",
+			Name: constants.VolumeNameWazuhConfigMount,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
 		// Writable volume for filebeat.yml (init container copies here)
 		{
-			Name: "filebeat-config",
+			Name: constants.VolumeNameFilebeatConfig,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
 		{
-			Name: "wazuh-certs",
+			Name: constants.VolumeNameWazuhCerts,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: fmt.Sprintf("%s-manager-%s-certs", b.clusterName, b.nodeType),
+					SecretName: constants.ManagerCertsName(b.clusterName, b.nodeType),
 					Items: []corev1.KeyToPath{
 						{Key: constants.SecretKeyTLSCert, Path: "filebeat.pem"},
 						{Key: constants.SecretKeyTLSKey, Path: "filebeat-key.pem"},
@@ -444,14 +444,14 @@ func (b *ManagerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 		},
 		// Indexer CA for filebeat SSL verification
 		{
-			Name: "indexer-certs",
+			Name: constants.VolumeNameIndexerCerts,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: fmt.Sprintf("%s-indexer-certs", b.clusterName),
+					SecretName: constants.IndexerCertsName(b.clusterName),
 					Items: []corev1.KeyToPath{
 						{
 							Key:  constants.SecretKeyCACert,
-							Path: "root-ca.pem",
+							Path: constants.SecretKeyRootCA,
 						},
 					},
 				},
@@ -469,29 +469,29 @@ func (b *ManagerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 func (b *ManagerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
 		{
-			Name:      "wazuh-manager-data",
+			Name:      constants.VolumeNameWazuhData,
 			MountPath: constants.PathWazuhData,
 		},
 		// Mount writable ossec.conf directory (populated by init container)
 		// The Wazuh entrypoint expects configs at /wazuh-config-mount/etc/
 		{
-			Name:      "wazuh-config-mount",
-			MountPath: "/wazuh-config-mount",
+			Name:      constants.VolumeNameWazuhConfigMount,
+			MountPath: constants.PathMountWazuhConfig,
 		},
 		// Mount writable filebeat.yml (populated by init container)
 		{
-			Name:      "filebeat-config",
-			MountPath: "/etc/filebeat",
+			Name:      constants.VolumeNameFilebeatConfig,
+			MountPath: constants.PathMountFilebeat,
 		},
 		// Mount certificates as directory for filebeat SSL
 		{
-			Name:      "wazuh-certs",
-			MountPath: "/etc/ssl/certs/wazuh",
+			Name:      constants.VolumeNameWazuhCerts,
+			MountPath: constants.PathMountSSLCertsWazuh,
 			ReadOnly:  true,
 		},
 		{
-			Name:      "indexer-certs",
-			MountPath: "/etc/ssl/certs/indexer",
+			Name:      constants.VolumeNameIndexerCerts,
+			MountPath: constants.PathMountSSLCertsIndexer,
 			ReadOnly:  true,
 		},
 	}
@@ -507,19 +507,19 @@ func (b *ManagerStatefulSetBuilder) buildInitContainerVolumeMounts() []corev1.Vo
 	return []corev1.VolumeMount{
 		// Source: ConfigMap (read-only)
 		{
-			Name:      "wazuh-config-source",
-			MountPath: "/config-source",
+			Name:      constants.VolumeNameWazuhConfigSource,
+			MountPath: constants.PathMountConfigSource,
 			ReadOnly:  true,
 		},
 		// Destination: writable ossec.conf directory
 		{
-			Name:      "wazuh-config-mount",
-			MountPath: "/wazuh-config-mount",
+			Name:      constants.VolumeNameWazuhConfigMount,
+			MountPath: constants.PathMountWazuhConfig,
 		},
 		// Destination: writable filebeat config directory
 		{
-			Name:      "filebeat-config",
-			MountPath: "/etc/filebeat",
+			Name:      constants.VolumeNameFilebeatConfig,
+			MountPath: constants.PathMountFilebeat,
 		},
 	}
 }
@@ -527,8 +527,8 @@ func (b *ManagerStatefulSetBuilder) buildInitContainerVolumeMounts() []corev1.Vo
 // buildInitContainer creates the init container that copies configs to writable volumes
 func (b *ManagerStatefulSetBuilder) buildInitContainer() corev1.Container {
 	return corev1.Container{
-		Name:  "copy-configs",
-		Image: "busybox:1.36",
+		Name:  constants.InitContainerNamePermissions,
+		Image: constants.ImageBusyboxInit,
 		Command: []string{
 			"/bin/sh",
 			"-c",
@@ -569,7 +569,7 @@ func (b *ManagerStatefulSetBuilder) buildEnvVars() []corev1.EnvVar {
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-cluster-key", b.clusterName),
+						Name: constants.ClusterKeyName(b.clusterName),
 					},
 					Key: constants.SecretKeyClusterKey,
 				},
@@ -592,7 +592,7 @@ func (b *ManagerStatefulSetBuilder) buildEnvVars() []corev1.EnvVar {
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-api-credentials", b.clusterName),
+						Name: constants.APICredentialsName(b.clusterName),
 					},
 					Key: constants.SecretKeyAPIUsername,
 				},
@@ -603,7 +603,7 @@ func (b *ManagerStatefulSetBuilder) buildEnvVars() []corev1.EnvVar {
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-api-credentials", b.clusterName),
+						Name: constants.APICredentialsName(b.clusterName),
 					},
 					Key: constants.SecretKeyAPIPassword,
 				},
@@ -615,7 +615,7 @@ func (b *ManagerStatefulSetBuilder) buildEnvVars() []corev1.EnvVar {
 	if b.nodeType == "worker" {
 		env = append(env, corev1.EnvVar{
 			Name:  "WAZUH_MASTER_ADDRESS",
-			Value: fmt.Sprintf("%s-manager-master.%s.svc.cluster.local", b.clusterName, b.namespace),
+			Value: constants.ManagerMasterServiceFQDN(b.clusterName, b.namespace),
 		})
 	}
 

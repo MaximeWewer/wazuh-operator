@@ -52,7 +52,7 @@ func NewDashboardHealthChecker(host string) *DashboardHealthChecker {
 	return &DashboardHealthChecker{
 		host:    host,
 		port:    constants.PortDashboardHTTP,
-		timeout: 10 * time.Second,
+		timeout: constants.TimeoutHealthCheck,
 		tlsConfig: &tls.Config{
 			InsecureSkipVerify: true, // Default to skip verify for internal checks
 		},
@@ -146,7 +146,7 @@ func (c *DashboardHealthChecker) IsHealthy(ctx context.Context) (bool, error) {
 // WaitForReady waits for the dashboard to become ready
 func (c *DashboardHealthChecker) WaitForReady(ctx context.Context, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(constants.PollIntervalHealthCheck)
 	defer ticker.Stop()
 
 	for {

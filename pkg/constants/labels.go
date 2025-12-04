@@ -71,12 +71,26 @@ const (
 	AnnotationLastCertRenewal = "wazuh.com/last-cert-renewal"
 )
 
+// Application identity constants
+const (
+	// AppName is the base application name
+	AppName = "wazuh"
+
+	// OperatorName is the operator name used in managed-by labels
+	OperatorName = "wazuh-operator"
+)
+
 // Component values for LabelComponent
 const (
-	ComponentManager   = "manager"
-	ComponentWorker    = "worker"
-	ComponentIndexer   = "indexer"
-	ComponentDashboard = "dashboard"
+	ComponentManager       = "manager"
+	ComponentWorker        = "worker"
+	ComponentIndexer       = "indexer"
+	ComponentDashboard     = "dashboard"
+	ComponentManagerMaster = "manager-master"
+	ComponentManagerWorker = "manager-worker"
+	ComponentLogRotation   = "log-rotation"
+	ComponentSecurity      = "security"
+	ComponentDashboardAuth = "dashboard-auth"
 )
 
 // Node type values for LabelWazuhNodeType
@@ -98,21 +112,21 @@ const (
 // CommonLabels returns the standard labels for a Wazuh resource
 func CommonLabels(clusterName, component, version string) map[string]string {
 	return map[string]string{
-		LabelName:           "wazuh-" + component,
+		LabelName:           AppName + "-" + component,
 		LabelInstance:       clusterName,
 		LabelVersion:        version,
 		LabelComponent:      component,
-		LabelPartOf:         "wazuh",
-		LabelManagedBy:      "wazuh-operator",
+		LabelPartOf:         AppName,
+		LabelManagedBy:      OperatorName,
 		LabelWazuhCluster:   clusterName,
-		LabelWazuhManagedBy: "wazuh-operator",
+		LabelWazuhManagedBy: OperatorName,
 	}
 }
 
 // SelectorLabels returns the minimal labels for selecting resources
 func SelectorLabels(clusterName, component string) map[string]string {
 	return map[string]string{
-		LabelName:         "wazuh-" + component,
+		LabelName:         AppName + "-" + component,
 		LabelInstance:     clusterName,
 		LabelWazuhCluster: clusterName,
 	}

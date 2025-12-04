@@ -222,10 +222,10 @@ func TestIsExpansionRequest(t *testing.T) {
 
 func TestGetPVCExpansionCondition(t *testing.T) {
 	tests := []struct {
-		name           string
-		pvc            *corev1.PersistentVolumeClaim
-		expectedPhase  PVCExpansionPhase
-		expectedDone   bool
+		name          string
+		pvc           *corev1.PersistentVolumeClaim
+		expectedPhase PVCExpansionPhase
+		expectedDone  bool
 	}{
 		{
 			name: "no conditions",

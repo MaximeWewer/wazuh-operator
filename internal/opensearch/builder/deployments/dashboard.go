@@ -53,8 +53,8 @@ type DashboardDeploymentBuilder struct {
 
 // NewDashboardDeploymentBuilder creates a new DashboardDeploymentBuilder
 func NewDashboardDeploymentBuilder(clusterName, namespace string) *DashboardDeploymentBuilder {
-	name := fmt.Sprintf("%s-dashboard", clusterName)
-	indexerURL := fmt.Sprintf("https://%s-indexer.%s.svc.cluster.local:%d", clusterName, namespace, constants.PortIndexerREST)
+	name := constants.DashboardName(clusterName)
+	indexerURL := fmt.Sprintf("https://%s:%d", constants.IndexerServiceFQDN(clusterName, namespace), constants.PortIndexerREST)
 	return &DashboardDeploymentBuilder{
 		name:        name,
 		namespace:   namespace,
@@ -276,7 +276,7 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 					InitContainers: []corev1.Container{
 						{
 							Name:  "config-processor",
-							Image: "busybox:stable",
+							Image: constants.ImageBusyboxStable,
 							Command: []string{
 								"sh",
 								"-c",
@@ -285,12 +285,12 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 							Env: env,
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      "dashboard-config",
+									Name:      constants.VolumeNameDashboardConfig,
 									MountPath: "/config-template",
 									ReadOnly:  true,
 								},
 								{
-									Name:      "dashboard-config-processed",
+									Name:      constants.VolumeNameDashboardConfigProcessed,
 									MountPath: "/config-processed",
 								},
 							},
@@ -366,17 +366,17 @@ func (b *DashboardDeploymentBuilder) buildVolumes() []corev1.Volume {
 
 	volumes := []corev1.Volume{
 		{
-			Name: "dashboard-config",
+			Name: constants.VolumeNameDashboardConfig,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-dashboard-config", b.clusterName),
+						Name: constants.DashboardConfigName(b.clusterName),
 					},
 				},
 			},
 		},
 		{
-			Name: "dashboard-config-processed",
+			Name: constants.VolumeNameDashboardConfigProcessed,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
@@ -384,14 +384,14 @@ func (b *DashboardDeploymentBuilder) buildVolumes() []corev1.Volume {
 		// Combined certs volume that mounts dashboard certs with correct filenames
 		// This creates a single directory with all needed certs for the dashboard
 		{
-			Name: "dashboard-certs",
+			Name: constants.VolumeNameDashboardCerts,
 			VolumeSource: corev1.VolumeSource{
 				Projected: &corev1.ProjectedVolumeSource{
 					Sources: []corev1.VolumeProjection{
 						{
 							Secret: &corev1.SecretProjection{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: fmt.Sprintf("%s-dashboard-certs", b.clusterName),
+									Name: constants.DashboardCertsName(b.clusterName),
 								},
 								Items: []corev1.KeyToPath{
 									{Key: constants.SecretKeyTLSCert, Path: "dashboard.pem"},
@@ -402,10 +402,10 @@ func (b *DashboardDeploymentBuilder) buildVolumes() []corev1.Volume {
 						{
 							Secret: &corev1.SecretProjection{
 								LocalObjectReference: corev1.LocalObjectReference{
-									Name: fmt.Sprintf("%s-indexer-certs", b.clusterName),
+									Name: constants.IndexerCertsName(b.clusterName),
 								},
 								Items: []corev1.KeyToPath{
-									{Key: constants.SecretKeyCACert, Path: "root-ca.pem"},
+									{Key: constants.SecretKeyCACert, Path: constants.SecretKeyRootCA},
 								},
 							},
 						},
@@ -415,11 +415,11 @@ func (b *DashboardDeploymentBuilder) buildVolumes() []corev1.Volume {
 		},
 		// Custom wazuh_app_config.sh script from ConfigMap
 		{
-			Name: "wazuh-app-config-script",
+			Name: constants.VolumeNameWazuhAppConfigScript,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-dashboard-config", b.clusterName),
+						Name: constants.DashboardConfigName(b.clusterName),
 					},
 					Items: []corev1.KeyToPath{
 						{
@@ -433,11 +433,11 @@ func (b *DashboardDeploymentBuilder) buildVolumes() []corev1.Volume {
 		},
 		// Wazuh plugin config (wazuh.yml)
 		{
-			Name: "wazuh-config",
+			Name: constants.VolumeNameWazuhConfig,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-dashboard-config", b.clusterName),
+						Name: constants.DashboardConfigName(b.clusterName),
 					},
 					Items: []corev1.KeyToPath{
 						{
@@ -460,27 +460,27 @@ func (b *DashboardDeploymentBuilder) buildVolumes() []corev1.Volume {
 func (b *DashboardDeploymentBuilder) buildVolumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
 		{
-			Name:      "dashboard-config-processed",
+			Name:      constants.VolumeNameDashboardConfigProcessed,
 			MountPath: constants.PathDashboardConfig + "/" + constants.ConfigMapKeyDashboardYml,
 			SubPath:   constants.ConfigMapKeyDashboardYml,
 		},
 		// Mount all certs as a directory (contains root-ca.pem, dashboard.pem, dashboard-key.pem)
 		{
-			Name:      "dashboard-certs",
+			Name:      constants.VolumeNameDashboardCerts,
 			MountPath: constants.PathDashboardConfig + "/certs",
 			ReadOnly:  true,
 		},
 		// Mount custom wazuh_app_config.sh script at /wazuh_app_config.sh (replaces default to avoid hardcoded host ID)
 		// The entrypoint.sh calls /wazuh_app_config.sh directly, not /usr/share/wazuh-dashboard/config/wazuh_app_config.sh
 		{
-			Name:      "wazuh-app-config-script",
+			Name:      constants.VolumeNameWazuhAppConfigScript,
 			MountPath: "/wazuh_app_config.sh",
 			SubPath:   "wazuh_app_config.sh",
 			ReadOnly:  true,
 		},
 		// Mount wazuh.yml config (pre-configured by operator)
 		{
-			Name:      "wazuh-config",
+			Name:      constants.VolumeNameWazuhConfig,
 			MountPath: constants.PathDashboardConfig + "/wazuh.yml",
 			SubPath:   "wazuh.yml",
 			ReadOnly:  true,
@@ -523,7 +523,7 @@ func (b *DashboardDeploymentBuilder) buildEnvVars() []corev1.EnvVar {
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-indexer-credentials", b.clusterName),
+						Name: constants.IndexerCredentialsName(b.clusterName),
 					},
 					Key: constants.SecretKeyAdminUsername,
 				},
@@ -534,7 +534,7 @@ func (b *DashboardDeploymentBuilder) buildEnvVars() []corev1.EnvVar {
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-indexer-credentials", b.clusterName),
+						Name: constants.IndexerCredentialsName(b.clusterName),
 					},
 					Key: constants.SecretKeyAdminPassword,
 				},
@@ -546,7 +546,7 @@ func (b *DashboardDeploymentBuilder) buildEnvVars() []corev1.EnvVar {
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-indexer-credentials", b.clusterName),
+						Name: constants.IndexerCredentialsName(b.clusterName),
 					},
 					Key: constants.SecretKeyAdminUsername,
 				},
@@ -557,7 +557,7 @@ func (b *DashboardDeploymentBuilder) buildEnvVars() []corev1.EnvVar {
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-indexer-credentials", b.clusterName),
+						Name: constants.IndexerCredentialsName(b.clusterName),
 					},
 					Key: constants.SecretKeyAdminPassword,
 				},
@@ -568,8 +568,8 @@ func (b *DashboardDeploymentBuilder) buildEnvVars() []corev1.EnvVar {
 	// Add Wazuh API configuration if plugin is enabled
 	// Note: URL should NOT include port (port is specified separately in wazuh.yml)
 	if b.wazuhPlugin {
-		wazuhAPIURL := fmt.Sprintf("https://%s-manager-master.%s.svc.cluster.local",
-			b.clusterName, b.namespace)
+		// Use manager master service FQDN but without port (port specified separately in wazuh.yml)
+		wazuhAPIURL := fmt.Sprintf("https://%s", constants.ManagerMasterServiceFQDN(b.clusterName, b.namespace))
 		env = append(env, corev1.EnvVar{
 			Name:  "WAZUH_API_URL",
 			Value: wazuhAPIURL,
@@ -580,7 +580,7 @@ func (b *DashboardDeploymentBuilder) buildEnvVars() []corev1.EnvVar {
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-api-credentials", b.clusterName),
+						Name: constants.APICredentialsName(b.clusterName),
 					},
 					Key: constants.SecretKeyAPIUsername,
 				},
@@ -591,7 +591,7 @@ func (b *DashboardDeploymentBuilder) buildEnvVars() []corev1.EnvVar {
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-api-credentials", b.clusterName),
+						Name: constants.APICredentialsName(b.clusterName),
 					},
 					Key: constants.SecretKeyAPIPassword,
 				},

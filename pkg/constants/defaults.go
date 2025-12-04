@@ -154,6 +154,30 @@ const (
 
 	// DefaultDashboardMemoryLimit is the default memory limit for dashboard
 	DefaultDashboardMemoryLimit = "1Gi"
+
+	// DefaultInitContainerCPURequest is the default CPU request for init containers
+	DefaultInitContainerCPURequest = "100m"
+
+	// DefaultInitContainerMemoryRequest is the default memory request for init containers
+	DefaultInitContainerMemoryRequest = "128Mi"
+
+	// DefaultInitContainerCPULimit is the default CPU limit for init containers
+	DefaultInitContainerCPULimit = "200m"
+
+	// DefaultInitContainerMemoryLimit is the default memory limit for init containers
+	DefaultInitContainerMemoryLimit = "256Mi"
+
+	// DefaultExporterCPURequest is the default CPU request for exporter sidecars
+	DefaultExporterCPURequest = "100m"
+
+	// DefaultExporterMemoryRequest is the default memory request for exporter sidecars
+	DefaultExporterMemoryRequest = "128Mi"
+
+	// DefaultExporterCPULimit is the default CPU limit for exporter sidecars
+	DefaultExporterCPULimit = "200m"
+
+	// DefaultExporterMemoryLimit is the default memory limit for exporter sidecars
+	DefaultExporterMemoryLimit = "256Mi"
 )
 
 // Certificate defaults
@@ -208,6 +232,9 @@ const (
 
 	// DefaultOpenSearchAdminUsername is the default OpenSearch admin username
 	DefaultOpenSearchAdminUsername = "admin"
+
+	// DefaultKibanaServerUsername is the default kibanaserver username for OpenSearch
+	DefaultKibanaServerUsername = "kibanaserver"
 )
 
 // Log rotation defaults

@@ -59,7 +59,7 @@ type IndexerStatefulSetBuilder struct {
 
 // NewIndexerStatefulSetBuilder creates a new IndexerStatefulSetBuilder
 func NewIndexerStatefulSetBuilder(clusterName, namespace string) *IndexerStatefulSetBuilder {
-	name := fmt.Sprintf("%s-indexer", clusterName)
+	name := constants.IndexerName(clusterName)
 	return &IndexerStatefulSetBuilder{
 		name:        name,
 		namespace:   namespace,
@@ -271,7 +271,7 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &b.replicas,
-			ServiceName: b.name + "-headless",
+			ServiceName: constants.IndexerHeadlessName(b.clusterName),
 			// Parallel allows all pods to start simultaneously, which is required for
 			// OpenSearch cluster formation - nodes need to discover each other at startup
 			PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -300,7 +300,7 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 					InitContainers: b.buildInitContainers(image),
 					Containers: []corev1.Container{
 						{
-							Name:            "opensearch",
+							Name:            constants.ContainerNameOpenSearch,
 							Image:           image,
 							ImagePullPolicy: corev1.PullIfNotPresent,
 							Resources:       *resources,
@@ -342,7 +342,7 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 				{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:   "opensearch-data",
+						Name:   constants.VolumeNameIndexerData,
 						Labels: selectorLabels,
 					},
 					Spec: corev1.PersistentVolumeClaimSpec{
@@ -382,41 +382,41 @@ func (b *IndexerStatefulSetBuilder) buildSelectorLabels() map[string]string {
 func (b *IndexerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 	volumes := []corev1.Volume{
 		{
-			Name: "opensearch-config",
+			Name: constants.VolumeNameIndexerConfig,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-indexer-config", b.clusterName),
+						Name: constants.IndexerConfigName(b.clusterName),
 					},
 				},
 			},
 		},
 		{
-			Name: "opensearch-certs",
+			Name: constants.VolumeNameIndexerCerts,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: fmt.Sprintf("%s-indexer-certs", b.clusterName),
+					SecretName: constants.IndexerCertsName(b.clusterName),
 				},
 			},
 		},
 		{
-			Name: "admin-certs",
+			Name: constants.VolumeNameAdminCerts,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: fmt.Sprintf("%s-admin-certs", b.clusterName),
+					SecretName: constants.AdminCertsName(b.clusterName),
 				},
 			},
 		},
 		{
-			Name: "opensearch-security",
+			Name: constants.VolumeNameIndexerSecurity,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: fmt.Sprintf("%s-indexer-security", b.clusterName),
+					SecretName: constants.IndexerSecurityName(b.clusterName),
 				},
 			},
 		},
 		{
-			Name: "config-processed",
+			Name: constants.VolumeNameConfigProcessed,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
@@ -433,11 +433,11 @@ func (b *IndexerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 func (b *IndexerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
 		{
-			Name:      "opensearch-data",
+			Name:      constants.VolumeNameIndexerData,
 			MountPath: constants.PathIndexerData,
 		},
 		{
-			Name:      "config-processed",
+			Name:      constants.VolumeNameConfigProcessed,
 			MountPath: constants.PathIndexerBase + "/opensearch.yml",
 			SubPath:   constants.ConfigMapKeyOpenSearchYml,
 			ReadOnly:  true,
@@ -446,26 +446,26 @@ func (b *IndexerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 		// When secrets are mounted without subPath, Kubernetes automatically updates
 		// the files when the Secret changes, enabling OpenSearch SSL hot reload
 		{
-			Name:      "opensearch-certs",
+			Name:      constants.VolumeNameIndexerCerts,
 			MountPath: constants.PathIndexerCerts,
 			ReadOnly:  true,
 		},
 		// Admin certificates for securityadmin tool
 		{
-			Name:      "admin-certs",
+			Name:      constants.VolumeNameAdminCerts,
 			MountPath: constants.PathIndexerBase + "/admin-certs",
 			ReadOnly:  true,
 		},
 		{
-			Name:      "config-processed",
+			Name:      constants.VolumeNameConfigProcessed,
 			MountPath: constants.PathIndexerSecurityConfig + "/internal_users.yml",
-			SubPath:   "internal_users.yml",
+			SubPath:   constants.SecretKeyInternalUsers,
 			ReadOnly:  true,
 		},
 		{
-			Name:      "config-processed",
+			Name:      constants.VolumeNameConfigProcessed,
 			MountPath: constants.PathIndexerSecurityConfig + "/roles_mapping.yml",
-			SubPath:   "roles_mapping.yml",
+			SubPath:   constants.SecretKeyRolesMapping,
 			ReadOnly:  true,
 		},
 	}
@@ -522,7 +522,7 @@ func (b *IndexerStatefulSetBuilder) buildEnvVars() []corev1.EnvVar {
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: fmt.Sprintf("%s-indexer-credentials", b.clusterName),
+						Name: constants.IndexerCredentialsName(b.clusterName),
 					},
 					Key: constants.SecretKeyAdminPassword,
 				},
@@ -559,7 +559,7 @@ func (b *IndexerStatefulSetBuilder) buildInitContainers(image string) []corev1.C
 	initContainers := []corev1.Container{
 		{
 			Name:    "init-config",
-			Image:   "busybox:stable",
+			Image:   constants.ImageBusyboxStable,
 			Command: []string{"sh", "-c"},
 			Args: []string{`
 set -e
@@ -590,38 +590,38 @@ ls -la /tmp/config/
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
-					Name:      "opensearch-config",
+					Name:      constants.VolumeNameIndexerConfig,
 					MountPath: "/tmp/config-template",
 					ReadOnly:  true,
 				},
 				{
-					Name:      "opensearch-security",
+					Name:      constants.VolumeNameIndexerSecurity,
 					MountPath: "/tmp/security-template",
 					ReadOnly:  true,
 				},
 				{
-					Name:      "config-processed",
+					Name:      constants.VolumeNameConfigProcessed,
 					MountPath: "/tmp/config",
 				},
 			},
 		},
 		{
 			Name:    "volume-mount-hack",
-			Image:   "busybox:stable",
+			Image:   constants.ImageBusyboxStable,
 			Command: []string{"sh", "-c", fmt.Sprintf("chown -R 1000:1000 %s || true", constants.PathIndexerData)},
 			SecurityContext: &corev1.SecurityContext{
 				RunAsUser: int64Ptr(0),
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
-					Name:      "opensearch-data",
+					Name:      constants.VolumeNameIndexerData,
 					MountPath: constants.PathIndexerData,
 				},
 			},
 		},
 		{
 			Name:  "increase-the-vm-max-map-count",
-			Image: "busybox:stable",
+			Image: constants.ImageBusyboxStable,
 			Command: []string{
 				"sh", "-c",
 				"sysctl -w vm.max_map_count=262144 || echo 'sysctl failed - vm.max_map_count might need to be set on the host node'",

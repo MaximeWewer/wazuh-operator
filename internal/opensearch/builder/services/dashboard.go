@@ -17,8 +17,6 @@ limitations under the License.
 package services
 
 import (
-	"fmt"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -41,9 +39,8 @@ type DashboardServiceBuilder struct {
 
 // NewDashboardServiceBuilder creates a new DashboardServiceBuilder
 func NewDashboardServiceBuilder(clusterName, namespace string) *DashboardServiceBuilder {
-	name := fmt.Sprintf("%s-dashboard", clusterName)
 	return &DashboardServiceBuilder{
-		name:        name,
+		name:        constants.DashboardName(clusterName),
 		namespace:   namespace,
 		clusterName: clusterName,
 		version:     constants.DefaultWazuhVersion,

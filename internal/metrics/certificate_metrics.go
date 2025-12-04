@@ -19,12 +19,12 @@ package metrics
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
-const (
-	// MetricsSubsystemCertificate is the subsystem for certificate metrics
-	MetricsSubsystemCertificate = "certificate"
-)
+// Re-export certificate subsystem constant for backwards compatibility
+const MetricsSubsystemCertificate = constants.MetricsSubsystemCertificate
 
 var (
 	// CertificateExpirySeconds tracks time until certificate expiry
@@ -176,8 +176,8 @@ func SetCertificateTestMode(cluster, namespace string, enabled bool) {
 // Call this when a cluster is deleted
 func ClearCertificateMetrics(cluster, namespace string) {
 	// Clear expiry metrics for all components
-	components := []string{"ca", "indexer", "manager-master", "manager-worker", "dashboard", "filebeat", "admin"}
-	certTypes := []string{"ca", "node"}
+	components := constants.CertificateComponents
+	certTypes := constants.CertificateTypes
 
 	for _, component := range components {
 		for _, certType := range certTypes {

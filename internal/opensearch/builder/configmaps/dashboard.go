@@ -126,20 +126,20 @@ func (b *DashboardConfigMapBuilder) WithAuthSecrets(secrets map[string]string) *
 
 // Build creates the ConfigMap for OpenSearch Dashboard
 func (b *DashboardConfigMapBuilder) Build() *corev1.ConfigMap {
-	name := b.clusterName + "-dashboard-config"
+	name := constants.DashboardConfigName(b.clusterName)
 
 	labels := map[string]string{
-		constants.LabelName:      "opensearch-dashboard",
+		constants.LabelName:      constants.AppName + "-" + constants.ComponentDashboard,
 		constants.LabelInstance:  b.clusterName,
-		constants.LabelComponent: "dashboard",
-		constants.LabelPartOf:    "wazuh",
-		constants.LabelManagedBy: "wazuh-operator",
+		constants.LabelComponent: constants.ComponentDashboard,
+		constants.LabelPartOf:    constants.AppName,
+		constants.LabelManagedBy: constants.OperatorName,
 	}
 
 	// Build default indexer host if not provided
 	indexerHost := b.indexerHost
 	if indexerHost == "" {
-		indexerHost = fmt.Sprintf("%s-indexer.%s.svc.cluster.local", b.clusterName, b.namespace)
+		indexerHost = constants.IndexerServiceFQDN(b.clusterName, b.namespace)
 	}
 
 	// Build opensearch_dashboards.yml configuration

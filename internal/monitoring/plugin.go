@@ -134,12 +134,12 @@ ls -la /mnt/plugins/ | head -25
 		},
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("100m"),
-				corev1.ResourceMemory: resource.MustParse("128Mi"),
+				corev1.ResourceCPU:    resource.MustParse(constants.DefaultInitContainerCPURequest),
+				corev1.ResourceMemory: resource.MustParse(constants.DefaultInitContainerMemoryRequest),
 			},
 			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("200m"),
-				corev1.ResourceMemory: resource.MustParse("256Mi"),
+				corev1.ResourceCPU:    resource.MustParse(constants.DefaultInitContainerCPULimit),
+				corev1.ResourceMemory: resource.MustParse(constants.DefaultInitContainerMemoryLimit),
 			},
 		},
 	}

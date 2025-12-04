@@ -27,6 +27,12 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// Local constants to avoid import cycle with pkg/constants
+const (
+	retryInitialInterval = 1 * time.Second
+	retryMaxInterval     = 30 * time.Second
+)
+
 // RetryConfig configures retry behavior
 type RetryConfig struct {
 	// MaxRetries is the maximum number of retry attempts
@@ -49,8 +55,8 @@ type RetryConfig struct {
 func DefaultRetryConfig() RetryConfig {
 	return RetryConfig{
 		MaxRetries:      5,
-		InitialInterval: 1 * time.Second,
-		MaxInterval:     30 * time.Second,
+		InitialInterval: retryInitialInterval,
+		MaxInterval:     retryMaxInterval,
 		Multiplier:      2.0,
 		Jitter:          true,
 	}

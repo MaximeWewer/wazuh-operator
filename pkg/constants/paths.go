@@ -183,3 +183,60 @@ const (
 	// SecretKeyAPIPassword is the key for Wazuh API password
 	SecretKeyAPIPassword = "api-password"
 )
+
+// Container mount paths
+const (
+	// PathMountFilebeat is the mount path for Filebeat configuration
+	PathMountFilebeat = "/etc/filebeat"
+
+	// PathMountConfigSource is the source path for config files in init containers
+	PathMountConfigSource = "/config-source"
+
+	// PathMountWazuhConfig is the mount path for Wazuh configuration
+	PathMountWazuhConfig = "/wazuh-config-mount"
+
+	// PathMountSSLCertsWazuh is the mount path for Wazuh SSL certificates
+	PathMountSSLCertsWazuh = "/etc/ssl/certs/wazuh"
+
+	// PathMountSSLCertsIndexer is the mount path for Indexer CA certificate
+	PathMountSSLCertsIndexer = "/etc/ssl/certs/indexer"
+)
+
+// Dashboard configuration paths
+const (
+	// PathDashboardWazuhConfig is the path to wazuh.yml in dashboard config
+	PathDashboardWazuhConfig = "/usr/share/wazuh-dashboard/config/wazuh.yml"
+
+	// PathDashboardWazuhDataConfig is the path to wazuh.yml in dashboard data
+	PathDashboardWazuhDataConfig = "/usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml"
+
+	// PathDashboardConfigCerts is the path to certificates in dashboard config
+	PathDashboardConfigCerts = "/usr/share/wazuh-dashboard/config/certs"
+)
+
+// Indexer binary paths
+const (
+	// PathIndexerBin is the path to Wazuh Indexer binaries
+	PathIndexerBin = "/usr/share/wazuh-indexer/bin"
+)
+
+// Kubernetes domain suffix
+const (
+	// KubernetesDNSSuffix is the standard Kubernetes DNS suffix
+	KubernetesDNSSuffix = ".svc.cluster.local"
+)
+
+// Filebeat specific paths
+const (
+	// PathFilebeatTemplate is the path to Wazuh template file for Filebeat
+	PathFilebeatTemplate = "/etc/filebeat/wazuh-template.json"
+
+	// PathFilebeatCertFile is the path to Filebeat certificate
+	PathFilebeatCertFile = "/etc/ssl/certs/wazuh/filebeat.pem"
+
+	// PathFilebeatKeyFile is the path to Filebeat private key
+	PathFilebeatKeyFile = "/etc/ssl/certs/wazuh/filebeat-key.pem"
+
+	// PathFilebeatCAFile is the path to CA certificate for Filebeat
+	PathFilebeatCAFile = "/etc/ssl/certs/indexer/ca.crt"
+)

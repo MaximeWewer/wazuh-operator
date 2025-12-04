@@ -68,7 +68,7 @@ func NewManagerHealthChecker(host string) *ManagerHealthChecker {
 	return &ManagerHealthChecker{
 		host:    host,
 		port:    constants.PortManagerAPI,
-		timeout: 10 * time.Second,
+		timeout: constants.TimeoutHealthCheck,
 		tlsConfig: &tls.Config{
 			InsecureSkipVerify: true, // Default to skip verify for internal checks
 		},

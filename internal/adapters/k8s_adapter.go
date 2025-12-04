@@ -29,6 +29,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // K8sAdapter wraps the controller-runtime client with helper methods
@@ -251,7 +253,7 @@ func (a *K8sAdapter) CreateEvent(ctx context.Context, obj client.Object, eventTy
 		Message: message,
 		Type:    eventType,
 		Source: corev1.EventSource{
-			Component: "wazuh-operator",
+			Component: constants.OperatorName,
 		},
 		FirstTimestamp: metav1.Now(),
 		LastTimestamp:  metav1.Now(),

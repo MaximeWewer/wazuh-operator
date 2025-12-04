@@ -27,12 +27,13 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
+// Re-export from centralized constants for backward compatibility
 const (
 	// DefaultWazuhExporterImage is the default image for the Wazuh Prometheus exporter
-	DefaultWazuhExporterImage = "kennyopennix/wazuh-exporter:latest"
+	DefaultWazuhExporterImage = constants.ImageWazuhExporter
 
 	// DefaultWazuhExporterPort is the default port for the exporter
-	DefaultWazuhExporterPort int32 = 9090
+	DefaultWazuhExporterPort = constants.PortWazuhExporter
 )
 
 // DefaultWazuhAPIPort is the default Wazuh API port (derived from constants)
@@ -66,7 +67,7 @@ func NewWazuhExporterConfig(cluster *wazuhv1alpha1.WazuhCluster) *WazuhExporterC
 		Port:              DefaultWazuhExporterPort,
 		APIProtocol:       "https",
 		LogLevel:          "INFO",
-		APICredentialsRef: fmt.Sprintf("%s-api-credentials", cluster.Name),
+		APICredentialsRef: constants.APICredentialsName(cluster.Name),
 	}
 
 	// Override with spec values if provided
@@ -100,12 +101,12 @@ func (c *WazuhExporterConfig) BuildExporterContainer() corev1.Container {
 	if resources == nil {
 		resources = &corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("100m"),
-				corev1.ResourceMemory: resource.MustParse("128Mi"),
+				corev1.ResourceCPU:    resource.MustParse(constants.DefaultExporterCPURequest),
+				corev1.ResourceMemory: resource.MustParse(constants.DefaultExporterMemoryRequest),
 			},
 			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("200m"),
-				corev1.ResourceMemory: resource.MustParse("256Mi"),
+				corev1.ResourceCPU:    resource.MustParse(constants.DefaultExporterCPULimit),
+				corev1.ResourceMemory: resource.MustParse(constants.DefaultExporterMemoryLimit),
 			},
 		}
 	}
@@ -114,7 +115,7 @@ func (c *WazuhExporterConfig) BuildExporterContainer() corev1.Container {
 	// This prevents the exporter from crashing before the manager is ready
 	startupScript := fmt.Sprintf(`
 echo "Waiting for Wazuh API to be available..."
-max_attempts=60
+max_attempts=%d
 attempt=0
 while [ $attempt -lt $max_attempts ]; do
     if curl -sk -u "$WAZUH_API_USERNAME:$WAZUH_API_PASSWORD" "https://localhost:%s/security/user/authenticate" | grep -q '"data"'; then
@@ -122,14 +123,14 @@ while [ $attempt -lt $max_attempts ]; do
         break
     fi
     attempt=$((attempt + 1))
-    echo "Attempt $attempt/$max_attempts: Wazuh API not ready yet, waiting 5s..."
-    sleep 5
+    echo "Attempt $attempt/$max_attempts: Wazuh API not ready yet, waiting %ds..."
+    sleep %d
 done
 if [ $attempt -eq $max_attempts ]; then
     echo "WARNING: Wazuh API did not become available after $max_attempts attempts, starting exporter anyway..."
 fi
 exec python ./main.py
-`, DefaultWazuhAPIPort)
+`, constants.APIReadinessMaxAttempts, DefaultWazuhAPIPort, constants.APIReadinessCheckIntervalSeconds, constants.APIReadinessCheckIntervalSeconds)
 
 	return corev1.Container{
 		Name:            "prometheus-exporter",
@@ -155,10 +156,10 @@ exec python ./main.py
 					Scheme: corev1.URISchemeHTTP,
 				},
 			},
-			InitialDelaySeconds: 30,
-			PeriodSeconds:       10,
+			InitialDelaySeconds: constants.ProbeStartupInitialDelaySeconds,
+			PeriodSeconds:       constants.ProbeStartupPeriodSeconds,
 			TimeoutSeconds:      5,
-			FailureThreshold:    30, // Allow up to 5 minutes for manager to start
+			FailureThreshold:    constants.ProbeStartupFailureThreshold, // Allow up to 5 minutes for manager to start
 		},
 		// Liveness probe ensures exporter is still healthy
 		LivenessProbe: &corev1.Probe{
@@ -169,10 +170,10 @@ exec python ./main.py
 					Scheme: corev1.URISchemeHTTP,
 				},
 			},
-			InitialDelaySeconds: 60,
-			PeriodSeconds:       30,
-			TimeoutSeconds:      10,
-			FailureThreshold:    3,
+			InitialDelaySeconds: constants.ProbeLivenessInitialDelaySeconds,
+			PeriodSeconds:       constants.ProbeLivenessPeriodSeconds,
+			TimeoutSeconds:      constants.ProbeTimeoutSeconds,
+			FailureThreshold:    constants.ProbeLivenessFailureThreshold,
 		},
 	}
 }
@@ -199,7 +200,7 @@ func (c *WazuhExporterConfig) buildEnvVars() []corev1.EnvVar {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: c.APICredentialsRef,
 					},
-					Key: "username",
+					Key: constants.SecretKeyUsername,
 				},
 			},
 		},
@@ -210,7 +211,7 @@ func (c *WazuhExporterConfig) buildEnvVars() []corev1.EnvVar {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: c.APICredentialsRef,
 					},
-					Key: "password",
+					Key: constants.SecretKeyPassword,
 				},
 			},
 		},

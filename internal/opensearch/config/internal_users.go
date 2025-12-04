@@ -19,6 +19,8 @@ package config
 import (
 	"fmt"
 	"strings"
+
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // InternalUser represents an OpenSearch internal user
@@ -50,14 +52,14 @@ func DefaultInternalUsersConfig() *InternalUsersConfig {
 	return &InternalUsersConfig{
 		Users: []InternalUser{
 			{
-				Username:     "admin",
+				Username:     constants.DefaultOpenSearchAdminUsername,
 				Hash:         "$2y$12$K/SpwjtB.wOHJ/Nc6GVRDuc1h0rM1DfvziFRNPtk27P.c4yDr9njO", // admin
 				Reserved:     true,
-				BackendRoles: []string{"admin"},
+				BackendRoles: []string{constants.DefaultOpenSearchAdminUsername},
 				Description:  "Admin user",
 			},
 			{
-				Username:    "kibanaserver",
+				Username:    constants.DefaultKibanaServerUsername,
 				Hash:        "$2y$12$4AcgAt3xwOWadA5s5blL6ev39OXDNhmOesEoo33eZtrq2N0YrU3H.", // kibanaserver
 				Reserved:    true,
 				Hidden:      false,
@@ -114,17 +116,17 @@ func (c *InternalUsersConfig) AddUser(user InternalUser) *InternalUsersConfig {
 // SetAdminHash sets the admin user's password hash
 func (c *InternalUsersConfig) SetAdminHash(hash string) *InternalUsersConfig {
 	for i, user := range c.Users {
-		if user.Username == "admin" {
+		if user.Username == constants.DefaultOpenSearchAdminUsername {
 			c.Users[i].Hash = hash
 			return c
 		}
 	}
 	// If admin user doesn't exist, add it
 	c.Users = append(c.Users, InternalUser{
-		Username:     "admin",
+		Username:     constants.DefaultOpenSearchAdminUsername,
 		Hash:         hash,
 		Reserved:     true,
-		BackendRoles: []string{"admin"},
+		BackendRoles: []string{constants.DefaultOpenSearchAdminUsername},
 		Description:  "Admin user",
 	})
 	return c
@@ -133,7 +135,7 @@ func (c *InternalUsersConfig) SetAdminHash(hash string) *InternalUsersConfig {
 // SetKibanaServerHash sets the kibanaserver user's password hash
 func (c *InternalUsersConfig) SetKibanaServerHash(hash string) *InternalUsersConfig {
 	for i, user := range c.Users {
-		if user.Username == "kibanaserver" {
+		if user.Username == constants.DefaultKibanaServerUsername {
 			c.Users[i].Hash = hash
 			return c
 		}
