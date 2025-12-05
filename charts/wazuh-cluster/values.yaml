@@ -129,6 +129,71 @@ cluster:
       #   limits:
       #     cpu: "4"
       #     memory: 8Gi
+      #
+      # ============================================
+      # Advanced Indexer Topology (nodePools)
+      # ============================================
+      # For large deployments requiring dedicated node roles
+      # Use EITHER replicas (simple mode) OR nodePools (advanced mode), not both
+      # See docs: docs/usage/features/advanced-indexer-topology.md
+      #
+      # nodePools:
+      #   # Dedicated cluster_manager nodes (minimum 3 for quorum)
+      #   - name: masters
+      #     replicas: 3
+      #     roles:
+      #       - cluster_manager
+      #     resources:
+      #       requests:
+      #         cpu: "500m"
+      #         memory: "2Gi"
+      #       limits:
+      #         cpu: "1"
+      #         memory: "4Gi"
+      #     storageSize: "10Gi"
+      #     storageClass: "standard"
+      #
+      #   # Data nodes with hot tier attribute
+      #   - name: data-hot
+      #     replicas: 5
+      #     roles:
+      #       - data
+      #       - ingest
+      #     attributes:
+      #       temp: hot
+      #     resources:
+      #       requests:
+      #         cpu: "2"
+      #         memory: "8Gi"
+      #       limits:
+      #         cpu: "4"
+      #         memory: "16Gi"
+      #     storageSize: "500Gi"
+      #     storageClass: "fast-ssd"
+      #
+      #   # Data nodes with warm tier attribute
+      #   - name: data-warm
+      #     replicas: 3
+      #     roles:
+      #       - data
+      #     attributes:
+      #       temp: warm
+      #     storageSize: "1Ti"
+      #     storageClass: "standard-ssd"
+      #
+      #   # Coordinating-only nodes (query routing)
+      #   - name: coord
+      #     replicas: 2
+      #     roles:
+      #       - coordinating_only
+      #     resources:
+      #       requests:
+      #         cpu: "1"
+      #         memory: "4Gi"
+      #       limits:
+      #         cpu: "2"
+      #         memory: "8Gi"
+      #     storageSize: "10Gi"
 
     # Manager configuration
     # When using sizing.profile, these are auto-configured
@@ -243,3 +308,104 @@ cluster:
     #     backoffMultiplier: 2.0
     #     # Maximum delay between retries (default: 30m)
     #     maxDelay: 30m
+
+# ============================================
+# Backup Configuration (Optional)
+# ============================================
+# Configure backups for OpenSearch indices and Wazuh Manager data
+# See docs: docs/usage/features/backup-restore.md
+
+# OpenSearch Snapshot Repository
+# Creates an OpenSearchSnapshotRepository CRD for storing snapshots
+opensearchRepository:
+  enabled: false
+  # name: minio-backups
+  # spec:
+  #   type: s3
+  #   settings:
+  #     bucket: wazuh-backups
+  #     basePath: opensearch/snapshots
+  #     # MinIO endpoint
+  #     endpoint: http://minio.minio.svc.cluster.local:9000
+  #     pathStyleAccess: true
+  #     compress: true
+  #     credentialsSecret:
+  #       name: backup-credentials
+  #       accessKeyKey: accessKeyId
+  #       secretKeyKey: secretAccessKey
+  #   verify: true
+
+# OpenSearch Snapshot Policy
+# Creates an OpenSearchSnapshotPolicy CRD for scheduled backups
+opensearchSnapshotPolicy:
+  enabled: false
+  # name: daily-snapshots
+  # spec:
+  #   description: "Daily automated snapshots"
+  #   repository:
+  #     name: minio-backups
+  #   snapshotConfig:
+  #     indices:
+  #       - "wazuh-alerts-*"
+  #       - "wazuh-archives-*"
+  #   creation:
+  #     schedule:
+  #       expression: "0 2 * * *"  # Daily at 2 AM UTC
+  #       timezone: "UTC"
+  #     timeLimit: "1h"
+  #   deletion:
+  #     schedule:
+  #       expression: "0 3 * * *"  # Cleanup at 3 AM
+  #     condition:
+  #       maxAge: "30d"
+  #       maxCount: 30
+  #       minCount: 7
+
+# Wazuh Manager Backup
+# Creates a WazuhBackup CRD for scheduled manager data backups
+wazuhBackup:
+  enabled: false
+  # name: daily-backup
+  # spec:
+  #   # Components to backup
+  #   components:
+  #     agentKeys: true       # CRITICAL - required for agent reconnection
+  #     fimDatabase: true     # File Integrity Monitoring database
+  #     agentDatabase: true   # Agent state information
+  #     integrations: false   # Integration scripts
+  #     alertLogs: false      # Alert logs (can be large)
+  #
+  #   # Cron schedule: daily at 2 AM UTC
+  #   schedule: "0 2 * * *"
+  #
+  #   # Retention policy
+  #   retention:
+  #     maxBackups: 14        # Keep last 14 backups
+  #     maxAge: "30d"         # Delete backups older than 30 days
+  #
+  #   # S3/MinIO storage
+  #   storage:
+  #     type: s3
+  #     bucket: wazuh-backups
+  #     prefix: "{{ .ClusterName }}/manager"
+  #     # MinIO endpoint
+  #     endpoint: http://minio.minio.svc.cluster.local:9000
+  #     forcePathStyle: true
+  #     credentialsSecret:
+  #       name: backup-credentials
+  #       accessKeyKey: accessKeyId
+  #       secretKeyKey: secretAccessKey
+  #
+  #   backupTimeout: "30m"
+
+# Backup credentials secret
+# Set this to create a Secret with S3/MinIO credentials for backups
+backupCredentials:
+  enabled: false
+  # name: backup-credentials
+  # # For MinIO
+  # accessKeyId: "minioadmin"
+  # secretAccessKey: "minioadmin"
+  # # For AWS S3 (use IRSA in production instead)
+  # # accessKeyId: "AKIAIOSFODNN7EXAMPLE"
+  # # secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"

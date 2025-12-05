@@ -52,6 +52,7 @@ rules:
   - batch
   resources:
   - cronjobs
+  - jobs
   verbs:
   - create
   - delete
@@ -108,16 +109,21 @@ rules:
   - opensearchindextemplates
   - opensearchindices
   - opensearchismpolicies
+  - opensearchrestores
   - opensearchrolemappings
   - opensearchroles
   - opensearchsnapshotpolicies
+  - opensearchsnapshotrepositories
+  - opensearchsnapshots
   - opensearchtenants
   - opensearchusers
+  - wazuhbackups
   - wazuhcertificates
   - wazuhclusters
   - wazuhdecoders
   - wazuhfilebeats
   - wazuhmanagers
+  - wazuhrestores
   - wazuhrules
   - wazuhworkers
   verbs:
@@ -139,16 +145,21 @@ rules:
   - opensearchindextemplates/finalizers
   - opensearchindices/finalizers
   - opensearchismpolicies/finalizers
+  - opensearchrestores/finalizers
   - opensearchrolemappings/finalizers
   - opensearchroles/finalizers
   - opensearchsnapshotpolicies/finalizers
+  - opensearchsnapshotrepositories/finalizers
+  - opensearchsnapshots/finalizers
   - opensearchtenants/finalizers
   - opensearchusers/finalizers
+  - wazuhbackups/finalizers
   - wazuhcertificates/finalizers
   - wazuhclusters/finalizers
   - wazuhdecoders/finalizers
   - wazuhfilebeats/finalizers
   - wazuhmanagers/finalizers
+  - wazuhrestores/finalizers
   - wazuhrules/finalizers
   - wazuhworkers/finalizers
   verbs:
@@ -164,16 +175,21 @@ rules:
   - opensearchindextemplates/status
   - opensearchindices/status
   - opensearchismpolicies/status
+  - opensearchrestores/status
   - opensearchrolemappings/status
   - opensearchroles/status
   - opensearchsnapshotpolicies/status
+  - opensearchsnapshotrepositories/status
+  - opensearchsnapshots/status
   - opensearchtenants/status
   - opensearchusers/status
+  - wazuhbackups/status
   - wazuhcertificates/status
   - wazuhclusters/status
   - wazuhdecoders/status
   - wazuhfilebeats/status
   - wazuhmanagers/status
+  - wazuhrestores/status
   - wazuhrules/status
   - wazuhworkers/status
   verbs:

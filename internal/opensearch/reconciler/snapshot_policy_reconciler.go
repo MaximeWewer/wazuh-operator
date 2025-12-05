@@ -59,8 +59,31 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 		return r.updateStatus(ctx, policy, "Pending", "Waiting for OpenSearch API client")
 	}
 
-	// Create Snapshot API client
+	// Create Snapshot API clients
 	snapshotAPI := api.NewSnapshotAPI(r.APIClient)
+	snapshotsAPI := api.NewSnapshotsAPI(r.APIClient)
+
+	// Validate repository exists before creating/updating policy
+	repoName := policy.Spec.Repository.Name
+	if repoName != "" {
+		repo, err := snapshotsAPI.GetRepository(ctx, repoName)
+		if err != nil {
+			log.Error(err, "Failed to check repository", "repository", repoName)
+			if updateErr := r.updateStatus(ctx, policy, "Error", fmt.Sprintf("Failed to check repository '%s': %v", repoName, err)); updateErr != nil {
+				log.Error(updateErr, "Failed to update status")
+			}
+			return fmt.Errorf("failed to check repository '%s': %w", repoName, err)
+		}
+		if repo == nil {
+			log.Info("Repository not found, waiting for repository to be created", "repository", repoName)
+			if updateErr := r.updateStatus(ctx, policy, "Pending", fmt.Sprintf("Repository '%s' not found - waiting for repository creation", repoName)); updateErr != nil {
+				log.Error(updateErr, "Failed to update status")
+			}
+			// Return nil to requeue and check again later
+			return nil
+		}
+		log.V(1).Info("Repository validated", "repository", repoName)
+	}
 
 	// Check if policy exists
 	exists, err := snapshotAPI.Exists(ctx, policy.Name)
@@ -76,7 +99,7 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 
 	if !exists {
 		// Create new policy
-		log.Info("Creating snapshot policy", "name", policy.Name)
+		log.Info("Creating snapshot policy", "name", policy.Name, "repository", repoName)
 		if err := snapshotAPI.CreatePolicy(ctx, policy.Name, snapshotPolicy); err != nil {
 			if updateErr := r.updateStatus(ctx, policy, "Error", fmt.Sprintf("Failed to create policy: %v", err)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
@@ -90,7 +113,7 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
-	log.Info("Snapshot policy reconciliation completed", "name", policy.Name)
+	log.Info("Snapshot policy reconciliation completed", "name", policy.Name, "repository", repoName)
 	return nil
 }
 

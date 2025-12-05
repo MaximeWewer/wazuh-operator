@@ -14,6 +14,10 @@ A Kubernetes operator for managing Wazuh clusters, providing a declarative way t
 - **Filebeat Configuration**: Declarative management of Filebeat config, index templates, and ingest pipelines
 - **OpenSearch Security CRDs**: Manage users, roles, role mappings, and tenants declaratively
 - **Index Lifecycle Management**: Configure ISM policies, index templates, and snapshot policies via CRDs
+- **Backup & Restore**: Complete data protection for both OpenSearch indices and Wazuh Manager data
+  - OpenSearch snapshots to S3/MinIO with scheduled and manual triggers
+  - Wazuh Manager backups (agent keys, FIM database, configurations) to S3/MinIO
+  - Point-in-time restore with pre-restore safety backups
 - **TLS Automation**: Auto-generated certificates with hot reload support (Wazuh 4.9+)
 - **Log Rotation**: Automated log cleanup via CronJob with configurable retention
 - **High Availability**: Built-in support for multi-node deployments with pod disruption budgets
@@ -158,14 +162,16 @@ kubectl get secret wazuh-cluster-sample-indexer-credentials \
 
 **API Group**: `resources.wazuh.com/v1alpha1`
 
-The operator provides 18 CRDs organized into categories:
+The operator provides 23 CRDs organized into categories:
 
 | Category                | CRDs                                                                                                                 | Short Names                            |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
 | **Wazuh Core**          | WazuhCluster, WazuhManager, WazuhIndexer, WazuhDashboard                                                             | wc, wmgr, widx, wdash                  |
 | **Wazuh Config**        | WazuhRule, WazuhDecoder, WazuhCertificate, WazuhFilebeat                                                             | wrule, wdec, wcert, wfb                |
+| **Wazuh Backup**        | WazuhBackup, WazuhRestore                                                                                            | wbak, wrest                            |
 | **OpenSearch Security** | OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchActionGroup, OpenSearchTenant                       | osuser, osrole, osrmap, osag, ostenant |
 | **OpenSearch Index**    | OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchISMPolicy, OpenSearchIndex, OpenSearchSnapshotPolicy | osidxt, osctpl, osism, osidx, ossnap   |
+| **OpenSearch Backup**   | OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore                                                  | osrepo, ossnapshot, osrest             |
 
 ### WazuhCluster
 
@@ -354,6 +360,9 @@ spec:
   - [Monitoring](docs/usage/features/monitoring.md) - Prometheus integration
   - [Log Rotation](docs/usage/features/log-rotation.md) - Automated log cleanup
   - [Filebeat Configuration](docs/usage/features/filebeat-configuration.md) - Index templates, ingest pipelines
+  - [Advanced Indexer Topology](docs/usage/features/advanced-indexer-topology.md) - NodePools, dedicated roles
+  - [Backup & Restore](docs/usage/features/backup-restore.md) - OpenSearch snapshots and Wazuh backups
+  - [Drain Strategy](docs/usage/features/drain-strategy.md) - Safe scale-down operations
 - **Examples**:
   - [Quick Start Examples](docs/usage/examples/quick-start/) - Minimal deployment
   - [Production Examples](docs/usage/examples/production/) - Production configuration
@@ -475,6 +484,69 @@ spec:
       maxFileSizeMB: 100 # Delete files > 100MB
       combinationMode: "or" # Delete if old OR large
 ```
+
+### Backup & Restore
+
+**OpenSearch Snapshots** - Backup OpenSearch indices to S3/MinIO:
+
+```yaml
+# 1. Create a snapshot repository
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchSnapshotRepository
+metadata:
+  name: minio-backups
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  type: s3
+  settings:
+    bucket: wazuh-backups
+    basePath: opensearch
+    endpoint: http://minio.minio.svc:9000
+    pathStyleAccess: true
+    credentialsSecret:
+      name: minio-credentials
+---
+# 2. Trigger a manual snapshot before upgrades
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchSnapshot
+metadata:
+  name: pre-upgrade
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  repository: minio-backups
+  indices:
+    - "wazuh-alerts-*"
+    - "wazuh-archives-*"
+```
+
+**Wazuh Manager Backups** - Backup agent keys and configuration to S3/MinIO:
+
+```yaml
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhBackup
+metadata:
+  name: daily-backup
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  schedule: "0 2 * * *" # Daily at 2 AM
+  components:
+    agentKeys: true # Critical for agent reconnection
+    fimDatabase: true
+  retention:
+    maxBackups: 14
+  storage:
+    type: s3
+    bucket: wazuh-backups
+    endpoint: http://minio.minio.svc:9000
+    forcePathStyle: true
+    credentialsSecret:
+      name: minio-credentials
+```
+
+See [Backup & Restore Guide](docs/usage/features/backup-restore.md) for full documentation.
 
 ## Operations
 
@@ -606,15 +678,15 @@ We welcome contributions! Please see [CONTRIBUTING.md](docs/dev/contributing/CON
 - [x] Helm charts for operator and cluster
 - [x] Prometheus monitoring integration
 - [x] WazuhFilebeat CRD for declarative Filebeat configuration (not released)
-- [ ] Implementation of node type support (Cluster manager, Data, Ingest, etc)
+- [x] Advanced Indexer Topology - NodePools with dedicated roles (not released)
 - [x] Drain strategy for scale down (not released)
 - [x] Scaling PVC - increase disk size (not released)
+- [x] Backup & Restore - OpenSearch snapshots and Wazuh Manager backups (not released)
 - [ ] Ability to deploy multiple clusters
 - [ ] More tests
 - [ ] NetworkPolicies
 - [ ] GatewayAPI support
 - [ ] Validation webhooks
-- [ ] Automatic backup/restore
 - [ ] OLM/OperatorHub support
 
 ## License

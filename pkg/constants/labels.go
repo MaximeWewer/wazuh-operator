@@ -60,6 +60,9 @@ const (
 
 	// LabelManagerNodeType identifies the manager node type (master/worker)
 	LabelManagerNodeType = "wazuh.com/manager-node-type"
+
+	// LabelNodePool identifies the nodePool name for advanced indexer topology
+	LabelNodePool = "wazuh.com/node-pool"
 )
 
 // Wazuh custom annotations (wazuh.com/*)

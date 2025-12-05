@@ -1,0 +1,58 @@
+# OpenSearchSnapshotRepository example for AWS S3
+# This creates a snapshot repository in AWS S3 for storing OpenSearch snapshots
+#
+# PREREQUISITE: The repository-s3 plugin must be installed in OpenSearch nodes.
+# Add an init container to install the plugin:
+#
+#   initContainers:
+#   - name: install-repository-s3
+#     image: opensearchproject/opensearch:2.x
+#     command:
+#     - sh
+#     - -c
+#     - |
+#       /usr/share/opensearch/bin/opensearch-plugin install --batch repository-s3
+#       cp -r /usr/share/opensearch/plugins/repository-s3 /plugins/
+#     volumeMounts:
+#     - name: plugins
+#       mountPath: /plugins
+#
+# See: https://docs.opensearch.org/latest/tuning-your-cluster/availability-and-recovery/snapshots/snapshot-restore/#amazon-s3
+#
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchSnapshotRepository
+metadata:
+  name: aws-backups
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  type: s3
+  settings:
+    bucket: my-wazuh-backups
+    basePath: production/opensearch
+    region: eu-west-1
+    compress: true
+    # Server-side encryption using S3-managed keys
+    serverSideEncryption: true
+    # Storage class for cost optimization
+    storageClass: standard
+    # Credentials from Kubernetes Secret
+    credentialsSecret:
+      name: aws-credentials
+      accessKeyKey: aws-access-key-id
+      secretKeyKey: aws-secret-access-key
+  # Verify repository after creation
+  verify: true
+---
+# Secret containing AWS credentials
+# WARNING: In production, use IRSA (IAM Roles for Service Accounts) instead
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aws-credentials
+  namespace: wazuh
+type: Opaque
+stringData:
+  aws-access-key-id: YOUR_ACCESS_KEY_ID
+  aws-secret-access-key: YOUR_SECRET_ACCESS_KEY

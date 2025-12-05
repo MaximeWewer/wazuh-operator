@@ -168,18 +168,29 @@ type LogRotationSpec struct {
 }
 
 // WazuhIndexerClusterSpec defines the indexer configuration (inline in WazuhCluster)
+// Supports two mutually exclusive modes:
+// - Simple mode: Use "replicas" field for a single StatefulSet where all nodes have all roles
+// - Advanced mode: Use "nodePools" field for multiple StatefulSets with different roles/configs
 type WazuhIndexerClusterSpec struct {
-	// Number of indexer replicas
+	// Number of indexer replicas (simple mode)
+	// Mutually exclusive with NodePools - cannot use both
+	// In simple mode, all nodes have all roles (cluster_manager, data, ingest)
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:default=3
 	Replicas int32 `json:"replicas,omitempty"`
 
-	// Resources for indexer nodes
+	// NodePools defines multiple node groups with different roles/configs (advanced mode)
+	// Mutually exclusive with Replicas - cannot use both
+	// Each nodePool becomes a separate StatefulSet with its own configuration
+	// +optional
+	NodePools []IndexerNodePoolSpec `json:"nodePools,omitempty"`
+
+	// Resources for indexer nodes (simple mode only, ignored if nodePools used)
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
-	// Storage size for indexer nodes
+	// Storage size for indexer nodes (simple mode only, ignored if nodePools used)
 	// +kubebuilder:default="50Gi"
 	StorageSize string `json:"storageSize,omitempty"`
 
@@ -851,6 +862,18 @@ type ComponentStatus struct {
 	// LastChangeType indicates what triggered the last update
 	// +optional
 	LastChangeType string `json:"lastChangeType,omitempty"`
+
+	// NodePoolStatuses tracks status of each nodePool (advanced mode only)
+	// Key is the nodePool name
+	// +optional
+	NodePoolStatuses map[string]NodePoolStatus `json:"nodePoolStatuses,omitempty"`
+
+	// TopologyMode indicates simple or advanced indexer topology mode
+	// "simple" = using replicas field (single StatefulSet)
+	// "advanced" = using nodePools field (multiple StatefulSets)
+	// +optional
+	// +kubebuilder:validation:Enum=simple;advanced
+	TopologyMode string `json:"topologyMode,omitempty"`
 }
 
 // Condition types
@@ -898,4 +921,82 @@ type WazuhClusterList struct {
 
 func init() {
 	SchemeBuilder.Register(&WazuhCluster{}, &WazuhClusterList{})
+}
+
+// WazuhIndexerClusterSpec helper methods for topology mode detection
+
+// IsAdvancedMode returns true if the indexer is using nodePools configuration
+func (s *WazuhIndexerClusterSpec) IsAdvancedMode() bool {
+	return len(s.NodePools) > 0
+}
+
+// IsSimpleMode returns true if the indexer is using simple replicas configuration
+func (s *WazuhIndexerClusterSpec) IsSimpleMode() bool {
+	return s.Replicas > 0 && len(s.NodePools) == 0
+}
+
+// GetTotalReplicas returns total node count across all pools or simple replicas
+func (s *WazuhIndexerClusterSpec) GetTotalReplicas() int32 {
+	if s.IsAdvancedMode() {
+		var total int32
+		for _, pool := range s.NodePools {
+			total += pool.Replicas
+		}
+		return total
+	}
+	return s.Replicas
+}
+
+// GetClusterManagerPoolNames returns the names of all nodePools with cluster_manager role
+func (s *WazuhIndexerClusterSpec) GetClusterManagerPoolNames() []string {
+	var names []string
+	for _, pool := range s.NodePools {
+		if pool.HasClusterManagerRole() {
+			names = append(names, pool.Name)
+		}
+	}
+	return names
+}
+
+// GetDataPoolNames returns the names of all nodePools with data role
+func (s *WazuhIndexerClusterSpec) GetDataPoolNames() []string {
+	var names []string
+	for _, pool := range s.NodePools {
+		if pool.HasDataRole() {
+			names = append(names, pool.Name)
+		}
+	}
+	return names
+}
+
+// CountClusterManagerNodes returns the total number of cluster_manager nodes across all pools
+func (s *WazuhIndexerClusterSpec) CountClusterManagerNodes() int32 {
+	var count int32
+	for _, pool := range s.NodePools {
+		if pool.HasClusterManagerRole() {
+			count += pool.Replicas
+		}
+	}
+	return count
+}
+
+// CountDataNodes returns the total number of data nodes across all pools
+func (s *WazuhIndexerClusterSpec) CountDataNodes() int32 {
+	var count int32
+	for _, pool := range s.NodePools {
+		if pool.HasDataRole() {
+			count += pool.Replicas
+		}
+	}
+	return count
+}
+
+// GetNodePoolByName returns a nodePool by name, or nil if not found
+func (s *WazuhIndexerClusterSpec) GetNodePoolByName(name string) *IndexerNodePoolSpec {
+	for i := range s.NodePools {
+		if s.NodePools[i].Name == name {
+			return &s.NodePools[i]
+		}
+	}
+	return nil
 }

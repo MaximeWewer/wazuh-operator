@@ -1,0 +1,83 @@
+# WazuhBackup - One-shot backup example
+#
+# This example creates a single Job that runs immediately to backup
+# Wazuh Manager data. Useful for pre-upgrade or pre-maintenance backups.
+#
+# Prerequisites:
+# 1. A WazuhCluster named 'wazuh-cluster' must exist
+# 2. A Secret with AWS/MinIO credentials
+#
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhBackup
+metadata:
+  name: pre-upgrade-backup
+  namespace: wazuh
+  labels:
+    backup.wazuh.com/purpose: pre-upgrade
+spec:
+  # Reference to the WazuhCluster to backup
+  clusterRef:
+    name: wazuh-cluster
+
+  # Full backup of all critical components
+  components:
+    agentKeys: true
+    fimDatabase: true
+    agentDatabase: true
+    integrations: true
+    alertLogs: false  # Usually too large for quick backups
+    # Backup custom configuration as well
+    customPaths:
+      - "/var/ossec/etc/rules/"
+      - "/var/ossec/etc/decoders/"
+
+  # No schedule = one-shot backup (Job instead of CronJob)
+  # The Job will run immediately when this resource is created
+
+  # S3 storage configuration
+  storage:
+    type: s3
+    bucket: wazuh-backups
+    # Include date in path for one-shot backups
+    prefix: "{{ .ClusterName }}/pre-upgrade/{{ .Date }}"
+    region: us-east-1
+    credentialsSecret:
+      name: s3-backup-credentials
+
+  backupTimeout: "45m"
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+---
+# Example: Emergency backup before deleting agents
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhBackup
+metadata:
+  name: emergency-backup
+  namespace: wazuh
+  annotations:
+    description: "Emergency backup before agent cleanup"
+spec:
+  clusterRef:
+    name: wazuh-cluster
+
+  # Just backup agent keys for potential restoration
+  components:
+    agentKeys: true
+    fimDatabase: false
+    agentDatabase: false
+
+  storage:
+    type: s3
+    bucket: wazuh-backups
+    prefix: "{{ .ClusterName }}/emergency"
+    region: us-east-1
+    credentialsSecret:
+      name: s3-backup-credentials
+
+  backupTimeout: "15m"

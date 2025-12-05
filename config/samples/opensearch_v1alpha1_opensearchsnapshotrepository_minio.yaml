@@ -1,0 +1,56 @@
+# OpenSearchSnapshotRepository example for MinIO (S3-compatible)
+# This creates a snapshot repository in MinIO for storing OpenSearch snapshots
+#
+# PREREQUISITE: The repository-s3 plugin must be installed in OpenSearch nodes.
+# Add an init container to install the plugin:
+#
+#   initContainers:
+#   - name: install-repository-s3
+#     image: opensearchproject/opensearch:2.x
+#     command:
+#     - sh
+#     - -c
+#     - |
+#       /usr/share/opensearch/bin/opensearch-plugin install --batch repository-s3
+#       cp -r /usr/share/opensearch/plugins/repository-s3 /plugins/
+#     volumeMounts:
+#     - name: plugins
+#       mountPath: /plugins
+#
+# See: https://docs.opensearch.org/latest/tuning-your-cluster/availability-and-recovery/snapshots/snapshot-restore/#amazon-s3
+#
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchSnapshotRepository
+metadata:
+  name: minio-backups
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  type: s3
+  settings:
+    bucket: wazuh-snapshots
+    basePath: opensearch
+    # MinIO endpoint (replace with your MinIO service)
+    endpoint: http://minio.storage:9000
+    # Required for MinIO - use path-style access instead of virtual-hosted-style
+    pathStyleAccess: true
+    compress: true
+    # Credentials from Kubernetes Secret
+    credentialsSecret:
+      name: minio-credentials
+      accessKeyKey: access-key
+      secretKeyKey: secret-key
+  # Verify repository after creation
+  verify: true
+---
+# Secret containing MinIO credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-credentials
+  namespace: wazuh
+type: Opaque
+stringData:
+  access-key: minioadmin
+  secret-key: minioadmin

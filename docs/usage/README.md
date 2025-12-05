@@ -22,6 +22,7 @@ This directory contains documentation for users of the Wazuh Operator.
 - [OpenSearch Security](features/opensearch-security.md) - Users, roles, tenants
 - [OpenSearch Index Management](features/opensearch-indices.md) - Templates, ISM policies
 - [Drain Strategy](features/drain-strategy.md) - Safe scale-down with shard relocation and queue drain
+- [Advanced Indexer Topology](features/advanced-indexer-topology.md) - Multi-role OpenSearch clusters with nodePools
 
 ### Examples
 

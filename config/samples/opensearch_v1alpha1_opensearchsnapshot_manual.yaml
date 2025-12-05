@@ -1,0 +1,47 @@
+# OpenSearchSnapshot example for triggering manual snapshots
+# Use this before maintenance, upgrades, or as ad-hoc backups
+#
+# PREREQUISITE:
+# 1. An OpenSearchSnapshotRepository must exist
+# 2. The repository-s3 plugin must be installed if using S3/MinIO
+#
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchSnapshot
+metadata:
+  name: pre-upgrade
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  # Repository must exist (created via OpenSearchSnapshotRepository CRD)
+  repository: minio-backups
+  # Index patterns to include in the snapshot
+  indices:
+    - "wazuh-alerts-*"
+    - "wazuh-archives-*"
+    - "wazuh-monitoring-*"
+    - "wazuh-statistics-*"
+  # Skip indices that don't exist
+  ignoreUnavailable: true
+  # Don't include cluster state (templates, settings)
+  # Set to true if you want to restore templates as well
+  includeGlobalState: false
+  # Allow partial snapshots (useful for large clusters)
+  partial: false
+  # Wait for completion (blocking) - set false for async
+  waitForCompletion: true
+---
+# Example: Snapshot only alert indices
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchSnapshot
+metadata:
+  name: alerts-backup
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  repository: minio-backups
+  indices:
+    - "wazuh-alerts-*"
+  ignoreUnavailable: true
+  includeGlobalState: false

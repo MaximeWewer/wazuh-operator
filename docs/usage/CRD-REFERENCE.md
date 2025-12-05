@@ -18,10 +18,17 @@ This document provides a complete reference for all Custom Resource Definitions 
   - [OpenSearchComponentTemplate](#opensearchcomponenttemplate)
   - [OpenSearchISMPolicy](#opensearchismpolicy)
   - [OpenSearchSnapshotPolicy](#opensearchsnapshotpolicy)
+- [OpenSearch Backup CRDs](#opensearch-backup-crds)
+  - [OpenSearchSnapshotRepository](#opensearchsnapshotrepository)
+  - [OpenSearchSnapshot](#opensearchsnapshot)
+  - [OpenSearchRestore](#opensearchrestore)
 - [Wazuh Configuration CRDs](#wazuh-configuration-crds)
   - [WazuhRule](#wazuhrule)
   - [WazuhDecoder](#wazuhdecoder)
   - [WazuhFilebeat](#wazuhfilebeat)
+- [Wazuh Backup CRDs](#wazuh-backup-crds)
+  - [WazuhBackup](#wazuhbackup)
+  - [WazuhRestore](#wazuhrestore)
 
 ---
 
@@ -282,29 +289,66 @@ Includes all fields from MasterSpec, plus:
 
 ### IndexerSpec
 
-| Field                      | Type                                          | Required | Default            | Description             |
-| -------------------------- | --------------------------------------------- | -------- | ------------------ | ----------------------- |
-| `replicas`                 | int32                                         | No       | `3`                | Number of replicas      |
-| `storageSize`              | string                                        | No       | `50Gi`             | Storage size            |
-| `clusterName`              | string                                        | No       | `wazuh`            | Cluster name            |
-| `javaOpts`                 | string                                        | No       | `-Xms1g -Xmx1g...` | Java options            |
-| `image`                    | [ImageSpec](#imagespec)                       | No       | -                  | Image override          |
-| `resources`                | ResourceRequirements                          | No       | -                  | Resources               |
-| `credentials`              | [CredentialsSecretRef](#credentialssecretref) | No       | -                  | Admin credentials       |
-| `service`                  | [ServiceSpec](#servicespec)                   | No       | -                  | Service config          |
-| `nodeSelector`             | map[string]string                             | No       | -                  | Node selector           |
-| `tolerations`              | []Toleration                                  | No       | -                  | Tolerations             |
-| `affinity`                 | Affinity                                      | No       | -                  | Affinity rules          |
-| `podDisruptionBudget`      | [PDBSpec](#pdbspec)                           | No       | -                  | PDB config              |
-| `annotations`              | map[string]string                             | No       | -                  | StatefulSet annotations |
-| `podAnnotations`           | map[string]string                             | No       | -                  | Pod annotations         |
-| `ingress`                  | [IngressSpec](#ingressspec)                   | No       | -                  | Ingress config          |
-| `updateStrategy`           | string                                        | No       | `RollingUpdate`    | Update strategy         |
-| `initContainers`           | []Container                                   | No       | -                  | Init containers         |
-| `env`                      | []EnvVar                                      | No       | -                  | Environment variables   |
-| `envFrom`                  | []EnvFromSource                               | No       | -                  | Env from sources        |
-| `securityContext`          | PodSecurityContext                            | No       | -                  | Pod security            |
-| `containerSecurityContext` | SecurityContext                               | No       | -                  | Container security      |
+| Field                      | Type                                          | Required | Default            | Description                                                        |
+| -------------------------- | --------------------------------------------- | -------- | ------------------ | ------------------------------------------------------------------ |
+| `replicas`                 | int32                                         | No       | `3`                | Number of replicas (simple mode)                                   |
+| `nodePools`                | [][IndexerNodePoolSpec](#indexernodepoolspec) | No       | -                  | NodePools for advanced topology (mutually exclusive with replicas) |
+| `storageSize`              | string                                        | No       | `50Gi`             | Storage size                                                       |
+| `clusterName`              | string                                        | No       | `wazuh`            | Cluster name                                                       |
+| `javaOpts`                 | string                                        | No       | `-Xms1g -Xmx1g...` | Java options                                                       |
+| `image`                    | [ImageSpec](#imagespec)                       | No       | -                  | Image override                                                     |
+| `resources`                | ResourceRequirements                          | No       | -                  | Resources                                                          |
+| `credentials`              | [CredentialsSecretRef](#credentialssecretref) | No       | -                  | Admin credentials                                                  |
+| `service`                  | [ServiceSpec](#servicespec)                   | No       | -                  | Service config                                                     |
+| `nodeSelector`             | map[string]string                             | No       | -                  | Node selector                                                      |
+| `tolerations`              | []Toleration                                  | No       | -                  | Tolerations                                                        |
+| `affinity`                 | Affinity                                      | No       | -                  | Affinity rules                                                     |
+| `podDisruptionBudget`      | [PDBSpec](#pdbspec)                           | No       | -                  | PDB config                                                         |
+| `annotations`              | map[string]string                             | No       | -                  | StatefulSet annotations                                            |
+| `podAnnotations`           | map[string]string                             | No       | -                  | Pod annotations                                                    |
+| `ingress`                  | [IngressSpec](#ingressspec)                   | No       | -                  | Ingress config                                                     |
+| `updateStrategy`           | string                                        | No       | `RollingUpdate`    | Update strategy                                                    |
+| `initContainers`           | []Container                                   | No       | -                  | Init containers                                                    |
+| `env`                      | []EnvVar                                      | No       | -                  | Environment variables                                              |
+| `envFrom`                  | []EnvFromSource                               | No       | -                  | Env from sources                                                   |
+| `securityContext`          | PodSecurityContext                            | No       | -                  | Pod security                                                       |
+| `containerSecurityContext` | SecurityContext                               | No       | -                  | Container security                                                 |
+
+> **Note**: `replicas` and `nodePools` are mutually exclusive. Use `replicas` for simple mode (all nodes have all roles) or `nodePools` for advanced mode (dedicated node roles). See [Advanced Indexer Topology](features/advanced-indexer-topology.md) for details.
+
+### IndexerNodePoolSpec
+
+Configuration for a nodePool in advanced indexer topology mode. Each nodePool becomes a separate StatefulSet with its own configuration.
+
+| Field            | Type                 | Required | Default | Description                                    |
+| ---------------- | -------------------- | -------- | ------- | ---------------------------------------------- |
+| `name`           | string               | **Yes**  | -       | Unique name for the nodePool (DNS-compatible)  |
+| `replicas`       | int32                | **Yes**  | -       | Number of replicas in this pool                |
+| `roles`          | []IndexerNodeRole    | **Yes**  | -       | OpenSearch node roles                          |
+| `attributes`     | map[string]string    | No       | -       | Node attributes for shard allocation awareness |
+| `storageSize`    | string               | No       | `50Gi`  | Storage size for this pool                     |
+| `storageClass`   | \*string             | No       | -       | StorageClass for this pool                     |
+| `javaOpts`       | string               | No       | -       | Java options for this pool                     |
+| `resources`      | ResourceRequirements | No       | -       | Resource requests/limits                       |
+| `nodeSelector`   | map[string]string    | No       | -       | Kubernetes node selector                       |
+| `tolerations`    | []Toleration         | No       | -       | Kubernetes tolerations                         |
+| `affinity`       | \*Affinity           | No       | -       | Kubernetes affinity rules                      |
+| `annotations`    | map[string]string    | No       | -       | StatefulSet annotations                        |
+| `podAnnotations` | map[string]string    | No       | -       | Pod annotations                                |
+
+### IndexerNodeRole
+
+Valid values for OpenSearch node roles:
+
+| Role                    | Description                                           |
+| ----------------------- | ----------------------------------------------------- |
+| `cluster_manager`       | Manages cluster state and metadata (minimum 3 needed) |
+| `data`                  | Stores data and executes search/indexing              |
+| `ingest`                | Pre-processes documents before indexing               |
+| `search`                | Dedicated search nodes                                |
+| `ml`                    | Machine learning workloads                            |
+| `remote_cluster_client` | Cross-cluster search support                          |
+| `coordinating_only`     | Routes requests, aggregates results (no data)         |
 
 ### DashboardSpec
 
@@ -551,6 +595,87 @@ Manages snapshot/backup policies.
 
 ---
 
+## OpenSearch Backup CRDs
+
+### OpenSearchSnapshotRepository
+
+Manages OpenSearch snapshot repositories for storing backups.
+
+**Short Name:** `osrepo`
+
+| Field        | Type                       | Required | Default | Description                          |
+| ------------ | -------------------------- | -------- | ------- | ------------------------------------ |
+| `clusterRef` | WazuhClusterReference      | **Yes**  | -       | Cluster reference                    |
+| `type`       | string                     | **Yes**  | -       | Repository type: `s3`, `azure`, `fs` |
+| `settings`   | SnapshotRepositorySettings | **Yes**  | -       | Repository settings                  |
+| `verify`     | bool                       | No       | `true`  | Verify repository after creation     |
+
+#### SnapshotRepositorySettings (S3)
+
+| Field                  | Type                       | Required | Default | Description                      |
+| ---------------------- | -------------------------- | -------- | ------- | -------------------------------- |
+| `bucket`               | string                     | **Yes**  | -       | S3 bucket name                   |
+| `basePath`             | string                     | No       | -       | Path prefix within bucket        |
+| `region`               | string                     | No       | -       | AWS region                       |
+| `endpoint`             | string                     | No       | -       | Custom endpoint (for MinIO)      |
+| `pathStyleAccess`      | bool                       | No       | `false` | Use path-style access (MinIO)    |
+| `compress`             | bool                       | No       | `true`  | Compress snapshot files          |
+| `serverSideEncryption` | bool                       | No       | `false` | Enable S3 server-side encryption |
+| `storageClass`         | string                     | No       | -       | S3 storage class                 |
+| `credentialsSecret`    | CredentialsSecretReference | **Yes**  | -       | Secret containing S3 credentials |
+
+### OpenSearchSnapshot
+
+Triggers manual snapshots on-demand.
+
+**Short Name:** `ossnapshot`
+
+| Field                | Type                  | Required | Default | Description                  |
+| -------------------- | --------------------- | -------- | ------- | ---------------------------- |
+| `clusterRef`         | WazuhClusterReference | **Yes**  | -       | Cluster reference            |
+| `repository`         | string                | **Yes**  | -       | Repository name              |
+| `indices`            | []string              | No       | all     | Index patterns to snapshot   |
+| `ignoreUnavailable`  | bool                  | No       | `true`  | Skip missing indices         |
+| `includeGlobalState` | bool                  | No       | `false` | Include cluster state        |
+| `partial`            | bool                  | No       | `false` | Allow partial snapshots      |
+| `waitForCompletion`  | bool                  | No       | `true`  | Wait for snapshot completion |
+
+**Status Fields:**
+
+| Field          | Type   | Description                                        |
+| -------------- | ------ | -------------------------------------------------- |
+| `snapshotName` | string | Generated snapshot name (e.g., `name-timestamp`)   |
+| `state`        | string | Snapshot state: `IN_PROGRESS`, `SUCCESS`, `FAILED` |
+
+### OpenSearchRestore
+
+Restores indices from a snapshot.
+
+**Short Name:** `osrest`
+
+| Field                | Type                  | Required | Default | Description                        |
+| -------------------- | --------------------- | -------- | ------- | ---------------------------------- |
+| `clusterRef`         | WazuhClusterReference | **Yes**  | -       | Cluster reference                  |
+| `repository`         | string                | **Yes**  | -       | Repository name                    |
+| `snapshot`           | string                | **Yes**  | -       | Snapshot name to restore           |
+| `indices`            | []string              | No       | all     | Index patterns to restore          |
+| `ignoreUnavailable`  | bool                  | No       | `true`  | Skip missing indices               |
+| `includeGlobalState` | bool                  | No       | `false` | Include cluster state              |
+| `renamePattern`      | string                | No       | -       | Regex pattern for renaming indices |
+| `renameReplacement`  | string                | No       | -       | Replacement string for rename      |
+| `indexSettings`      | map[string]string     | No       | -       | Override settings during restore   |
+| `waitForCompletion`  | bool                  | No       | `true`  | Wait for restore completion        |
+
+**Example: Rename during restore:**
+
+```yaml
+renamePattern: "(.+)"
+renameReplacement: "restored-$1"
+# wazuh-alerts-2025.01 → restored-wazuh-alerts-2025.01
+```
+
+---
+
 ## Wazuh Configuration CRDs
 
 ### WazuhRule
@@ -673,6 +798,123 @@ See [Filebeat Configuration Guide](./features/filebeat-configuration.md) for det
 
 ---
 
+## Wazuh Backup CRDs
+
+### WazuhBackup
+
+Manages scheduled or one-shot backups of Wazuh Manager data to S3/MinIO.
+
+**Short Name:** `wbak`
+
+| Field           | Type                  | Required | Default | Description                              |
+| --------------- | --------------------- | -------- | ------- | ---------------------------------------- |
+| `clusterRef`    | WazuhClusterReference | **Yes**  | -       | Cluster reference                        |
+| `components`    | BackupComponents      | **Yes**  | -       | Components to backup                     |
+| `schedule`      | string                | No       | -       | Cron schedule (omit for one-shot backup) |
+| `retention`     | RetentionPolicy       | No       | -       | Backup retention policy                  |
+| `storage`       | BackupStorage         | **Yes**  | -       | S3/MinIO storage configuration           |
+| `suspend`       | bool                  | No       | `false` | Suspend scheduled backups                |
+| `backupTimeout` | string                | No       | `30m`   | Maximum backup duration                  |
+| `image`         | ImageSpec             | No       | -       | Custom backup image                      |
+| `resources`     | ResourceRequirements  | No       | -       | Container resources                      |
+
+#### BackupComponents
+
+| Field           | Type     | Default | Description                         |
+| --------------- | -------- | ------- | ----------------------------------- |
+| `agentKeys`     | bool     | `true`  | Agent registration keys (critical)  |
+| `fimDatabase`   | bool     | `true`  | File Integrity Monitoring database  |
+| `agentDatabase` | bool     | `true`  | Agent state databases               |
+| `integrations`  | bool     | `false` | Integration scripts                 |
+| `alertLogs`     | bool     | `false` | Alert log files (can be large)      |
+| `customPaths`   | []string | -       | Additional paths within /var/ossec/ |
+
+#### RetentionPolicy
+
+| Field        | Type   | Description                             |
+| ------------ | ------ | --------------------------------------- |
+| `maxBackups` | int32  | Maximum number of backups to keep       |
+| `maxAge`     | string | Delete backups older than (e.g., "30d") |
+
+#### BackupStorage
+
+| Field               | Type                       | Required | Default | Description                      |
+| ------------------- | -------------------------- | -------- | ------- | -------------------------------- |
+| `type`              | string                     | **Yes**  | -       | Storage type: `s3`               |
+| `bucket`            | string                     | **Yes**  | -       | S3/MinIO bucket name             |
+| `prefix`            | string                     | No       | -       | Path prefix (supports templates) |
+| `region`            | string                     | No       | -       | AWS region                       |
+| `endpoint`          | string                     | No       | -       | Custom endpoint (for MinIO)      |
+| `forcePathStyle`    | bool                       | No       | `false` | Use path-style access (MinIO)    |
+| `credentialsSecret` | CredentialsSecretReference | **Yes**  | -       | Secret containing credentials    |
+
+**Status Fields:**
+
+| Field           | Type   | Description                         |
+| --------------- | ------ | ----------------------------------- |
+| `lastBackup`    | \*Time | Timestamp of last successful backup |
+| `lastBackupKey` | string | S3 key of last backup archive       |
+| `backupCount`   | int32  | Total number of backups             |
+| `jobName`       | string | Name of current/last Job            |
+
+### WazuhRestore
+
+Restores Wazuh Manager data from an S3/MinIO backup archive.
+
+**Short Name:** `wrest`
+
+| Field                 | Type                  | Required | Default | Description                   |
+| --------------------- | --------------------- | -------- | ------- | ----------------------------- |
+| `clusterRef`          | WazuhClusterReference | **Yes**  | -       | Cluster reference             |
+| `source`              | RestoreSource         | **Yes**  | -       | Source configuration          |
+| `components`          | RestoreComponents     | No       | all     | Components to restore         |
+| `preRestoreBackup`    | bool                  | No       | `true`  | Create backup before restore  |
+| `stopManager`         | bool                  | No       | `true`  | Stop manager during restore   |
+| `restartAfterRestore` | bool                  | No       | `true`  | Restart manager after restore |
+| `restoreTimeout`      | string                | No       | `30m`   | Maximum restore duration      |
+| `resources`           | ResourceRequirements  | No       | -       | Container resources           |
+
+#### RestoreSource
+
+Either `s3` or `wazuhBackupRef` must be specified:
+
+| Field            | Type            | Description                         |
+| ---------------- | --------------- | ----------------------------------- |
+| `s3`             | S3RestoreSource | Restore from S3/MinIO directly      |
+| `wazuhBackupRef` | WazuhBackupRef  | Reference to a WazuhBackup resource |
+
+#### S3RestoreSource
+
+| Field               | Type                       | Required | Description                   |
+| ------------------- | -------------------------- | -------- | ----------------------------- |
+| `bucket`            | string                     | **Yes**  | S3/MinIO bucket name          |
+| `key`               | string                     | **Yes**  | Full path to backup archive   |
+| `region`            | string                     | No       | AWS region                    |
+| `endpoint`          | string                     | No       | Custom endpoint (for MinIO)   |
+| `forcePathStyle`    | bool                       | No       | Use path-style access (MinIO) |
+| `credentialsSecret` | CredentialsSecretReference | **Yes**  | Secret containing credentials |
+
+#### WazuhBackupRef
+
+| Field             | Type   | Required | Description                  |
+| ----------------- | ------ | -------- | ---------------------------- |
+| `name`            | string | **Yes**  | Name of WazuhBackup resource |
+| `backupTimestamp` | string | No       | Specific backup timestamp    |
+
+**Status Fields:**
+
+| Field          | Type              | Description                     |
+| -------------- | ----------------- | ------------------------------- |
+| `startTime`    | \*Time            | When restore started            |
+| `endTime`      | \*Time            | When restore completed          |
+| `duration`     | string            | Total restore duration          |
+| `sourceBackup` | RestoreSourceInfo | Information about source backup |
+| `jobName`      | string            | Name of restore Job             |
+
+See [Backup & Restore Guide](./features/backup-restore.md) for detailed usage and examples.
+
+---
+
 ## Common Status Fields
 
 All CRDs include these status fields:
@@ -756,12 +998,30 @@ See [Volume Expansion Guide](./features/volume-expansion.md) for detailed usage 
 
 See `config/samples/` for example manifests:
 
+### WazuhCluster Examples
+
 - `wazuh_v1alpha1_wazuhcluster_minimal.yaml` - Minimal development setup
 - `wazuh_v1alpha1_wazuhcluster_production.yaml` - Production configuration
 - `wazuh_v1alpha1_wazuhcluster_complete.yaml` - All options documented
 - `wazuh_v1alpha1_wazuhcluster_monitoring.yaml` - Prometheus monitoring
 - `wazuh_v1alpha1_wazuhcluster_tls.yaml` - TLS configurations
 - `wazuh_v1alpha1_wazuhcluster_cloud_workers.yaml` - Cloud log collection
-- `opensearch_v1alpha1_*.yaml` - OpenSearch resource examples
+
+### Wazuh Configuration
+
 - `wazuh_v1alpha1_rule.yaml` - Custom rule example
 - `wazuh_v1alpha1_decoder.yaml` - Custom decoder example
+
+### OpenSearch Security & Index Management
+
+- `opensearch_v1alpha1_*.yaml` - OpenSearch resource examples
+
+### Backup & Restore
+
+- `opensearch_v1alpha1_opensearchsnapshotrepository_s3.yaml` - AWS S3 repository
+- `opensearch_v1alpha1_opensearchsnapshotrepository_minio.yaml` - MinIO repository
+- `opensearch_v1alpha1_opensearchsnapshot_manual.yaml` - Manual snapshot trigger
+- `opensearch_v1alpha1_opensearchrestore.yaml` - Restore from snapshot
+- `wazuh_v1alpha1_wazuhbackup_scheduled.yaml` - Scheduled Wazuh backups
+- `wazuh_v1alpha1_wazuhbackup_oneshot.yaml` - One-shot Wazuh backup
+- `wazuh_v1alpha1_wazuhrestore.yaml` - Wazuh restore examples

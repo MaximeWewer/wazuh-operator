@@ -1,0 +1,381 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.0
+  name: wazuhrestores.resources.wazuh.com
+spec:
+  group: resources.wazuh.com
+  names:
+    kind: WazuhRestore
+    listKind: WazuhRestoreList
+    plural: wazuhrestores
+    shortNames:
+    - wrest
+    singular: wazuhrestore
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.clusterRef.name
+      name: Cluster
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.duration
+      name: Duration
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: WazuhRestore is the Schema for restoring Wazuh Manager data from
+          backups
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: WazuhRestoreSpec defines the desired state of WazuhRestore
+            properties:
+              clusterRef:
+                description: ClusterRef references the WazuhCluster to restore to
+                properties:
+                  name:
+                    description: Name of the WazuhCluster resource
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the WazuhCluster resource
+                      If empty, assumes the same namespace as the referencing resource
+                    type: string
+                required:
+                - name
+                type: object
+              components:
+                description: |-
+                  Components defines what data to restore
+                  If not specified, restores all components that exist in the backup
+                properties:
+                  agentDatabase:
+                    default: true
+                    description: AgentDatabase restores /var/ossec/queue/db/
+                    type: boolean
+                  agentKeys:
+                    default: true
+                    description: AgentKeys restores /var/ossec/etc/client.keys
+                    type: boolean
+                  alertLogs:
+                    default: false
+                    description: AlertLogs restores /var/ossec/logs/alerts/
+                    type: boolean
+                  customPaths:
+                    description: CustomPaths additional paths to restore
+                    items:
+                      type: string
+                    type: array
+                  fimDatabase:
+                    default: true
+                    description: FIMDatabase restores /var/ossec/queue/fim/db/
+                    type: boolean
+                  integrations:
+                    default: false
+                    description: Integrations restores /var/ossec/integrations/
+                    type: boolean
+                type: object
+              image:
+                description: |-
+                  Image specifies a custom restore container image
+                  If not set, uses a default image with aws-cli and tar
+                properties:
+                  pullPolicy:
+                    description: PullPolicy is the image pull policy
+                    type: string
+                  repository:
+                    description: Repository is the image repository
+                    type: string
+                  tag:
+                    description: Tag is the image tag
+                    type: string
+                type: object
+              preRestoreBackup:
+                default: true
+                description: PreRestoreBackup creates a backup of current data before
+                  restore
+                type: boolean
+              resources:
+                description: Resources for the restore Job container
+                properties:
+                  claims:
+                    description: |-
+                      Claims lists the names of resources, defined in spec.resourceClaims,
+                      that are used by this container.
+
+                      This field depends on the
+                      DynamicResourceAllocation feature gate.
+
+                      This field is immutable. It can only be set for containers.
+                    items:
+                      description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                      properties:
+                        name:
+                          description: |-
+                            Name must match the name of one entry in pod.spec.resourceClaims of
+                            the Pod where this field is used. It makes that resource available
+                            inside a container.
+                          type: string
+                        request:
+                          description: |-
+                            Request is the name chosen for a request in the referenced claim.
+                            If empty, everything from the claim is made available, otherwise
+                            only the result of this request.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Limits describes the maximum amount of compute resources allowed.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Requests describes the minimum amount of compute resources required.
+                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                type: object
+              restartAfterRestore:
+                default: true
+                description: RestartAfterRestore restarts the manager after successful
+                  restore
+                type: boolean
+              restoreTimeout:
+                default: 30m
+                description: RestoreTimeout is the maximum duration for the restore
+                  operation
+                type: string
+              source:
+                description: Source defines where to restore from
+                properties:
+                  s3:
+                    description: S3 defines S3/MinIO source configuration
+                    properties:
+                      bucket:
+                        description: Bucket is the S3 bucket name
+                        type: string
+                      credentialsSecret:
+                        description: CredentialsSecret references the Secret containing
+                          S3 credentials
+                        properties:
+                          accessKeyKey:
+                            default: access-key
+                            description: AccessKeyKey is the key in the Secret for
+                              the access key ID
+                            type: string
+                          name:
+                            description: Name of the Secret containing credentials
+                            type: string
+                          secretKeyKey:
+                            default: secret-key
+                            description: SecretKeyKey is the key in the Secret for
+                              the secret access key
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      endpoint:
+                        description: Endpoint is a custom S3 endpoint (for MinIO)
+                        type: string
+                      forcePathStyle:
+                        description: ForcePathStyle enables path-style S3 access (required
+                          for MinIO)
+                        type: boolean
+                      key:
+                        description: |-
+                          Key is the full S3 key (path) to the backup archive
+                          Example: "wazuh-cluster/wazuh/daily-backup-20250105-020000.tar.gz"
+                        type: string
+                      region:
+                        description: Region is the AWS region
+                        type: string
+                    required:
+                    - bucket
+                    - credentialsSecret
+                    - key
+                    type: object
+                  wazuhBackupRef:
+                    description: |-
+                      WazuhBackupRef references an existing WazuhBackup to restore from
+                      Uses the last successful backup from that WazuhBackup
+                    properties:
+                      backupTimestamp:
+                        description: |-
+                          BackupTimestamp optionally specifies which backup to restore
+                          If not specified, uses the most recent successful backup
+                        type: string
+                      name:
+                        description: Name is the WazuhBackup name
+                        type: string
+                    required:
+                    - name
+                    type: object
+                type: object
+              stopManager:
+                default: true
+                description: |-
+                  StopManager stops the manager during restore
+                  Recommended for data consistency
+                type: boolean
+            required:
+            - clusterRef
+            - source
+            type: object
+          status:
+            description: WazuhRestoreStatus defines the observed state of WazuhRestore
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              duration:
+                description: Duration is how long the restore took
+                type: string
+              endTime:
+                description: EndTime is when the restore completed
+                format: date-time
+                type: string
+              jobName:
+                description: JobName is the name of the restore Job
+                type: string
+              message:
+                description: Message provides additional information about the current
+                  phase
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the last observed generation
+                format: int64
+                type: integer
+              phase:
+                description: Phase is the current phase
+                type: string
+              preRestoreBackupLocation:
+                description: PreRestoreBackupLocation is where the pre-restore backup
+                  was saved
+                type: string
+              restoredComponents:
+                description: RestoredComponents lists what was actually restored
+                items:
+                  type: string
+                type: array
+              sourceBackup:
+                description: SourceBackup contains info about the source backup
+                properties:
+                  backupTime:
+                    description: BackupTime is when the source backup was created
+                    format: date-time
+                    type: string
+                  location:
+                    description: Location is the S3 URL or reference
+                    type: string
+                  size:
+                    description: Size is the backup size
+                    type: string
+                type: object
+              startTime:
+                description: StartTime is when the restore started
+                format: date-time
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

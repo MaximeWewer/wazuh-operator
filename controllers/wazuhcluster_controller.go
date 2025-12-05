@@ -36,6 +36,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/validation"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
@@ -141,6 +142,44 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if err := r.Status().Update(ctx, cluster); err != nil {
 			log.Error(err, "Failed to update WazuhCluster status to Creating")
 			return ctrl.Result{}, err
+		}
+	}
+
+	// Validate indexer topology configuration (simple vs advanced mode)
+	if cluster.Spec.Indexer != nil {
+		validationResult := validation.ValidateNodePools(cluster.Spec.Indexer)
+		if !validationResult.Valid {
+			for _, valErr := range validationResult.Errors {
+				log.Error(fmt.Errorf("%s", valErr.Message), "NodePool validation failed", "field", valErr.Field)
+			}
+			// Emit event for validation failure
+			r.emitDrainEvent(cluster, constants.DrainComponentIndexer, "ValidationFailed",
+				fmt.Sprintf("NodePool validation failed: %s", validationResult.Errors[0].Message))
+
+			r.updateCondition(cluster, wazuhv1alpha1.ConditionTypeProgressing, metav1.ConditionFalse,
+				"NodePoolValidationFailed", validationResult.Errors[0].Message)
+
+			// Don't proceed with reconciliation if validation fails
+			return ctrl.Result{}, fmt.Errorf("nodePool validation failed: %s", validationResult.Errors[0].Message)
+		}
+
+		// Log warnings but continue
+		for _, warning := range validationResult.Warnings {
+			log.Info("NodePool validation warning", "warning", warning)
+		}
+
+		// Update topology mode in status
+		if cluster.Spec.Indexer.IsAdvancedMode() {
+			if cluster.Status.Indexer.TopologyMode != constants.TopologyModeAdvanced {
+				cluster.Status.Indexer.TopologyMode = constants.TopologyModeAdvanced
+				log.Info("Detected advanced indexer topology mode with nodePools",
+					"poolCount", len(cluster.Spec.Indexer.NodePools))
+			}
+		} else {
+			if cluster.Status.Indexer.TopologyMode != constants.TopologyModeSimple {
+				cluster.Status.Indexer.TopologyMode = constants.TopologyModeSimple
+				log.V(1).Info("Using simple indexer topology mode")
+			}
 		}
 	}
 

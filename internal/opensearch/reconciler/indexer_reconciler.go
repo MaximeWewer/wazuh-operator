@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sort"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -83,11 +84,21 @@ func (r *IndexerReconciler) WithRecorder(recorder record.EventRecorder) *Indexer
 func (r *IndexerReconciler) Reconcile(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
-	// Reconcile Secrets
+	// Detect topology mode
+	isAdvancedMode := cluster.Spec.Indexer != nil && cluster.Spec.Indexer.IsAdvancedMode()
+
+	// Reconcile Secrets (shared between both modes)
 	if err := r.reconcileSecrets(ctx, cluster); err != nil {
 		return fmt.Errorf("failed to reconcile indexer secrets: %w", err)
 	}
 
+	if isAdvancedMode {
+		// Advanced topology mode: reconcile nodePools
+		log.Info("Reconciling indexer in advanced topology mode", "nodePools", len(cluster.Spec.Indexer.NodePools))
+		return r.reconcileAdvancedMode(ctx, cluster)
+	}
+
+	// Simple mode: original reconciliation logic
 	// Reconcile ConfigMap
 	if err := r.reconcileConfigMap(ctx, cluster); err != nil {
 		return fmt.Errorf("failed to reconcile indexer configmap: %w", err)
@@ -1873,4 +1884,698 @@ func (r *IndexerReconciler) updateIndexerExpansionStatus(ctx context.Context, cl
 		"phase", update.Phase,
 		"pvcsExpanded", len(pvcsExpanded),
 		"pvcsPending", len(pvcsPending))
+}
+
+// =============================================================================
+// Advanced Topology Mode (NodePools)
+// =============================================================================
+
+// reconcileAdvancedMode reconciles the indexer in advanced topology mode
+// This creates separate StatefulSets, Services, and ConfigMaps for each nodePool
+func (r *IndexerReconciler) reconcileAdvancedMode(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	// Initialize nodePool statuses if needed
+	if cluster.Status.Indexer.NodePoolStatuses == nil {
+		cluster.Status.Indexer.NodePoolStatuses = make(map[string]wazuhv1alpha1.NodePoolStatus)
+	}
+
+	// Build discovery hosts and initial master nodes (pointing to cluster_manager pools)
+	discoveryHosts, initialMasterNodes := r.buildDiscoveryConfig(cluster)
+
+	// Reconcile each nodePool
+	for _, pool := range cluster.Spec.Indexer.NodePools {
+		log.V(1).Info("Reconciling nodePool", "pool", pool.Name, "replicas", pool.Replicas)
+
+		// Update status to indicate reconciliation in progress
+		r.updateNodePoolStatus(cluster, pool.Name, wazuhv1alpha1.NodePoolPhaseCreating, "Reconciling nodePool")
+
+		if err := r.reconcileSingleNodePool(ctx, cluster, &pool, discoveryHosts, initialMasterNodes); err != nil {
+			r.updateNodePoolStatus(cluster, pool.Name, wazuhv1alpha1.NodePoolPhaseFailed, err.Error())
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeWarning, "NodePoolReconcileFailed",
+					fmt.Sprintf("Failed to reconcile nodePool %s: %v", pool.Name, err))
+			}
+			return fmt.Errorf("failed to reconcile nodePool %s: %w", pool.Name, err)
+		}
+
+		// Get StatefulSet status for this pool
+		stsName := constants.IndexerNodePoolName(cluster.Name, pool.Name)
+		sts := &appsv1.StatefulSet{}
+		if err := r.Get(ctx, types.NamespacedName{Name: stsName, Namespace: cluster.Namespace}, sts); err == nil {
+			phase := r.getNodePoolPhase(sts)
+			r.updateNodePoolStatusFromSts(cluster, pool.Name, sts, phase)
+		}
+	}
+
+	// Cleanup orphaned resources from removed nodePools
+	if err := r.cleanupOrphanedNodePools(ctx, cluster); err != nil {
+		log.Error(err, "Failed to cleanup orphaned nodePool resources")
+		// Don't fail reconciliation for cleanup errors
+	}
+
+	// Update overall indexer status
+	r.updateIndexerStatusFromNodePools(cluster)
+
+	log.Info("Advanced mode indexer reconciliation completed",
+		"nodePools", len(cluster.Spec.Indexer.NodePools))
+	return nil
+}
+
+// reconcileSingleNodePool reconciles a single nodePool's resources
+func (r *IndexerReconciler) reconcileSingleNodePool(
+	ctx context.Context,
+	cluster *wazuhv1alpha1.WazuhCluster,
+	pool *wazuhv1alpha1.IndexerNodePoolSpec,
+	discoveryHosts []string,
+	initialMasterNodes []string,
+) error {
+	log := logf.FromContext(ctx)
+
+	// 1. Reconcile ConfigMap for this nodePool
+	if err := r.reconcileNodePoolConfigMap(ctx, cluster, pool, discoveryHosts, initialMasterNodes); err != nil {
+		return fmt.Errorf("failed to reconcile configmap: %w", err)
+	}
+
+	// 2. Reconcile headless Service for this nodePool
+	if err := r.reconcileNodePoolService(ctx, cluster, pool); err != nil {
+		return fmt.Errorf("failed to reconcile service: %w", err)
+	}
+
+	// 3. Reconcile StatefulSet for this nodePool
+	if err := r.reconcileNodePoolStatefulSet(ctx, cluster, pool); err != nil {
+		return fmt.Errorf("failed to reconcile statefulset: %w", err)
+	}
+
+	log.V(1).Info("NodePool resources reconciled", "pool", pool.Name)
+	return nil
+}
+
+// reconcileNodePoolConfigMap creates/updates the ConfigMap for a nodePool
+func (r *IndexerReconciler) reconcileNodePoolConfigMap(
+	ctx context.Context,
+	cluster *wazuhv1alpha1.WazuhCluster,
+	pool *wazuhv1alpha1.IndexerNodePoolSpec,
+	discoveryHosts []string,
+	initialMasterNodes []string,
+) error {
+	// Build opensearch.yml with role-specific configuration
+	params := config.NodePoolConfigParams{
+		ClusterName:        cluster.Name,
+		Namespace:          cluster.Namespace,
+		PoolName:           pool.Name,
+		Roles:              pool.GetRolesAsStrings(),
+		Attributes:         pool.Attributes,
+		DiscoverySeedHosts: discoveryHosts,
+		InitialMasterNodes: initialMasterNodes,
+		WazuhVersion:       cluster.Spec.Version,
+	}
+	opensearchYML := config.BuildNodePoolConfig(params)
+
+	// Build ConfigMap
+	configBuilder := configmaps.NewNodePoolConfigMapBuilder(cluster.Name, cluster.Namespace, pool.Name)
+	configBuilder.WithOpenSearchYML(opensearchYML)
+	if cluster.Spec.Version != "" {
+		configBuilder.WithVersion(cluster.Spec.Version)
+	}
+	configMap := configBuilder.Build()
+
+	// Set controller reference
+	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference: %w", err)
+	}
+
+	return r.createOrUpdate(ctx, configMap)
+}
+
+// reconcileNodePoolService creates/updates the headless Service for a nodePool
+func (r *IndexerReconciler) reconcileNodePoolService(
+	ctx context.Context,
+	cluster *wazuhv1alpha1.WazuhCluster,
+	pool *wazuhv1alpha1.IndexerNodePoolSpec,
+) error {
+	// Build headless service
+	serviceBuilder := services.NewNodePoolServiceBuilder(cluster.Name, cluster.Namespace, pool.Name)
+	if cluster.Spec.Version != "" {
+		serviceBuilder.WithVersion(cluster.Spec.Version)
+	}
+	service := serviceBuilder.Build()
+
+	// Set controller reference
+	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference: %w", err)
+	}
+
+	return r.createOrUpdate(ctx, service)
+}
+
+// reconcileNodePoolStatefulSet creates/updates the StatefulSet for a nodePool
+func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
+	ctx context.Context,
+	cluster *wazuhv1alpha1.WazuhCluster,
+	pool *wazuhv1alpha1.IndexerNodePoolSpec,
+) error {
+	log := logf.FromContext(ctx)
+
+	// Build StatefulSet
+	stsBuilder := deployments.NewNodePoolStatefulSetBuilder(cluster.Name, cluster.Namespace, pool.Name)
+	stsBuilder.WithReplicas(pool.Replicas).
+		WithRoles(pool.GetRolesAsStrings()).
+		WithCluster(cluster)
+
+	// Set version
+	if cluster.Spec.Version != "" {
+		stsBuilder.WithVersion(cluster.Spec.Version)
+	}
+
+	// Set per-pool configurations
+	if pool.Resources != nil {
+		stsBuilder.WithResources(pool.Resources)
+	}
+	if pool.StorageSize != "" {
+		stsBuilder.WithStorageSize(pool.StorageSize)
+	}
+	if pool.StorageClass != nil {
+		stsBuilder.WithStorageClassName(*pool.StorageClass)
+	}
+	if pool.JavaOpts != "" {
+		stsBuilder.WithJavaOpts(pool.JavaOpts)
+	}
+	if pool.NodeSelector != nil {
+		stsBuilder.WithNodeSelector(pool.NodeSelector)
+	}
+	if pool.Tolerations != nil {
+		stsBuilder.WithTolerations(pool.Tolerations)
+	}
+	if pool.Affinity != nil {
+		stsBuilder.WithAffinity(pool.Affinity)
+	}
+	if len(pool.Annotations) > 0 {
+		stsBuilder.WithAnnotations(pool.Annotations)
+	}
+	if len(pool.PodAnnotations) > 0 {
+		stsBuilder.WithPodAnnotations(pool.PodAnnotations)
+	}
+
+	// Compute config hash for change detection
+	configMapName := constants.IndexerNodePoolConfigName(cluster.Name, pool.Name)
+	configMap := &corev1.ConfigMap{}
+	if err := r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: cluster.Namespace}, configMap); err == nil {
+		configHash := patch.ComputeConfigHash(configMap.Data)
+		stsBuilder.WithConfigHash(configHash)
+	}
+
+	sts := stsBuilder.Build()
+
+	// Set controller reference
+	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference: %w", err)
+	}
+
+	// Check if StatefulSet exists
+	found := &appsv1.StatefulSet{}
+	err := r.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, found)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating nodePool StatefulSet", "name", sts.Name, "pool", pool.Name, "replicas", pool.Replicas)
+		if err := r.Create(ctx, sts); err != nil {
+			return fmt.Errorf("failed to create statefulset: %w", err)
+		}
+
+		// Emit event
+		if r.Recorder != nil {
+			r.Recorder.Event(cluster, corev1.EventTypeNormal, "NodePoolCreated",
+				fmt.Sprintf("Created nodePool %s with %d replicas", pool.Name, pool.Replicas))
+		}
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("failed to get statefulset: %w", err)
+	}
+
+	// Check if update is needed
+	needsUpdate := false
+	updateReason := ""
+
+	// Check replicas change
+	currentReplicas := *found.Spec.Replicas
+	isScaleDown := pool.Replicas < currentReplicas
+
+	if currentReplicas != pool.Replicas {
+		log.Info("NodePool replicas changed",
+			"pool", pool.Name,
+			"oldReplicas", currentReplicas,
+			"newReplicas", pool.Replicas,
+			"isScaleDown", isScaleDown)
+
+		// Handle scale-down with drain integration
+		if isScaleDown {
+			// Check if drain is enabled and if it's needed for this nodePool
+			drainNeeded, err := r.checkNodePoolScaleDownDrain(ctx, cluster, pool, currentReplicas)
+			if err != nil {
+				return fmt.Errorf("failed to check scale-down drain: %w", err)
+			}
+			if drainNeeded {
+				// Drain is in progress or waiting, don't update replicas yet
+				log.Info("Scale-down drain in progress, deferring replica update",
+					"pool", pool.Name)
+				return nil
+			}
+			// Drain complete or not needed, proceed with scale-down
+		}
+
+		needsUpdate = true
+		updateReason = fmt.Sprintf("replicas: %d->%d", currentReplicas, pool.Replicas)
+	}
+
+	// Check config hash change
+	existingConfigHash := ""
+	if found.Spec.Template.Annotations != nil {
+		existingConfigHash = found.Spec.Template.Annotations[constants.AnnotationConfigHash]
+	}
+	newConfigHash := ""
+	if sts.Spec.Template.Annotations != nil {
+		newConfigHash = sts.Spec.Template.Annotations[constants.AnnotationConfigHash]
+	}
+	if newConfigHash != "" && newConfigHash != existingConfigHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += ", "
+		}
+		updateReason += "config changed"
+	}
+
+	if needsUpdate {
+		log.Info("Updating nodePool StatefulSet",
+			"pool", pool.Name,
+			"reason", updateReason)
+
+		sts.SetResourceVersion(found.GetResourceVersion())
+		if err := r.Update(ctx, sts); err != nil {
+			return fmt.Errorf("failed to update statefulset: %w", err)
+		}
+
+		// Emit event
+		if r.Recorder != nil {
+			r.Recorder.Event(cluster, corev1.EventTypeNormal, "NodePoolUpdated",
+				fmt.Sprintf("Updated nodePool %s: %s", pool.Name, updateReason))
+		}
+	}
+
+	return nil
+}
+
+// checkNodePoolScaleDownDrain checks if drain is needed and handles it for nodePool scale-down
+// Returns true if drain is in progress and scale-down should be deferred
+func (r *IndexerReconciler) checkNodePoolScaleDownDrain(
+	ctx context.Context,
+	cluster *wazuhv1alpha1.WazuhCluster,
+	pool *wazuhv1alpha1.IndexerNodePoolSpec,
+	currentReplicas int32,
+) (bool, error) {
+	log := logf.FromContext(ctx)
+
+	// Check if drain is enabled
+	if cluster.Spec.Drain == nil || cluster.Spec.Drain.Indexer == nil ||
+		cluster.Spec.Drain.Indexer.Enabled == nil || !*cluster.Spec.Drain.Indexer.Enabled {
+		log.Info("Indexer drain is not enabled, proceeding with scale-down without drain",
+			"pool", pool.Name)
+		return false, nil
+	}
+
+	// Calculate total cluster_manager count for quorum check
+	totalClusterManagers := r.getTotalClusterManagers(cluster)
+
+	// Build scale-down info
+	targetPods := drain.GetNodePoolScaleDownTargets(cluster.Name, pool.Name, currentReplicas, pool.Replicas)
+	scaleDownInfo := &drain.NodePoolScaleDownInfo{
+		PoolName:        pool.Name,
+		Roles:           pool.GetRolesAsStrings(),
+		CurrentReplicas: currentReplicas,
+		DesiredReplicas: pool.Replicas,
+		TargetPodNames:  targetPods,
+	}
+
+	// Initialize drainer if needed
+	if err := r.ensureOpenSearchClient(ctx, cluster); err != nil {
+		log.Error(err, "Failed to create OpenSearch client for drain check")
+		// If we can't connect, emit warning but allow scale-down
+		if r.Recorder != nil {
+			r.Recorder.Event(cluster, corev1.EventTypeWarning, "DrainCheckFailed",
+				fmt.Sprintf("Cannot check drain for nodePool %s: %v", pool.Name, err))
+		}
+		return false, nil
+	}
+
+	if r.drainer == nil {
+		var drainConfig *wazuhv1alpha1.IndexerDrainConfig
+		if cluster.Spec.Drain != nil {
+			drainConfig = cluster.Spec.Drain.Indexer
+		}
+		r.drainer = drain.NewIndexerDrainer(r.osClient, log, drainConfig)
+	}
+
+	// Evaluate if drain is needed
+	drainResult, err := r.drainer.EvaluateNodePoolScaleDown(ctx, scaleDownInfo, totalClusterManagers)
+	if err != nil {
+		return false, fmt.Errorf("failed to evaluate scale-down drain: %w", err)
+	}
+
+	// Check for blockers (quorum violation, etc.)
+	if !drainResult.Feasible {
+		for _, blocker := range drainResult.Blockers {
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeWarning, "ScaleDownBlocked",
+					fmt.Sprintf("NodePool %s scale-down blocked: %s", pool.Name, blocker))
+			}
+		}
+		// Return error to prevent scale-down
+		return false, fmt.Errorf("scale-down blocked: %s", drainResult.Blockers[0])
+	}
+
+	// If drain not needed (coordinating-only, no data role), proceed
+	if !drainResult.NeedsDrain {
+		log.Info("Drain not needed for nodePool scale-down",
+			"pool", pool.Name,
+			"reason", drainResult.SkipReason)
+		return false, nil
+	}
+
+	// Drain is needed - check/manage drain status
+	drainStatus := r.getOrInitNodePoolDrainStatus(cluster, pool.Name)
+
+	switch drainStatus.Phase {
+	case wazuhv1alpha1.DrainPhaseIdle, "":
+		// Start new drain
+		log.Info("Starting nodePool drain for scale-down",
+			"pool", pool.Name,
+			"targetPods", targetPods)
+
+		if err := r.drainer.StartNodePoolDrain(ctx, targetPods); err != nil {
+			drainStatus.Phase = wazuhv1alpha1.DrainPhaseFailed
+			drainStatus.Message = err.Error()
+			return false, fmt.Errorf("failed to start drain: %w", err)
+		}
+
+		drainStatus.Phase = wazuhv1alpha1.DrainPhaseDraining
+		drainStatus.Message = fmt.Sprintf("Draining %d pods", len(targetPods))
+		drainStatus.StartTime = &metav1.Time{Time: time.Now()}
+		drainStatus.LastTransitionTime = &metav1.Time{Time: time.Now()}
+
+		if r.Recorder != nil {
+			r.Recorder.Event(cluster, corev1.EventTypeNormal, "NodePoolDrainStarted",
+				fmt.Sprintf("Started drain for nodePool %s: %d pods", pool.Name, len(targetPods)))
+		}
+		return true, nil
+
+	case wazuhv1alpha1.DrainPhaseDraining:
+		// Monitor progress
+		progress, err := r.drainer.MonitorNodePoolDrainProgress(ctx, targetPods)
+		if err != nil {
+			log.Error(err, "Error monitoring nodePool drain progress", "pool", pool.Name)
+			return true, nil // Keep waiting
+		}
+
+		drainStatus.Progress = progress.Percent
+		drainStatus.Message = progress.Message
+
+		if progress.IsComplete {
+			drainStatus.Phase = wazuhv1alpha1.DrainPhaseVerifying
+			log.Info("NodePool drain appears complete, verifying", "pool", pool.Name)
+		}
+		return true, nil
+
+	case wazuhv1alpha1.DrainPhaseVerifying:
+		// Verify completion
+		complete, err := r.drainer.VerifyNodePoolDrainComplete(ctx, targetPods)
+		if err != nil {
+			log.Error(err, "Error verifying nodePool drain", "pool", pool.Name)
+			return true, nil
+		}
+
+		if complete {
+			drainStatus.Phase = wazuhv1alpha1.DrainPhaseComplete
+			drainStatus.LastTransitionTime = &metav1.Time{Time: time.Now()}
+			drainStatus.Message = "Drain complete, proceeding with scale-down"
+
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeNormal, "NodePoolDrainComplete",
+					fmt.Sprintf("Drain complete for nodePool %s", pool.Name))
+			}
+
+			// Clear allocation exclusion
+			if err := r.drainer.CancelDrain(ctx); err != nil {
+				log.Error(err, "Failed to clear allocation exclusion after drain")
+			}
+
+			return false, nil // Drain complete, proceed with scale-down
+		}
+		return true, nil
+
+	case wazuhv1alpha1.DrainPhaseComplete:
+		// Already complete, proceed
+		log.Info("NodePool drain already complete, proceeding with scale-down", "pool", pool.Name)
+		// Reset status for next operation
+		drainStatus.Phase = wazuhv1alpha1.DrainPhaseIdle
+		return false, nil
+
+	case wazuhv1alpha1.DrainPhaseFailed:
+		// Failed - check if we should retry
+		log.Info("Previous nodePool drain failed", "pool", pool.Name, "message", drainStatus.Message)
+		// Reset and allow retry on next reconcile
+		drainStatus.Phase = wazuhv1alpha1.DrainPhaseIdle
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// getOrInitNodePoolDrainStatus returns or initializes drain status for a nodePool
+func (r *IndexerReconciler) getOrInitNodePoolDrainStatus(cluster *wazuhv1alpha1.WazuhCluster, poolName string) *wazuhv1alpha1.ComponentDrainStatus {
+	if cluster.Status.Drain == nil {
+		cluster.Status.Drain = &wazuhv1alpha1.DrainStatus{}
+	}
+
+	// Use a map in NodePoolDrainStatuses (we'll need to check if this exists in the API)
+	// For now, use the single Indexer status with pool name in message
+	if cluster.Status.Drain.Indexer == nil {
+		cluster.Status.Drain.Indexer = &wazuhv1alpha1.ComponentDrainStatus{
+			Phase: wazuhv1alpha1.DrainPhaseIdle,
+		}
+	}
+	return cluster.Status.Drain.Indexer
+}
+
+// getTotalClusterManagers returns the total number of cluster_manager nodes across all nodePools
+func (r *IndexerReconciler) getTotalClusterManagers(cluster *wazuhv1alpha1.WazuhCluster) int32 {
+	var total int32
+	for _, pool := range cluster.Spec.Indexer.NodePools {
+		if pool.HasClusterManagerRole() {
+			total += pool.Replicas
+		}
+	}
+	return total
+}
+
+// buildDiscoveryConfig builds discovery hosts and initial master nodes for advanced mode
+// Discovery hosts point to cluster_manager nodePool pods for all nodes to find the cluster
+func (r *IndexerReconciler) buildDiscoveryConfig(cluster *wazuhv1alpha1.WazuhCluster) ([]string, []string) {
+	var clusterManagerPools []struct {
+		Name     string
+		Replicas int32
+	}
+
+	// Find all nodePools with cluster_manager role
+	for _, pool := range cluster.Spec.Indexer.NodePools {
+		if pool.HasClusterManagerRole() {
+			clusterManagerPools = append(clusterManagerPools, struct {
+				Name     string
+				Replicas int32
+			}{
+				Name:     pool.Name,
+				Replicas: pool.Replicas,
+			})
+		}
+	}
+
+	// If no cluster_manager pools found, use all pools for discovery
+	// (this shouldn't happen with validation, but be safe)
+	if len(clusterManagerPools) == 0 {
+		for _, pool := range cluster.Spec.Indexer.NodePools {
+			clusterManagerPools = append(clusterManagerPools, struct {
+				Name     string
+				Replicas int32
+			}{
+				Name:     pool.Name,
+				Replicas: pool.Replicas,
+			})
+		}
+	}
+
+	discoveryHosts := config.GenerateDiscoveryHostsForNodePools(cluster.Name, cluster.Namespace, clusterManagerPools)
+	initialMasterNodes := config.GenerateInitialMasterNodesForNodePools(cluster.Name, clusterManagerPools)
+
+	return discoveryHosts, initialMasterNodes
+}
+
+// cleanupOrphanedNodePools removes resources from nodePools that no longer exist in spec
+func (r *IndexerReconciler) cleanupOrphanedNodePools(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	// Build set of current nodePool names
+	currentPools := make(map[string]bool)
+	for _, pool := range cluster.Spec.Indexer.NodePools {
+		currentPools[pool.Name] = true
+	}
+
+	// List all StatefulSets with nodePool label
+	stsList := &appsv1.StatefulSetList{}
+	listOpts := []client.ListOption{
+		client.InNamespace(cluster.Namespace),
+		client.MatchingLabels{
+			constants.LabelInstance:  cluster.Name,
+			constants.LabelComponent: constants.ComponentIndexer,
+		},
+	}
+
+	if err := r.List(ctx, stsList, listOpts...); err != nil {
+		return fmt.Errorf("failed to list statefulsets: %w", err)
+	}
+
+	// Find orphaned StatefulSets (have nodePool label but pool doesn't exist)
+	for _, sts := range stsList.Items {
+		poolName, hasPoolLabel := sts.Labels[constants.LabelNodePool]
+		if !hasPoolLabel {
+			// Not a nodePool StatefulSet, skip
+			continue
+		}
+
+		if !currentPools[poolName] {
+			// This nodePool no longer exists, delete its resources
+			log.Info("Cleaning up orphaned nodePool resources", "pool", poolName)
+
+			// Delete StatefulSet
+			if err := r.Delete(ctx, &sts); err != nil && !errors.IsNotFound(err) {
+				log.Error(err, "Failed to delete orphaned StatefulSet", "name", sts.Name)
+			}
+
+			// Delete Service
+			svcName := constants.IndexerNodePoolHeadlessName(cluster.Name, poolName)
+			svc := &corev1.Service{}
+			if err := r.Get(ctx, types.NamespacedName{Name: svcName, Namespace: cluster.Namespace}, svc); err == nil {
+				if err := r.Delete(ctx, svc); err != nil && !errors.IsNotFound(err) {
+					log.Error(err, "Failed to delete orphaned Service", "name", svcName)
+				}
+			}
+
+			// Delete ConfigMap
+			cmName := constants.IndexerNodePoolConfigName(cluster.Name, poolName)
+			cm := &corev1.ConfigMap{}
+			if err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: cluster.Namespace}, cm); err == nil {
+				if err := r.Delete(ctx, cm); err != nil && !errors.IsNotFound(err) {
+					log.Error(err, "Failed to delete orphaned ConfigMap", "name", cmName)
+				}
+			}
+
+			// Remove from status
+			delete(cluster.Status.Indexer.NodePoolStatuses, poolName)
+
+			// Emit event
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeNormal, "NodePoolDeleted",
+					fmt.Sprintf("Deleted orphaned nodePool %s", poolName))
+			}
+		}
+	}
+
+	return nil
+}
+
+// updateNodePoolStatus updates the status for a specific nodePool
+func (r *IndexerReconciler) updateNodePoolStatus(cluster *wazuhv1alpha1.WazuhCluster, poolName, phase, message string) {
+	if cluster.Status.Indexer.NodePoolStatuses == nil {
+		cluster.Status.Indexer.NodePoolStatuses = make(map[string]wazuhv1alpha1.NodePoolStatus)
+	}
+
+	status := cluster.Status.Indexer.NodePoolStatuses[poolName]
+	status.Name = poolName
+	status.Phase = phase
+	status.Message = message
+	status.StatefulSetName = constants.IndexerNodePoolName(cluster.Name, poolName)
+	now := metav1.Now()
+	status.LastTransitionTime = &now
+
+	cluster.Status.Indexer.NodePoolStatuses[poolName] = status
+}
+
+// updateNodePoolStatusFromSts updates nodePool status from StatefulSet state
+func (r *IndexerReconciler) updateNodePoolStatusFromSts(cluster *wazuhv1alpha1.WazuhCluster, poolName string, sts *appsv1.StatefulSet, phase string) {
+	if cluster.Status.Indexer.NodePoolStatuses == nil {
+		cluster.Status.Indexer.NodePoolStatuses = make(map[string]wazuhv1alpha1.NodePoolStatus)
+	}
+
+	status := cluster.Status.Indexer.NodePoolStatuses[poolName]
+	status.Name = poolName
+	status.Replicas = *sts.Spec.Replicas
+	status.ReadyReplicas = sts.Status.ReadyReplicas
+	status.Phase = phase
+	status.StatefulSetName = sts.Name
+
+	// Only update transition time if phase changed
+	existing, exists := cluster.Status.Indexer.NodePoolStatuses[poolName]
+	if !exists || existing.Phase != phase {
+		now := metav1.Now()
+		status.LastTransitionTime = &now
+	} else {
+		status.LastTransitionTime = existing.LastTransitionTime
+	}
+
+	cluster.Status.Indexer.NodePoolStatuses[poolName] = status
+}
+
+// getNodePoolPhase determines the phase of a nodePool from its StatefulSet
+func (r *IndexerReconciler) getNodePoolPhase(sts *appsv1.StatefulSet) string {
+	if sts.Status.ReadyReplicas == 0 {
+		return wazuhv1alpha1.NodePoolPhaseCreating
+	}
+	if sts.Status.ReadyReplicas < *sts.Spec.Replicas {
+		return wazuhv1alpha1.NodePoolPhaseScaling
+	}
+	if sts.Status.UpdatedReplicas < *sts.Spec.Replicas {
+		return wazuhv1alpha1.NodePoolPhaseScaling
+	}
+	return wazuhv1alpha1.NodePoolPhaseRunning
+}
+
+// updateIndexerStatusFromNodePools aggregates nodePool statuses into overall indexer status
+func (r *IndexerReconciler) updateIndexerStatusFromNodePools(cluster *wazuhv1alpha1.WazuhCluster) {
+	var totalReplicas int32
+	var totalReady int32
+	allRunning := true
+	var phases []string
+
+	for _, status := range cluster.Status.Indexer.NodePoolStatuses {
+		totalReplicas += status.Replicas
+		totalReady += status.ReadyReplicas
+		if status.Phase != wazuhv1alpha1.NodePoolPhaseRunning {
+			allRunning = false
+		}
+		phases = append(phases, fmt.Sprintf("%s:%s", status.Name, status.Phase))
+	}
+
+	cluster.Status.Indexer.Replicas = totalReplicas
+	cluster.Status.Indexer.ReadyReplicas = totalReady
+	cluster.Status.Indexer.TopologyMode = constants.TopologyModeAdvanced
+
+	// Determine overall phase
+	if totalReady == 0 {
+		cluster.Status.Indexer.Phase = "Starting"
+	} else if allRunning && totalReady == totalReplicas {
+		cluster.Status.Indexer.Phase = "Ready"
+	} else if totalReady < totalReplicas {
+		cluster.Status.Indexer.Phase = "Scaling"
+	} else {
+		cluster.Status.Indexer.Phase = "Degraded"
+	}
+
+	// Sort phases for consistent output
+	sort.Strings(phases)
 }

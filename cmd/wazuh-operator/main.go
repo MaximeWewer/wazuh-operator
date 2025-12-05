@@ -40,6 +40,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
+	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	// +kubebuilder:scaffold:imports
@@ -195,7 +196,10 @@ func main() {
 		CertificateReconciler:  certReconciler,
 		IndexerReconciler:      opensearchreconciler.NewIndexerReconciler(mgr.GetClient(), mgr.GetScheme()),
 		DashboardReconciler:    opensearchreconciler.NewDashboardReconciler(mgr.GetClient(), mgr.GetScheme()),
+		WorkerReconciler:       wazuhreconciler.NewWorkerReconciler(mgr.GetClient(), mgr.GetScheme()),
 		MonitoringReconciler:   monitoring.NewMonitoringReconciler(mgr.GetClient(), mgr.GetScheme()),
+		RollbackManager:        drain.NewRollbackManager(mgr.GetClient(), ctrl.Log.WithName("rollback-manager")),
+		RetryManager:           drain.NewRetryManager(ctrl.Log.WithName("retry-manager")),
 		CertTestMode:           certTestMode,
 		UseNonBlockingRollouts: nonBlockingRollouts,
 	}
@@ -246,6 +250,15 @@ func main() {
 		WorkerReconciler: wazuhreconciler.NewWorkerReconciler(mgr.GetClient(), mgr.GetScheme()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WazuhWorker")
+		os.Exit(1)
+	}
+	if err := (&controllers.WazuhFilebeatReconciler{
+		Client:             mgr.GetClient(),
+		Scheme:             mgr.GetScheme(),
+		Recorder:           mgr.GetEventRecorderFor("wazuhfilebeat-controller"),
+		FilebeatReconciler: wazuhreconciler.NewFilebeatReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor("wazuhfilebeat-controller")),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WazuhFilebeat")
 		os.Exit(1)
 	}
 
@@ -330,6 +343,30 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchSnapshotPolicy")
 		os.Exit(1)
 	}
+	if err := (&controllers.OpenSearchSnapshotRepositoryReconciler{
+		Client:                       mgr.GetClient(),
+		Scheme:                       mgr.GetScheme(),
+		SnapshotRepositoryReconciler: opensearchreconciler.NewSnapshotRepositoryReconciler(mgr.GetClient(), mgr.GetScheme()),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchSnapshotRepository")
+		os.Exit(1)
+	}
+	if err := (&controllers.OpenSearchSnapshotReconciler{
+		Client:                   mgr.GetClient(),
+		Scheme:                   mgr.GetScheme(),
+		ManualSnapshotReconciler: opensearchreconciler.NewManualSnapshotReconciler(mgr.GetClient(), mgr.GetScheme()),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchSnapshot")
+		os.Exit(1)
+	}
+	if err := (&controllers.OpenSearchRestoreReconciler{
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		RestoreReconciler: opensearchreconciler.NewRestoreReconciler(mgr.GetClient(), mgr.GetScheme()),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchRestore")
+		os.Exit(1)
+	}
 
 	// OpenSearch Infrastructure Controllers
 	if err := (&controllers.OpenSearchIndexerReconciler{
@@ -346,6 +383,24 @@ func main() {
 		DashboardReconciler: opensearchreconciler.NewDashboardReconciler(mgr.GetClient(), mgr.GetScheme()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchDashboard")
+		os.Exit(1)
+	}
+
+	// Backup/Restore Controllers
+	if err := (&controllers.WazuhBackupReconciler{
+		Client:           mgr.GetClient(),
+		Scheme:           mgr.GetScheme(),
+		BackupReconciler: wazuhreconciler.NewBackupReconciler(mgr.GetClient(), mgr.GetScheme()),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WazuhBackup")
+		os.Exit(1)
+	}
+	if err := (&controllers.WazuhRestoreReconciler{
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		RestoreReconciler: wazuhreconciler.NewWazuhRestoreReconciler(mgr.GetClient(), mgr.GetScheme()),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WazuhRestore")
 		os.Exit(1)
 	}
 

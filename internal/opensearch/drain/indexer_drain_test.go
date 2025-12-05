@@ -193,6 +193,234 @@ func TestShardRelocator_States(t *testing.T) {
 	}
 }
 
+// =============================================================================
+// NodePool Scale-Down Tests
+// =============================================================================
+
+func TestNodePoolScaleDownInfo_IsScaleDown(t *testing.T) {
+	tests := []struct {
+		name            string
+		current         int32
+		desired         int32
+		expectScaleDown bool
+	}{
+		{"scale down from 5 to 3", 5, 3, true},
+		{"scale down from 3 to 1", 3, 1, true},
+		{"scale up from 3 to 5", 3, 5, false},
+		{"no change", 3, 3, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &NodePoolScaleDownInfo{
+				CurrentReplicas: tt.current,
+				DesiredReplicas: tt.desired,
+			}
+			if info.IsScaleDown() != tt.expectScaleDown {
+				t.Errorf("expected IsScaleDown=%v, got %v", tt.expectScaleDown, info.IsScaleDown())
+			}
+		})
+	}
+}
+
+func TestNodePoolScaleDownInfo_GetReplicasDelta(t *testing.T) {
+	tests := []struct {
+		name          string
+		current       int32
+		desired       int32
+		expectedDelta int32
+	}{
+		{"scale down by 2", 5, 3, 2},
+		{"scale down by 1", 3, 2, 1},
+		{"scale up", 3, 5, 0},
+		{"no change", 3, 3, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &NodePoolScaleDownInfo{
+				CurrentReplicas: tt.current,
+				DesiredReplicas: tt.desired,
+			}
+			if info.GetReplicasDelta() != tt.expectedDelta {
+				t.Errorf("expected delta=%d, got %d", tt.expectedDelta, info.GetReplicasDelta())
+			}
+		})
+	}
+}
+
+func TestNodePoolScaleDownInfo_HasRole(t *testing.T) {
+	info := &NodePoolScaleDownInfo{
+		Roles: []string{constants.OpenSearchRoleClusterManager, constants.OpenSearchRoleData},
+	}
+
+	if !info.HasRole(constants.OpenSearchRoleClusterManager) {
+		t.Error("expected HasRole to return true for cluster_manager")
+	}
+	if !info.HasRole(constants.OpenSearchRoleData) {
+		t.Error("expected HasRole to return true for data")
+	}
+	if info.HasRole(constants.OpenSearchRoleIngest) {
+		t.Error("expected HasRole to return false for ingest")
+	}
+}
+
+func TestNodePoolScaleDownInfo_HasDataRole(t *testing.T) {
+	tests := []struct {
+		name     string
+		roles    []string
+		expected bool
+	}{
+		{"data only", []string{constants.OpenSearchRoleData}, true},
+		{"data and ingest", []string{constants.OpenSearchRoleData, constants.OpenSearchRoleIngest}, true},
+		{"cluster_manager only", []string{constants.OpenSearchRoleClusterManager}, false},
+		{"empty roles", []string{}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &NodePoolScaleDownInfo{Roles: tt.roles}
+			if info.HasDataRole() != tt.expected {
+				t.Errorf("expected HasDataRole=%v, got %v", tt.expected, info.HasDataRole())
+			}
+		})
+	}
+}
+
+func TestNodePoolScaleDownInfo_HasClusterManagerRole(t *testing.T) {
+	tests := []struct {
+		name     string
+		roles    []string
+		expected bool
+	}{
+		{"cluster_manager only", []string{constants.OpenSearchRoleClusterManager}, true},
+		{"cluster_manager and data", []string{constants.OpenSearchRoleClusterManager, constants.OpenSearchRoleData}, true},
+		{"data only", []string{constants.OpenSearchRoleData}, false},
+		{"empty roles", []string{}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &NodePoolScaleDownInfo{Roles: tt.roles}
+			if info.HasClusterManagerRole() != tt.expected {
+				t.Errorf("expected HasClusterManagerRole=%v, got %v", tt.expected, info.HasClusterManagerRole())
+			}
+		})
+	}
+}
+
+func TestNodePoolScaleDownInfo_IsCoordinatingOnly(t *testing.T) {
+	tests := []struct {
+		name     string
+		roles    []string
+		expected bool
+	}{
+		{"empty roles", []string{}, true},
+		{"coordinating_only pseudo-role", []string{constants.OpenSearchRoleCoordinatingOnly}, true},
+		{"data role", []string{constants.OpenSearchRoleData}, false},
+		{"cluster_manager role", []string{constants.OpenSearchRoleClusterManager}, false},
+		{"data and ingest", []string{constants.OpenSearchRoleData, constants.OpenSearchRoleIngest}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &NodePoolScaleDownInfo{Roles: tt.roles}
+			if info.IsCoordinatingOnly() != tt.expected {
+				t.Errorf("expected IsCoordinatingOnly=%v, got %v", tt.expected, info.IsCoordinatingOnly())
+			}
+		})
+	}
+}
+
+func TestGetNodePoolScaleDownTargets(t *testing.T) {
+	tests := []struct {
+		name            string
+		clusterName     string
+		poolName        string
+		currentReplicas int32
+		desiredReplicas int32
+		expectedCount   int
+		expectedPods    []string
+	}{
+		{
+			name:            "scale down from 5 to 3",
+			clusterName:     "test-cluster",
+			poolName:        "data",
+			currentReplicas: 5,
+			desiredReplicas: 3,
+			expectedCount:   2,
+			expectedPods:    []string{"test-cluster-indexer-data-3", "test-cluster-indexer-data-4"},
+		},
+		{
+			name:            "scale down from 3 to 1",
+			clusterName:     "test-cluster",
+			poolName:        "masters",
+			currentReplicas: 3,
+			desiredReplicas: 1,
+			expectedCount:   2,
+			expectedPods:    []string{"test-cluster-indexer-masters-1", "test-cluster-indexer-masters-2"},
+		},
+		{
+			name:            "scale up (no targets)",
+			clusterName:     "test-cluster",
+			poolName:        "data",
+			currentReplicas: 3,
+			desiredReplicas: 5,
+			expectedCount:   0,
+			expectedPods:    nil,
+		},
+		{
+			name:            "no change (no targets)",
+			clusterName:     "test-cluster",
+			poolName:        "data",
+			currentReplicas: 3,
+			desiredReplicas: 3,
+			expectedCount:   0,
+			expectedPods:    nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			targets := GetNodePoolScaleDownTargets(tt.clusterName, tt.poolName, tt.currentReplicas, tt.desiredReplicas)
+
+			if len(targets) != tt.expectedCount {
+				t.Errorf("expected %d targets, got %d", tt.expectedCount, len(targets))
+			}
+
+			for i, expected := range tt.expectedPods {
+				if i >= len(targets) {
+					t.Errorf("missing expected pod: %s", expected)
+					continue
+				}
+				if targets[i] != expected {
+					t.Errorf("expected pod %s at index %d, got %s", expected, i, targets[i])
+				}
+			}
+		})
+	}
+}
+
+func TestNodePoolDrainResult_Defaults(t *testing.T) {
+	result := &NodePoolDrainResult{
+		Feasible: true,
+	}
+
+	if result.NeedsDrain {
+		t.Error("expected NeedsDrain to be false by default")
+	}
+	if len(result.Blockers) != 0 {
+		t.Error("expected no blockers by default")
+	}
+	if len(result.Warnings) != 0 {
+		t.Error("expected no warnings by default")
+	}
+}
+
+// =============================================================================
+// Original Tests
+// =============================================================================
+
 func TestDryRunResult(t *testing.T) {
 	tests := []struct {
 		name           string

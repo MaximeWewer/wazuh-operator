@@ -55,6 +55,17 @@ type OpenSearchConfig struct {
 	WazuhVersion string
 	// Custom settings
 	CustomSettings map[string]string
+
+	// Advanced topology settings (for nodePool support)
+	// NodeRoles specifies the OpenSearch roles for this node
+	// Empty means all roles (default for simple mode)
+	// Valid values: cluster_manager, data, ingest, ml, remote_cluster_client
+	// coordinating_only is represented by an empty slice
+	NodeRoles []string
+	// NodeAttributes are custom attributes for shard allocation awareness
+	// Rendered as node.attr.<key>: <value> in opensearch.yml
+	// Common uses: {temp: hot}, {zone: az-1}
+	NodeAttributes map[string]string
 }
 
 // DefaultOpenSearchConfig returns a default OpenSearch configuration
@@ -102,6 +113,34 @@ func (c *OpenSearchConfig) WithWazuhVersion(version string) *OpenSearchConfig {
 	return c
 }
 
+// WithNodeRoles sets the OpenSearch node roles
+// Valid roles: cluster_manager, data, ingest, ml, remote_cluster_client
+// An empty slice means coordinating-only node
+func (c *OpenSearchConfig) WithNodeRoles(roles []string) *OpenSearchConfig {
+	c.NodeRoles = roles
+	return c
+}
+
+// WithNodeAttributes sets custom node attributes for shard allocation awareness
+// These are rendered as node.attr.<key>: <value> in opensearch.yml
+func (c *OpenSearchConfig) WithNodeAttributes(attrs map[string]string) *OpenSearchConfig {
+	c.NodeAttributes = attrs
+	return c
+}
+
+// WithDiscoveryHosts sets custom discovery seed hosts
+// This overrides the auto-generated hosts based on replicas
+func (c *OpenSearchConfig) WithDiscoveryHosts(hosts []string) *OpenSearchConfig {
+	c.DiscoverySeedHosts = hosts
+	return c
+}
+
+// WithInitialMasterNodes sets the initial master nodes for cluster bootstrap
+func (c *OpenSearchConfig) WithInitialMasterNodes(nodes []string) *OpenSearchConfig {
+	c.InitialMasterNodes = nodes
+	return c
+}
+
 // generateDiscoveryHosts generates the discovery seed hosts based on replicas
 func (c *OpenSearchConfig) generateDiscoveryHosts() {
 	c.DiscoverySeedHosts = make([]string, 0, c.Replicas)
@@ -131,7 +170,47 @@ func (c *OpenSearchConfig) Build() string {
 
 	// Cluster settings
 	sb.WriteString(fmt.Sprintf("cluster.name: %s\n", c.ClusterName))
-	sb.WriteString(fmt.Sprintf("node.name: %s\n\n", c.NodeName))
+	sb.WriteString(fmt.Sprintf("node.name: %s\n", c.NodeName))
+
+	// Node roles (advanced mode - if specified)
+	// If NodeRoles is nil/empty and NodeAttributes is nil, we're in simple mode (all roles)
+	// If NodeRoles is explicitly set (even if empty), we're in advanced mode
+	if c.NodeRoles != nil {
+		if len(c.NodeRoles) == 0 {
+			// Empty roles = coordinating-only node
+			sb.WriteString("node.roles: []\n")
+		} else {
+			// Filter out "coordinating_only" as it's not a real OpenSearch role
+			var actualRoles []string
+			for _, role := range c.NodeRoles {
+				if role != constants.OpenSearchRoleCoordinatingOnly {
+					actualRoles = append(actualRoles, role)
+				}
+			}
+			if len(actualRoles) == 0 {
+				sb.WriteString("node.roles: []\n")
+			} else {
+				sb.WriteString("node.roles: [")
+				for i, role := range actualRoles {
+					if i > 0 {
+						sb.WriteString(", ")
+					}
+					sb.WriteString(role)
+				}
+				sb.WriteString("]\n")
+			}
+		}
+	}
+
+	// Node attributes (for shard allocation awareness)
+	if len(c.NodeAttributes) > 0 {
+		sb.WriteString("\n# Node attributes for shard allocation awareness\n")
+		// Sort keys for consistent output
+		for key, value := range c.NodeAttributes {
+			sb.WriteString(fmt.Sprintf("node.attr.%s: %s\n", key, value))
+		}
+	}
+	sb.WriteString("\n")
 
 	// Path settings
 	sb.WriteString(fmt.Sprintf("path.data: %s\n", c.PathData))
@@ -230,4 +309,81 @@ func BuildIndexerConfig(clusterName, namespace string, replicas int32, wazuhVers
 		config.WithWazuhVersion(wazuhVersion)
 	}
 	return config.Build()
+}
+
+// NodePoolConfigParams holds parameters for building a nodePool opensearch.yml
+type NodePoolConfigParams struct {
+	ClusterName        string
+	Namespace          string
+	PoolName           string
+	Roles              []string
+	Attributes         map[string]string
+	DiscoverySeedHosts []string
+	InitialMasterNodes []string
+	WazuhVersion       string
+}
+
+// BuildNodePoolConfig builds opensearch.yml for a specific nodePool
+// This is used in advanced topology mode where each nodePool has different roles/attributes
+func BuildNodePoolConfig(params NodePoolConfigParams) string {
+	config := DefaultOpenSearchConfig(params.ClusterName, params.Namespace)
+
+	// Set node roles
+	config.WithNodeRoles(params.Roles)
+
+	// Set node attributes for shard allocation awareness
+	if len(params.Attributes) > 0 {
+		config.WithNodeAttributes(params.Attributes)
+	}
+
+	// Set discovery hosts (pointing to cluster_manager nodes)
+	if len(params.DiscoverySeedHosts) > 0 {
+		config.WithDiscoveryHosts(params.DiscoverySeedHosts)
+	}
+
+	// Set initial master nodes
+	if len(params.InitialMasterNodes) > 0 {
+		config.WithInitialMasterNodes(params.InitialMasterNodes)
+	}
+
+	// Set Wazuh version for feature detection
+	if params.WazuhVersion != "" {
+		config.WithWazuhVersion(params.WazuhVersion)
+	}
+
+	return config.Build()
+}
+
+// GenerateDiscoveryHostsForNodePools generates discovery seed hosts for a multi-pool cluster
+// It returns hosts pointing to the cluster_manager nodePool's headless service
+func GenerateDiscoveryHostsForNodePools(clusterName, namespace string, clusterManagerPools []struct {
+	Name     string
+	Replicas int32
+}) []string {
+	var hosts []string
+	for _, pool := range clusterManagerPools {
+		headlessService := constants.IndexerNodePoolHeadlessServiceFQDN(clusterName, pool.Name, namespace)
+		for i := int32(0); i < pool.Replicas; i++ {
+			podName := constants.IndexerNodePoolPodName(clusterName, pool.Name, int(i))
+			host := fmt.Sprintf("%s.%s", podName, headlessService)
+			hosts = append(hosts, host)
+		}
+	}
+	return hosts
+}
+
+// GenerateInitialMasterNodesForNodePools generates the initial master nodes list
+// for cluster bootstrap in a multi-pool cluster
+func GenerateInitialMasterNodesForNodePools(clusterName string, clusterManagerPools []struct {
+	Name     string
+	Replicas int32
+}) []string {
+	var nodes []string
+	for _, pool := range clusterManagerPools {
+		for i := int32(0); i < pool.Replicas; i++ {
+			nodeName := constants.IndexerNodePoolPodName(clusterName, pool.Name, int(i))
+			nodes = append(nodes, nodeName)
+		}
+	}
+	return nodes
 }

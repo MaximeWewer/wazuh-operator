@@ -843,3 +843,59 @@ type DryRunResult struct {
 	// +optional
 	EstimatedDuration *metav1.Duration `json:"estimatedDuration,omitempty"`
 }
+
+// ============================================================================
+// Backup & Restore Types
+// ============================================================================
+
+// RepositoryCredentialsRef references a Secret containing storage credentials
+type RepositoryCredentialsRef struct {
+	// Name of the Secret containing credentials
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// AccessKeyKey is the key in the Secret for the access key ID
+	// +kubebuilder:default="access-key"
+	AccessKeyKey string `json:"accessKeyKey,omitempty"`
+
+	// SecretKeyKey is the key in the Secret for the secret access key
+	// +kubebuilder:default="secret-key"
+	SecretKeyKey string `json:"secretKeyKey,omitempty"`
+}
+
+// ShardStats contains shard statistics for snapshots and restores
+type ShardStats struct {
+	// Total number of shards
+	Total int32 `json:"total"`
+
+	// Successful shards
+	Successful int32 `json:"successful"`
+
+	// Failed shards
+	Failed int32 `json:"failed"`
+}
+
+// BackupInfo contains information about a backup execution
+type BackupInfo struct {
+	// Time is when the backup was created
+	Time metav1.Time `json:"time"`
+
+	// Status is the backup result (Success, Failed)
+	Status string `json:"status"`
+
+	// Size is the backup size (human-readable)
+	// +optional
+	Size string `json:"size,omitempty"`
+
+	// Location is the backup storage path
+	// +optional
+	Location string `json:"location,omitempty"`
+
+	// Duration is how long the backup took
+	// +optional
+	Duration string `json:"duration,omitempty"`
+
+	// Message contains error message if failed
+	// +optional
+	Message string `json:"message,omitempty"`
+}

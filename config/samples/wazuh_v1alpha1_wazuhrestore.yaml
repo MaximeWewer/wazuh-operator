@@ -1,0 +1,116 @@
+# WazuhRestore - Restore from S3 backup
+#
+# This example restores Wazuh Manager data from an S3 backup archive.
+#
+# Prerequisites:
+# 1. A WazuhCluster named 'wazuh-cluster' must exist
+# 2. A Secret named 's3-backup-credentials' with AWS/MinIO credentials
+# 3. The backup archive must exist at the specified S3 location
+#
+# IMPORTANT: Review the restore settings carefully before applying!
+# - The restore will create a pre-restore backup by default
+# - The manager will be stopped during restore (recommended)
+#
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhRestore
+metadata:
+  name: restore-from-backup
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster to restore to
+  clusterRef:
+    name: wazuh-cluster
+
+  # Source configuration - restore from S3/MinIO
+  source:
+    s3:
+      bucket: wazuh-backups
+      # Full path to the backup archive
+      key: "wazuh-cluster/wazuh/daily-backup-20250105-020000.tar.gz"
+      region: us-east-1
+      credentialsSecret:
+        name: s3-backup-credentials
+        accessKeyKey: accessKeyId
+        secretKeyKey: secretAccessKey
+
+  # Components to restore (optional - defaults to all available)
+  components:
+    agentKeys: true       # Critical for agent reconnection
+    fimDatabase: true     # FIM baseline data
+    agentDatabase: true   # Agent state information
+    integrations: false   # Integration scripts
+    alertLogs: false      # Alert log files
+
+  # Create backup of current data before restore (recommended)
+  preRestoreBackup: true
+
+  # Stop manager during restore for data consistency (recommended)
+  stopManager: true
+
+  # Restart manager after successful restore
+  restartAfterRestore: true
+
+  # Maximum duration for the restore operation
+  restoreTimeout: "30m"
+
+  # Optional: resource limits
+  # resources:
+  #   requests:
+  #     cpu: 200m
+  #     memory: 256Mi
+  #   limits:
+  #     cpu: 1000m
+  #     memory: 1Gi
+---
+# Example: Restore from MinIO with custom endpoint
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhRestore
+metadata:
+  name: restore-from-minio
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+
+  source:
+    s3:
+      bucket: wazuh-backups
+      key: "wazuh-cluster/emergency/emergency-backup-20250105-143022.tar.gz"
+      # MinIO endpoint
+      endpoint: http://minio.minio.svc.cluster.local:9000
+      forcePathStyle: true
+      credentialsSecret:
+        name: minio-backup-credentials
+
+  # Restore only agent keys for quick agent reconnection
+  components:
+    agentKeys: true
+    fimDatabase: false
+    agentDatabase: false
+
+  preRestoreBackup: true
+  stopManager: true
+  restartAfterRestore: true
+---
+# Example: Restore from WazuhBackup reference (uses last successful backup)
+# Note: This feature uses the storage configuration from the referenced WazuhBackup
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhRestore
+metadata:
+  name: restore-from-wazuhbackup
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+
+  # Reference an existing WazuhBackup resource
+  # The restore will use the most recent successful backup
+  source:
+    wazuhBackupRef:
+      name: daily-backup
+      # Optionally specify a specific backup timestamp
+      # backupTimestamp: "20250105-020000"
+
+  preRestoreBackup: true
+  stopManager: true
+  restartAfterRestore: true

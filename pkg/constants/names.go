@@ -29,6 +29,22 @@ const (
 	// SuffixIndexerConfig is the suffix for indexer configmap
 	SuffixIndexerConfig = "-indexer-config"
 
+	// SuffixIndexerNodePool is the suffix pattern for nodePool resources
+	// Full pattern: {cluster}-indexer-{poolName}
+	SuffixIndexerNodePool = "-indexer-"
+
+	// SuffixNodePoolHeadless is the suffix for nodePool headless services
+	// Full pattern: {cluster}-indexer-{poolName}-headless
+	SuffixNodePoolHeadless = "-headless"
+
+	// SuffixNodePoolConfig is the suffix for nodePool configmaps
+	// Full pattern: {cluster}-indexer-{poolName}-config
+	SuffixNodePoolConfig = "-config"
+
+	// SuffixNodePoolPDB is the suffix for nodePool PodDisruptionBudgets
+	// Full pattern: {cluster}-indexer-{poolName}-pdb
+	SuffixNodePoolPDB = "-pdb"
+
 	// SuffixIndexerCerts is the suffix for indexer certificates secret
 	SuffixIndexerCerts = "-indexer-certs"
 
@@ -289,4 +305,48 @@ func ManagerConfigName(clusterName, nodeType string) string {
 // ManagerSharedConfigName returns the name for manager shared configmap
 func ManagerSharedConfigName(clusterName string) string {
 	return clusterName + SuffixManagerSharedConfig
+}
+
+// NodePool naming functions
+
+// IndexerNodePoolName returns the name for a nodePool StatefulSet
+// Pattern: {cluster}-indexer-{poolName}
+func IndexerNodePoolName(clusterName, poolName string) string {
+	return fmt.Sprintf("%s%s%s", clusterName, SuffixIndexerNodePool, poolName)
+}
+
+// IndexerNodePoolHeadlessName returns the name for a nodePool headless service
+// Pattern: {cluster}-indexer-{poolName}-headless
+func IndexerNodePoolHeadlessName(clusterName, poolName string) string {
+	return IndexerNodePoolName(clusterName, poolName) + SuffixNodePoolHeadless
+}
+
+// IndexerNodePoolConfigName returns the name for a nodePool configmap
+// Pattern: {cluster}-indexer-{poolName}-config
+func IndexerNodePoolConfigName(clusterName, poolName string) string {
+	return IndexerNodePoolName(clusterName, poolName) + SuffixNodePoolConfig
+}
+
+// IndexerNodePoolPDBName returns the name for a nodePool PodDisruptionBudget
+// Pattern: {cluster}-indexer-{poolName}-pdb
+func IndexerNodePoolPDBName(clusterName, poolName string) string {
+	return IndexerNodePoolName(clusterName, poolName) + SuffixNodePoolPDB
+}
+
+// IndexerNodePoolPodName returns the name for a specific pod in a nodePool
+// Pattern: {cluster}-indexer-{poolName}-{ordinal}
+func IndexerNodePoolPodName(clusterName, poolName string, ordinal int) string {
+	return fmt.Sprintf("%s-%d", IndexerNodePoolName(clusterName, poolName), ordinal)
+}
+
+// IndexerNodePoolHeadlessServiceFQDN returns the FQDN for a nodePool headless service
+func IndexerNodePoolHeadlessServiceFQDN(clusterName, poolName, namespace string) string {
+	return fmt.Sprintf("%s.%s.svc.cluster.local", IndexerNodePoolHeadlessName(clusterName, poolName), namespace)
+}
+
+// IndexerNodePoolPodFQDN returns the FQDN for a specific pod in a nodePool
+func IndexerNodePoolPodFQDN(clusterName, poolName, namespace string, ordinal int) string {
+	podName := IndexerNodePoolPodName(clusterName, poolName, ordinal)
+	headlessService := IndexerNodePoolHeadlessName(clusterName, poolName)
+	return fmt.Sprintf("%s.%s.%s.svc.cluster.local", podName, headlessService, namespace)
 }

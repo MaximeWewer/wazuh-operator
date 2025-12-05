@@ -1,0 +1,111 @@
+# WazuhBackup - Scheduled backup example
+#
+# This example creates a CronJob that backs up Wazuh Manager data daily at 2 AM.
+#
+# Prerequisites:
+# 1. A WazuhCluster named 'wazuh-cluster' must exist
+# 2. A Secret named 's3-backup-credentials' with AWS/MinIO credentials:
+#    kubectl create secret generic s3-backup-credentials \
+#      --from-literal=accessKeyId=YOURACCESSKEY \
+#      --from-literal=secretAccessKey=YOURSECRETKEY
+#
+# NOTE: The backup Job uses amazon/aws-cli image which requires
+# a ServiceAccount with permissions to list and exec into pods.
+#
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhBackup
+metadata:
+  name: daily-backup
+  namespace: wazuh
+spec:
+  # Reference to the WazuhCluster to backup
+  clusterRef:
+    name: wazuh-cluster
+
+  # Components to include in backup
+  components:
+    # Agent registration keys - CRITICAL for agent reconnection
+    agentKeys: true
+    # File Integrity Monitoring database
+    fimDatabase: true
+    # Agent state databases
+    agentDatabase: true
+    # Integration scripts (usually static, but included for completeness)
+    integrations: false
+    # Alert logs - can be large, consider OpenSearch snapshots instead
+    alertLogs: false
+    # Additional paths within /var/ossec/
+    customPaths: []
+
+  # Cron schedule: daily at 2 AM UTC
+  schedule: "0 2 * * *"
+
+  # Retention policy
+  retention:
+    maxBackups: 14      # Keep last 14 backups
+    maxAge: "30d"       # Delete backups older than 30 days
+
+  # S3 storage configuration
+  storage:
+    type: s3
+    bucket: wazuh-backups
+    # Path prefix in bucket - supports templates
+    prefix: "{{ .ClusterName }}/{{ .Namespace }}"
+    region: us-east-1
+    # Secret containing accessKeyId and secretAccessKey
+    credentialsSecret:
+      name: s3-backup-credentials
+      accessKeyKey: accessKeyId
+      secretKeyKey: secretAccessKey
+
+  # Suspend scheduled backups temporarily
+  suspend: false
+
+  # Maximum duration for a backup operation
+  backupTimeout: "30m"
+
+  # Optional: custom backup image
+  # image:
+  #   repository: your-registry/backup-tools
+  #   tag: v1.0.0
+  #   pullPolicy: IfNotPresent
+
+  # Optional: resource limits for the backup pod
+  # resources:
+  #   requests:
+  #     cpu: 100m
+  #     memory: 128Mi
+  #   limits:
+  #     cpu: 500m
+  #     memory: 512Mi
+---
+# Example with MinIO storage backend
+apiVersion: resources.wazuh.com/v1alpha1
+kind: WazuhBackup
+metadata:
+  name: minio-daily-backup
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+
+  components:
+    agentKeys: true
+    fimDatabase: true
+    agentDatabase: true
+
+  schedule: "0 3 * * *"  # 3 AM daily
+
+  retention:
+    maxBackups: 7
+
+  storage:
+    type: s3
+    bucket: wazuh-backups
+    prefix: "{{ .ClusterName }}"
+    # MinIO endpoint
+    endpoint: http://minio.minio.svc.cluster.local:9000
+    # Required for MinIO
+    forcePathStyle: true
+    credentialsSecret:
+      name: minio-backup-credentials

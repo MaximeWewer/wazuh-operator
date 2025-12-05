@@ -1,0 +1,54 @@
+# OpenSearchRestore example for restoring indices from snapshots
+#
+# IMPORTANT NOTES:
+# 1. You cannot restore to indices that already exist
+# 2. Use renamePattern/renameReplacement to avoid conflicts
+# 3. Or delete existing indices before restore
+#
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchRestore
+metadata:
+  name: restore-alerts
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  # Repository containing the snapshot
+  repository: minio-backups
+  # Snapshot name to restore from (check status.snapshotName from OpenSearchSnapshot)
+  snapshot: pre-upgrade-20250105-143022
+  # Index patterns to restore (empty = all indices)
+  indices:
+    - "wazuh-alerts-*"
+  # Skip missing indices
+  ignoreUnavailable: true
+  # Don't restore cluster state (templates, settings)
+  includeGlobalState: false
+  # Rename indices during restore to avoid conflicts
+  # This example prefixes all restored indices with "restored-"
+  renamePattern: "(.+)"
+  renameReplacement: "restored-$1"
+  # Override settings for faster restore
+  indexSettings:
+    # Set replicas to 0 during restore for speed, increase later
+    index.number_of_replicas: "0"
+  # Wait for restore to complete
+  waitForCompletion: true
+---
+# Example: Restore without renaming (assumes original indices were deleted)
+apiVersion: resources.wazuh.com/v1alpha1
+kind: OpenSearchRestore
+metadata:
+  name: restore-full
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  repository: minio-backups
+  snapshot: pre-upgrade-20250105-143022
+  # Restore all indices from snapshot
+  indices: []
+  ignoreUnavailable: true
+  includeGlobalState: false
+  # No rename - restores with original names
+  # Make sure original indices are deleted first!
