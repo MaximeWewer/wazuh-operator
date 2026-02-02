@@ -4,13 +4,15 @@ This guide covers how to install the Wazuh Operator in your Kubernetes cluster.
 
 ## Prerequisites
 
-- Kubernetes 1.24+
-- kubectl configured to access your cluster
-- Helm 3.x (for Helm installation)
-- Storage provisioner for PersistentVolumeClaims
-- Minimum cluster resources:
-  - Development: 4 vCPU, 8GB RAM
-  - Production: 16+ vCPU, 32GB+ RAM
+See [Prerequisites and Requirements](../../requirements.md) for detailed requirements.
+
+**Quick check:**
+
+```bash
+kubectl version --client  # 1.24+
+helm version              # 3.0+
+kubectl get storageclass  # StorageClass available
+```
 
 ## Installation Methods
 
@@ -57,6 +59,24 @@ Key values:
 - `operator.image.tag`: Image tag
 - `operator.resources`: Resource limits/requests
 - `crds.install`: Install CRDs (default: true)
+- `operator.clusterDomain`: Kubernetes DNS domain (default: `cluster.local`)
+
+#### Custom Cluster Domain
+
+If your Kubernetes cluster uses a custom DNS domain (e.g., custom CoreDNS configuration), configure the operator accordingly:
+
+```bash
+helm install wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-system \
+  --create-namespace \
+  --set operator.clusterDomain=svc.company.internal
+```
+
+This setting affects all generated TLS certificates and service discovery. Common custom domains include:
+
+- `svc.company.local` - Corporate environments
+- `k8s.prod.example.com` - Multi-cluster setups
+- Custom domains mandated by security policies
 
 ### Method 2: kubectl
 
@@ -121,7 +141,7 @@ helm install wazuh-cluster ./charts/wazuh-cluster \
 
 # Or using kubectl
 kubectl create namespace wazuh
-kubectl apply -f config/samples/wazuh_v1alpha1_wazuhcluster_minimal.yaml
+kubectl apply -f config/samples/wazuh_v1_wazuhcluster_minimal.yaml
 ```
 
 ## Upgrading

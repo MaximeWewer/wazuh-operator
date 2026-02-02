@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import (
 	"fmt"
 
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
+	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
 
 // ClusterNodeConfig holds configuration for a Wazuh cluster node
@@ -72,7 +73,7 @@ func DefaultMasterNodeConfig(clusterName, namespace string) *ClusterNodeConfig {
 
 // DefaultWorkerNodeConfig returns a default ClusterNodeConfig for a worker node
 func DefaultWorkerNodeConfig(clusterName, namespace string, workerIndex int) *ClusterNodeConfig {
-	masterService := fmt.Sprintf("%s-manager-master.%s.svc.cluster.local", clusterName, namespace)
+	masterService := dns.ServiceFQDN(clusterName+"-manager-master", namespace)
 	return &ClusterNodeConfig{
 		ClusterName:      clusterName,
 		NodeType:         NodeTypeWorker,
@@ -147,32 +148,33 @@ func GenerateClusterKey() (string, error) {
 
 // GetMasterServiceAddress returns the full service address for the master node
 func GetMasterServiceAddress(clusterName, namespace string) string {
-	return fmt.Sprintf("%s-manager-master.%s.svc.cluster.local", clusterName, namespace)
+	return dns.ServiceFQDN(clusterName+"-manager-master", namespace)
 }
 
 // GetWorkerServiceAddress returns the full service address for worker nodes
 func GetWorkerServiceAddress(clusterName, namespace string) string {
-	return fmt.Sprintf("%s-manager-workers.%s.svc.cluster.local", clusterName, namespace)
+	return dns.ServiceFQDN(clusterName+"-manager-workers", namespace)
 }
 
 // GetIndexerServiceAddress returns the full service address for the indexer
 func GetIndexerServiceAddress(clusterName, namespace string) string {
-	return fmt.Sprintf("%s-indexer.%s.svc.cluster.local", clusterName, namespace)
+	return dns.ServiceFQDN(clusterName+"-indexer", namespace)
 }
 
 // GetDashboardServiceAddress returns the full service address for the dashboard
 func GetDashboardServiceAddress(clusterName, namespace string) string {
-	return fmt.Sprintf("%s-dashboard.%s.svc.cluster.local", clusterName, namespace)
+	return dns.ServiceFQDN(clusterName+"-dashboard", namespace)
 }
 
 // GetPodDNSName returns the DNS name for a specific pod
 func GetPodDNSName(statefulSetName, namespace string, ordinal int) string {
-	return fmt.Sprintf("%s-%d.%s.%s.svc.cluster.local", statefulSetName, ordinal, statefulSetName, namespace)
+	podName := fmt.Sprintf("%s-%d", statefulSetName, ordinal)
+	return dns.PodFQDN(podName, statefulSetName, namespace)
 }
 
 // GetHeadlessServiceAddress returns the headless service address for StatefulSet pod discovery
 func GetHeadlessServiceAddress(serviceName, namespace string) string {
-	return fmt.Sprintf("%s.%s.svc.cluster.local", serviceName, namespace)
+	return dns.ServiceFQDN(serviceName, namespace)
 }
 
 // NodeConfigMap represents the configuration for all nodes in a cluster

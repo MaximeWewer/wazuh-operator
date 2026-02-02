@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,11 +22,11 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
 // ValidateOpenSearchIndex validates an OpenSearchIndex resource
-func ValidateOpenSearchIndex(index *wazuhv1alpha1.OpenSearchIndex) field.ErrorList {
+func ValidateOpenSearchIndex(index *wazuhv1.OpenSearchIndex) field.ErrorList {
 	var allErrs field.ErrorList
 
 	specPath := field.NewPath("spec")
@@ -57,7 +57,7 @@ func ValidateOpenSearchIndex(index *wazuhv1alpha1.OpenSearchIndex) field.ErrorLi
 }
 
 // ValidateOpenSearchIndexTemplate validates an OpenSearchIndexTemplate resource
-func ValidateOpenSearchIndexTemplate(template *wazuhv1alpha1.OpenSearchIndexTemplate) field.ErrorList {
+func ValidateOpenSearchIndexTemplate(template *wazuhv1.OpenSearchIndexTemplate) field.ErrorList {
 	var allErrs field.ErrorList
 
 	specPath := field.NewPath("spec")
@@ -77,7 +77,7 @@ func ValidateOpenSearchIndexTemplate(template *wazuhv1alpha1.OpenSearchIndexTemp
 }
 
 // ValidateOpenSearchUser validates an OpenSearchUser resource
-func ValidateOpenSearchUser(user *wazuhv1alpha1.OpenSearchUser) field.ErrorList {
+func ValidateOpenSearchUser(user *wazuhv1.OpenSearchUser) field.ErrorList {
 	var allErrs field.ErrorList
 
 	metaPath := field.NewPath("metadata")
@@ -99,7 +99,7 @@ func ValidateOpenSearchUser(user *wazuhv1alpha1.OpenSearchUser) field.ErrorList 
 }
 
 // ValidateOpenSearchRole validates an OpenSearchRole resource
-func ValidateOpenSearchRole(role *wazuhv1alpha1.OpenSearchRole) field.ErrorList {
+func ValidateOpenSearchRole(role *wazuhv1.OpenSearchRole) field.ErrorList {
 	var allErrs field.ErrorList
 
 	metaPath := field.NewPath("metadata")
@@ -113,7 +113,7 @@ func ValidateOpenSearchRole(role *wazuhv1alpha1.OpenSearchRole) field.ErrorList 
 }
 
 // ValidateOpenSearchRoleMapping validates an OpenSearchRoleMapping resource
-func ValidateOpenSearchRoleMapping(mapping *wazuhv1alpha1.OpenSearchRoleMapping) field.ErrorList {
+func ValidateOpenSearchRoleMapping(mapping *wazuhv1.OpenSearchRoleMapping) field.ErrorList {
 	var allErrs field.ErrorList
 
 	specPath := field.NewPath("spec")
@@ -133,7 +133,7 @@ func ValidateOpenSearchRoleMapping(mapping *wazuhv1alpha1.OpenSearchRoleMapping)
 }
 
 // ValidateOpenSearchTenant validates an OpenSearchTenant resource
-func ValidateOpenSearchTenant(tenant *wazuhv1alpha1.OpenSearchTenant) field.ErrorList {
+func ValidateOpenSearchTenant(tenant *wazuhv1.OpenSearchTenant) field.ErrorList {
 	var allErrs field.ErrorList
 
 	metaPath := field.NewPath("metadata")
@@ -147,7 +147,7 @@ func ValidateOpenSearchTenant(tenant *wazuhv1alpha1.OpenSearchTenant) field.Erro
 }
 
 // ValidateOpenSearchActionGroup validates an OpenSearchActionGroup resource
-func ValidateOpenSearchActionGroup(ag *wazuhv1alpha1.OpenSearchActionGroup) field.ErrorList {
+func ValidateOpenSearchActionGroup(ag *wazuhv1.OpenSearchActionGroup) field.ErrorList {
 	var allErrs field.ErrorList
 
 	specPath := field.NewPath("spec")
@@ -167,7 +167,7 @@ func ValidateOpenSearchActionGroup(ag *wazuhv1alpha1.OpenSearchActionGroup) fiel
 }
 
 // ValidateOpenSearchISMPolicy validates an OpenSearchISMPolicy resource
-func ValidateOpenSearchISMPolicy(policy *wazuhv1alpha1.OpenSearchISMPolicy) field.ErrorList {
+func ValidateOpenSearchISMPolicy(policy *wazuhv1.OpenSearchISMPolicy) field.ErrorList {
 	var allErrs field.ErrorList
 
 	specPath := field.NewPath("spec")
@@ -192,7 +192,7 @@ func ValidateOpenSearchISMPolicy(policy *wazuhv1alpha1.OpenSearchISMPolicy) fiel
 }
 
 // ValidateOpenSearchSnapshotPolicy validates an OpenSearchSnapshotPolicy resource
-func ValidateOpenSearchSnapshotPolicy(policy *wazuhv1alpha1.OpenSearchSnapshotPolicy) field.ErrorList {
+func ValidateOpenSearchSnapshotPolicy(policy *wazuhv1.OpenSearchSnapshotPolicy) field.ErrorList {
 	var allErrs field.ErrorList
 
 	specPath := field.NewPath("spec")
@@ -217,7 +217,7 @@ func isValidIndexName(name string) bool {
 	// - Start with _, -, or +
 	// - Contain uppercase letters
 	// - Contain special characters except - and _
-	if len(name) == 0 || len(name) > 255 {
+	if name == "" || len(name) > 255 {
 		return false
 	}
 	if strings.HasPrefix(name, "_") || strings.HasPrefix(name, "-") || strings.HasPrefix(name, "+") {
@@ -226,15 +226,15 @@ func isValidIndexName(name string) bool {
 	if name != strings.ToLower(name) {
 		return false
 	}
-	validRegex := regexp.MustCompile(`^[a-z0-9][a-z0-9_\-\.]*$`)
+	validRegex := regexp.MustCompile(`^[a-z0-9][a-z0-9_\-.]*$`)
 	return validRegex.MatchString(name)
 }
 
 // isValidUsername validates an OpenSearch username
 func isValidUsername(username string) bool {
-	if len(username) == 0 || len(username) > 64 {
+	if username == "" || len(username) > 64 {
 		return false
 	}
-	validRegex := regexp.MustCompile(`^[a-zA-Z0-9_\-\.]+$`)
+	validRegex := regexp.MustCompile(`^[a-zA-Z0-9_\-.]+$`)
 	return validRegex.MatchString(username)
 }

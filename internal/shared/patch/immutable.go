@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -71,52 +71,55 @@ func checkVolumeClaimTemplates(current, desired *appsv1.StatefulSet) error {
 
 	// Check each desired VCT
 	for _, desiredVCT := range desiredVCTs {
-		if idx, exists := currentMap[desiredVCT.Name]; exists {
-			currentVCT := currentVCTs[idx]
+		idx, exists := currentMap[desiredVCT.Name]
+		if !exists {
+			// New VCTs are allowed (will create new PVCs for existing pods on next restart)
+			continue
+		}
 
-			// Storage size can only be increased (if StorageClass allows)
-			// But for simplicity, we'll warn if it changes at all since
-			// most storage classes don't support resize
-			currentStorage := currentVCT.Spec.Resources.Requests.Storage()
-			desiredStorage := desiredVCT.Spec.Resources.Requests.Storage()
+		currentVCT := currentVCTs[idx]
 
-			if currentStorage != nil && desiredStorage != nil {
-				if currentStorage.Cmp(*desiredStorage) != 0 {
-					return NewImmutableFieldError(
-						fmt.Sprintf("spec.volumeClaimTemplates[%s].resources.requests.storage", desiredVCT.Name),
-						"StatefulSet",
-						current.Name,
-						currentStorage.String(),
-						desiredStorage.String(),
-					)
-				}
-			}
+		// Storage size can only be increased (if StorageClass allows)
+		// But for simplicity, we'll warn if it changes at all since
+		// most storage classes don't support resize
+		currentStorage := currentVCT.Spec.Resources.Requests.Storage()
+		desiredStorage := desiredVCT.Spec.Resources.Requests.Storage()
 
-			// StorageClassName is immutable
-			if currentVCT.Spec.StorageClassName != nil && desiredVCT.Spec.StorageClassName != nil {
-				if *currentVCT.Spec.StorageClassName != *desiredVCT.Spec.StorageClassName {
-					return NewImmutableFieldError(
-						fmt.Sprintf("spec.volumeClaimTemplates[%s].storageClassName", desiredVCT.Name),
-						"StatefulSet",
-						current.Name,
-						*currentVCT.Spec.StorageClassName,
-						*desiredVCT.Spec.StorageClassName,
-					)
-				}
-			}
-
-			// AccessModes are immutable
-			if !equality.Semantic.DeepEqual(currentVCT.Spec.AccessModes, desiredVCT.Spec.AccessModes) {
+		if currentStorage != nil && desiredStorage != nil {
+			if currentStorage.Cmp(*desiredStorage) != 0 {
 				return NewImmutableFieldError(
-					fmt.Sprintf("spec.volumeClaimTemplates[%s].accessModes", desiredVCT.Name),
+					fmt.Sprintf("spec.volumeClaimTemplates[%s].resources.requests.storage", desiredVCT.Name),
 					"StatefulSet",
 					current.Name,
-					fmt.Sprintf("%v", currentVCT.Spec.AccessModes),
-					fmt.Sprintf("%v", desiredVCT.Spec.AccessModes),
+					currentStorage.String(),
+					desiredStorage.String(),
 				)
 			}
 		}
-		// New VCTs are allowed (will create new PVCs for existing pods on next restart)
+
+		// StorageClassName is immutable
+		if currentVCT.Spec.StorageClassName != nil && desiredVCT.Spec.StorageClassName != nil {
+			if *currentVCT.Spec.StorageClassName != *desiredVCT.Spec.StorageClassName {
+				return NewImmutableFieldError(
+					fmt.Sprintf("spec.volumeClaimTemplates[%s].storageClassName", desiredVCT.Name),
+					"StatefulSet",
+					current.Name,
+					*currentVCT.Spec.StorageClassName,
+					*desiredVCT.Spec.StorageClassName,
+				)
+			}
+		}
+
+		// AccessModes are immutable
+		if !equality.Semantic.DeepEqual(currentVCT.Spec.AccessModes, desiredVCT.Spec.AccessModes) {
+			return NewImmutableFieldError(
+				fmt.Sprintf("spec.volumeClaimTemplates[%s].accessModes", desiredVCT.Name),
+				"StatefulSet",
+				current.Name,
+				fmt.Sprintf("%v", currentVCT.Spec.AccessModes),
+				fmt.Sprintf("%v", desiredVCT.Spec.AccessModes),
+			)
+		}
 	}
 
 	// Removing VCTs is not allowed (would orphan PVCs)

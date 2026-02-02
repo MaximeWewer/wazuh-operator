@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -31,10 +32,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
+	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
 
 // CertificateReconciler handles reconciliation of TLS certificates
@@ -43,10 +46,9 @@ type CertificateReconciler struct {
 	Scheme *runtime.Scheme
 	// EventRecorder is used to emit Kubernetes events for certificate operations
 	EventRecorder record.EventRecorder
-	// TestMode enables short-lived certificates for testing renewal
-	// When enabled, certificates are generated with 5-minute validity
-	// and renewal is triggered 2 minutes before expiry
-	TestMode bool
+	// PropagationTimeout is the timeout for waiting for kubelet to sync certificates
+	// Defaults to 120 seconds if not set. Use a shorter value for unit tests.
+	PropagationTimeout time.Duration
 }
 
 // Certificate event reasons
@@ -59,39 +61,45 @@ const (
 	EventReasonCertificateRenewalFailed = "CertificateRenewalFailed"
 	// EventReasonCertificateCreated is emitted when a new certificate is created
 	EventReasonCertificateCreated = "CertificateCreated"
+	// EventReasonCertificateDomainMismatch is emitted when a certificate has SANs with wrong cluster domain
+	EventReasonCertificateDomainMismatch = "CertificateDomainMismatch"
 )
 
 // getCertOptions builds CertificateOptions from the WazuhCluster CRD spec
 // It reads TLS configuration from cluster.Spec.TLS.CertConfig if available
-func (r *CertificateReconciler) getCertOptions(cluster *wazuhv1alpha1.WazuhCluster) *certificates.CertificateOptions {
+func (r *CertificateReconciler) getCertOptions(cluster *wazuhv1.WazuhCluster) *certificates.CertificateOptions {
 	opts := certificates.DefaultCertificateOptions()
-	opts.TestMode = r.TestMode
 
 	// Read configuration from CRD if available
 	if cluster.Spec.TLS != nil && cluster.Spec.TLS.CertConfig != nil {
 		cfg := cluster.Spec.TLS.CertConfig
 
-		// Set node cert validity days from CRD
-		if cfg.ValidityDays > 0 {
-			opts.NodeValidityDays = cfg.ValidityDays
+		// Set node cert validity from CRD
+		if cfg.Validity != "" {
+			if d, err := certificates.ParseCertDuration(cfg.Validity); err == nil {
+				opts.NodeValidity = d
+			}
 		}
 
 		// Set node cert renewal threshold from CRD
-		if cfg.RenewalThresholdDays > 0 {
-			opts.RenewalThresholdDays = cfg.RenewalThresholdDays
+		if cfg.RenewalThreshold != "" {
+			if d, err := certificates.ParseCertDuration(cfg.RenewalThreshold); err == nil {
+				opts.RenewalThreshold = d
+			}
 		}
 
-		// Set CA validity days from CRD (separate from node certs)
-		if cfg.CAValidityDays > 0 {
-			opts.CAValidityDays = cfg.CAValidityDays
-		} else if cfg.ValidityDays > 0 {
-			// Fallback: CA validity is 10x longer than node certs if not specified
-			opts.CAValidityDays = cfg.ValidityDays * 10
+		// Set CA validity from CRD
+		if cfg.CAValidity != "" {
+			if d, err := certificates.ParseCertDuration(cfg.CAValidity); err == nil {
+				opts.CAValidity = d
+			}
 		}
 
 		// Set CA renewal threshold from CRD
-		if cfg.CARenewalThresholdDays > 0 {
-			opts.CARenewalThresholdDays = cfg.CARenewalThresholdDays
+		if cfg.CARenewalThreshold != "" {
+			if d, err := certificates.ParseCertDuration(cfg.CARenewalThreshold); err == nil {
+				opts.CARenewalThreshold = d
+			}
 		}
 
 		// Set certificate subject fields from CRD
@@ -113,6 +121,16 @@ func (r *CertificateReconciler) getCertOptions(cluster *wazuhv1alpha1.WazuhClust
 		if cfg.CommonName != "" {
 			opts.CommonName = cfg.CommonName
 		}
+
+		// Set key algorithm from CRD
+		if cfg.KeyAlgorithm != "" {
+			opts.KeyAlgorithm = certificates.KeyAlgorithm(cfg.KeyAlgorithm)
+		}
+
+		// Set ECDSA curve from CRD
+		if cfg.ECDSACurve != "" {
+			opts.ECDSACurve = certificates.ECDSACurve(cfg.ECDSACurve)
+		}
 	}
 
 	return opts
@@ -132,8 +150,15 @@ func (r *CertificateReconciler) WithEventRecorder(recorder record.EventRecorder)
 	return r
 }
 
+// WithPropagationTimeout sets the timeout for waiting for kubelet to sync certificates
+// Use a short value (e.g., 1*time.Second) for unit tests
+func (r *CertificateReconciler) WithPropagationTimeout(timeout time.Duration) *CertificateReconciler {
+	r.PropagationTimeout = timeout
+	return r
+}
+
 // emitCertificateRenewingEvent emits an event when certificate renewal starts
-func (r *CertificateReconciler) emitCertificateRenewingEvent(cluster *wazuhv1alpha1.WazuhCluster, certName string) {
+func (r *CertificateReconciler) emitCertificateRenewingEvent(cluster *wazuhv1.WazuhCluster, certName string) {
 	if r.EventRecorder != nil {
 		r.EventRecorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonCertificateRenewing,
 			"Starting renewal of certificate: %s", certName)
@@ -141,7 +166,7 @@ func (r *CertificateReconciler) emitCertificateRenewingEvent(cluster *wazuhv1alp
 }
 
 // emitCertificateRenewedEvent emits an event when certificate renewal succeeds
-func (r *CertificateReconciler) emitCertificateRenewedEvent(cluster *wazuhv1alpha1.WazuhCluster, certName string) {
+func (r *CertificateReconciler) emitCertificateRenewedEvent(cluster *wazuhv1.WazuhCluster, certName string) {
 	if r.EventRecorder != nil {
 		r.EventRecorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonCertificateRenewed,
 			"Successfully renewed certificate: %s", certName)
@@ -149,7 +174,7 @@ func (r *CertificateReconciler) emitCertificateRenewedEvent(cluster *wazuhv1alph
 }
 
 // emitCertificateRenewalFailedEvent emits an event when certificate renewal fails
-func (r *CertificateReconciler) emitCertificateRenewalFailedEvent(cluster *wazuhv1alpha1.WazuhCluster, certName string, err error) {
+func (r *CertificateReconciler) emitCertificateRenewalFailedEvent(cluster *wazuhv1.WazuhCluster, certName string, err error) {
 	if r.EventRecorder != nil {
 		r.EventRecorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCertificateRenewalFailed,
 			"Failed to renew certificate %s: %v", certName, err)
@@ -157,10 +182,18 @@ func (r *CertificateReconciler) emitCertificateRenewalFailedEvent(cluster *wazuh
 }
 
 // emitCertificateCreatedEvent emits an event when a new certificate is created
-func (r *CertificateReconciler) emitCertificateCreatedEvent(cluster *wazuhv1alpha1.WazuhCluster, certName string) {
+func (r *CertificateReconciler) emitCertificateCreatedEvent(cluster *wazuhv1.WazuhCluster, certName string) {
 	if r.EventRecorder != nil {
 		r.EventRecorder.Eventf(cluster, corev1.EventTypeNormal, EventReasonCertificateCreated,
 			"Created new certificate: %s", certName)
+	}
+}
+
+// emitCertificateDomainMismatchEvent emits a warning event when a certificate has SANs with wrong cluster domain
+func (r *CertificateReconciler) emitCertificateDomainMismatchEvent(cluster *wazuhv1.WazuhCluster, certName string, expectedDomain string) {
+	if r.EventRecorder != nil {
+		r.EventRecorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCertificateDomainMismatch,
+			"Certificate %s has SANs with wrong cluster domain (expected: %s), triggering regeneration", certName, expectedDomain)
 	}
 }
 
@@ -196,24 +229,21 @@ type CertHashResult struct {
 }
 
 // Reconcile reconciles certificates for the Wazuh cluster
-func (r *CertificateReconciler) Reconcile(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *CertificateReconciler) Reconcile(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	_, err := r.ReconcileWithHashes(ctx, cluster)
 	return err
 }
 
 // ReconcileWithHashes reconciles certificates for the Wazuh cluster and returns certificate hashes
 // The hashes can be used as pod annotations to trigger pod restarts when certificates are renewed
-func (r *CertificateReconciler) ReconcileWithHashes(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*CertHashResult, error) {
+func (r *CertificateReconciler) ReconcileWithHashes(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*CertHashResult, error) {
 	log := logf.FromContext(ctx)
-
-	result := &CertHashResult{}
 
 	// Get certificate options from CRD configuration
 	certOpts := r.getCertOptions(cluster)
 	log.V(1).Info("Using certificate options",
-		"testMode", certOpts.TestMode,
-		"nodeValidityDays", certOpts.GetNodeValidityDays(),
-		"renewalThresholdDays", certOpts.GetRenewalThresholdDays())
+		"nodeValidity", certificates.FormatCertDuration(certOpts.GetNodeValidity()),
+		"renewalThreshold", certificates.FormatCertDuration(certOpts.GetRenewalThreshold()))
 
 	// Reconcile CA certificate
 	caResult, caRenewed, err := r.reconcileCA(ctx, cluster, certOpts)
@@ -248,7 +278,7 @@ func (r *CertificateReconciler) ReconcileWithHashes(ctx context.Context, cluster
 	}
 
 	// Collect certificate hashes from secrets
-	result, err = r.collectCertHashes(ctx, cluster)
+	result, err := r.collectCertHashes(ctx, cluster)
 	if err != nil {
 		log.Error(err, "Failed to collect certificate hashes, pods may not restart on cert renewal")
 		// Don't fail the reconciliation if we can't collect hashes
@@ -291,12 +321,15 @@ func (r *CertificateReconciler) ReconcileWithHashes(ctx context.Context, cluster
 			"caRenewed", caRenewed)
 	}
 
+	// Record certificate expiry metrics
+	r.recordCertificateExpiryMetrics(ctx, cluster)
+
 	log.Info("Certificate reconciliation completed")
 	return result, nil
 }
 
 // collectCertHashes collects the certificate hashes from secrets
-func (r *CertificateReconciler) collectCertHashes(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*CertHashResult, error) {
+func (r *CertificateReconciler) collectCertHashes(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*CertHashResult, error) {
 	result := &CertHashResult{}
 
 	// Helper to get secret hash
@@ -358,9 +391,62 @@ func (r *CertificateReconciler) collectCertHashes(ctx context.Context, cluster *
 	return result, nil
 }
 
+// recordCertificateExpiryMetrics records the expiry time of all certificates as Prometheus metrics
+func (r *CertificateReconciler) recordCertificateExpiryMetrics(ctx context.Context, cluster *wazuhv1.WazuhCluster) {
+	log := logf.FromContext(ctx)
+
+	// Helper to get certificate expiry from secret
+	getCertExpiry := func(secretName, certKey string) int64 {
+		secret := &corev1.Secret{}
+		if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cluster.Namespace}, secret); err != nil {
+			return 0
+		}
+		certPEM, ok := secret.Data[certKey]
+		if !ok {
+			return 0
+		}
+		expiry, err := certificates.GetCertificateExpiry(certPEM)
+		if err != nil {
+			log.V(1).Info("Failed to get certificate expiry", "secret", secretName, "error", err)
+			return 0
+		}
+		return expiry.Unix()
+	}
+
+	// Record CA certificate expiry
+	if expiry := getCertExpiry(cluster.Name+"-ca", constants.SecretKeyCACert); expiry > 0 {
+		metrics.SetWazuhCertificateExpiry(cluster.Name, cluster.Namespace, "ca", expiry)
+	}
+
+	// Record Indexer certificate expiry
+	if expiry := getCertExpiry(constants.IndexerCertsName(cluster.Name), constants.SecretKeyNodeCert); expiry > 0 {
+		metrics.SetWazuhCertificateExpiry(cluster.Name, cluster.Namespace, "indexer", expiry)
+	}
+
+	// Record Dashboard certificate expiry
+	if expiry := getCertExpiry(constants.DashboardCertsName(cluster.Name), constants.SecretKeyNodeCert); expiry > 0 {
+		metrics.SetWazuhCertificateExpiry(cluster.Name, cluster.Namespace, "dashboard", expiry)
+	}
+
+	// Record Manager master certificate expiry
+	if expiry := getCertExpiry(constants.ManagerMasterCertsName(cluster.Name), constants.SecretKeyNodeCert); expiry > 0 {
+		metrics.SetWazuhCertificateExpiry(cluster.Name, cluster.Namespace, "manager-master", expiry)
+	}
+
+	// Record Manager worker certificate expiry
+	if expiry := getCertExpiry(constants.ManagerWorkerCertsName(cluster.Name), constants.SecretKeyNodeCert); expiry > 0 {
+		metrics.SetWazuhCertificateExpiry(cluster.Name, cluster.Namespace, "manager-worker", expiry)
+	}
+
+	// Record Admin certificate expiry
+	if expiry := getCertExpiry(constants.AdminCertsName(cluster.Name), constants.SecretKeyAdminCert); expiry > 0 {
+		metrics.SetWazuhCertificateExpiry(cluster.Name, cluster.Namespace, "admin", expiry)
+	}
+}
+
 // reconcileCA reconciles the CA certificate
 // Returns the CA result, whether the CA was renewed, and any error
-func (r *CertificateReconciler) reconcileCA(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, certOpts *certificates.CertificateOptions) (*certificates.CAResult, bool, error) {
+func (r *CertificateReconciler) reconcileCA(ctx context.Context, cluster *wazuhv1.WazuhCluster, certOpts *certificates.CertificateOptions) (*certificates.CAResult, bool, error) {
 	log := logf.FromContext(ctx)
 	secretName := cluster.Name + "-ca"
 	caRenewed := false
@@ -377,15 +463,11 @@ func (r *CertificateReconciler) reconcileCA(ctx context.Context, cluster *wazuhv
 			// Check if CA needs renewal using options from CRD
 			needsRenewal := certOpts.ShouldRenewCA(caResult)
 			if needsRenewal {
-				if certOpts.TestMode {
-					log.Info("CA certificate needs renewal (test mode)", "name", secretName, "minutesUntilExpiry", caResult.MinutesUntilExpiry(), "renewalThresholdMinutes", certOpts.GetCARenewalThresholdMinutes())
-				} else {
-					log.Info("CA certificate needs renewal", "name", secretName, "daysUntilExpiry", caResult.DaysUntilExpiry(), "renewalThresholdDays", certOpts.GetCARenewalThresholdDays())
-				}
-				// In test mode or if CA is already expired, regenerate the CA
+				log.Info("CA certificate needs renewal", "name", secretName, "daysUntilExpiry", caResult.DaysUntilExpiry(), "renewalThreshold", certificates.FormatCertDuration(certOpts.GetCARenewalThreshold()))
+				// If CA needs renewal, regenerate it
 				// This will trigger regeneration of all dependent certificates
 				r.emitCertificateRenewingEvent(cluster, secretName)
-				log.Info("Regenerating CA certificate", "name", secretName, "testMode", certOpts.TestMode)
+				log.Info("Regenerating CA certificate", "name", secretName)
 				caRenewed = true
 				// Fall through to regenerate CA
 			} else {
@@ -400,7 +482,7 @@ func (r *CertificateReconciler) reconcileCA(ctx context.Context, cluster *wazuhv
 	}
 
 	// Generate new CA using options from CRD
-	log.Info("Generating new CA certificate", "name", secretName, "testMode", certOpts.TestMode, "validityDays", certOpts.GetCAValidityDays(),
+	log.Info("Generating new CA certificate", "name", secretName, "validity", certificates.FormatCertDuration(certOpts.GetCAValidity()),
 		"country", certOpts.Country, "state", certOpts.State, "locality", certOpts.Locality,
 		"organization", certOpts.Organization, "organizationalUnit", certOpts.OrganizationalUnit)
 	caConfig := certificates.DefaultCAConfig(cluster.Name + "-ca")
@@ -410,11 +492,9 @@ func (r *CertificateReconciler) reconcileCA(ctx context.Context, cluster *wazuhv
 	caConfig.Locality = certOpts.Locality
 	caConfig.Organization = certOpts.Organization
 	caConfig.OrganizationalUnit = certOpts.OrganizationalUnit
-	if certOpts.TestMode {
-		caConfig.ValidityMinutes = certOpts.GetCAValidityMinutes() // Use separate CA validity in test mode (default: 15 min)
-	} else {
-		caConfig.ValidityDays = certOpts.GetCAValidityDays()
-	}
+	caConfig.Validity = certOpts.GetCAValidity()
+	caConfig.KeyAlgorithm = certOpts.KeyAlgorithm
+	caConfig.ECDSACurve = certOpts.ECDSACurve
 
 	caResult, err := certificates.GenerateCA(caConfig)
 	if err != nil {
@@ -473,12 +553,12 @@ func (r *CertificateReconciler) reconcileCA(ctx context.Context, cluster *wazuhv
 }
 
 // reconcileManagerCerts reconciles manager node certificates
-func (r *CertificateReconciler) reconcileManagerCerts(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) error {
+func (r *CertificateReconciler) reconcileManagerCerts(ctx context.Context, cluster *wazuhv1.WazuhCluster, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) error {
 	log := logf.FromContext(ctx)
 
 	// Generate SANs for manager nodes
 	// Handle nil Manager spec (Workers is a value type, not pointer)
-	var workerReplicas int32 = 0
+	var workerReplicas int32
 	if cluster.Spec.Manager != nil {
 		workerReplicas = cluster.Spec.Manager.Workers.GetReplicas()
 	}
@@ -502,7 +582,7 @@ func (r *CertificateReconciler) reconcileManagerCerts(ctx context.Context, clust
 
 // reconcileIndexerCerts reconciles indexer certificates
 // Returns whether the certificates were renewed (true) or already valid (false)
-func (r *CertificateReconciler) reconcileIndexerCerts(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) (bool, error) {
+func (r *CertificateReconciler) reconcileIndexerCerts(ctx context.Context, cluster *wazuhv1.WazuhCluster, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) (bool, error) {
 	replicas := int32(1)
 	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Replicas > 0 {
 		replicas = cluster.Spec.Indexer.Replicas
@@ -514,7 +594,7 @@ func (r *CertificateReconciler) reconcileIndexerCerts(ctx context.Context, clust
 }
 
 // reconcileDashboardCerts reconciles dashboard certificates
-func (r *CertificateReconciler) reconcileDashboardCerts(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) error {
+func (r *CertificateReconciler) reconcileDashboardCerts(ctx context.Context, cluster *wazuhv1.WazuhCluster, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) error {
 	log := logf.FromContext(ctx)
 	secretName := constants.DashboardCertsName(cluster.Name)
 
@@ -527,18 +607,23 @@ func (r *CertificateReconciler) reconcileDashboardCerts(ctx context.Context, clu
 		// Check if certificate needs renewal using options from CRD
 		certResult, parseErr := certificates.ParseDashboardCert(found.Data[constants.SecretKeyTLSCert], found.Data[constants.SecretKeyTLSKey])
 		if parseErr == nil {
-			needsRenewal := certOpts.ShouldRenewDashboard(certResult)
-			if needsRenewal {
-				if certOpts.TestMode {
-					log.Info("Dashboard certificate needs renewal (test mode)", "name", secretName, "minutesUntilExpiry", certResult.MinutesUntilExpiry())
-				} else {
-					log.Info("Dashboard certificate needs renewal", "name", secretName, "daysUntilExpiry", certResult.DaysUntilExpiry(), "renewalThresholdDays", certOpts.GetRenewalThresholdDays())
+			// Check for cluster domain mismatch
+			if certificates.RequiresDomainRegeneration(certResult.Certificate, secretName, cluster.Namespace, log) {
+				log.Info("Dashboard certificate has domain mismatch, regenerating",
+					"name", secretName,
+					"expectedDomain", dns.ClusterDomain())
+				r.emitCertificateDomainMismatchEvent(cluster, secretName, dns.ClusterDomain())
+				// Fall through to regenerate certificate
+			} else {
+				needsRenewal := certOpts.ShouldRenewDashboard(certResult)
+				if needsRenewal {
+					log.Info("Dashboard certificate needs renewal", "name", secretName, "daysUntilExpiry", certResult.DaysUntilExpiry(), "renewalThreshold", certificates.FormatCertDuration(certOpts.GetRenewalThreshold()))
+					// Emit event before starting renewal
+					r.emitCertificateRenewingEvent(cluster, secretName)
 				}
-				// Emit event before starting renewal
-				r.emitCertificateRenewingEvent(cluster, secretName)
-			}
-			if !needsRenewal {
-				return nil
+				if !needsRenewal {
+					return nil
+				}
 			}
 		}
 		if parseErr != nil {
@@ -549,7 +634,7 @@ func (r *CertificateReconciler) reconcileDashboardCerts(ctx context.Context, clu
 	}
 
 	// Generate new dashboard certificate using options from CRD
-	log.Info("Generating new dashboard certificate", "name", secretName, "testMode", certOpts.TestMode, "validityDays", certOpts.GetNodeValidityDays())
+	log.Info("Generating new dashboard certificate", "name", secretName, "validity", certificates.FormatCertDuration(certOpts.GetNodeValidity()))
 	dashboardConfig := certificates.DefaultDashboardCertConfig()
 	dashboardConfig.CommonName = cluster.Name + "-dashboard"
 	dashboardConfig.DNSNames = certificates.GenerateDashboardSANs(cluster.Name, cluster.Namespace)
@@ -559,11 +644,9 @@ func (r *CertificateReconciler) reconcileDashboardCerts(ctx context.Context, clu
 	dashboardConfig.Locality = certOpts.Locality
 	dashboardConfig.Organization = certOpts.Organization
 	dashboardConfig.OrganizationalUnit = certOpts.OrganizationalUnit
-	if certOpts.TestMode {
-		dashboardConfig.ValidityMinutes = certOpts.GetValidityMinutes()
-	} else {
-		dashboardConfig.ValidityDays = certOpts.GetNodeValidityDays()
-	}
+	dashboardConfig.Validity = certOpts.GetNodeValidity()
+	dashboardConfig.KeyAlgorithm = certOpts.KeyAlgorithm
+	dashboardConfig.ECDSACurve = certOpts.ECDSACurve
 
 	certResult, err := certificates.GenerateDashboardCert(dashboardConfig, caResult)
 	if err != nil {
@@ -614,7 +697,7 @@ func (r *CertificateReconciler) reconcileDashboardCerts(ctx context.Context, clu
 }
 
 // reconcileFilebeatCerts reconciles filebeat certificates
-func (r *CertificateReconciler) reconcileFilebeatCerts(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) error {
+func (r *CertificateReconciler) reconcileFilebeatCerts(ctx context.Context, cluster *wazuhv1.WazuhCluster, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) error {
 	log := logf.FromContext(ctx)
 	secretName := constants.FilebeatCertsName(cluster.Name)
 
@@ -627,18 +710,23 @@ func (r *CertificateReconciler) reconcileFilebeatCerts(ctx context.Context, clus
 		// Check if certificate needs renewal using options from CRD
 		certResult, parseErr := certificates.ParseFilebeatCert(found.Data[constants.SecretKeyTLSCert], found.Data[constants.SecretKeyTLSKey])
 		if parseErr == nil {
-			needsRenewal := certOpts.ShouldRenewFilebeat(certResult)
-			if needsRenewal {
-				if certOpts.TestMode {
-					log.Info("Filebeat certificate needs renewal (test mode)", "name", secretName, "minutesUntilExpiry", certResult.MinutesUntilExpiry())
-				} else {
-					log.Info("Filebeat certificate needs renewal", "name", secretName, "daysUntilExpiry", certResult.DaysUntilExpiry(), "renewalThresholdDays", certOpts.GetRenewalThresholdDays())
+			// Check for cluster domain mismatch
+			if certificates.RequiresDomainRegeneration(certResult.Certificate, secretName, cluster.Namespace, log) {
+				log.Info("Filebeat certificate has domain mismatch, regenerating",
+					"name", secretName,
+					"expectedDomain", dns.ClusterDomain())
+				r.emitCertificateDomainMismatchEvent(cluster, secretName, dns.ClusterDomain())
+				// Fall through to regenerate certificate
+			} else {
+				needsRenewal := certOpts.ShouldRenewFilebeat(certResult)
+				if needsRenewal {
+					log.Info("Filebeat certificate needs renewal", "name", secretName, "daysUntilExpiry", certResult.DaysUntilExpiry(), "renewalThreshold", certificates.FormatCertDuration(certOpts.GetRenewalThreshold()))
+					// Emit event before starting renewal
+					r.emitCertificateRenewingEvent(cluster, secretName)
 				}
-				// Emit event before starting renewal
-				r.emitCertificateRenewingEvent(cluster, secretName)
-			}
-			if !needsRenewal {
-				return nil
+				if !needsRenewal {
+					return nil
+				}
 			}
 		}
 		if parseErr != nil {
@@ -649,8 +737,8 @@ func (r *CertificateReconciler) reconcileFilebeatCerts(ctx context.Context, clus
 	}
 
 	// Generate new filebeat certificate using options from CRD
-	log.Info("Generating new filebeat certificate", "name", secretName, "testMode", certOpts.TestMode, "validityDays", certOpts.GetNodeValidityDays())
-	var workerReplicas int32 = 0
+	log.Info("Generating new filebeat certificate", "name", secretName, "validity", certificates.FormatCertDuration(certOpts.GetNodeValidity()))
+	var workerReplicas int32
 	if cluster.Spec.Manager != nil {
 		workerReplicas = cluster.Spec.Manager.Workers.GetReplicas()
 	}
@@ -664,11 +752,9 @@ func (r *CertificateReconciler) reconcileFilebeatCerts(ctx context.Context, clus
 	filebeatConfig.Locality = certOpts.Locality
 	filebeatConfig.Organization = certOpts.Organization
 	filebeatConfig.OrganizationalUnit = certOpts.OrganizationalUnit
-	if certOpts.TestMode {
-		filebeatConfig.ValidityMinutes = certOpts.GetValidityMinutes()
-	} else {
-		filebeatConfig.ValidityDays = certOpts.GetNodeValidityDays()
-	}
+	filebeatConfig.Validity = certOpts.GetNodeValidity()
+	filebeatConfig.KeyAlgorithm = certOpts.KeyAlgorithm
+	filebeatConfig.ECDSACurve = certOpts.ECDSACurve
 
 	certResult, err := certificates.GenerateFilebeatCert(filebeatConfig, caResult)
 	if err != nil {
@@ -719,7 +805,7 @@ func (r *CertificateReconciler) reconcileFilebeatCerts(ctx context.Context, clus
 }
 
 // reconcileAdminCerts reconciles admin certificates
-func (r *CertificateReconciler) reconcileAdminCerts(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) error {
+func (r *CertificateReconciler) reconcileAdminCerts(ctx context.Context, cluster *wazuhv1.WazuhCluster, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) error {
 	log := logf.FromContext(ctx)
 	secretName := constants.AdminCertsName(cluster.Name)
 
@@ -732,18 +818,23 @@ func (r *CertificateReconciler) reconcileAdminCerts(ctx context.Context, cluster
 		// Check if certificate needs renewal using options from CRD
 		certResult, parseErr := certificates.ParseAdminCert(found.Data[constants.SecretKeyTLSCert], found.Data[constants.SecretKeyTLSKey])
 		if parseErr == nil {
-			needsRenewal := certOpts.ShouldRenewAdmin(certResult)
-			if needsRenewal {
-				if certOpts.TestMode {
-					log.Info("Admin certificate needs renewal (test mode)", "name", secretName, "minutesUntilExpiry", certResult.MinutesUntilExpiry())
-				} else {
-					log.Info("Admin certificate needs renewal", "name", secretName, "daysUntilExpiry", certResult.DaysUntilExpiry(), "renewalThresholdDays", certOpts.GetRenewalThresholdDays())
+			// Check for cluster domain mismatch (admin certs typically don't have K8s FQDNs, but check anyway)
+			if certificates.RequiresDomainRegeneration(certResult.Certificate, secretName, cluster.Namespace, log) {
+				log.Info("Admin certificate has domain mismatch, regenerating",
+					"name", secretName,
+					"expectedDomain", dns.ClusterDomain())
+				r.emitCertificateDomainMismatchEvent(cluster, secretName, dns.ClusterDomain())
+				// Fall through to regenerate certificate
+			} else {
+				needsRenewal := certOpts.ShouldRenewAdmin(certResult)
+				if needsRenewal {
+					log.Info("Admin certificate needs renewal", "name", secretName, "daysUntilExpiry", certResult.DaysUntilExpiry(), "renewalThreshold", certificates.FormatCertDuration(certOpts.GetRenewalThreshold()))
+					// Emit event before starting renewal
+					r.emitCertificateRenewingEvent(cluster, secretName)
 				}
-				// Emit event before starting renewal
-				r.emitCertificateRenewingEvent(cluster, secretName)
-			}
-			if !needsRenewal {
-				return nil
+				if !needsRenewal {
+					return nil
+				}
 			}
 		}
 		if parseErr != nil {
@@ -754,7 +845,7 @@ func (r *CertificateReconciler) reconcileAdminCerts(ctx context.Context, cluster
 	}
 
 	// Generate new admin certificate using options from CRD
-	log.Info("Generating new admin certificate", "name", secretName, "testMode", certOpts.TestMode, "validityDays", certOpts.GetNodeValidityDays())
+	log.Info("Generating new admin certificate", "name", secretName, "validity", certificates.FormatCertDuration(certOpts.GetNodeValidity()))
 	adminConfig := certificates.DefaultAdminCertConfig()
 	// Apply subject fields from CRD configuration
 	adminConfig.Country = certOpts.Country
@@ -762,11 +853,9 @@ func (r *CertificateReconciler) reconcileAdminCerts(ctx context.Context, cluster
 	adminConfig.Locality = certOpts.Locality
 	adminConfig.Organization = certOpts.Organization
 	adminConfig.OrganizationalUnit = certOpts.OrganizationalUnit
-	if certOpts.TestMode {
-		adminConfig.ValidityMinutes = certOpts.GetValidityMinutes()
-	} else {
-		adminConfig.ValidityDays = certOpts.GetNodeValidityDays()
-	}
+	adminConfig.Validity = certOpts.GetNodeValidity()
+	adminConfig.KeyAlgorithm = certOpts.KeyAlgorithm
+	adminConfig.ECDSACurve = certOpts.ECDSACurve
 
 	certResult, err := certificates.GenerateAdminCert(adminConfig, caResult)
 	if err != nil {
@@ -817,7 +906,7 @@ func (r *CertificateReconciler) reconcileAdminCerts(ctx context.Context, cluster
 }
 
 // ReconcileStandalone reconciles a standalone WazuhCertificate resource
-func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *wazuhv1alpha1.WazuhCertificate) error {
+func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *wazuhv1.WazuhCertificate) error {
 	log := logf.FromContext(ctx)
 
 	// Get or create CA for signing
@@ -832,23 +921,24 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 	// Generate certificate based on type
 	var certData map[string][]byte
 	switch cert.Spec.Type {
-	case wazuhv1alpha1.CertificateTypeCA:
+	case wazuhv1.CertificateTypeCA:
 		certData = map[string][]byte{
 			constants.SecretKeyCACert:  caResult.CertificatePEM,
 			constants.SecretKeyCAKey:   caResult.PrivateKeyPEM,
 			constants.SecretKeyTLSCert: caResult.CertificatePEM,
 			constants.SecretKeyTLSKey:  caResult.PrivateKeyPEM,
 		}
-	case wazuhv1alpha1.CertificateTypeNode, wazuhv1alpha1.CertificateTypeIndexer:
+	case wazuhv1.CertificateTypeNode, wazuhv1.CertificateTypeIndexer:
 		commonName := cert.Name
 		if cert.Spec.DistinguishedName != nil && cert.Spec.DistinguishedName.CommonName != "" {
 			commonName = cert.Spec.DistinguishedName.CommonName
 		}
 		nodeConfig := certificates.DefaultNodeCertConfig(commonName)
 		nodeConfig.DNSNames = sans
-		nodeConfig.ValidityDays = cert.Spec.ValidityDays
-		if nodeConfig.ValidityDays == 0 {
-			nodeConfig.ValidityDays = 365
+		if cert.Spec.Validity != "" {
+			if d, err := certificates.ParseCertDuration(cert.Spec.Validity); err == nil {
+				nodeConfig.Validity = d
+			}
 		}
 		// Apply subject fields from standalone certificate spec
 		if cert.Spec.DistinguishedName != nil {
@@ -868,6 +958,15 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 				nodeConfig.OrganizationalUnit = cert.Spec.DistinguishedName.OrganizationalUnit
 			}
 		}
+		// Apply key algorithm from standalone certificate spec
+		if cert.Spec.KeyConfig != nil {
+			if cert.Spec.KeyConfig.Algorithm != "" {
+				nodeConfig.KeyAlgorithm = certificates.KeyAlgorithm(cert.Spec.KeyConfig.Algorithm)
+			}
+			if cert.Spec.KeyConfig.Curve != "" {
+				nodeConfig.ECDSACurve = certificates.ECDSACurve(cert.Spec.KeyConfig.Curve)
+			}
+		}
 		nodeCert, err := certificates.GenerateNodeCert(nodeConfig, caResult)
 		if err != nil {
 			return fmt.Errorf("failed to generate node certificate: %w", err)
@@ -877,11 +976,12 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 			constants.SecretKeyTLSCert: nodeCert.CertificatePEM,
 			constants.SecretKeyTLSKey:  nodeCert.PrivateKeyPEM,
 		}
-	case wazuhv1alpha1.CertificateTypeAdmin:
+	case wazuhv1.CertificateTypeAdmin:
 		adminConfig := certificates.DefaultAdminCertConfig()
-		adminConfig.ValidityDays = cert.Spec.ValidityDays
-		if adminConfig.ValidityDays == 0 {
-			adminConfig.ValidityDays = 365
+		if cert.Spec.Validity != "" {
+			if d, err := certificates.ParseCertDuration(cert.Spec.Validity); err == nil {
+				adminConfig.Validity = d
+			}
 		}
 		// Apply subject fields from standalone certificate spec
 		if cert.Spec.DistinguishedName != nil {
@@ -901,6 +1001,15 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 				adminConfig.OrganizationalUnit = cert.Spec.DistinguishedName.OrganizationalUnit
 			}
 		}
+		// Apply key algorithm from standalone certificate spec
+		if cert.Spec.KeyConfig != nil {
+			if cert.Spec.KeyConfig.Algorithm != "" {
+				adminConfig.KeyAlgorithm = certificates.KeyAlgorithm(cert.Spec.KeyConfig.Algorithm)
+			}
+			if cert.Spec.KeyConfig.Curve != "" {
+				adminConfig.ECDSACurve = certificates.ECDSACurve(cert.Spec.KeyConfig.Curve)
+			}
+		}
 		adminCert, err := certificates.GenerateAdminCert(adminConfig, caResult)
 		if err != nil {
 			return fmt.Errorf("failed to generate admin certificate: %w", err)
@@ -910,7 +1019,7 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 			constants.SecretKeyTLSCert: adminCert.CertificatePEM,
 			constants.SecretKeyTLSKey:  adminCert.PrivateKeyPEM,
 		}
-	case wazuhv1alpha1.CertificateTypeFilebeat:
+	case wazuhv1.CertificateTypeFilebeat:
 		commonName := cert.Name
 		if cert.Spec.DistinguishedName != nil && cert.Spec.DistinguishedName.CommonName != "" {
 			commonName = cert.Spec.DistinguishedName.CommonName
@@ -918,9 +1027,10 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 		filebeatConfig := certificates.DefaultFilebeatCertConfig()
 		filebeatConfig.CommonName = commonName
 		filebeatConfig.DNSNames = sans
-		filebeatConfig.ValidityDays = cert.Spec.ValidityDays
-		if filebeatConfig.ValidityDays == 0 {
-			filebeatConfig.ValidityDays = 365
+		if cert.Spec.Validity != "" {
+			if d, err := certificates.ParseCertDuration(cert.Spec.Validity); err == nil {
+				filebeatConfig.Validity = d
+			}
 		}
 		// Apply subject fields from standalone certificate spec
 		if cert.Spec.DistinguishedName != nil {
@@ -940,6 +1050,15 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 				filebeatConfig.OrganizationalUnit = cert.Spec.DistinguishedName.OrganizationalUnit
 			}
 		}
+		// Apply key algorithm from standalone certificate spec
+		if cert.Spec.KeyConfig != nil {
+			if cert.Spec.KeyConfig.Algorithm != "" {
+				filebeatConfig.KeyAlgorithm = certificates.KeyAlgorithm(cert.Spec.KeyConfig.Algorithm)
+			}
+			if cert.Spec.KeyConfig.Curve != "" {
+				filebeatConfig.ECDSACurve = certificates.ECDSACurve(cert.Spec.KeyConfig.Curve)
+			}
+		}
 		filebeatCert, err := certificates.GenerateFilebeatCert(filebeatConfig, caResult)
 		if err != nil {
 			return fmt.Errorf("failed to generate filebeat certificate: %w", err)
@@ -949,7 +1068,7 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 			constants.SecretKeyTLSCert: filebeatCert.CertificatePEM,
 			constants.SecretKeyTLSKey:  filebeatCert.PrivateKeyPEM,
 		}
-	case wazuhv1alpha1.CertificateTypeDashboard:
+	case wazuhv1.CertificateTypeDashboard:
 		commonName := cert.Name
 		if cert.Spec.DistinguishedName != nil && cert.Spec.DistinguishedName.CommonName != "" {
 			commonName = cert.Spec.DistinguishedName.CommonName
@@ -957,9 +1076,10 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 		dashboardConfig := certificates.DefaultDashboardCertConfig()
 		dashboardConfig.CommonName = commonName
 		dashboardConfig.DNSNames = sans
-		dashboardConfig.ValidityDays = cert.Spec.ValidityDays
-		if dashboardConfig.ValidityDays == 0 {
-			dashboardConfig.ValidityDays = 365
+		if cert.Spec.Validity != "" {
+			if d, err := certificates.ParseCertDuration(cert.Spec.Validity); err == nil {
+				dashboardConfig.Validity = d
+			}
 		}
 		// Apply subject fields from standalone certificate spec
 		if cert.Spec.DistinguishedName != nil {
@@ -977,6 +1097,15 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 			}
 			if cert.Spec.DistinguishedName.OrganizationalUnit != "" {
 				dashboardConfig.OrganizationalUnit = cert.Spec.DistinguishedName.OrganizationalUnit
+			}
+		}
+		// Apply key algorithm from standalone certificate spec
+		if cert.Spec.KeyConfig != nil {
+			if cert.Spec.KeyConfig.Algorithm != "" {
+				dashboardConfig.KeyAlgorithm = certificates.KeyAlgorithm(cert.Spec.KeyConfig.Algorithm)
+			}
+			if cert.Spec.KeyConfig.Curve != "" {
+				dashboardConfig.ECDSACurve = certificates.ECDSACurve(cert.Spec.KeyConfig.Curve)
 			}
 		}
 		dashboardCert, err := certificates.GenerateDashboardCert(dashboardConfig, caResult)
@@ -1035,18 +1164,28 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 }
 
 // getOrCreateStandaloneCA gets or creates a CA for standalone certificate generation
-func (r *CertificateReconciler) getOrCreateStandaloneCA(ctx context.Context, cert *wazuhv1alpha1.WazuhCertificate) (*certificates.CAResult, error) {
+func (r *CertificateReconciler) getOrCreateStandaloneCA(ctx context.Context, cert *wazuhv1.WazuhCertificate) (*certificates.CAResult, error) {
 	// If this is a CA certificate, generate a new one
-	if cert.Spec.Type == wazuhv1alpha1.CertificateTypeCA {
+	if cert.Spec.Type == wazuhv1.CertificateTypeCA {
 		caConfig := certificates.DefaultCAConfig(cert.Name)
 		if cert.Spec.DistinguishedName != nil {
 			if cert.Spec.DistinguishedName.Organization != "" {
 				caConfig.Organization = cert.Spec.DistinguishedName.Organization
 			}
 		}
-		caConfig.ValidityDays = cert.Spec.ValidityDays
-		if caConfig.ValidityDays == 0 {
-			caConfig.ValidityDays = 365 * 10 // 10 years for CA
+		if cert.Spec.Validity != "" {
+			if d, err := certificates.ParseCertDuration(cert.Spec.Validity); err == nil {
+				caConfig.Validity = d
+			}
+		}
+		// Apply key algorithm from standalone certificate spec
+		if cert.Spec.KeyConfig != nil {
+			if cert.Spec.KeyConfig.Algorithm != "" {
+				caConfig.KeyAlgorithm = certificates.KeyAlgorithm(cert.Spec.KeyConfig.Algorithm)
+			}
+			if cert.Spec.KeyConfig.Curve != "" {
+				caConfig.ECDSACurve = certificates.ECDSACurve(cert.Spec.KeyConfig.Curve)
+			}
 		}
 		return certificates.GenerateCA(caConfig)
 	}
@@ -1058,6 +1197,15 @@ func (r *CertificateReconciler) getOrCreateStandaloneCA(ctx context.Context, cer
 		if errors.IsNotFound(err) {
 			// Generate a new CA if none exists
 			caConfig := certificates.DefaultCAConfig(cert.Spec.ClusterRef + "-ca")
+			// Apply key algorithm from standalone certificate spec
+			if cert.Spec.KeyConfig != nil {
+				if cert.Spec.KeyConfig.Algorithm != "" {
+					caConfig.KeyAlgorithm = certificates.KeyAlgorithm(cert.Spec.KeyConfig.Algorithm)
+				}
+				if cert.Spec.KeyConfig.Curve != "" {
+					caConfig.ECDSACurve = certificates.ECDSACurve(cert.Spec.KeyConfig.Curve)
+				}
+			}
 			return certificates.GenerateCA(caConfig)
 		}
 		return nil, fmt.Errorf("failed to get CA secret: %w", err)
@@ -1068,7 +1216,7 @@ func (r *CertificateReconciler) getOrCreateStandaloneCA(ctx context.Context, cer
 }
 
 // generateSANs generates Subject Alternative Names based on certificate spec
-func (r *CertificateReconciler) generateSANs(cert *wazuhv1alpha1.WazuhCertificate) []string {
+func (r *CertificateReconciler) generateSANs(cert *wazuhv1.WazuhCertificate) []string {
 	var sans []string
 
 	// Add explicit SANs from spec
@@ -1085,17 +1233,17 @@ func (r *CertificateReconciler) generateSANs(cert *wazuhv1alpha1.WazuhCertificat
 		clusterName := cert.Spec.ClusterRef
 
 		switch cert.Spec.Type {
-		case wazuhv1alpha1.CertificateTypeIndexer, wazuhv1alpha1.CertificateTypeNode:
+		case wazuhv1.CertificateTypeIndexer, wazuhv1.CertificateTypeNode:
 			replicas := cert.Spec.AutoGenerateSANs.IndexerReplicas
 			if replicas == 0 {
 				replicas = 3
 			}
 			sans = append(sans, certificates.GenerateIndexerNodeSANs(clusterName, namespace, replicas)...)
-		case wazuhv1alpha1.CertificateTypeDashboard:
+		case wazuhv1.CertificateTypeDashboard:
 			sans = append(sans, certificates.GenerateDashboardSANs(clusterName, namespace)...)
-		case wazuhv1alpha1.CertificateTypeFilebeat:
+		case wazuhv1.CertificateTypeFilebeat:
 			sans = append(sans, certificates.GenerateFilebeatSANs(clusterName, namespace, 0)...)
-		case wazuhv1alpha1.CertificateTypeAdmin:
+		case wazuhv1.CertificateTypeAdmin:
 			sans = append(sans, "localhost")
 		}
 
@@ -1106,7 +1254,7 @@ func (r *CertificateReconciler) generateSANs(cert *wazuhv1alpha1.WazuhCertificat
 	}
 
 	// Ensure localhost is always included for admin certs
-	if cert.Spec.Type == wazuhv1alpha1.CertificateTypeAdmin && len(sans) == 0 {
+	if cert.Spec.Type == wazuhv1.CertificateTypeAdmin && len(sans) == 0 {
 		sans = []string{"localhost"}
 	}
 
@@ -1114,13 +1262,13 @@ func (r *CertificateReconciler) generateSANs(cert *wazuhv1alpha1.WazuhCertificat
 }
 
 // reconcileNodeCert reconciles a node certificate
-func (r *CertificateReconciler) reconcileNodeCert(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, secretName, componentName string, sans []string, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) error {
+func (r *CertificateReconciler) reconcileNodeCert(ctx context.Context, cluster *wazuhv1.WazuhCluster, secretName, componentName string, sans []string, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) error {
 	_, err := r.reconcileNodeCertWithRenewalStatus(ctx, cluster, secretName, componentName, sans, caResult, certOpts)
 	return err
 }
 
 // reconcileNodeCertWithRenewalStatus reconciles a node certificate and returns whether it was renewed
-func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, secretName, componentName string, sans []string, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) (bool, error) {
+func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.Context, cluster *wazuhv1.WazuhCluster, secretName, componentName string, sans []string, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) (bool, error) {
 	log := logf.FromContext(ctx)
 
 	// Check if secret exists
@@ -1132,16 +1280,23 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 		// Check if certificate needs renewal using options from CRD
 		certResult, parseErr := certificates.ParseNodeCert(found.Data[constants.SecretKeyTLSCert], found.Data[constants.SecretKeyTLSKey])
 		if parseErr == nil {
-			needsRenewal := certOpts.ShouldRenewNode(certResult)
-			if needsRenewal {
-				if certOpts.TestMode {
-					log.Info("Node certificate needs renewal (test mode)", "name", secretName, "component", componentName, "minutesUntilExpiry", certResult.MinutesUntilExpiry())
-				} else {
-					log.Info("Node certificate needs renewal", "name", secretName, "component", componentName, "daysUntilExpiry", certResult.DaysUntilExpiry(), "renewalThresholdDays", certOpts.GetRenewalThresholdDays())
+			// Check for cluster domain mismatch (e.g., after operator upgrade with new domain)
+			if certificates.RequiresDomainRegeneration(certResult.Certificate, secretName, cluster.Namespace, log) {
+				log.Info("Node certificate has domain mismatch, regenerating",
+					"name", secretName,
+					"component", componentName,
+					"expectedDomain", dns.ClusterDomain())
+				r.emitCertificateDomainMismatchEvent(cluster, secretName, dns.ClusterDomain())
+				// Fall through to regenerate certificate
+			} else {
+				// Check if certificate needs renewal due to expiry
+				needsRenewal := certOpts.ShouldRenewNode(certResult)
+				if needsRenewal {
+					log.Info("Node certificate needs renewal", "name", secretName, "component", componentName, "daysUntilExpiry", certResult.DaysUntilExpiry(), "renewalThreshold", certificates.FormatCertDuration(certOpts.GetRenewalThreshold()))
 				}
-			}
-			if !needsRenewal {
-				return false, nil // Certificate is still valid, no renewal
+				if !needsRenewal {
+					return false, nil // Certificate is still valid, no renewal
+				}
 			}
 		}
 		if parseErr != nil {
@@ -1152,7 +1307,7 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 	}
 
 	// Generate new node certificate using options from CRD
-	log.Info("Generating new node certificate", "name", secretName, "component", componentName, "testMode", certOpts.TestMode, "validityDays", certOpts.GetNodeValidityDays())
+	log.Info("Generating new node certificate", "name", secretName, "component", componentName, "validity", certificates.FormatCertDuration(certOpts.GetNodeValidity()))
 	nodeConfig := certificates.DefaultNodeCertConfig(cluster.Name + "-" + componentName)
 	nodeConfig.DNSNames = sans
 	// Apply subject fields from CRD configuration
@@ -1161,11 +1316,9 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 	nodeConfig.Locality = certOpts.Locality
 	nodeConfig.Organization = certOpts.Organization
 	nodeConfig.OrganizationalUnit = certOpts.OrganizationalUnit
-	if certOpts.TestMode {
-		nodeConfig.ValidityMinutes = certOpts.GetValidityMinutes()
-	} else {
-		nodeConfig.ValidityDays = certOpts.GetNodeValidityDays()
-	}
+	nodeConfig.Validity = certOpts.GetNodeValidity()
+	nodeConfig.KeyAlgorithm = certOpts.KeyAlgorithm
+	nodeConfig.ECDSACurve = certOpts.ECDSACurve
 
 	certResult, err := certificates.GenerateNodeCert(nodeConfig, caResult)
 	if err != nil {
@@ -1201,41 +1354,14 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 		if err := r.Create(ctx, secret); err != nil {
 			return false, fmt.Errorf("failed to create node secret: %w", err)
 		}
-	} else {
-		secret.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, secret); err != nil {
-			return false, fmt.Errorf("failed to update node secret: %w", err)
-		}
+		return false, nil // Certificate was created (not renewed)
+	}
+
+	// Secret exists, update it (this is a renewal)
+	secret.SetResourceVersion(found.GetResourceVersion())
+	if err := r.Update(ctx, secret); err != nil {
+		return false, fmt.Errorf("failed to update node secret: %w", err)
 	}
 
 	return true, nil // Certificate was renewed
-}
-
-// createOrUpdateSecret creates or updates a secret with retry on conflict
-func (r *CertificateReconciler) createOrUpdateSecret(ctx context.Context, secret *corev1.Secret) error {
-	log := logf.FromContext(ctx)
-
-	return utils.RetryOnConflict(ctx, func() error {
-		key := types.NamespacedName{
-			Name:      secret.GetName(),
-			Namespace: secret.GetNamespace(),
-		}
-
-		existing := &corev1.Secret{}
-		err := r.Get(ctx, key, existing)
-		if err != nil && errors.IsNotFound(err) {
-			log.Info("Creating secret", "name", secret.GetName())
-			createErr := r.Create(ctx, secret)
-			if errors.IsAlreadyExists(createErr) {
-				return createErr // Will trigger retry which will find and update
-			}
-			return createErr
-		} else if err != nil {
-			return err
-		}
-
-		log.V(1).Info("Updating secret", "name", secret.GetName())
-		secret.SetResourceVersion(existing.GetResourceVersion())
-		return r.Update(ctx, secret)
-	})
 }

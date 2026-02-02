@@ -35,7 +35,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         description: WazuhCertificate is the Schema for the wazuhcertificates API
@@ -134,7 +134,7 @@ spec:
                     description: Common Name (CN)
                     type: string
                   country:
-                    default: US
+                    default: FR
                     description: Country (C) - 2 letter code
                     pattern: ^[A-Z]{2}$
                     type: string
@@ -142,7 +142,7 @@ spec:
                     description: Email Address
                     type: string
                   locality:
-                    default: California
+                    default: Strasbourg
                     description: Locality/City (L)
                     type: string
                   organization:
@@ -154,7 +154,7 @@ spec:
                     description: Organizational Unit (OU)
                     type: string
                   state:
-                    default: California
+                    default: Alsace
                     description: State/Province (ST)
                     type: string
                 required:
@@ -215,12 +215,14 @@ spec:
                   - filebeat
                 description: Certificate type (ca, node, admin, filebeat)
                 type: string
-              validityDays:
-                default: 365
-                description: Certificate lifetime in days
-                maximum: 3650
-                minimum: 1
-                type: integer
+              validity:
+                default: 365d
+                description: |-
+                  Certificate validity as a duration string
+                  Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
+                  Examples: "365d" (1 year), "24h" (1 day), "30m" (30 minutes)
+                pattern: ^\d+[dhm]$
+                type: string
             required:
             - clusterRef
             - secretName

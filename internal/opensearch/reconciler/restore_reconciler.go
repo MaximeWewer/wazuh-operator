@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -59,7 +59,7 @@ func (r *RestoreReconciler) WithAPIClient(apiClient *api.Client) *RestoreReconci
 }
 
 // Reconcile reconciles an OpenSearch restore operation
-func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1alpha1.OpenSearchRestore) error {
+func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1.OpenSearchRestore) error {
 	log := logf.FromContext(ctx)
 
 	// Handle finalizer
@@ -141,7 +141,7 @@ func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1alpha
 
 		// Convert index settings
 		if len(restore.Spec.IndexSettings) > 0 {
-			opts.IndexSettings = make(map[string]interface{})
+			opts.IndexSettings = make(map[string]any)
 			for k, v := range restore.Spec.IndexSettings {
 				opts.IndexSettings[k] = v
 			}
@@ -156,7 +156,7 @@ func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1alpha
 		// Update status with initial result
 		if result != nil {
 			restore.Status.RestoredIndices = result.Snapshot.Indices
-			restore.Status.Shards = &wazuhv1alpha1.ShardStats{
+			restore.Status.Shards = &wazuhv1.ShardStats{
 				Total:      int32(result.Snapshot.Shards.Total),
 				Successful: int32(result.Snapshot.Shards.Successful),
 				Failed:     int32(result.Snapshot.Shards.Failed),
@@ -171,7 +171,7 @@ func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1alpha
 }
 
 // monitorRestoreProgress monitors the restore operation progress
-func (r *RestoreReconciler) monitorRestoreProgress(ctx context.Context, restore *wazuhv1alpha1.OpenSearchRestore, snapshotsAPI *api.SnapshotsAPI) error {
+func (r *RestoreReconciler) monitorRestoreProgress(ctx context.Context, restore *wazuhv1.OpenSearchRestore, snapshotsAPI *api.SnapshotsAPI) error {
 	log := logf.FromContext(ctx)
 
 	// Check recovery status for restored indices
@@ -224,7 +224,7 @@ func (r *RestoreReconciler) monitorRestoreProgress(ctx context.Context, restore 
 }
 
 // handleDeletion handles restore cleanup on CRD deletion
-func (r *RestoreReconciler) handleDeletion(ctx context.Context, restore *wazuhv1alpha1.OpenSearchRestore) error {
+func (r *RestoreReconciler) handleDeletion(ctx context.Context, restore *wazuhv1.OpenSearchRestore) error {
 	log := logf.FromContext(ctx)
 
 	// Note: We don't delete the restored indices
@@ -243,7 +243,7 @@ func (r *RestoreReconciler) handleDeletion(ctx context.Context, restore *wazuhv1
 }
 
 // updateStatus updates the restore status
-func (r *RestoreReconciler) updateStatus(ctx context.Context, restore *wazuhv1alpha1.OpenSearchRestore, phase, message string) error {
+func (r *RestoreReconciler) updateStatus(ctx context.Context, restore *wazuhv1.OpenSearchRestore, phase, message string) error {
 	restore.Status.Phase = phase
 	restore.Status.Message = message
 	restore.Status.ObservedGeneration = restore.Generation
@@ -251,10 +251,11 @@ func (r *RestoreReconciler) updateStatus(ctx context.Context, restore *wazuhv1al
 	// Set condition
 	conditionStatus := metav1.ConditionFalse
 	reason := "RestoreInProgress"
-	if phase == constants.RestorePhaseCompleted {
+	switch phase {
+	case constants.RestorePhaseCompleted:
 		conditionStatus = metav1.ConditionTrue
 		reason = "RestoreComplete"
-	} else if phase == constants.RestorePhaseFailed {
+	case constants.RestorePhaseFailed:
 		reason = "RestoreFailed"
 	}
 
@@ -270,6 +271,6 @@ func (r *RestoreReconciler) updateStatus(ctx context.Context, restore *wazuhv1al
 }
 
 // Delete handles cleanup when a restore CRD is deleted (called by controller)
-func (r *RestoreReconciler) Delete(ctx context.Context, restore *wazuhv1alpha1.OpenSearchRestore) error {
+func (r *RestoreReconciler) Delete(ctx context.Context, restore *wazuhv1.OpenSearchRestore) error {
 	return r.handleDeletion(ctx, restore)
 }

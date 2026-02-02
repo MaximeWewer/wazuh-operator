@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,33 +28,33 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // DryRunEvaluator evaluates drain feasibility without executing
 type DryRunEvaluator interface {
 	// EvaluateIndexerDrain checks if indexer drain is feasible
-	EvaluateIndexerDrain(ctx context.Context, cluster *v1alpha1.WazuhCluster, targetNode string) (*v1alpha1.DryRunResult, error)
+	EvaluateIndexerDrain(ctx context.Context, cluster *v1.WazuhCluster, targetNode string) (*v1.DryRunResult, error)
 
 	// EvaluateManagerDrain checks if manager drain is feasible
-	EvaluateManagerDrain(ctx context.Context, cluster *v1alpha1.WazuhCluster, targetNode string) (*v1alpha1.DryRunResult, error)
+	EvaluateManagerDrain(ctx context.Context, cluster *v1.WazuhCluster, targetNode string) (*v1.DryRunResult, error)
 
 	// EvaluateDashboard checks dashboard PDB constraints
-	EvaluateDashboard(ctx context.Context, cluster *v1alpha1.WazuhCluster) (*v1alpha1.DryRunResult, error)
+	EvaluateDashboard(ctx context.Context, cluster *v1.WazuhCluster) (*v1.DryRunResult, error)
 
 	// EvaluateAll runs all evaluations and returns combined result
-	EvaluateAll(ctx context.Context, cluster *v1alpha1.WazuhCluster) (*v1alpha1.DryRunResult, error)
+	EvaluateAll(ctx context.Context, cluster *v1.WazuhCluster) (*v1.DryRunResult, error)
 }
 
 // IndexerDrainEvaluator evaluates indexer drain feasibility
 type IndexerDrainEvaluator interface {
-	EvaluateFeasibility(ctx context.Context, nodeName string) (*v1alpha1.DryRunResult, error)
+	EvaluateFeasibility(ctx context.Context, nodeName string) (*v1.DryRunResult, error)
 }
 
 // ManagerDrainEvaluator evaluates manager drain feasibility
 type ManagerDrainEvaluator interface {
-	EvaluateFeasibility(ctx context.Context, nodeName string) (*v1alpha1.DryRunResult, error)
+	EvaluateFeasibility(ctx context.Context, nodeName string) (*v1.DryRunResult, error)
 }
 
 // DryRunEvaluatorImpl implements DryRunEvaluator
@@ -76,11 +76,11 @@ func NewDryRunEvaluator(c client.Client, log logr.Logger, indexerEval IndexerDra
 }
 
 // EvaluateIndexerDrain checks if indexer drain is feasible
-func (e *DryRunEvaluatorImpl) EvaluateIndexerDrain(ctx context.Context, cluster *v1alpha1.WazuhCluster, targetNode string) (*v1alpha1.DryRunResult, error) {
+func (e *DryRunEvaluatorImpl) EvaluateIndexerDrain(ctx context.Context, cluster *v1.WazuhCluster, targetNode string) (*v1.DryRunResult, error) {
 	e.log.Info("Evaluating indexer drain feasibility", "cluster", cluster.Name, "targetNode", targetNode)
 
 	if e.indexerEvaluator == nil {
-		return &v1alpha1.DryRunResult{
+		return &v1.DryRunResult{
 			Feasible:    false,
 			EvaluatedAt: metav1.Now(),
 			Component:   constants.DrainComponentIndexer,
@@ -90,7 +90,7 @@ func (e *DryRunEvaluatorImpl) EvaluateIndexerDrain(ctx context.Context, cluster 
 
 	result, err := e.indexerEvaluator.EvaluateFeasibility(ctx, targetNode)
 	if err != nil {
-		return &v1alpha1.DryRunResult{
+		return &v1.DryRunResult{
 			Feasible:    false,
 			EvaluatedAt: metav1.Now(),
 			Component:   constants.DrainComponentIndexer,
@@ -107,11 +107,11 @@ func (e *DryRunEvaluatorImpl) EvaluateIndexerDrain(ctx context.Context, cluster 
 }
 
 // EvaluateManagerDrain checks if manager drain is feasible
-func (e *DryRunEvaluatorImpl) EvaluateManagerDrain(ctx context.Context, cluster *v1alpha1.WazuhCluster, targetNode string) (*v1alpha1.DryRunResult, error) {
+func (e *DryRunEvaluatorImpl) EvaluateManagerDrain(ctx context.Context, cluster *v1.WazuhCluster, targetNode string) (*v1.DryRunResult, error) {
 	e.log.Info("Evaluating manager drain feasibility", "cluster", cluster.Name, "targetNode", targetNode)
 
 	if e.managerEvaluator == nil {
-		return &v1alpha1.DryRunResult{
+		return &v1.DryRunResult{
 			Feasible:    false,
 			EvaluatedAt: metav1.Now(),
 			Component:   constants.DrainComponentManager,
@@ -121,7 +121,7 @@ func (e *DryRunEvaluatorImpl) EvaluateManagerDrain(ctx context.Context, cluster 
 
 	result, err := e.managerEvaluator.EvaluateFeasibility(ctx, targetNode)
 	if err != nil {
-		return &v1alpha1.DryRunResult{
+		return &v1.DryRunResult{
 			Feasible:    false,
 			EvaluatedAt: metav1.Now(),
 			Component:   constants.DrainComponentManager,
@@ -138,10 +138,10 @@ func (e *DryRunEvaluatorImpl) EvaluateManagerDrain(ctx context.Context, cluster 
 }
 
 // EvaluateDashboard checks dashboard PDB constraints
-func (e *DryRunEvaluatorImpl) EvaluateDashboard(ctx context.Context, cluster *v1alpha1.WazuhCluster) (*v1alpha1.DryRunResult, error) {
+func (e *DryRunEvaluatorImpl) EvaluateDashboard(ctx context.Context, cluster *v1.WazuhCluster) (*v1.DryRunResult, error) {
 	e.log.Info("Evaluating dashboard PDB constraints", "cluster", cluster.Name)
 
-	result := &v1alpha1.DryRunResult{
+	result := &v1.DryRunResult{
 		Feasible:    true,
 		EvaluatedAt: metav1.Now(),
 		Component:   constants.DrainComponentDashboard,
@@ -209,10 +209,10 @@ func (e *DryRunEvaluatorImpl) EvaluateDashboard(ctx context.Context, cluster *v1
 }
 
 // EvaluateAll runs all evaluations and returns combined result
-func (e *DryRunEvaluatorImpl) EvaluateAll(ctx context.Context, cluster *v1alpha1.WazuhCluster) (*v1alpha1.DryRunResult, error) {
+func (e *DryRunEvaluatorImpl) EvaluateAll(ctx context.Context, cluster *v1.WazuhCluster) (*v1.DryRunResult, error) {
 	e.log.Info("Running comprehensive dry-run evaluation", "cluster", cluster.Name)
 
-	combinedResult := &v1alpha1.DryRunResult{
+	combinedResult := &v1.DryRunResult{
 		Feasible:    true,
 		EvaluatedAt: metav1.Now(),
 		Component:   "all",
@@ -223,15 +223,15 @@ func (e *DryRunEvaluatorImpl) EvaluateAll(ctx context.Context, cluster *v1alpha1
 	// Evaluate each component and combine results
 	components := []struct {
 		name     string
-		evaluate func() (*v1alpha1.DryRunResult, error)
+		evaluate func() (*v1.DryRunResult, error)
 	}{
 		{
 			name: constants.DrainComponentIndexer,
-			evaluate: func() (*v1alpha1.DryRunResult, error) {
+			evaluate: func() (*v1.DryRunResult, error) {
 				// Get target node for indexer (highest index pod that would be removed)
 				targetNode := e.getTargetIndexerNode(cluster)
 				if targetNode == "" {
-					return &v1alpha1.DryRunResult{
+					return &v1.DryRunResult{
 						Feasible:    true,
 						EvaluatedAt: metav1.Now(),
 						Component:   constants.DrainComponentIndexer,
@@ -243,11 +243,11 @@ func (e *DryRunEvaluatorImpl) EvaluateAll(ctx context.Context, cluster *v1alpha1
 		},
 		{
 			name: constants.DrainComponentManager,
-			evaluate: func() (*v1alpha1.DryRunResult, error) {
+			evaluate: func() (*v1.DryRunResult, error) {
 				// Get target node for manager (highest index pod that would be removed)
 				targetNode := e.getTargetManagerNode(cluster)
 				if targetNode == "" {
-					return &v1alpha1.DryRunResult{
+					return &v1.DryRunResult{
 						Feasible:    true,
 						EvaluatedAt: metav1.Now(),
 						Component:   constants.DrainComponentManager,
@@ -259,7 +259,7 @@ func (e *DryRunEvaluatorImpl) EvaluateAll(ctx context.Context, cluster *v1alpha1
 		},
 		{
 			name: constants.DrainComponentDashboard,
-			evaluate: func() (*v1alpha1.DryRunResult, error) {
+			evaluate: func() (*v1.DryRunResult, error) {
 				return e.EvaluateDashboard(ctx, cluster)
 			},
 		},
@@ -309,7 +309,7 @@ func (e *DryRunEvaluatorImpl) EvaluateAll(ctx context.Context, cluster *v1alpha1
 }
 
 // getTargetIndexerNode determines the target node for indexer evaluation
-func (e *DryRunEvaluatorImpl) getTargetIndexerNode(cluster *v1alpha1.WazuhCluster) string {
+func (e *DryRunEvaluatorImpl) getTargetIndexerNode(cluster *v1.WazuhCluster) string {
 	// If drain status has a target pod, use it
 	if cluster.Status.Drain != nil && cluster.Status.Drain.Indexer != nil {
 		if cluster.Status.Drain.Indexer.TargetPod != "" {
@@ -323,7 +323,7 @@ func (e *DryRunEvaluatorImpl) getTargetIndexerNode(cluster *v1alpha1.WazuhCluste
 		desiredReplicas = cluster.Spec.Indexer.Replicas
 	}
 
-	var currentReplicas int32 = 0
+	var currentReplicas int32
 	if cluster.Status.Indexer != nil {
 		currentReplicas = cluster.Status.Indexer.Replicas
 	}
@@ -337,7 +337,7 @@ func (e *DryRunEvaluatorImpl) getTargetIndexerNode(cluster *v1alpha1.WazuhCluste
 }
 
 // getTargetManagerNode determines the target node for manager evaluation
-func (e *DryRunEvaluatorImpl) getTargetManagerNode(cluster *v1alpha1.WazuhCluster) string {
+func (e *DryRunEvaluatorImpl) getTargetManagerNode(cluster *v1.WazuhCluster) string {
 	// If drain status has a target pod, use it
 	if cluster.Status.Drain != nil && cluster.Status.Drain.Manager != nil {
 		if cluster.Status.Drain.Manager.TargetPod != "" {
@@ -346,7 +346,7 @@ func (e *DryRunEvaluatorImpl) getTargetManagerNode(cluster *v1alpha1.WazuhCluste
 	}
 
 	// Otherwise, calculate based on spec vs status replicas
-	var desiredReplicas int32 = 0
+	var desiredReplicas int32
 	if cluster.Spec.Manager != nil {
 		desiredReplicas = cluster.Spec.Manager.Workers.GetReplicas()
 	}
@@ -354,7 +354,7 @@ func (e *DryRunEvaluatorImpl) getTargetManagerNode(cluster *v1alpha1.WazuhCluste
 	// Manager status is the combined status - for workers we need to check
 	// the actual StatefulSet replicas. For now, use the drain target replicas
 	// from the drain status if available.
-	var currentReplicas int32 = 0
+	var currentReplicas int32
 	if cluster.Status.Drain != nil && cluster.Status.Drain.Manager != nil {
 		if cluster.Status.Drain.Manager.PreviousReplicas != nil {
 			currentReplicas = *cluster.Status.Drain.Manager.PreviousReplicas

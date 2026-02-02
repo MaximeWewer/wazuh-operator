@@ -21,8 +21,8 @@ help: ## Display this help.
 ##@ Development
 
 .PHONY: manifests
-manifests: controller-gen ## Generate CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd
+manifests: controller-gen ## Generate CRDs directly into Helm chart.
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=charts/wazuh-operator/crds
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -37,8 +37,23 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet ## Run tests.
-	go test ./... -coverprofile cover.out
+test: manifests generate fmt vet envtest ## Run tests.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
+
+.PHONY: test-coverage
+test-coverage: test ## Run tests and show coverage report.
+	go tool cover -html=cover.out
+
+.PHONY: test-e2e
+test-e2e: ## Run E2E tests (requires deployed cluster)
+	./test/e2e/scripts/test-deployment.sh
+	./test/e2e/scripts/test-configuration.sh
+
+.PHONY: test-e2e-full
+test-e2e-full: ## Run full E2E test suite including scaling tests
+	./test/e2e/scripts/test-deployment.sh
+	./test/e2e/scripts/test-configuration.sh
+	./test/e2e/scripts/test-scaling.sh
 
 ##@ Build
 
@@ -58,29 +73,39 @@ docker-build: ## Build docker image with the manager.
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
 
-##@ Deployment
+##@ Deployment (Helm)
 
-ifndef ignore-not-found
-  ignore-not-found = false
-endif
+HELM_RELEASE_OPERATOR ?= wazuh-operator
+HELM_RELEASE_CLUSTER ?= wazuh-cluster
+HELM_NAMESPACE_OPERATOR ?= wazuh-system
+HELM_NAMESPACE_CLUSTER ?= wazuh
 
 .PHONY: install
-install: manifests ## Install CRDs into the K8s cluster specified in ~/.kube/config.
-	kubectl apply -f config/crd/
+install: manifests ## Install CRDs into the K8s cluster.
+	kubectl apply -f charts/wazuh-operator/crds/
 
 .PHONY: uninstall
-uninstall: manifests ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
-	kubectl delete -f config/crd/
+uninstall: ## Uninstall CRDs from the K8s cluster.
+	-kubectl delete -f charts/wazuh-operator/crds/
 
 .PHONY: deploy
-deploy: manifests ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	kubectl apply -f config/rbac/
-	kubectl apply -f config/manager/
+deploy: manifests ## Deploy operator using Helm.
+	helm upgrade --install $(HELM_RELEASE_OPERATOR) ./charts/wazuh-operator \
+		--namespace $(HELM_NAMESPACE_OPERATOR) --create-namespace
 
 .PHONY: undeploy
-undeploy: ## Undeploy controller from the K8s cluster specified in ~/.kube/config.
-	kubectl delete -f config/manager/ --ignore-not-found=$(ignore-not-found)
-	kubectl delete -f config/rbac/ --ignore-not-found=$(ignore-not-found)
+undeploy: ## Undeploy operator using Helm.
+	-helm uninstall $(HELM_RELEASE_OPERATOR) --namespace $(HELM_NAMESPACE_OPERATOR)
+
+.PHONY: deploy-cluster
+deploy-cluster: ## Deploy a Wazuh cluster using Helm.
+	helm upgrade --install $(HELM_RELEASE_CLUSTER) ./charts/wazuh-cluster \
+		--namespace $(HELM_NAMESPACE_CLUSTER) --create-namespace \
+		--set sizing.profile=S
+
+.PHONY: undeploy-cluster
+undeploy-cluster: ## Undeploy Wazuh cluster using Helm.
+	-helm uninstall $(HELM_RELEASE_CLUSTER) --namespace $(HELM_NAMESPACE_CLUSTER)
 
 ##@ Clean & Redeploy
 
@@ -93,18 +118,18 @@ clean-bin: ## Remove old binary
 .PHONY: clean-crds
 clean-crds: ## Remove old CRDs from cluster
 	@echo "Cleaning old CRDs from cluster..."
-	-kubectl delete wazuhclusters.wazuh.com --all --all-namespaces
-	-kubectl delete wazuhrules.wazuh.com --all --all-namespaces
-	-kubectl delete wazuhdecoders.wazuh.com --all --all-namespaces
-	-kubectl delete -f config/crd/ --ignore-not-found=true
+	-kubectl delete wazuhclusters.resources.wazuh.com --all --all-namespaces
+	-kubectl delete wazuhrules.resources.wazuh.com --all --all-namespaces
+	-kubectl delete wazuhdecoders.resources.wazuh.com --all --all-namespaces
+	-kubectl delete -f charts/wazuh-operator/crds/ --ignore-not-found=true
 	@echo "CRDs cleaned"
 
 .PHONY: clean-all
-clean-all: clean-bin clean-crds undeploy ## Clean everything (binary, CRDs, deployment)
+clean-all: clean-bin undeploy undeploy-cluster clean-crds ## Clean everything (binary, Helm releases, CRDs)
 	@echo "Full cleanup completed"
 
 .PHONY: redeploy
-redeploy: clean-all build install deploy ## Complete redeploy: clean, build, install CRDs, deploy
+redeploy: clean-all build install deploy ## Complete redeploy: clean, build, install CRDs, deploy operator
 	@echo "==========================="
 	@echo "Redeploy completed!"
 	@echo "==========================="
@@ -125,21 +150,48 @@ fresh-cluster: clean-all ## Delete all Wazuh clusters and prepare for fresh depl
 
 ##@ Build Dependencies
 
-CONTROLLER_GEN = $(shell pwd)/bin/controller-gen
-.PHONY: controller-gen
-controller-gen: ## Download controller-gen locally if necessary.
-	$(call go-get-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen@v0.17.0)
+## Location to install dependencies to
+LOCALBIN ?= $(shell pwd)/bin
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
 
-# go-get-tool will 'go install' any package $2 and install it to $1.
-PROJECT_DIR := $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST))))
-define go-get-tool
-@[ -f $(1) ] || { \
-set -e ;\
-TMP_DIR=$$(mktemp -d) ;\
-cd $$TMP_DIR ;\
-go mod init tmp ;\
-echo "Downloading $(2)" ;\
-GOBIN=$(PROJECT_DIR)/bin go install $(2) ;\
-rm -rf $$TMP_DIR ;\
-}
-endef
+## Tool Binaries
+CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
+ENVTEST ?= $(LOCALBIN)/setup-envtest
+
+## Tool Versions
+CONTROLLER_TOOLS_VERSION ?= v0.17.0
+ENVTEST_VERSION ?= latest
+ENVTEST_K8S_VERSION = 1.31.0
+
+.PHONY: controller-gen
+controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
+$(CONTROLLER_GEN): $(LOCALBIN)
+	test -s $(LOCALBIN)/controller-gen || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
+
+.PHONY: envtest
+envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
+$(ENVTEST): $(LOCALBIN)
+	test -s $(LOCALBIN)/setup-envtest || GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION)
+
+##@ Validation
+
+.PHONY: lint
+lint: ## Run golangci-lint
+	golangci-lint run ./...
+
+.PHONY: helm-lint
+helm-lint: ## Lint Helm charts
+	helm lint charts/wazuh-operator
+	helm lint charts/wazuh-cluster
+
+.PHONY: helm-docs
+helm-docs: ## Generate Helm chart READMEs from values.yaml and format them
+	@command -v helm-docs >/dev/null 2>&1 || { echo "helm-docs not found. Install with: go install github.com/norwoodj/helm-docs/cmd/helm-docs@latest"; exit 1; }
+	helm-docs --chart-search-root=charts
+	@if command -v npx >/dev/null 2>&1 && [ -f package.json ]; then \
+		npx prettier --write charts/*/README.md; \
+	else \
+		echo "Prettier not available, skipping markdown formatting"; \
+	fi
+

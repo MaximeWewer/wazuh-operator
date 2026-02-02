@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,9 +17,20 @@ limitations under the License.
 package config
 
 import (
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
+
+func TestMain(m *testing.M) {
+	// Initialize DNS package for tests
+	if err := dns.InitializeWithDomain("cluster.local"); err != nil {
+		panic("Failed to initialize DNS for tests: " + err.Error())
+	}
+	os.Exit(m.Run())
+}
 
 func TestOpenSearchConfig_VersionAwareHotReload(t *testing.T) {
 	tests := []struct {

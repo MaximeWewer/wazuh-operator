@@ -1,210 +1,346 @@
-# Quick Start Guide
+# Wazuh Operator - Quick Start Guide
 
-Deploy a Wazuh cluster in minutes.
+Quick start guide to deploy and test the Wazuh operator locally.
+
+## Quick Start (2 commands)
+
+```bash
+# 1. Deploy everything (operator + full cluster)
+./wazuh-dev deploy
+
+# 2. Check status
+./wazuh-dev status
+```
+
+That's it!
 
 ## Prerequisites
 
-- Wazuh Operator installed ([Installation Guide](installation.md))
-- kubectl access to your cluster
-- At least 8GB RAM available in your cluster
+See [Prerequisites and Requirements](../../requirements.md) for complete requirements.
 
-## Step 1: Create a Namespace
+**Quick check:**
 
 ```bash
-kubectl create namespace wazuh
+docker --version && minikube version && kubectl version --client && helm version
 ```
 
-## Step 2: Deploy a Minimal Cluster
+## Essential Commands
 
-### Option A: Using Helm
+### Deployment
 
 ```bash
-helm install wazuh-cluster ./charts/wazuh-cluster \
-  --namespace wazuh \
-  --set sizing.profile=S  # Small profile for testing
+# Standard deployment (profile S - recommended)
+./wazuh-dev deploy
+
+# Minimal deployment (quick tests)
+./wazuh-dev deploy XS
+
+# Medium deployment (performance tests)
+./wazuh-dev deploy M
 ```
 
-### Option B: Using kubectl
-
-Create a file `wazuh-cluster.yaml`:
-
-```yaml
-apiVersion: resources.wazuh.com/v1alpha1
-kind: WazuhCluster
-metadata:
-  name: wazuh
-  namespace: wazuh
-spec:
-  version: "4.9.0"
-
-  manager:
-    master:
-      storageSize: "10Gi"
-      resources:
-        requests:
-          cpu: "500m"
-          memory: "1Gi"
-        limits:
-          cpu: "1"
-          memory: "2Gi"
-    workers:
-      replicas: 0 # No workers for minimal cluster
-
-  indexer:
-    replicas: 1
-    storageSize: "10Gi"
-    javaOpts: "-Xms512m -Xmx512m"
-    resources:
-      requests:
-        cpu: "500m"
-        memory: "1Gi"
-      limits:
-        cpu: "1"
-        memory: "2Gi"
-
-  dashboard:
-    replicas: 1
-    resources:
-      requests:
-        cpu: "250m"
-        memory: "512Mi"
-      limits:
-        cpu: "500m"
-        memory: "1Gi"
-```
-
-Apply it:
+### Monitoring
 
 ```bash
-kubectl apply -f wazuh-cluster.yaml
+# Global status
+./wazuh-dev status
+
+# Logs and events
+./wazuh-dev logs
+
+# Specific logs
+./wazuh-dev logs-operator
+./wazuh-dev logs-manager
+./wazuh-dev logs-indexer
+./wazuh-dev logs-dashboard
 ```
 
-## Step 3: Monitor Deployment
+### Dashboard Access
 
 ```bash
-# Watch cluster status
-kubectl get wazuhcluster -n wazuh -w
+# Option 1: Open in browser (recommended)
+./wazuh-dev dashboard
 
-# Watch pods
-kubectl get pods -n wazuh -w
+# Option 2: Manual port forwarding
+./wazuh-dev port-forward
+# Then access: https://localhost:5601
 ```
 
-Expected output after ~2-5 minutes:
-
-```
-NAME    VERSION   PHASE     MANAGER   INDEXER   DASHBOARD   AGE
-wazuh   4.9.0     Running   Running   Running   Running     5m
-```
-
-## Step 4: Access the Dashboard
-
-### Get Admin Password
-
-The operator automatically generates secure random passwords for all components. To retrieve the OpenSearch admin password:
-
-```bash
-# Get admin password (auto-generated 24-character random password)
-kubectl get secret -n wazuh wazuh-indexer-credentials \
-  -o jsonpath='{.data.admin-password}' | base64 -d && echo
-```
-
-> **Note:** Passwords are cryptographically generated for each deployment. There are no default passwords like "admin" or "wazuh".
-
-### Port Forward
-
-```bash
-kubectl port-forward -n wazuh svc/wazuh-dashboard 5601:5601
-```
-
-### Open Browser
-
-Navigate to: https://localhost:5601
-
-Login with:
+**Credentials:**
 
 - Username: `admin`
-- Password: (from step above)
+- Password: `MyS3cureP@ssw0rd`
 
-For more credential management options, see the [Credentials Management Guide](../features/credentials.md).
-
-## Step 5: Verify Components
-
-### Check Indexer Health
+### Maintenance
 
 ```bash
-# Get password
-PASSWORD=$(kubectl get secret -n wazuh wazuh-indexer-credentials \
-  -o jsonpath='{.data.admin-password}' | base64 -d)
+# Full restart
+./wazuh-dev restart
 
-# Check cluster health
-kubectl exec -n wazuh wazuh-indexer-0 -- \
-  curl -sk -u admin:$PASSWORD https://localhost:9200/_cluster/health?pretty
+# Rebuild image only
+./wazuh-dev rebuild
+
+# Full cleanup
+./wazuh-dev cleanup
 ```
 
-### Check Manager Status
+### Debug
 
 ```bash
-kubectl exec -n wazuh wazuh-manager-master-0 -- \
-  /var/ossec/bin/cluster_control -l
+# Shell into a pod
+./wazuh-dev shell-manager
+./wazuh-dev shell-indexer
+
+# Integration tests
+./wazuh-dev test
 ```
 
-## Common Operations
+## Sizing Profiles
 
-### Scale Workers
+| Profile | Use Case | Resources |
+|---------|----------|-----------|
+| **XS** | CI/CD, quick tests | ~3Gi RAM, ~1.5 CPU |
+| **S** | Local development (recommended) | ~7Gi RAM, ~3.5 CPU |
+| **M** | Staging, small production | ~19Gi RAM, ~10 CPU |
+| **L/XL** | Production, enterprise | See sizing guide |
+
+For detailed resource requirements, see [Sizing Guide](../features/sizing.md).
+
+## Advanced Configuration
+
+### Resource Customization
+
+Create a `.env` file:
 
 ```bash
-kubectl patch wazuhcluster wazuh -n wazuh --type=merge \
-  -p '{"spec":{"manager":{"workers":{"replicas":2}}}}'
+cp scripts/.env.example .env
 ```
 
-### View Logs
+Edit `.env`:
 
 ```bash
-# Manager logs
-kubectl logs -n wazuh wazuh-manager-master-0
-
-# Indexer logs
-kubectl logs -n wazuh wazuh-indexer-0
-
-# Operator logs
-kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager
+# Example: More resources for performance testing
+MINIKUBE_CPUS=8
+MINIKUBE_MEMORY=16384
+SIZING_PROFILE=M
 ```
 
-### Delete Cluster
+Then deploy:
 
 ```bash
-kubectl delete wazuhcluster wazuh -n wazuh
+source .env && ./wazuh-dev deploy
 ```
 
-## Next Steps
+### Individual Scripts
 
-- [Production Deployment](../examples/production/README.md) - Production configuration
-- [TLS Configuration](../features/tls.md) - Certificate management
-- [Monitoring](../features/monitoring.md) - Prometheus integration
-- [CRD Reference](../CRD-REFERENCE.md) - Full API documentation
+If you prefer low-level scripts:
+
+```bash
+# Full deployment
+./scripts/deploy-local.sh
+
+# Status
+./scripts/status.sh
+
+# Cleanup
+./scripts/cleanup-local.sh
+```
 
 ## Troubleshooting
 
-### Pods Stuck in Pending
-
-Check if there are enough resources:
+### Problem: Pods in CrashLoopBackOff
 
 ```bash
+# View logs
+kubectl logs -n wazuh <pod-name> --previous
+
+# View events
 kubectl describe pod -n wazuh <pod-name>
 ```
 
-### Indexer Not Starting
-
-Check if PVC is bound:
+### Problem: Not enough resources
 
 ```bash
-kubectl get pvc -n wazuh
+# Increase Minikube resources
+MINIKUBE_CPUS=6 MINIKUBE_MEMORY=12288 ./wazuh-dev deploy
 ```
 
-### Dashboard Can't Connect
-
-Verify indexer is healthy:
+### Problem: Image not found
 
 ```bash
-kubectl get pods -n wazuh -l app.kubernetes.io/component=wazuh-indexer
+# Check images in Minikube
+minikube ssh --profile wazuh-dev -- docker images | grep wazuh
+
+# Rebuild and redeploy
+./wazuh-dev restart
+```
+
+### Problem: Minikube won't start
+
+```bash
+# Delete and recreate
+minikube delete --profile wazuh-dev
+./wazuh-dev deploy
+```
+
+## Complete Documentation
+
+For more details, see:
+
+- **[scripts/README.md](../../../scripts/README.md)** - Complete scripts documentation
+- **[charts/wazuh-operator/](../../../charts/wazuh-operator/)** - Operator Helm chart
+- **[charts/wazuh-cluster/](../../../charts/wazuh-cluster/)** - Cluster Helm chart
+- **[docs/](../../)** - General documentation
+
+## Deployed Architecture
+
+After a successful deployment (profile S):
+
+```
++-----------------------------------+
+|     Minikube Cluster              |
+|     (4 CPUs, 8GB RAM, 40GB disk)  |
+|                                   |
+|  +-----------------------------+  |
+|  |  Namespace: wazuh-system    |  |
+|  |  - Wazuh Operator (1 replica)|  |
+|  +-----------------------------+  |
+|                                   |
+|  +-----------------------------+  |
+|  |  Namespace: wazuh           |  |
+|  |  - Manager Master (1 replica)|  |
+|  |  - Manager Worker (1 replica)|  |
+|  |  - Indexer (1 replica)      |  |
+|  |  - Dashboard (1 replica)    |  |
+|  +-----------------------------+  |
++-----------------------------------+
+```
+
+## Typical Development Workflow
+
+```bash
+# 1. Initial deployment
+./wazuh-dev deploy
+
+# 2. Verify everything works
+./wazuh-dev status
+
+# 3. Access dashboard
+./wazuh-dev dashboard
+
+# 4. Make code changes...
+vim controllers/wazuhcluster_controller.go
+
+# 5. Redeploy with changes
+./wazuh-dev restart
+
+# 6. View logs
+./wazuh-dev logs-operator
+
+# 7. Debugging
+./wazuh-dev shell-manager
+
+# 8. Tests
+./wazuh-dev test
+
+# 9. Final cleanup
+./wazuh-dev cleanup
+```
+
+## Usage Examples
+
+### Quick Development
+
+```bash
+# Minimal deployment for quick tests
+SIZING_PROFILE=XS ./wazuh-dev deploy
+
+# Integration tests
+./wazuh-dev test
+
+# Cleanup
+./wazuh-dev cleanup --force
+```
+
+### Performance Testing
+
+```bash
+# Deployment with more resources
+cat > .env << EOF
+MINIKUBE_CPUS=8
+MINIKUBE_MEMORY=16384
+MINIKUBE_DISK_SIZE=80g
+SIZING_PROFILE=M
+EOF
+
+source .env && ./wazuh-dev deploy
+```
+
+### Deep Debugging
+
+```bash
+# Real-time logs from all components
+./wazuh-dev logs-operator &
+./wazuh-dev logs-manager &
+./wazuh-dev logs-indexer &
+./wazuh-dev logs-dashboard &
+
+# In another terminal
+./wazuh-dev status
+```
+
+## Tips
+
+1. **Use `./wazuh-dev` instead of individual scripts** for a better experience
+2. **Profile S is optimal for local development** (good balance of resources/completeness)
+3. **Use `./wazuh-dev restart` rather than cleanup + deploy** (faster)
+4. **Builds are cache-free** to ensure clean builds
+5. **Old images are automatically cleaned** to save disk space
+
+## Need Help?
+
+```bash
+# CLI help
+./wazuh-dev help
+
+# Individual script help
+./scripts/deploy-local.sh --help
+./scripts/cleanup-local.sh --help
+./scripts/status.sh --help
+```
+
+## Post-Deployment Checklist
+
+- [ ] Minikube starts correctly
+- [ ] Operator deployed and ready (1/1)
+- [ ] Manager Master ready (1/1)
+- [ ] Manager Worker ready (1/1 for profile S)
+- [ ] Indexer ready (1/1)
+- [ ] Dashboard ready (1/1)
+- [ ] WazuhCluster CR status = Ready
+- [ ] Dashboard accessible via browser
+- [ ] Dashboard authentication works
+
+If all items are checked: **Deployment successful!**
+
+## Release Cycle
+
+```bash
+# 1. Development
+git checkout -b feature/my-feature
+# ... make changes ...
+
+# 2. Local test
+./wazuh-dev deploy
+./wazuh-dev test
+
+# 3. Commit
+git add .
+git commit -m "feat: my feature"
+
+# 4. Cleanup
+./wazuh-dev cleanup
+
+# 5. Push
+git push origin feature/my-feature
 ```

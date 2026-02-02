@@ -35,7 +35,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         description: OpenSearchDashboard is the Schema for the opensearchdashboards
@@ -1397,6 +1397,92 @@ spec:
                   type: object
                 type: array
                 x-kubernetes-preserve-unknown-fields: true
+              gatewayAPI:
+                description: GatewayAPI configuration (alternative to Ingress)
+                properties:
+                  enabled:
+                    description: Enable Gateway API instead of Ingress
+                    type: boolean
+                  gatewayRef:
+                    description: Reference to parent Gateway
+                    properties:
+                      name:
+                        description: Name of the Gateway
+                        type: string
+                      namespace:
+                        description: Namespace of the Gateway (defaults to same namespace
+                          as the resource)
+                        type: string
+                      sectionName:
+                        description: SectionName is the name of a section within the
+                          Gateway
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  hostnames:
+                    description: Hostnames for HTTPRoute
+                    items:
+                      type: string
+                    type: array
+                  http:
+                    description: HTTP route configuration (Dashboard, Manager API)
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        description: Annotations for the HTTPRoute resource
+                        type: object
+                      pathPrefix:
+                        default: /
+                        description: 'PathPrefix for the HTTP route (default: "/")'
+                        type: string
+                    type: object
+                  tcp:
+                    description: TCP route configuration (Agent enrollment/events)
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        description: Annotations for the TCPRoute resources
+                        type: object
+                      clusterEnabled:
+                        description: ClusterEnabled enables TCP route for cluster
+                          communication (port 1516)
+                        type: boolean
+                      enabled:
+                        description: Enable TCP routes for agent traffic
+                        type: boolean
+                      enrollmentEnabled:
+                        description: EnrollmentEnabled enables TCP route for agent
+                          enrollment (port 1515)
+                        type: boolean
+                      eventsEnabled:
+                        description: EventsEnabled enables TCP route for agent events
+                          (port 1514)
+                        type: boolean
+                    type: object
+                  udp:
+                    description: UDP route configuration (Syslog)
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        description: Annotations for the UDPRoute resource
+                        type: object
+                      enabled:
+                        description: Enable UDP route for syslog
+                        type: boolean
+                      syslogPort:
+                        default: 514
+                        description: 'SyslogPort is the UDP port for syslog (default:
+                          514)'
+                        format: int32
+                        maximum: 65535
+                        minimum: 1
+                        type: integer
+                    type: object
+                type: object
               image:
                 description: Image override
                 properties:
@@ -2197,16 +2283,82 @@ spec:
                             Credentials reference from a secret (contains both username and password)
                             The secret should have keys: 'username' and 'password' (or custom keys via usernameKey/passwordKey)
                           properties:
+                            externalSecretRef:
+                              description: |-
+                                ExternalSecretRef references an ExternalSecret from ESO
+                                When specified, the operator will read credentials from the K8s Secret
+                                created by the ExternalSecret controller
+                              properties:
+                                name:
+                                  description: |-
+                                    Name of the ExternalSecret resource that will be created/referenced
+                                    The ExternalSecret will sync the secret from the external provider to a K8s Secret
+                                  type: string
+                                namespace:
+                                  description: Namespace of the ExternalSecret (defaults
+                                    to same namespace as the parent resource)
+                                  type: string
+                                refreshInterval:
+                                  default: 1h
+                                  description: RefreshInterval is how often to sync
+                                    the secret (e.g., "1h", "30m")
+                                  type: string
+                                remoteRef:
+                                  description: RemoteRef specifies the remote secret
+                                    location in the external provider
+                                  properties:
+                                    key:
+                                      description: |-
+                                        Key is the key/path in the external secret provider
+                                        For Vault: "secret/data/myapp/config"
+                                        For AWS SM: "myapp/database-credentials"
+                                      type: string
+                                    property:
+                                      description: |-
+                                        Property is the specific property within the secret to extract
+                                        If not specified, the entire secret is used
+                                      type: string
+                                    version:
+                                      description: Version is the version of the secret
+                                        to fetch (provider-specific)
+                                      type: string
+                                  required:
+                                  - key
+                                  type: object
+                                secretStoreRef:
+                                  description: SecretStoreRef references the SecretStore
+                                    or ClusterSecretStore to use
+                                  properties:
+                                    kind:
+                                      default: SecretStore
+                                      description: Kind is the kind of secret store
+                                        (SecretStore or ClusterSecretStore)
+                                      enum:
+                                      - SecretStore
+                                      - ClusterSecretStore
+                                      type: string
+                                    name:
+                                      description: Name of the SecretStore or ClusterSecretStore
+                                      type: string
+                                  required:
+                                  - name
+                                  type: object
+                              required:
+                              - name
+                              type: object
                             passwordKey:
                               default: password
-                              description: Password key in secret
+                              description: PasswordKey is the key in the secret containing
+                                the password
                               type: string
                             secretName:
-                              description: Secret name
+                              description: SecretName references a native Kubernetes
+                                Secret
                               type: string
                             usernameKey:
                               default: username
-                              description: Username key in secret
+                              description: UsernameKey is the key in the secret containing
+                                the username
                               type: string
                           type: object
                         id:
@@ -2330,16 +2482,82 @@ spec:
                           Credentials from a secret for the default API endpoint
                           The secret should have keys for username and password
                         properties:
+                          externalSecretRef:
+                            description: |-
+                              ExternalSecretRef references an ExternalSecret from ESO
+                              When specified, the operator will read credentials from the K8s Secret
+                              created by the ExternalSecret controller
+                            properties:
+                              name:
+                                description: |-
+                                  Name of the ExternalSecret resource that will be created/referenced
+                                  The ExternalSecret will sync the secret from the external provider to a K8s Secret
+                                type: string
+                              namespace:
+                                description: Namespace of the ExternalSecret (defaults
+                                  to same namespace as the parent resource)
+                                type: string
+                              refreshInterval:
+                                default: 1h
+                                description: RefreshInterval is how often to sync
+                                  the secret (e.g., "1h", "30m")
+                                type: string
+                              remoteRef:
+                                description: RemoteRef specifies the remote secret
+                                  location in the external provider
+                                properties:
+                                  key:
+                                    description: |-
+                                      Key is the key/path in the external secret provider
+                                      For Vault: "secret/data/myapp/config"
+                                      For AWS SM: "myapp/database-credentials"
+                                    type: string
+                                  property:
+                                    description: |-
+                                      Property is the specific property within the secret to extract
+                                      If not specified, the entire secret is used
+                                    type: string
+                                  version:
+                                    description: Version is the version of the secret
+                                      to fetch (provider-specific)
+                                    type: string
+                                required:
+                                - key
+                                type: object
+                              secretStoreRef:
+                                description: SecretStoreRef references the SecretStore
+                                  or ClusterSecretStore to use
+                                properties:
+                                  kind:
+                                    default: SecretStore
+                                    description: Kind is the kind of secret store
+                                      (SecretStore or ClusterSecretStore)
+                                    enum:
+                                    - SecretStore
+                                    - ClusterSecretStore
+                                    type: string
+                                  name:
+                                    description: Name of the SecretStore or ClusterSecretStore
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                            required:
+                            - name
+                            type: object
                           passwordKey:
                             default: password
-                            description: Password key in secret
+                            description: PasswordKey is the key in the secret containing
+                              the password
                             type: string
                           secretName:
-                            description: Secret name
+                            description: SecretName references a native Kubernetes
+                              Secret
                             type: string
                           usernameKey:
                             default: username
-                            description: Username key in secret
+                            description: UsernameKey is the key in the secret containing
+                              the username
                             type: string
                         type: object
                       port:

@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,17 +23,17 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // mockIndexerEvaluator is a mock implementation for testing
 type mockIndexerEvaluator struct {
-	result *v1alpha1.DryRunResult
+	result *v1.DryRunResult
 	err    error
 }
 
-func (m *mockIndexerEvaluator) EvaluateFeasibility(ctx context.Context, nodeName string) (*v1alpha1.DryRunResult, error) {
+func (m *mockIndexerEvaluator) EvaluateFeasibility(ctx context.Context, nodeName string) (*v1.DryRunResult, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -42,11 +42,11 @@ func (m *mockIndexerEvaluator) EvaluateFeasibility(ctx context.Context, nodeName
 
 // mockManagerEvaluator is a mock implementation for testing
 type mockManagerEvaluator struct {
-	result *v1alpha1.DryRunResult
+	result *v1.DryRunResult
 	err    error
 }
 
-func (m *mockManagerEvaluator) EvaluateFeasibility(ctx context.Context, nodeName string) (*v1alpha1.DryRunResult, error) {
+func (m *mockManagerEvaluator) EvaluateFeasibility(ctx context.Context, nodeName string) (*v1.DryRunResult, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -59,7 +59,7 @@ func TestDryRunEvaluator_EvaluateIndexerDrain_NilEvaluator(t *testing.T) {
 		indexerEvaluator: nil,
 	}
 
-	cluster := &v1alpha1.WazuhCluster{
+	cluster := &v1.WazuhCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "default",
@@ -85,7 +85,7 @@ func TestDryRunEvaluator_EvaluateIndexerDrain_NilEvaluator(t *testing.T) {
 }
 
 func TestDryRunEvaluator_EvaluateIndexerDrain_Success(t *testing.T) {
-	mockResult := &v1alpha1.DryRunResult{
+	mockResult := &v1.DryRunResult{
 		Feasible:    true,
 		EvaluatedAt: metav1.Now(),
 		Component:   constants.DrainComponentIndexer,
@@ -99,7 +99,7 @@ func TestDryRunEvaluator_EvaluateIndexerDrain_Success(t *testing.T) {
 		},
 	}
 
-	cluster := &v1alpha1.WazuhCluster{
+	cluster := &v1.WazuhCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "default",
@@ -126,7 +126,7 @@ func TestDryRunEvaluator_EvaluateManagerDrain_NilEvaluator(t *testing.T) {
 		managerEvaluator: nil,
 	}
 
-	cluster := &v1alpha1.WazuhCluster{
+	cluster := &v1.WazuhCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "default",
@@ -148,7 +148,7 @@ func TestDryRunEvaluator_EvaluateManagerDrain_NilEvaluator(t *testing.T) {
 }
 
 func TestDryRunEvaluator_EvaluateManagerDrain_NotFeasible(t *testing.T) {
-	mockResult := &v1alpha1.DryRunResult{
+	mockResult := &v1.DryRunResult{
 		Feasible:    false,
 		EvaluatedAt: metav1.Now(),
 		Component:   constants.DrainComponentManager,
@@ -162,7 +162,7 @@ func TestDryRunEvaluator_EvaluateManagerDrain_NotFeasible(t *testing.T) {
 		},
 	}
 
-	cluster := &v1alpha1.WazuhCluster{
+	cluster := &v1.WazuhCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "default",
@@ -184,14 +184,14 @@ func TestDryRunEvaluator_EvaluateManagerDrain_NotFeasible(t *testing.T) {
 }
 
 func TestDryRunEvaluator_EvaluateAll_AllFeasible(t *testing.T) {
-	indexerResult := &v1alpha1.DryRunResult{
+	indexerResult := &v1.DryRunResult{
 		Feasible:          true,
 		EvaluatedAt:       metav1.Now(),
 		Component:         constants.DrainComponentIndexer,
 		EstimatedDuration: &metav1.Duration{Duration: 5 * time.Minute},
 	}
 
-	managerResult := &v1alpha1.DryRunResult{
+	managerResult := &v1.DryRunResult{
 		Feasible:          true,
 		EvaluatedAt:       metav1.Now(),
 		Component:         constants.DrainComponentManager,
@@ -210,26 +210,26 @@ func TestDryRunEvaluator_EvaluateAll_AllFeasible(t *testing.T) {
 
 	// Create cluster with drain status to simulate scale-down
 	prevReplicas := int32(3)
-	cluster := &v1alpha1.WazuhCluster{
+	cluster := &v1.WazuhCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "default",
 		},
-		Spec: v1alpha1.WazuhClusterSpec{
-			Indexer: &v1alpha1.WazuhIndexerClusterSpec{
+		Spec: v1.WazuhClusterSpec{
+			Indexer: &v1.WazuhIndexerClusterSpec{
 				Replicas: 2, // Scale down from 3 to 2
 			},
 		},
-		Status: v1alpha1.WazuhClusterStatus{
-			Indexer: &v1alpha1.ComponentStatus{
+		Status: v1.WazuhClusterStatus{
+			Indexer: &v1.ComponentStatus{
 				Replicas: 3,
 			},
-			Drain: &v1alpha1.DrainStatus{
-				Indexer: &v1alpha1.ComponentDrainStatus{
+			Drain: &v1.DrainStatus{
+				Indexer: &v1.ComponentDrainStatus{
 					TargetPod:        "test-cluster-indexer-2",
 					PreviousReplicas: &prevReplicas,
 				},
-				Manager: &v1alpha1.ComponentDrainStatus{
+				Manager: &v1.ComponentDrainStatus{
 					TargetPod:        "test-cluster-manager-worker-1",
 					PreviousReplicas: &prevReplicas,
 				},
@@ -252,13 +252,13 @@ func TestDryRunEvaluator_EvaluateAll_AllFeasible(t *testing.T) {
 }
 
 func TestDryRunEvaluator_EvaluateAll_OneNotFeasible(t *testing.T) {
-	indexerResult := &v1alpha1.DryRunResult{
+	indexerResult := &v1.DryRunResult{
 		Feasible:    true,
 		EvaluatedAt: metav1.Now(),
 		Component:   constants.DrainComponentIndexer,
 	}
 
-	managerResult := &v1alpha1.DryRunResult{
+	managerResult := &v1.DryRunResult{
 		Feasible:    false,
 		EvaluatedAt: metav1.Now(),
 		Component:   constants.DrainComponentManager,
@@ -276,26 +276,26 @@ func TestDryRunEvaluator_EvaluateAll_OneNotFeasible(t *testing.T) {
 	}
 
 	prevReplicas := int32(2)
-	cluster := &v1alpha1.WazuhCluster{
+	cluster := &v1.WazuhCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "default",
 		},
-		Spec: v1alpha1.WazuhClusterSpec{
-			Indexer: &v1alpha1.WazuhIndexerClusterSpec{
+		Spec: v1.WazuhClusterSpec{
+			Indexer: &v1.WazuhIndexerClusterSpec{
 				Replicas: 2,
 			},
 		},
-		Status: v1alpha1.WazuhClusterStatus{
-			Indexer: &v1alpha1.ComponentStatus{
+		Status: v1.WazuhClusterStatus{
+			Indexer: &v1.ComponentStatus{
 				Replicas: 3,
 			},
-			Drain: &v1alpha1.DrainStatus{
-				Indexer: &v1alpha1.ComponentDrainStatus{
+			Drain: &v1.DrainStatus{
+				Indexer: &v1.ComponentDrainStatus{
 					TargetPod:        "test-cluster-indexer-2",
 					PreviousReplicas: &prevReplicas,
 				},
-				Manager: &v1alpha1.ComponentDrainStatus{
+				Manager: &v1.ComponentDrainStatus{
 					TargetPod:        "test-cluster-manager-worker-1",
 					PreviousReplicas: &prevReplicas,
 				},
@@ -332,16 +332,16 @@ func TestDryRunEvaluator_GetTargetIndexerNode(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		cluster        *v1alpha1.WazuhCluster
+		cluster        *v1.WazuhCluster
 		expectedTarget string
 	}{
 		{
 			name: "target from drain status",
-			cluster: &v1alpha1.WazuhCluster{
+			cluster: &v1.WazuhCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "test"},
-				Status: v1alpha1.WazuhClusterStatus{
-					Drain: &v1alpha1.DrainStatus{
-						Indexer: &v1alpha1.ComponentDrainStatus{
+				Status: v1.WazuhClusterStatus{
+					Drain: &v1.DrainStatus{
+						Indexer: &v1.ComponentDrainStatus{
 							TargetPod: "test-indexer-2",
 						},
 					},
@@ -351,15 +351,15 @@ func TestDryRunEvaluator_GetTargetIndexerNode(t *testing.T) {
 		},
 		{
 			name: "no scale-down detected",
-			cluster: &v1alpha1.WazuhCluster{
+			cluster: &v1.WazuhCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "test"},
-				Spec: v1alpha1.WazuhClusterSpec{
-					Indexer: &v1alpha1.WazuhIndexerClusterSpec{
+				Spec: v1.WazuhClusterSpec{
+					Indexer: &v1.WazuhIndexerClusterSpec{
 						Replicas: 3,
 					},
 				},
-				Status: v1alpha1.WazuhClusterStatus{
-					Indexer: &v1alpha1.ComponentStatus{
+				Status: v1.WazuhClusterStatus{
+					Indexer: &v1.ComponentStatus{
 						Replicas: 3,
 					},
 				},
@@ -368,15 +368,15 @@ func TestDryRunEvaluator_GetTargetIndexerNode(t *testing.T) {
 		},
 		{
 			name: "scale-down detected",
-			cluster: &v1alpha1.WazuhCluster{
+			cluster: &v1.WazuhCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "test"},
-				Spec: v1alpha1.WazuhClusterSpec{
-					Indexer: &v1alpha1.WazuhIndexerClusterSpec{
+				Spec: v1.WazuhClusterSpec{
+					Indexer: &v1.WazuhIndexerClusterSpec{
 						Replicas: 2,
 					},
 				},
-				Status: v1alpha1.WazuhClusterStatus{
-					Indexer: &v1alpha1.ComponentStatus{
+				Status: v1.WazuhClusterStatus{
+					Indexer: &v1.ComponentStatus{
 						Replicas: 3,
 					},
 				},
@@ -403,16 +403,16 @@ func TestDryRunEvaluator_GetTargetManagerNode(t *testing.T) {
 	prevReplicas := int32(2)
 	tests := []struct {
 		name           string
-		cluster        *v1alpha1.WazuhCluster
+		cluster        *v1.WazuhCluster
 		expectedTarget string
 	}{
 		{
 			name: "target from drain status",
-			cluster: &v1alpha1.WazuhCluster{
+			cluster: &v1.WazuhCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "test"},
-				Status: v1alpha1.WazuhClusterStatus{
-					Drain: &v1alpha1.DrainStatus{
-						Manager: &v1alpha1.ComponentDrainStatus{
+				Status: v1.WazuhClusterStatus{
+					Drain: &v1.DrainStatus{
+						Manager: &v1.ComponentDrainStatus{
 							TargetPod: "test-manager-worker-1",
 						},
 					},
@@ -422,18 +422,18 @@ func TestDryRunEvaluator_GetTargetManagerNode(t *testing.T) {
 		},
 		{
 			name: "scale-down detected from previous replicas",
-			cluster: &v1alpha1.WazuhCluster{
+			cluster: &v1.WazuhCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "test"},
-				Spec: v1alpha1.WazuhClusterSpec{
-					Manager: &v1alpha1.WazuhManagerClusterSpec{
-						Workers: v1alpha1.WazuhWorkerSpec{
+				Spec: v1.WazuhClusterSpec{
+					Manager: &v1.WazuhManagerClusterSpec{
+						Workers: v1.WazuhWorkerSpec{
 							Replicas: func() *int32 { r := int32(1); return &r }(),
 						},
 					},
 				},
-				Status: v1alpha1.WazuhClusterStatus{
-					Drain: &v1alpha1.DrainStatus{
-						Manager: &v1alpha1.ComponentDrainStatus{
+				Status: v1.WazuhClusterStatus{
+					Drain: &v1.DrainStatus{
+						Manager: &v1.ComponentDrainStatus{
 							PreviousReplicas: &prevReplicas,
 						},
 					},
@@ -443,11 +443,11 @@ func TestDryRunEvaluator_GetTargetManagerNode(t *testing.T) {
 		},
 		{
 			name: "no drain status",
-			cluster: &v1alpha1.WazuhCluster{
+			cluster: &v1.WazuhCluster{
 				ObjectMeta: metav1.ObjectMeta{Name: "test"},
-				Spec: v1alpha1.WazuhClusterSpec{
-					Manager: &v1alpha1.WazuhManagerClusterSpec{
-						Workers: v1alpha1.WazuhWorkerSpec{
+				Spec: v1.WazuhClusterSpec{
+					Manager: &v1.WazuhManagerClusterSpec{
+						Workers: v1.WazuhWorkerSpec{
 							Replicas: func() *int32 { r := int32(2); return &r }(),
 						},
 					},

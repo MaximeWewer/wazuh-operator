@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package utils
+package utils //nolint:revive // utils is a common package name
 
 import (
 	"encoding/json"
@@ -45,7 +45,7 @@ func MergeAnnotations(maps ...map[string]string) map[string]string {
 // DeepMerge performs a deep merge of two objects
 // dst is the destination object that will be modified
 // src is the source object whose values will override dst
-func DeepMerge(dst, src interface{}) error {
+func DeepMerge(dst, src any) error {
 	// Marshal src to JSON
 	srcBytes, err := json.Marshal(src)
 	if err != nil {

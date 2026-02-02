@@ -1,411 +1,321 @@
 # Default values for wazuh-cluster
 # This chart deploys WazuhCluster CRDs and associated secrets
 
-# Namespace where the Wazuh cluster will be deployed
+# @section Global Parameters
+
+# -- Namespace where the Wazuh cluster will be deployed
 namespace: wazuh
 
-# Create namespace if it doesn't exist
-createNamespace: false
+# -- Create namespace if it doesn't exist
+createNamespace: true
 
-# ============================================
-# Sizing Profiles
-# ============================================
-# Select a pre-configured size profile: S, M, L, XL
-# This automatically configures resources, replicas, and storage
-# Set to "" (empty) to use custom configuration below
+# @section Sizing Profiles
+# Select a pre-configured size profile to automatically configure resources, replicas, and storage.
+# See [Sizing Guide](../../docs/usage/features/sizing.md) for full details.
+
 sizing:
-  # Available profiles:
-  # - XS (Extra Small): Minimal testing - 1 indexer, 0 workers, tiny resources
-  # - S  (Small):       Dev/Test - 1 indexer, 1 worker, minimal resources
-  # - M  (Medium):      Small Prod - 3 indexers, 2 workers, moderate resources
-  # - L  (Large):       Production - 3 indexers, 3 workers, high resources
-  # - XL (Extra Large): Enterprise - 5 indexers, 5 workers, maximum resources
-  profile: "M" # Default: Medium
+  # -- Sizing profile: XS (testing), S (dev), M (small prod), L (prod), XL (enterprise). Set to "" for custom config.
+  # @default -- `"M"`
+  profile: "M"
 
-  # Custom storage class (applies to all profiles)
-  # Leave empty to use cluster default
+  # -- Custom storage class (applies to all profiles). Leave empty for cluster default.
   storageClassName: ""
 
-# Profile Specifications (read-only, for reference):
-#
-# Profile XS (Extra Small - Minimal Testing):
-#   - Indexer: 1 replica, 1.5Gi-2Gi RAM (1g JVM heap minimum), 0.2-1 CPU, 10Gi storage
-#   - Manager Master: 256Mi-512Mi RAM, 0.1-0.5 CPU, 5Gi storage
-#   - Manager Workers: 0 replicas (disabled)
-#   - Dashboard: 1 replica, 256Mi-512Mi RAM, 0.1-0.5 CPU
-#   - Total: ~3Gi RAM, ~1.5 CPU, ~15Gi storage
-#
-# Profile S (Small - Dev/Test):
-#   - Indexer: 1 replica, 1-2Gi RAM, 0.5-1 CPU, 20Gi storage
-#   - Manager Master: 1-2Gi RAM, 0.5-1 CPU, 10Gi storage
-#   - Manager Workers: 1 replica, 1-2Gi RAM, 0.5-1 CPU, 10Gi storage
-#   - Dashboard: 1 replica, 512Mi-1Gi RAM, 0.25-0.5 CPU
-#   - Total: ~3.5-7Gi RAM (requests-limits), ~1.75-3.5 CPU, ~40Gi storage
-#
-# Profile M (Medium - Small Production):
-#   - Indexer: 3 replicas, 4Gi RAM, 2 CPU, 50Gi storage each
-#   - Manager Master: 2Gi RAM, 1 CPU, 20Gi storage
-#   - Manager Workers: 2 replicas, 2Gi RAM, 1 CPU, 20Gi storage each
-#   - Dashboard: 1 replica, 1Gi RAM, 0.5 CPU
-#   - Total: ~19Gi RAM, ~10 CPU, ~210Gi storage
-#
-# Profile L (Large - Production):
-#   - Indexer: 3 replicas, 8Gi RAM, 4 CPU, 100Gi storage each
-#   - Manager Master: 4Gi RAM, 2 CPU, 50Gi storage
-#   - Manager Workers: 3 replicas, 4Gi RAM, 2 CPU, 50Gi storage each
-#   - Dashboard: 2 replicas, 2Gi RAM, 1 CPU
-#   - Total: ~44Gi RAM, ~22 CPU, ~500Gi storage
-#
-# Profile XL (Extra Large - Enterprise):
-#   - Indexer: 5 replicas, 16Gi RAM, 8 CPU, 200Gi storage each
-#   - Manager Master: 8Gi RAM, 4 CPU, 100Gi storage
-#   - Manager Workers: 5 replicas, 8Gi RAM, 4 CPU, 100Gi storage each
-#   - Dashboard: 3 replicas, 4Gi RAM, 2 CPU
-#   - Total: ~140Gi RAM, ~70 CPU, ~1700Gi storage
+# Profile Specifications (read-only reference):
+# - XS: 1 indexer, 0 workers, ~3Gi RAM, ~15Gi storage
+# - S:  1 indexer, 1 worker, ~3.5-7Gi RAM, ~40Gi storage
+# - M:  3 indexers, 2 workers, ~19Gi RAM, ~210Gi storage
+# - L:  3 indexers, 3 workers, ~44Gi RAM, ~500Gi storage
+# - XL: 5 indexers, 5 workers, ~140Gi RAM, ~1700Gi storage
 
-# Secrets configuration
+# @section Inline Secrets
+# Credentials for Wazuh components. Use either inline secrets OR External Secrets (not both).
+
 secrets:
-  # Wazuh API credentials (used by Dashboard to connect to Wazuh Manager API)
+  # @extra secrets.wazuhApi Wazuh API credentials (used by Dashboard to connect to Manager API)
   wazuhApi:
+    # -- Wazuh API username
     username: "wazuh-api"
+    # -- Wazuh API password (CHANGE IN PRODUCTION)
     password: "CHANGE_ME_STRONG_PASSWORD_HERE"
 
-  # Indexer admin credentials (used by Dashboard and internal components)
+  # @extra secrets.indexerAdmin Indexer admin credentials (used by Dashboard and internal components)
   indexerAdmin:
+    # -- Indexer admin username
     username: "admin"
+    # -- Indexer admin password (CHANGE IN PRODUCTION)
     password: "CHANGE_ME_STRONG_PASSWORD_HERE"
 
-  # Wazuh authd password (agent enrollment)
+  # @extra secrets.wazuhAuthd Wazuh authd password for agent enrollment
   wazuhAuthd:
+    # -- Enable authd password secret creation
     enabled: true
+    # -- Agent enrollment password (CHANGE IN PRODUCTION)
     password: "CHANGE_ME_STRONG_PASSWORD_HERE"
 
-# ============================================
-# WazuhCluster Configuration
-# ============================================
-# One chart deploys ONE WazuhCluster
+# @section External Secrets Operator (ESO)
+# Integration with external secret providers (HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, GCP Secret Manager).
+# Prerequisites: [External Secrets Operator](https://external-secrets.io) installed with SecretStore configured.
+
+externalSecrets:
+  # -- Enable External Secrets integration (when true, inline secrets are ignored for configured components)
+  enabled: false
+
+  # @extra externalSecrets.indexerAdmin Indexer admin credentials from external provider
+  indexerAdmin:
+    # -- ExternalSecret name (leave empty to use inline secrets)
+    name: ""
+    # @extra externalSecrets.indexerAdmin.secretStoreRef Reference to SecretStore or ClusterSecretStore
+    secretStoreRef:
+      # -- SecretStore name
+      name: ""
+      # -- SecretStore kind: SecretStore or ClusterSecretStore
+      kind: "SecretStore"
+    # @extra externalSecrets.indexerAdmin.remoteRef Remote secret location in provider
+    remoteRef:
+      # -- Key/path in external provider (e.g., "secret/data/wazuh/indexer")
+      key: ""
+    # -- Sync interval (e.g., "1h", "30m")
+    refreshInterval: "1h"
+    # -- Key in synced secret containing username
+    usernameKey: "username"
+    # -- Key in synced secret containing password
+    passwordKey: "password"
+
+  # @extra externalSecrets.wazuhApi Wazuh API credentials from external provider
+  wazuhApi:
+    # -- ExternalSecret name (leave empty to use inline secrets)
+    name: ""
+    secretStoreRef:
+      name: ""
+      kind: "SecretStore"
+    remoteRef:
+      key: ""
+    refreshInterval: "1h"
+    usernameKey: "username"
+    passwordKey: "password"
+
+  # @extra externalSecrets.wazuhAuthd Wazuh authd password from external provider
+  wazuhAuthd:
+    # -- ExternalSecret name (leave empty to use inline secrets)
+    name: ""
+    secretStoreRef:
+      name: ""
+      kind: "SecretStore"
+    remoteRef:
+      key: ""
+    refreshInterval: "1h"
+    # -- Key in synced secret containing password
+    passwordKey: "password"
+
+# @section WazuhCluster Configuration
+# Main cluster configuration. One chart deploys ONE WazuhCluster.
+
 cluster:
-  # Enable cluster deployment
+  # -- Enable WazuhCluster deployment
   enabled: true
 
-  # Cluster name
+  # -- Name of the WazuhCluster resource
   name: wazuh-cluster
 
-  # WazuhCluster spec
+  # @extra cluster.spec WazuhCluster CRD specification (see CRD-REFERENCE.md for all options)
   spec:
+    # -- Wazuh version to deploy
     version: "4.9.0"
 
-    # Note: If sizing.profile is set above, replicas/resources/storage are auto-configured
-    # The values below are ONLY used if sizing.profile is empty ("")
-    # To override specific values while using a profile, set them explicitly here
+    # Note: If sizing.profile is set, replicas/resources/storage are auto-configured.
+    # Values below are ONLY used if sizing.profile is empty ("").
 
-    # Monitoring configuration (optional)
-    # monitoring:
-    #   enabled: true
-    #   wazuhExporter:
-    #     enabled: true
-    #     image: kennyopennix/wazuh-exporter:latest
-    #     port: 9090
-    #   indexerExporter:
-    #     enabled: true
-    #   serviceMonitor:
-    #     enabled: true
-    #     labels:
-    #       prometheus: kube-prometheus
-    #     interval: 30s
-
-    # Indexer configuration
-    # When using sizing.profile, these are auto-configured
+    # @extra cluster.spec.indexer OpenSearch Indexer configuration
+    # @default -- `{}` (auto-configured by sizing profile)
     indexer:
       {}
-      # Manual override examples (only used if sizing.profile is empty):
       # replicas: 3
       # storageSize: 50Gi
       # javaOpts: "-Xms2g -Xmx2g -Dlog4j2.formatMsgNoLookups=true"
       # resources:
-      #   requests:
-      #     cpu: "2"
-      #     memory: 4Gi
-      #   limits:
-      #     cpu: "4"
-      #     memory: 8Gi
-      #
-      # ============================================
-      # Advanced Indexer Topology (nodePools)
-      # ============================================
-      # For large deployments requiring dedicated node roles
-      # Use EITHER replicas (simple mode) OR nodePools (advanced mode), not both
-      # See docs: docs/usage/features/advanced-indexer-topology.md
-      #
-      # nodePools:
-      #   # Dedicated cluster_manager nodes (minimum 3 for quorum)
-      #   - name: masters
-      #     replicas: 3
-      #     roles:
-      #       - cluster_manager
-      #     resources:
-      #       requests:
-      #         cpu: "500m"
-      #         memory: "2Gi"
-      #       limits:
-      #         cpu: "1"
-      #         memory: "4Gi"
-      #     storageSize: "10Gi"
-      #     storageClass: "standard"
-      #
-      #   # Data nodes with hot tier attribute
-      #   - name: data-hot
-      #     replicas: 5
-      #     roles:
-      #       - data
-      #       - ingest
-      #     attributes:
-      #       temp: hot
-      #     resources:
-      #       requests:
-      #         cpu: "2"
-      #         memory: "8Gi"
-      #       limits:
-      #         cpu: "4"
-      #         memory: "16Gi"
-      #     storageSize: "500Gi"
-      #     storageClass: "fast-ssd"
-      #
-      #   # Data nodes with warm tier attribute
-      #   - name: data-warm
-      #     replicas: 3
-      #     roles:
-      #       - data
-      #     attributes:
-      #       temp: warm
-      #     storageSize: "1Ti"
-      #     storageClass: "standard-ssd"
-      #
-      #   # Coordinating-only nodes (query routing)
-      #   - name: coord
-      #     replicas: 2
-      #     roles:
-      #       - coordinating_only
-      #     resources:
-      #       requests:
-      #         cpu: "1"
-      #         memory: "4Gi"
-      #       limits:
-      #         cpu: "2"
-      #         memory: "8Gi"
-      #     storageSize: "10Gi"
+      #   requests: { cpu: "2", memory: 4Gi }
+      #   limits: { cpu: "4", memory: 8Gi }
+      # antiAffinity:
+      #   enabled: true
+      #   type: required  # or "preferred"
+      #   topologyKey: kubernetes.io/hostname
+      # hpa:
+      #   enabled: true
+      #   minReplicas: 3
+      #   maxReplicas: 9
+      #   targetCPUUtilizationPercentage: 70
+      # gatewayAPI:
+      #   enabled: true
+      #   gatewayRef: { name: wazuh-gateway }
 
-    # Manager configuration
-    # When using sizing.profile, these are auto-configured
+    # @extra cluster.spec.manager Wazuh Manager configuration
     manager:
+      # @extra cluster.spec.manager.master Master node configuration
+      # @default -- `{}` (auto-configured by sizing profile)
       master:
         {}
-        # Manual override examples:
         # storageSize: 20Gi
         # resources:
-        #   requests:
-        #     cpu: "1"
-        #     memory: 2Gi
+        #   requests: { cpu: "1", memory: 2Gi }
+
+      # @extra cluster.spec.manager.workers Worker nodes configuration
+      # @default -- `{}` (auto-configured by sizing profile)
       workers:
         {}
-        # Manual override examples:
         # replicas: 2
         # storageSize: 20Gi
+        # hpa:
+        #   enabled: true
+        #   minReplicas: 2
+        #   maxReplicas: 10
+        #   targetCPUUtilizationPercentage: 80
+        # gatewayAPI:
+        #   enabled: true
+        #   tcp: { enabled: true, enrollmentEnabled: true, eventsEnabled: true }
 
-      # Log rotation configuration (optional)
-      # Automatically cleans up old log files on manager pods
-      # logRotation:
-      #   enabled: true
-      #   # Cron schedule for log rotation (default: weekly on Monday at midnight)
-      #   schedule: "0 0 * * 1"
-      #   # Number of days to retain log files (default: 7)
-      #   retentionDays: 7
-      #   # Maximum file size in MB before deletion (0 = disabled)
-      #   maxFileSizeMB: 0
-      #   # How age and size filters combine: "or" (delete if old OR large) or "and" (both)
-      #   combinationMode: "or"
-      #   # Paths to clean (default: alerts and archives)
-      #   paths:
-      #     - /var/ossec/logs/alerts/
-      #     - /var/ossec/logs/archives/
-      #   # kubectl image for the CronJob
-      #   image: "bitnami/kubectl:latest"
-
-    # Dashboard configuration
-    # When using sizing.profile, these are auto-configured
+    # @extra cluster.spec.dashboard OpenSearch Dashboard configuration
+    # @default -- `{}` (auto-configured by sizing profile)
     dashboard:
       {}
-      # Manual override examples:
       # replicas: 1
       # resources:
-      #   requests:
-      #     cpu: "500m"
-      #     memory: 1Gi
+      #   requests: { cpu: "500m", memory: 1Gi }
+      # hpa:
+      #   enabled: true
+      #   minReplicas: 2
+      #   maxReplicas: 10
+      #   targetCPUUtilizationPercentage: 80
+      # gatewayAPI:
+      #   enabled: true
+      #   hostnames: ["dashboard.wazuh.example.com"]
 
-    # TLS configuration (optional)
-    # tls:
-    #   enabled: true
-    #   certConfig:
-    #     organization: "My Organization"
-    #     organizationalUnit: "Security"
-    #     country: "US"
-    #     state: "California"
-    #     locality: "San Francisco"
-    #     # Node certificate validity (365 days default)
-    #     # Node certs (indexer, dashboard, filebeat) can be renewed more frequently
-    #     # OpenSearch supports hot reload of node certificates without restart
-    #     validityDays: 365
-    #     renewalThresholdDays: 30
-    #     # CA certificate validity (730 days / 2 years default)
-    #     # CA renewal requires indexer restart to reload trust store
-    #     # Recommended: longer validity than node certs (1-2 years)
-    #     caValidityDays: 730
-    #     caRenewalThresholdDays: 60
-    #
-    #   # Hot reload configuration for certificate renewal without pod restart
-    #   # Requires Wazuh >= 4.9.0 (OpenSearch >= 2.13)
-    #   hotReload:
-    #     # Enable hot reload (default: true)
-    #     # When enabled, certificates can be renewed without restarting pods
-    #     enabled: true
-    #     # Force API reload even for versions with automatic hot reload
-    #     # - Wazuh 4.9.x (OpenSearch 2.13-2.18): API call is always required
-    #     # - Wazuh 4.12+ (OpenSearch 2.19+): Automatic, set forceAPIReload if needed
-    #     forceAPIReload: false
+# @section Backup Configuration
+# Configure backups for OpenSearch indices and Wazuh Manager data.
+# See [Backup & Restore Guide](../../docs/usage/features/backup-restore.md) for details.
 
-    # Drain strategy configuration (optional)
-    # Controls safe scale-down operations for indexers and managers
-    # See docs: docs/usage/features/drain-strategy.md
-    # drain:
-    #   # Enable dry-run mode to preview scale-down feasibility without making changes
-    #   dryRun: false
-    #
-    #   # Indexer drain settings (OpenSearch shard relocation)
-    #   indexer:
-    #     # Timeout for shard relocation (default: 30m)
-    #     timeout: 30m
-    #     # Interval between shard status checks (default: 10s)
-    #     healthCheckInterval: 10s
-    #     # Wait time for cluster green health before proceeding (default: 5m)
-    #     minGreenHealthTimeout: 5m
-    #
-    #   # Manager drain settings (event queue processing)
-    #   manager:
-    #     # Timeout for queue drain (default: 15m)
-    #     timeout: 15m
-    #     # Interval between queue depth checks (default: 5s)
-    #     queueCheckInterval: 5s
-    #     # Grace period after queue is empty (default: 30s)
-    #     gracePeriod: 30s
-    #
-    #   # Retry configuration for failed drain operations
-    #   retry:
-    #     # Maximum retry attempts before giving up (default: 3)
-    #     maxAttempts: 3
-    #     # Initial delay before first retry (default: 5m)
-    #     initialDelay: 5m
-    #     # Exponential backoff multiplier (default: 2.0)
-    #     backoffMultiplier: 2.0
-    #     # Maximum delay between retries (default: 30m)
-    #     maxDelay: 30m
-
-# ============================================
-# Backup Configuration (Optional)
-# ============================================
-# Configure backups for OpenSearch indices and Wazuh Manager data
-# See docs: docs/usage/features/backup-restore.md
-
-# OpenSearch Snapshot Repository
-# Creates an OpenSearchSnapshotRepository CRD for storing snapshots
+# @extra opensearchRepository OpenSearch Snapshot Repository for storing index snapshots
 opensearchRepository:
+  # -- Enable OpenSearchSnapshotRepository CRD creation
   enabled: false
   # name: minio-backups
   # spec:
   #   type: s3
   #   settings:
   #     bucket: wazuh-backups
-  #     basePath: opensearch/snapshots
-  #     # MinIO endpoint
   #     endpoint: http://minio.minio.svc.cluster.local:9000
   #     pathStyleAccess: true
-  #     compress: true
-  #     credentialsSecret:
-  #       name: backup-credentials
-  #       accessKeyKey: accessKeyId
-  #       secretKeyKey: secretAccessKey
-  #   verify: true
 
-# OpenSearch Snapshot Policy
-# Creates an OpenSearchSnapshotPolicy CRD for scheduled backups
+# @extra opensearchSnapshotPolicy OpenSearch Snapshot Policy for scheduled index backups
 opensearchSnapshotPolicy:
+  # -- Enable OpenSearchSnapshotPolicy CRD creation
   enabled: false
   # name: daily-snapshots
   # spec:
-  #   description: "Daily automated snapshots"
-  #   repository:
-  #     name: minio-backups
-  #   snapshotConfig:
-  #     indices:
-  #       - "wazuh-alerts-*"
-  #       - "wazuh-archives-*"
-  #   creation:
-  #     schedule:
-  #       expression: "0 2 * * *"  # Daily at 2 AM UTC
-  #       timezone: "UTC"
-  #     timeLimit: "1h"
-  #   deletion:
-  #     schedule:
-  #       expression: "0 3 * * *"  # Cleanup at 3 AM
-  #     condition:
-  #       maxAge: "30d"
-  #       maxCount: 30
-  #       minCount: 7
+  #   repository: { name: minio-backups }
+  #   creation: { schedule: { expression: "0 2 * * *" } }
 
-# Wazuh Manager Backup
-# Creates a WazuhBackup CRD for scheduled manager data backups
+# @extra wazuhBackup Wazuh Manager Backup for scheduled manager data backups
 wazuhBackup:
+  # -- Enable WazuhBackup CRD creation
   enabled: false
   # name: daily-backup
   # spec:
-  #   # Components to backup
-  #   components:
-  #     agentKeys: true       # CRITICAL - required for agent reconnection
-  #     fimDatabase: true     # File Integrity Monitoring database
-  #     agentDatabase: true   # Agent state information
-  #     integrations: false   # Integration scripts
-  #     alertLogs: false      # Alert logs (can be large)
-  #
-  #   # Cron schedule: daily at 2 AM UTC
+  #   components: { agentKeys: true, fimDatabase: true }
   #   schedule: "0 2 * * *"
-  #
-  #   # Retention policy
-  #   retention:
-  #     maxBackups: 14        # Keep last 14 backups
-  #     maxAge: "30d"         # Delete backups older than 30 days
-  #
-  #   # S3/MinIO storage
-  #   storage:
-  #     type: s3
-  #     bucket: wazuh-backups
-  #     prefix: "{{ .ClusterName }}/manager"
-  #     # MinIO endpoint
-  #     endpoint: http://minio.minio.svc.cluster.local:9000
-  #     forcePathStyle: true
-  #     credentialsSecret:
-  #       name: backup-credentials
-  #       accessKeyKey: accessKeyId
-  #       secretKeyKey: secretAccessKey
-  #
-  #   backupTimeout: "30m"
+  #   storage: { type: s3, bucket: wazuh-backups }
 
-# Backup credentials secret
-# Set this to create a Secret with S3/MinIO credentials for backups
+# @extra backupCredentials S3/MinIO credentials secret for backups
 backupCredentials:
+  # -- Enable backup credentials Secret creation
   enabled: false
   # name: backup-credentials
-  # # For MinIO
   # accessKeyId: "minioadmin"
   # secretAccessKey: "minioadmin"
-  # # For AWS S3 (use IRSA in production instead)
-  # # accessKeyId: "AKIAIOSFODNN7EXAMPLE"
-  # # secretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+
+# @section Network Policy Configuration
+# Enable NetworkPolicies for Wazuh cluster components.
+# See [Network Security Guide](../../docs/usage/features/network-security.md) for details.
+
+networkPolicy:
+  # -- Enable NetworkPolicies for cluster components
+  enabled: false
+
+  # -- Operator namespace (for allowing operator access)
+  operatorNamespace: wazuh-system
+
+  # @extra networkPolicy.indexer Indexer network policy settings
+  indexer:
+    # -- Additional ingress rules for indexer
+    additionalIngress: []
+    # -- Additional egress rules for indexer (e.g., for S3 backups)
+    additionalEgress: []
+
+  # @extra networkPolicy.manager Manager network policy settings
+  manager:
+    # -- Allow agent connections from outside the cluster
+    allowAgentConnections: true
+    # -- Restrict agent connections to specific CIDRs (empty = all)
+    agentCIDRs: []
+    additionalIngress: []
+    additionalEgress: []
+
+  # @extra networkPolicy.dashboard Dashboard network policy settings
+  dashboard:
+    # -- Custom ingress rules (default: allow all on port 5601)
+    ingressFrom: []
+    additionalEgress: []
+
+# @section Resource Quota Configuration
+# Enforce resource limits on Wazuh cluster namespace.
+
+resourceQuota:
+  # -- Enable ResourceQuota and LimitRange
+  enabled: false
+
+  # -- Maximum pods (adjust based on sizing profile: XS=10, S=15, M=25, L=40, XL=60)
+  pods: "25"
+
+  # @extra resourceQuota.requests Namespace request limits
+  requests:
+    # -- Total CPU requests limit
+    cpu: "20"
+    # -- Total memory requests limit
+    memory: "40Gi"
+    # -- Total storage requests limit
+    storage: "500Gi"
+
+  # @extra resourceQuota.limits Namespace limits
+  limits:
+    # -- Total CPU limits
+    cpu: "40"
+    # -- Total memory limits
+    memory: "80Gi"
+
+  # -- Maximum PVCs in namespace
+  persistentvolumeclaims: "20"
+  # -- Maximum ConfigMaps in namespace
+  configmaps: "50"
+  # -- Maximum Secrets in namespace
+  secrets: "50"
+  # -- Maximum Services in namespace
+  services: "20"
+
+  # @extra resourceQuota.limitRange LimitRange defaults for containers
+  limitRange:
+    # @extra resourceQuota.limitRange.defaultRequest Default requests if not specified
+    defaultRequest:
+      cpu: "100m"
+      memory: "256Mi"
+    # @extra resourceQuota.limitRange.default Default limits if not specified
+    default:
+      cpu: "1"
+      memory: "2Gi"
+    # @extra resourceQuota.limitRange.max Maximum allowed per container
+    max:
+      cpu: "16"
+      memory: "32Gi"
+    # -- Maximum PVC size
+    pvcMax: "500Gi"
+    # -- Minimum PVC size
+    pvcMin: "1Gi"

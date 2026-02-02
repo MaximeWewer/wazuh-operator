@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -31,7 +31,7 @@ import (
 
 // DashboardAuthConfigBuilder builds opensearch_dashboards.yml authentication settings
 type DashboardAuthConfigBuilder struct {
-	authConfig      *v1alpha1.OpenSearchAuthConfigSpec
+	authConfig      *v1.OpenSearchAuthConfigSpec
 	resolvedSecrets map[string]string
 	serverHost      string
 	serverPort      int
@@ -39,7 +39,7 @@ type DashboardAuthConfigBuilder struct {
 }
 
 // NewDashboardAuthConfigBuilder creates a new DashboardAuthConfigBuilder
-func NewDashboardAuthConfigBuilder(spec *v1alpha1.OpenSearchAuthConfigSpec) *DashboardAuthConfigBuilder {
+func NewDashboardAuthConfigBuilder(spec *v1.OpenSearchAuthConfigSpec) *DashboardAuthConfigBuilder {
 	return &DashboardAuthConfigBuilder{
 		authConfig:      spec,
 		resolvedSecrets: make(map[string]string),
@@ -335,7 +335,7 @@ func (b *DashboardAuthConfigBuilder) GetActiveAuthTypes() []string {
 }
 
 // NeedsDashboardRestart returns true if auth config changes require dashboard restart
-func (b *DashboardAuthConfigBuilder) NeedsDashboardRestart(previous *v1alpha1.OpenSearchAuthConfigSpec) bool {
+func (b *DashboardAuthConfigBuilder) NeedsDashboardRestart(previous *v1.OpenSearchAuthConfigSpec) bool {
 	if previous == nil {
 		return true
 	}

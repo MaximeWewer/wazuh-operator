@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,9 +17,12 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"os"
+	"strings"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -29,20 +32,27 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
+
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/controllers"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/MaximeWewer/wazuh-operator/pkg/config"
+	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -54,17 +64,21 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(wazuhv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(wazuhv1.AddToScheme(scheme))
 
 	// Register Prometheus Operator types
 	utilruntime.Must(monitoringv1.AddToScheme(scheme))
+
+	// Register Gateway API types (optional - only used if Gateway API CRDs are installed)
+	_ = gatewayv1.Install(scheme)
+	_ = gatewayv1alpha2.Install(scheme)
 	// +kubebuilder:scaffold:scheme
 
 	// Register operator metrics with Prometheus
 	metrics.RegisterMetrics()
 }
 
-// nolint:gocyclo
+//nolint:gocyclo // Main function has high cyclomatic complexity due to controller setup; splitting would reduce clarity
 func main() {
 	var metricsAddr string
 	var metricsCertPath, metricsCertName, metricsCertKey string
@@ -72,16 +86,15 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
-	var certTestMode bool
 	var nonBlockingRollouts bool
+	var enableLeaderElection bool
+	var leaderElectionID string
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&secureMetrics, "metrics-secure", true,
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
-	flag.BoolVar(&certTestMode, "cert-test-mode", false,
-		"If set, enables short-lived certificates (5 min) for testing renewal. DO NOT USE IN PRODUCTION.")
 	flag.BoolVar(&nonBlockingRollouts, "non-blocking-rollouts", true,
 		"If set, certificate renewals will not block waiting for pod rollouts. Recommended for production.")
 	flag.StringVar(&webhookCertPath, "webhook-cert-path", "", "The directory that contains the webhook certificate.")
@@ -93,6 +106,11 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
+		"Enable leader election for controller manager. "+
+			"Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&leaderElectionID, "leader-election-id", "wazuh-operator-leader",
+		"The name of the resource that leader election will use for holding the leader lock.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -100,6 +118,47 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	// Initialize cluster domain configuration
+	// This must be done before any controllers or components use DNS functions
+	if err := dns.Initialize(); err != nil {
+		setupLog.Error(err, "failed to initialize cluster domain configuration")
+		os.Exit(1)
+	}
+	setupLog.Info("cluster domain configured", "domain", dns.ClusterDomain())
+
+	// Initialize runtime configuration (vm.max_map_count, etc.)
+	if err := config.Initialize(); err != nil {
+		setupLog.Error(err, "failed to initialize runtime configuration")
+		os.Exit(1)
+	}
+	setupLog.Info("runtime configuration initialized", "vmMaxMapCount", config.VMMaxMapCount())
+
+	// Check Gateway API configuration (basic flag - CRD availability checked after manager creation)
+	gatewayAPIEnabled := config.IsGatewayAPIEnabled()
+	if !gatewayAPIEnabled {
+		setupLog.Info("Gateway API support is DISABLED - Gateway API routes will not be managed",
+			"enableWith", "set GATEWAY_API_ENABLED=true or gatewayAPI.enabled=true in Helm values")
+	}
+
+	// Initialize OpenTelemetry tracing if configured
+	otelConfig := telemetry.LoadFromEnv()
+	if otelConfig.IsEnabled() {
+		setupLog.Info("Initializing OpenTelemetry tracing", "endpoint", otelConfig.Endpoint)
+		tp, err := telemetry.InitProvider(context.Background(), otelConfig)
+		if err != nil {
+			setupLog.Error(err, "failed to initialize OpenTelemetry provider")
+		} else {
+			defer func() {
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := telemetry.Shutdown(shutdownCtx, tp); err != nil {
+					setupLog.Error(err, "failed to shutdown OpenTelemetry provider")
+				}
+			}()
+			setupLog.Info("OpenTelemetry tracing initialized successfully")
+		}
+	}
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled
 	// due to its vulnerabilities. More specifically, disabling http/2 will
@@ -122,7 +181,7 @@ func main() {
 		TLSOpts: webhookTLSOpts,
 	}
 
-	if len(webhookCertPath) > 0 {
+	if webhookCertPath != "" {
 		setupLog.Info("Initializing webhook certificate watcher using provided certificates",
 			"webhook-cert-path", webhookCertPath, "webhook-cert-name", webhookCertName, "webhook-cert-key", webhookCertKey)
 
@@ -159,7 +218,7 @@ func main() {
 	// - [METRICS-WITH-CERTS] at config/default/kustomization.yaml to generate and use certificates
 	// managed by cert-manager for the metrics server.
 	// - [PROMETHEUS-WITH-CERTS] at config/prometheus/kustomization.yaml for TLS certification.
-	if len(metricsCertPath) > 0 {
+	if metricsCertPath != "" {
 		setupLog.Info("Initializing metrics certificate watcher using provided certificates",
 			"metrics-cert-path", metricsCertPath, "metrics-cert-name", metricsCertName, "metrics-cert-key", metricsCertKey)
 
@@ -168,40 +227,82 @@ func main() {
 		metricsServerOptions.KeyName = metricsCertKey
 	}
 
+	// Configure namespace-scoped watching if WATCH_NAMESPACES is set
+	// This enables multi-namespace RBAC isolation
+	var cacheOptions cache.Options
+	watchNamespaces := os.Getenv("WATCH_NAMESPACES")
+	if watchNamespaces != "" {
+		namespaces := strings.Split(watchNamespaces, ",")
+		for i := range namespaces {
+			namespaces[i] = strings.TrimSpace(namespaces[i])
+		}
+		setupLog.Info("Watching specific namespaces", "namespaces", namespaces)
+		cacheOptions = cache.Options{
+			DefaultNamespaces: make(map[string]cache.Config),
+		}
+		for _, ns := range namespaces {
+			cacheOptions.DefaultNamespaces[ns] = cache.Config{}
+		}
+	} else {
+		setupLog.Info("Watching all namespaces (cluster-scoped)")
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                 scheme,
-		Metrics:                metricsServerOptions,
-		WebhookServer:          webhookServer,
-		HealthProbeBindAddress: probeAddr,
-		// Leader election is disabled - operator manages one cluster only
-		LeaderElection: false,
+		Scheme:                        scheme,
+		Metrics:                       metricsServerOptions,
+		WebhookServer:                 webhookServer,
+		HealthProbeBindAddress:        probeAddr,
+		LeaderElection:                enableLeaderElection,
+		LeaderElectionID:              leaderElectionID,
+		LeaderElectionReleaseOnCancel: true, // Release leadership on graceful shutdown for faster failover
+		Cache:                         cacheOptions,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
-		os.Exit(1)
+		os.Exit(1) //nolint:gocritic // exitAfterDefer: OTEL cleanup not critical for fatal init errors
 	}
 
-	// Create CertificateReconciler with test mode if enabled
-	certReconciler := wazuhreconciler.NewCertificateReconciler(mgr.GetClient(), mgr.GetScheme())
-	if certTestMode {
-		setupLog.Info("Certificate test mode ENABLED - certificates will have 5 minute validity")
-		certReconciler.TestMode = true
+	// Check Gateway API CRD availability if enabled
+	var gatewayAPIStatus config.GatewayAPIStatus
+	if gatewayAPIEnabled {
+		gatewayAPIStatus = config.CheckGatewayAPICRDs(context.Background(), mgr.GetClient())
+		setupLog.Info("Gateway API support is ENABLED",
+			"httpRouteAvailable", gatewayAPIStatus.HTTPRouteAvailable,
+			"tcpRouteAvailable", gatewayAPIStatus.TCPRouteAvailable,
+			"udpRouteAvailable", gatewayAPIStatus.UDPRouteAvailable,
+			"message", gatewayAPIStatus.Message)
 	}
+
+	// Create CertificateReconciler
+	certReconciler := wazuhreconciler.NewCertificateReconciler(mgr.GetClient(), mgr.GetScheme())
+
+	// Create shared rule and decoder reconcilers (used by both WazuhCluster and individual controllers)
+	wazuhRuleRecorder := mgr.GetEventRecorderFor("wazuhrule-controller")
+	ruleReconciler := wazuhreconciler.NewRuleReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhRuleRecorder)
+	wazuhDecoderRecorder := mgr.GetEventRecorderFor("wazuhdecoder-controller")
+	decoderReconciler := wazuhreconciler.NewDecoderReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhDecoderRecorder)
 
 	// WazuhCluster Controller (main orchestration)
 	wazuhClusterReconciler := &controllers.WazuhClusterReconciler{
-		Client:                 mgr.GetClient(),
-		Scheme:                 mgr.GetScheme(),
-		ClusterReconciler:      wazuhreconciler.NewClusterReconciler(mgr.GetClient(), mgr.GetScheme()),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("wazuhcluster-controller"),
+		ClusterReconciler: wazuhreconciler.NewClusterReconciler(mgr.GetClient(), mgr.GetScheme()).
+			WithRuleReconciler(ruleReconciler).
+			WithDecoderReconciler(decoderReconciler),
 		CertificateReconciler:  certReconciler,
 		IndexerReconciler:      opensearchreconciler.NewIndexerReconciler(mgr.GetClient(), mgr.GetScheme()),
 		DashboardReconciler:    opensearchreconciler.NewDashboardReconciler(mgr.GetClient(), mgr.GetScheme()),
 		WorkerReconciler:       wazuhreconciler.NewWorkerReconciler(mgr.GetClient(), mgr.GetScheme()),
 		MonitoringReconciler:   monitoring.NewMonitoringReconciler(mgr.GetClient(), mgr.GetScheme()),
+		GatewayReconciler:      wazuhreconciler.NewGatewayReconciler(mgr.GetClient(), mgr.GetScheme()),
 		RollbackManager:        drain.NewRollbackManager(mgr.GetClient(), ctrl.Log.WithName("rollback-manager")),
 		RetryManager:           drain.NewRetryManager(ctrl.Log.WithName("retry-manager")),
-		CertTestMode:           certTestMode,
 		UseNonBlockingRollouts: nonBlockingRollouts,
+		GatewayAPIEnabled:      gatewayAPIEnabled,
+		HTTPRouteAvailable:     gatewayAPIStatus.HTTPRouteAvailable,
+		TCPRouteAvailable:      gatewayAPIStatus.TCPRouteAvailable,
+		UDPRouteAvailable:      gatewayAPIStatus.UDPRouteAvailable,
 	}
 	if nonBlockingRollouts {
 		setupLog.Info("Non-blocking certificate rollouts ENABLED")
@@ -211,11 +312,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Wazuh Controllers
+	// Wazuh Controllers (reuse shared rule/decoder reconcilers created above)
 	if err := (&controllers.WazuhRuleReconciler{
 		Client:         mgr.GetClient(),
 		Scheme:         mgr.GetScheme(),
-		RuleReconciler: wazuhreconciler.NewRuleReconciler(mgr.GetClient(), mgr.GetScheme()),
+		Recorder:       wazuhRuleRecorder,
+		RuleReconciler: ruleReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WazuhRule")
 		os.Exit(1)
@@ -223,7 +325,8 @@ func main() {
 	if err := (&controllers.WazuhDecoderReconciler{
 		Client:            mgr.GetClient(),
 		Scheme:            mgr.GetScheme(),
-		DecoderReconciler: wazuhreconciler.NewDecoderReconciler(mgr.GetClient(), mgr.GetScheme()),
+		Recorder:          wazuhDecoderRecorder,
+		DecoderReconciler: decoderReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WazuhDecoder")
 		os.Exit(1)
@@ -266,7 +369,7 @@ func main() {
 	if err := (&controllers.OpenSearchUserReconciler{
 		Client:         mgr.GetClient(),
 		Scheme:         mgr.GetScheme(),
-		UserReconciler: opensearchreconciler.NewUserReconciler(mgr.GetClient(), mgr.GetScheme()),
+		UserReconciler: opensearchreconciler.NewUserReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor("opensearchuser-controller")),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchUser")
 		os.Exit(1)
@@ -274,7 +377,7 @@ func main() {
 	if err := (&controllers.OpenSearchRoleReconciler{
 		Client:         mgr.GetClient(),
 		Scheme:         mgr.GetScheme(),
-		RoleReconciler: opensearchreconciler.NewRoleReconciler(mgr.GetClient(), mgr.GetScheme()),
+		RoleReconciler: opensearchreconciler.NewRoleReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor("opensearchrole-controller")),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchRole")
 		os.Exit(1)
@@ -330,7 +433,7 @@ func main() {
 	if err := (&controllers.OpenSearchIndexReconciler{
 		Client:          mgr.GetClient(),
 		Scheme:          mgr.GetScheme(),
-		IndexReconciler: opensearchreconciler.NewIndexReconciler(mgr.GetClient(), mgr.GetScheme()),
+		IndexReconciler: opensearchreconciler.NewIndexReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor("opensearchindex-controller")),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchIndex")
 		os.Exit(1)
@@ -402,6 +505,14 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WazuhRestore")
 		os.Exit(1)
+	}
+
+	// Setup webhooks
+	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		if err := wazuhv1.SetupWazuhClusterWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "WazuhCluster")
+			os.Exit(1)
+		}
 	}
 
 	// +kubebuilder:scaffold:builder

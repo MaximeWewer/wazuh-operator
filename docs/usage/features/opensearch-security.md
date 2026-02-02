@@ -44,7 +44,7 @@ For more details on credential management, see the [Credentials Management Guide
 You can declare your own admin user using the `OpenSearchUser` CRD with `defaultAdmin: true`:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchUser
 metadata:
   name: admin
@@ -115,7 +115,7 @@ Manage internal users in OpenSearch.
 #### Basic User
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchUser
 metadata:
   name: readonly-user
@@ -134,7 +134,7 @@ spec:
 #### User with Backend Roles (for LDAP/SAML)
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchUser
 metadata:
   name: ldap-mapped-user
@@ -156,7 +156,7 @@ spec:
 #### User with Pre-computed Hash
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchUser
 metadata:
   name: hashed-user
@@ -209,7 +209,7 @@ Define custom security roles with granular permissions.
 #### Read-Only Role for Wazuh Alerts
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchRole
 metadata:
   name: wazuh-alerts-reader
@@ -231,7 +231,7 @@ spec:
 #### Role with Document-Level Security
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchRole
 metadata:
   name: team-a-alerts
@@ -252,7 +252,7 @@ spec:
 #### Role with Field-Level Security
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchRole
 metadata:
   name: restricted-fields
@@ -280,7 +280,7 @@ spec:
 #### Admin Role for Specific Indices
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchRole
 metadata:
   name: logs-admin
@@ -343,7 +343,7 @@ Map users, backend roles, or hosts to OpenSearch roles.
 #### Map Users to Role
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchRoleMapping
 metadata:
   name: wazuh-alerts-reader # Role name
@@ -360,7 +360,7 @@ spec:
 #### Map Backend Roles (LDAP/SAML Groups)
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchRoleMapping
 metadata:
   name: all_access
@@ -376,7 +376,7 @@ spec:
 #### Map with AND Logic
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchRoleMapping
 metadata:
   name: sensitive-data-access
@@ -393,7 +393,7 @@ spec:
 #### Map by Host
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchRoleMapping
 metadata:
   name: internal-full-access
@@ -420,7 +420,7 @@ Create isolated spaces in OpenSearch Dashboards for multi-tenancy.
 ### Example
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchTenant
 metadata:
   name: team-security
@@ -430,7 +430,7 @@ spec:
     name: wazuh
   description: "Security team private space"
 ---
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchTenant
 metadata:
   name: team-devops
@@ -444,7 +444,7 @@ spec:
 ### Grant Tenant Access
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchRole
 metadata:
   name: security-team-role
@@ -479,7 +479,7 @@ Create reusable permission groups.
 ### Examples
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchActionGroup
 metadata:
   name: wazuh-read
@@ -494,7 +494,7 @@ spec:
     - get
   description: "Read operations for Wazuh indices"
 ---
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchActionGroup
 metadata:
   name: wazuh-write
@@ -509,7 +509,7 @@ spec:
     - bulk
   description: "Write operations for Wazuh indices"
 ---
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchActionGroup
 metadata:
   name: wazuh-full
@@ -556,6 +556,43 @@ When `driftDetected: true`:
 1. Someone modified the resource directly in OpenSearch
 2. The operator will reconcile to match the CRD spec
 3. To keep manual changes, update the CRD
+
+## Events
+
+The operator emits Kubernetes events for OpenSearch security CRDs, visible via `kubectl describe`:
+
+| Event Type | Reason           | Description                                  |
+| ---------- | ---------------- | -------------------------------------------- |
+| Normal     | `Synced`         | Resource successfully synchronized           |
+| Normal     | `Created`        | Resource created in OpenSearch               |
+| Normal     | `Deleted`        | Resource deleted from OpenSearch             |
+| Warning    | `SyncFailed`     | Failed to sync to OpenSearch                 |
+| Warning    | `ConnectionError`| Failed to connect to OpenSearch              |
+| Warning    | `PasswordError`  | Failed to retrieve password (OpenSearchUser) |
+| Warning    | `DeleteFailed`   | Failed to delete from OpenSearch             |
+
+### View Events
+
+```bash
+# View events for a specific resource
+kubectl describe osuser my-user -n wazuh
+
+# View all events in namespace
+kubectl get events -n wazuh --field-selector involvedObject.kind=OpenSearchUser
+```
+
+## Validation Constraints
+
+OpenSearch security CRDs enforce validation rules:
+
+| CRD              | Field                        | Constraint                                 |
+| ---------------- | ---------------------------- | ------------------------------------------ |
+| `OpenSearchUser` | `description`                | Max 1024 characters                        |
+| `OpenSearchRole` | `description`                | Max 1024 characters                        |
+| `OpenSearchRole` | `indexPermissions[].indexPatterns`   | At least 1 item required          |
+| `OpenSearchRole` | `indexPermissions[].allowedActions`  | At least 1 item required          |
+| `OpenSearchRole` | `tenantPermissions[].tenantPatterns` | At least 1 item required          |
+| `OpenSearchRole` | `tenantPermissions[].allowedActions` | At least 1 item required          |
 
 ## See Also
 

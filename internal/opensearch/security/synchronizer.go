@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 )
@@ -82,7 +82,7 @@ func NewSecurityConfigSynchronizer(k8sClient client.Client, factory *OpenSearchC
 }
 
 // SyncAllForCluster syncs all security CRDs for a cluster
-func (s *SecurityConfigSynchronizer) SyncAllForCluster(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*SyncResult, error) {
+func (s *SecurityConfigSynchronizer) SyncAllForCluster(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*SyncResult, error) {
 	logger := log.FromContext(ctx).WithValues("cluster", cluster.Name)
 	result := &SyncResult{}
 
@@ -137,11 +137,11 @@ func (s *SecurityConfigSynchronizer) SyncAllForCluster(ctx context.Context, clus
 }
 
 // SyncUsers syncs all OpenSearchUser CRDs for a cluster
-func (s *SecurityConfigSynchronizer) SyncUsers(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, osClient *api.Client, result *SyncResult) error {
+func (s *SecurityConfigSynchronizer) SyncUsers(ctx context.Context, cluster *wazuhv1.WazuhCluster, osClient *api.Client, result *SyncResult) error {
 	logger := log.FromContext(ctx).WithValues("cluster", cluster.Name, "resourceType", "user")
 
 	// List all users for this cluster
-	var userList wazuhv1alpha1.OpenSearchUserList
+	var userList wazuhv1.OpenSearchUserList
 	if err := s.k8sClient.List(ctx, &userList, client.InNamespace(cluster.Namespace)); err != nil {
 		return fmt.Errorf("failed to list OpenSearchUser CRDs: %w", err)
 	}
@@ -181,7 +181,7 @@ func (s *SecurityConfigSynchronizer) SyncUsers(ctx context.Context, cluster *waz
 }
 
 // buildSecurityUser builds an adapters.SecurityUser from an OpenSearchUser CRD
-func (s *SecurityConfigSynchronizer) buildSecurityUser(ctx context.Context, user *wazuhv1alpha1.OpenSearchUser) (*adapters.SecurityUser, error) {
+func (s *SecurityConfigSynchronizer) buildSecurityUser(ctx context.Context, user *wazuhv1.OpenSearchUser) (*adapters.SecurityUser, error) {
 	secUser := &adapters.SecurityUser{
 		BackendRoles:            user.Spec.BackendRoles,
 		Attributes:              user.Spec.Attributes,
@@ -224,7 +224,7 @@ func (s *SecurityConfigSynchronizer) createOrUpdateUser(ctx context.Context, osC
 }
 
 // updateUserStatus updates the status of an OpenSearchUser CRD
-func (s *SecurityConfigSynchronizer) updateUserStatus(ctx context.Context, user *wazuhv1alpha1.OpenSearchUser, phase, message string) {
+func (s *SecurityConfigSynchronizer) updateUserStatus(ctx context.Context, user *wazuhv1.OpenSearchUser, phase, message string) {
 	user.Status.Phase = phase
 	user.Status.Message = message
 	user.Status.LastSyncTime = &metav1.Time{Time: time.Now()}
@@ -236,11 +236,11 @@ func (s *SecurityConfigSynchronizer) updateUserStatus(ctx context.Context, user 
 }
 
 // SyncRoles syncs all OpenSearchRole CRDs for a cluster
-func (s *SecurityConfigSynchronizer) SyncRoles(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, osClient *api.Client, result *SyncResult) error {
+func (s *SecurityConfigSynchronizer) SyncRoles(ctx context.Context, cluster *wazuhv1.WazuhCluster, osClient *api.Client, result *SyncResult) error {
 	logger := log.FromContext(ctx).WithValues("cluster", cluster.Name, "resourceType", "role")
 
 	// List all roles for this cluster
-	var roleList wazuhv1alpha1.OpenSearchRoleList
+	var roleList wazuhv1.OpenSearchRoleList
 	if err := s.k8sClient.List(ctx, &roleList, client.InNamespace(cluster.Namespace)); err != nil {
 		return fmt.Errorf("failed to list OpenSearchRole CRDs: %w", err)
 	}
@@ -280,7 +280,7 @@ func (s *SecurityConfigSynchronizer) SyncRoles(ctx context.Context, cluster *waz
 }
 
 // buildSecurityRole builds an adapters.SecurityRole from an OpenSearchRole CRD
-func (s *SecurityConfigSynchronizer) buildSecurityRole(role *wazuhv1alpha1.OpenSearchRole) *adapters.SecurityRole {
+func (s *SecurityConfigSynchronizer) buildSecurityRole(role *wazuhv1.OpenSearchRole) *adapters.SecurityRole {
 	secRole := &adapters.SecurityRole{
 		Description:        role.Spec.Description,
 		ClusterPermissions: role.Spec.ClusterPermissions,
@@ -306,7 +306,7 @@ func (s *SecurityConfigSynchronizer) buildSecurityRole(role *wazuhv1alpha1.OpenS
 }
 
 // updateRoleStatus updates the status of an OpenSearchRole CRD
-func (s *SecurityConfigSynchronizer) updateRoleStatus(ctx context.Context, role *wazuhv1alpha1.OpenSearchRole, phase, message string) {
+func (s *SecurityConfigSynchronizer) updateRoleStatus(ctx context.Context, role *wazuhv1.OpenSearchRole, phase, message string) {
 	role.Status.Phase = phase
 	role.Status.Message = message
 	role.Status.LastSyncTime = &metav1.Time{Time: time.Now()}
@@ -318,11 +318,11 @@ func (s *SecurityConfigSynchronizer) updateRoleStatus(ctx context.Context, role 
 }
 
 // SyncRoleMappings syncs all OpenSearchRoleMapping CRDs for a cluster
-func (s *SecurityConfigSynchronizer) SyncRoleMappings(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, osClient *api.Client, result *SyncResult) error {
+func (s *SecurityConfigSynchronizer) SyncRoleMappings(ctx context.Context, cluster *wazuhv1.WazuhCluster, osClient *api.Client, result *SyncResult) error {
 	logger := log.FromContext(ctx).WithValues("cluster", cluster.Name, "resourceType", "rolemapping")
 
 	// List all role mappings for this cluster
-	var mappingList wazuhv1alpha1.OpenSearchRoleMappingList
+	var mappingList wazuhv1.OpenSearchRoleMappingList
 	if err := s.k8sClient.List(ctx, &mappingList, client.InNamespace(cluster.Namespace)); err != nil {
 		return fmt.Errorf("failed to list OpenSearchRoleMapping CRDs: %w", err)
 	}
@@ -335,7 +335,7 @@ func (s *SecurityConfigSynchronizer) SyncRoleMappings(ctx context.Context, clust
 		logger.V(1).Info("Syncing role mapping", "mapping", mapping.Name)
 
 		// Build the mapping request
-		reqBody := map[string]interface{}{
+		reqBody := map[string]any{
 			"backend_roles": mapping.Spec.BackendRoles,
 			"hosts":         mapping.Spec.Hosts,
 			"users":         mapping.Spec.Users,
@@ -366,7 +366,7 @@ func (s *SecurityConfigSynchronizer) SyncRoleMappings(ctx context.Context, clust
 }
 
 // updateRoleMappingStatus updates the status of an OpenSearchRoleMapping CRD
-func (s *SecurityConfigSynchronizer) updateRoleMappingStatus(ctx context.Context, mapping *wazuhv1alpha1.OpenSearchRoleMapping, phase, message string) {
+func (s *SecurityConfigSynchronizer) updateRoleMappingStatus(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping, phase, message string) {
 	mapping.Status.Phase = phase
 	mapping.Status.Message = message
 	mapping.Status.LastSyncTime = &metav1.Time{Time: time.Now()}
@@ -378,11 +378,11 @@ func (s *SecurityConfigSynchronizer) updateRoleMappingStatus(ctx context.Context
 }
 
 // SyncTenants syncs all OpenSearchTenant CRDs for a cluster
-func (s *SecurityConfigSynchronizer) SyncTenants(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, osClient *api.Client, result *SyncResult) error {
+func (s *SecurityConfigSynchronizer) SyncTenants(ctx context.Context, cluster *wazuhv1.WazuhCluster, osClient *api.Client, result *SyncResult) error {
 	logger := log.FromContext(ctx).WithValues("cluster", cluster.Name, "resourceType", "tenant")
 
 	// List all tenants for this cluster
-	var tenantList wazuhv1alpha1.OpenSearchTenantList
+	var tenantList wazuhv1.OpenSearchTenantList
 	if err := s.k8sClient.List(ctx, &tenantList, client.InNamespace(cluster.Namespace)); err != nil {
 		return fmt.Errorf("failed to list OpenSearchTenant CRDs: %w", err)
 	}
@@ -395,7 +395,7 @@ func (s *SecurityConfigSynchronizer) SyncTenants(ctx context.Context, cluster *w
 		logger.V(1).Info("Syncing tenant", "tenant", tenant.Name)
 
 		// Build the tenant request
-		reqBody := map[string]interface{}{
+		reqBody := map[string]any{
 			"description": tenant.Spec.Description,
 		}
 
@@ -424,7 +424,7 @@ func (s *SecurityConfigSynchronizer) SyncTenants(ctx context.Context, cluster *w
 }
 
 // updateTenantStatus updates the status of an OpenSearchTenant CRD
-func (s *SecurityConfigSynchronizer) updateTenantStatus(ctx context.Context, tenant *wazuhv1alpha1.OpenSearchTenant, phase, message string) {
+func (s *SecurityConfigSynchronizer) updateTenantStatus(ctx context.Context, tenant *wazuhv1.OpenSearchTenant, phase, message string) {
 	tenant.Status.Phase = phase
 	tenant.Status.Message = message
 	tenant.Status.LastSyncTime = &metav1.Time{Time: time.Now()}
@@ -436,11 +436,11 @@ func (s *SecurityConfigSynchronizer) updateTenantStatus(ctx context.Context, ten
 }
 
 // SyncActionGroups syncs all OpenSearchActionGroup CRDs for a cluster
-func (s *SecurityConfigSynchronizer) SyncActionGroups(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, osClient *api.Client, result *SyncResult) error {
+func (s *SecurityConfigSynchronizer) SyncActionGroups(ctx context.Context, cluster *wazuhv1.WazuhCluster, osClient *api.Client, result *SyncResult) error {
 	logger := log.FromContext(ctx).WithValues("cluster", cluster.Name, "resourceType", "actiongroup")
 
 	// List all action groups for this cluster
-	var actionGroupList wazuhv1alpha1.OpenSearchActionGroupList
+	var actionGroupList wazuhv1.OpenSearchActionGroupList
 	if err := s.k8sClient.List(ctx, &actionGroupList, client.InNamespace(cluster.Namespace)); err != nil {
 		return fmt.Errorf("failed to list OpenSearchActionGroup CRDs: %w", err)
 	}
@@ -453,7 +453,7 @@ func (s *SecurityConfigSynchronizer) SyncActionGroups(ctx context.Context, clust
 		logger.V(1).Info("Syncing action group", "actionGroup", ag.Name)
 
 		// Build the action group request
-		reqBody := map[string]interface{}{
+		reqBody := map[string]any{
 			"allowed_actions": ag.Spec.AllowedActions,
 		}
 
@@ -482,7 +482,7 @@ func (s *SecurityConfigSynchronizer) SyncActionGroups(ctx context.Context, clust
 }
 
 // updateActionGroupStatus updates the status of an OpenSearchActionGroup CRD
-func (s *SecurityConfigSynchronizer) updateActionGroupStatus(ctx context.Context, ag *wazuhv1alpha1.OpenSearchActionGroup, phase, message string) {
+func (s *SecurityConfigSynchronizer) updateActionGroupStatus(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup, phase, message string) {
 	ag.Status.Phase = phase
 	ag.Status.Message = message
 	ag.Status.LastSyncTime = &metav1.Time{Time: time.Now()}

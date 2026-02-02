@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package utils
+package utils //nolint:revive // utils is a common package name
 
 import (
 	"crypto/sha256"
@@ -25,7 +25,7 @@ import (
 )
 
 // HashObject computes a SHA256 hash of an object's JSON representation
-func HashObject(obj interface{}) (string, error) {
+func HashObject(obj any) (string, error) {
 	data, err := json.Marshal(obj)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal object for hashing: %w", err)
@@ -98,7 +98,7 @@ func CompareHashes(hash1, hash2 string) bool {
 }
 
 // HashChanged checks if the object hash has changed from the stored hash
-func HashChanged(obj interface{}, storedHash string) (bool, string, error) {
+func HashChanged(obj any, storedHash string) (bool, string, error) {
 	newHash, err := HashObject(obj)
 	if err != nil {
 		return false, "", err

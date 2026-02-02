@@ -5,6 +5,11 @@ This document provides a complete reference for all Custom Resource Definitions 
 ## Table of Contents
 
 - [WazuhCluster](#wazuhcluster)
+- [WazuhManager](#wazuhmanager)
+- [WazuhWorker](#wazuhworker)
+- [OpenSearch Core CRDs](#opensearch-core-crds)
+  - [OpenSearchIndexer](#opensearchindexer)
+  - [OpenSearchDashboard](#opensearchdashboard)
 - [OpenSearch Security CRDs](#opensearch-security-crds)
   - [OpenSearchUser](#opensearchuser)
   - [OpenSearchRole](#opensearchrole)
@@ -25,6 +30,7 @@ This document provides a complete reference for all Custom Resource Definitions 
 - [Wazuh Configuration CRDs](#wazuh-configuration-crds)
   - [WazuhRule](#wazuhrule)
   - [WazuhDecoder](#wazuhdecoder)
+  - [WazuhCertificate](#wazuhcertificate)
   - [WazuhFilebeat](#wazuhfilebeat)
 - [Wazuh Backup CRDs](#wazuh-backup-crds)
   - [WazuhBackup](#wazuhbackup)
@@ -36,7 +42,7 @@ This document provides a complete reference for all Custom Resource Definitions 
 
 The main CRD for deploying a complete Wazuh stack (Manager, Indexer, Dashboard).
 
-**API Group:** `resources.wazuh.com/v1alpha1`
+**API Group:** `resources.wazuh.com/v1`
 **Kind:** `WazuhCluster`
 **Short Name:** `wc`
 
@@ -66,18 +72,18 @@ The main CRD for deploying a complete Wazuh stack (Manager, Indexer, Dashboard).
 
 ### CertificateConfig
 
-| Field                    | Type   | Required | Default      | Description             |
-| ------------------------ | ------ | -------- | ------------ | ----------------------- |
-| `country`                | string | No       | `US`         | X.509 Country           |
-| `state`                  | string | No       | `California` | X.509 State             |
-| `locality`               | string | No       | `California` | X.509 Locality          |
-| `organization`           | string | No       | `Wazuh`      | X.509 Organization      |
-| `organizationalUnit`     | string | No       | `Wazuh`      | X.509 OU                |
-| `commonName`             | string | No       | `admin`      | X.509 CN                |
-| `validityDays`           | int    | No       | `365`        | Certs validity (days)   |
-| `renewalThresholdDays`   | int    | No       | `30`         | Certs renewal threshold |
-| `caValidityDays`         | int    | No       | `730`        | CA validity (days)      |
-| `caRenewalThresholdDays` | int    | No       | `60`         | CA renewal threshold    |
+| Field                | Type   | Required | Default      | Description                                             |
+| -------------------- | ------ | -------- | ------------ | ------------------------------------------------------- |
+| `country`            | string | No       | `FR`         | X.509 Country                                           |
+| `state`              | string | No       | `Alsace`     | X.509 State                                             |
+| `locality`           | string | No       | `Strasbourg` | X.509 Locality                                          |
+| `organization`       | string | No       | `Wazuh`      | X.509 Organization                                      |
+| `organizationalUnit` | string | No       | `Wazuh`      | X.509 OU                                                |
+| `commonName`         | string | No       | `admin`      | X.509 CN                                                |
+| `validity`           | string | No       | `365d`       | Node cert validity (e.g., "365d", "24h", "30m")         |
+| `renewalThreshold`   | string | No       | `30d`        | Node cert renewal threshold (e.g., "30d", "12h", "30m") |
+| `caValidity`         | string | No       | `3650d`      | CA validity (e.g., "3650d" = 10 years)                  |
+| `caRenewalThreshold` | string | No       | `60d`        | CA renewal threshold (e.g., "60d", "24h")               |
 
 ### HotReloadConfig
 
@@ -250,34 +256,36 @@ Configuration for safe scale-down operations. See [Drain Strategy](features/drai
 
 ### MasterSpec
 
-| Field                      | Type                        | Required | Default | Description             |
-| -------------------------- | --------------------------- | -------- | ------- | ----------------------- |
-| `storageSize`              | string                      | No       | `50Gi`  | Storage size            |
-| `resources`                | ResourceRequirements        | No       | -       | Resources               |
-| `service`                  | [ServiceSpec](#servicespec) | No       | -       | Service config          |
-| `nodeSelector`             | map[string]string           | No       | -       | Node selector           |
-| `tolerations`              | []Toleration                | No       | -       | Tolerations             |
-| `affinity`                 | Affinity                    | No       | -       | Affinity rules          |
-| `extraConfig`              | string                      | No       | -       | Extra ossec.conf XML    |
-| `extraVolumes`             | []Volume                    | No       | -       | Extra volumes           |
-| `extraVolumeMounts`        | []VolumeMount               | No       | -       | Extra mounts            |
-| `podAnnotations`           | map[string]string           | No       | -       | Pod annotations         |
-| `annotations`              | map[string]string           | No       | -       | StatefulSet annotations |
-| `ingress`                  | [IngressSpec](#ingressspec) | No       | -       | Ingress config          |
-| `env`                      | []EnvVar                    | No       | -       | Environment variables   |
-| `envFrom`                  | []EnvFromSource             | No       | -       | Env from sources        |
-| `securityContext`          | PodSecurityContext          | No       | -       | Pod security            |
-| `containerSecurityContext` | SecurityContext             | No       | -       | Container security      |
+| Field                      | Type                              | Required | Default | Description             |
+| -------------------------- | --------------------------------- | -------- | ------- | ----------------------- |
+| `storageSize`              | string                            | No       | `50Gi`  | Storage size            |
+| `resources`                | ResourceRequirements              | No       | -       | Resources               |
+| `service`                  | [ServiceSpec](#servicespec)       | No       | -       | Service config          |
+| `nodeSelector`             | map[string]string                 | No       | -       | Node selector           |
+| `tolerations`              | []Toleration                      | No       | -       | Tolerations             |
+| `affinity`                 | Affinity                          | No       | -       | Affinity rules          |
+| `extraConfig`              | string                            | No       | -       | Extra ossec.conf XML    |
+| `extraVolumes`             | []Volume                          | No       | -       | Extra volumes           |
+| `extraVolumeMounts`        | []VolumeMount                     | No       | -       | Extra mounts            |
+| `podAnnotations`           | map[string]string                 | No       | -       | Pod annotations         |
+| `annotations`              | map[string]string                 | No       | -       | StatefulSet annotations |
+| `ingress`                  | [IngressSpec](#ingressspec)       | No       | -       | Ingress config          |
+| `gatewayAPI`               | [GatewayAPISpec](#gatewayapispec) | No       | -       | Gateway API config      |
+| `env`                      | []EnvVar                          | No       | -       | Environment variables   |
+| `envFrom`                  | []EnvFromSource                   | No       | -       | Env from sources        |
+| `securityContext`          | PodSecurityContext                | No       | -       | Pod security            |
+| `containerSecurityContext` | SecurityContext                   | No       | -       | Container security      |
 
 ### WorkerSpec
 
 Includes all fields from MasterSpec, plus:
 
-| Field                 | Type                                | Required | Default | Description       |
-| --------------------- | ----------------------------------- | -------- | ------- | ----------------- |
-| `replicas`            | int32                               | No       | `2`     | Number of workers |
-| `podDisruptionBudget` | [PDBSpec](#pdbspec)                 | No       | -       | PDB config        |
-| `overrides`           | [][WorkerOverride](#workeroverride) | No       | -       | Per-pod overrides |
+| Field                 | Type                                | Required | Default | Description               |
+| --------------------- | ----------------------------------- | -------- | ------- | ------------------------- |
+| `replicas`            | int32                               | No       | `2`     | Number of workers         |
+| `podDisruptionBudget` | [PDBSpec](#pdbspec)                 | No       | -       | PDB config                |
+| `overrides`           | [][WorkerOverride](#workeroverride) | No       | -       | Per-pod overrides         |
+| `hpa`                 | [HPASpec](#hpaspec)                 | No       | -       | Horizontal Pod Autoscaler |
 
 ### WorkerOverride
 
@@ -307,12 +315,15 @@ Includes all fields from MasterSpec, plus:
 | `annotations`              | map[string]string                             | No       | -                  | StatefulSet annotations                                            |
 | `podAnnotations`           | map[string]string                             | No       | -                  | Pod annotations                                                    |
 | `ingress`                  | [IngressSpec](#ingressspec)                   | No       | -                  | Ingress config                                                     |
+| `gatewayAPI`               | [GatewayAPISpec](#gatewayapispec)             | No       | -                  | Gateway API config                                                 |
 | `updateStrategy`           | string                                        | No       | `RollingUpdate`    | Update strategy                                                    |
 | `initContainers`           | []Container                                   | No       | -                  | Init containers                                                    |
 | `env`                      | []EnvVar                                      | No       | -                  | Environment variables                                              |
 | `envFrom`                  | []EnvFromSource                               | No       | -                  | Env from sources                                                   |
 | `securityContext`          | PodSecurityContext                            | No       | -                  | Pod security                                                       |
 | `containerSecurityContext` | SecurityContext                               | No       | -                  | Container security                                                 |
+| `antiAffinity`             | [AntiAffinitySpec](#antiaffinityspec)         | No       | -                  | Pod anti-affinity for HA                                           |
+| `hpa`                      | [HPASpec](#hpaspec)                           | No       | -                  | Horizontal Pod Autoscaler (use with caution for StatefulSet)       |
 
 > **Note**: `replicas` and `nodePools` are mutually exclusive. Use `replicas` for simple mode (all nodes have all roles) or `nodePools` for advanced mode (dedicated node roles). See [Advanced Indexer Topology](features/advanced-indexer-topology.md) for details.
 
@@ -352,25 +363,27 @@ Valid values for OpenSearch node roles:
 
 ### DashboardSpec
 
-| Field                      | Type                        | Required | Default | Description            |
-| -------------------------- | --------------------------- | -------- | ------- | ---------------------- |
-| `replicas`                 | int32                       | No       | `2`     | Number of replicas     |
-| `enableSSL`                | bool                        | No       | `false` | Enable SSL             |
-| `image`                    | [ImageSpec](#imagespec)     | No       | -       | Image override         |
-| `resources`                | ResourceRequirements        | No       | -       | Resources              |
-| `wazuhPlugin`              | object                      | No       | -       | Wazuh plugin config    |
-| `service`                  | [ServiceSpec](#servicespec) | No       | -       | Service config         |
-| `nodeSelector`             | map[string]string           | No       | -       | Node selector          |
-| `tolerations`              | []Toleration                | No       | -       | Tolerations            |
-| `affinity`                 | Affinity                    | No       | -       | Affinity rules         |
-| `podDisruptionBudget`      | [PDBSpec](#pdbspec)         | No       | -       | PDB config             |
-| `annotations`              | map[string]string           | No       | -       | Deployment annotations |
-| `podAnnotations`           | map[string]string           | No       | -       | Pod annotations        |
-| `ingress`                  | [IngressSpec](#ingressspec) | No       | -       | Ingress config         |
-| `env`                      | []EnvVar                    | No       | -       | Environment variables  |
-| `envFrom`                  | []EnvFromSource             | No       | -       | Env from sources       |
-| `securityContext`          | PodSecurityContext          | No       | -       | Pod security           |
-| `containerSecurityContext` | SecurityContext             | No       | -       | Container security     |
+| Field                      | Type                              | Required | Default | Description               |
+| -------------------------- | --------------------------------- | -------- | ------- | ------------------------- |
+| `replicas`                 | int32                             | No       | `2`     | Number of replicas        |
+| `enableSSL`                | bool                              | No       | `false` | Enable SSL                |
+| `image`                    | [ImageSpec](#imagespec)           | No       | -       | Image override            |
+| `resources`                | ResourceRequirements              | No       | -       | Resources                 |
+| `wazuhPlugin`              | object                            | No       | -       | Wazuh plugin config       |
+| `service`                  | [ServiceSpec](#servicespec)       | No       | -       | Service config            |
+| `nodeSelector`             | map[string]string                 | No       | -       | Node selector             |
+| `tolerations`              | []Toleration                      | No       | -       | Tolerations               |
+| `affinity`                 | Affinity                          | No       | -       | Affinity rules            |
+| `podDisruptionBudget`      | [PDBSpec](#pdbspec)               | No       | -       | PDB config                |
+| `annotations`              | map[string]string                 | No       | -       | Deployment annotations    |
+| `podAnnotations`           | map[string]string                 | No       | -       | Pod annotations           |
+| `ingress`                  | [IngressSpec](#ingressspec)       | No       | -       | Ingress config            |
+| `gatewayAPI`               | [GatewayAPISpec](#gatewayapispec) | No       | -       | Gateway API config        |
+| `env`                      | []EnvVar                          | No       | -       | Environment variables     |
+| `envFrom`                  | []EnvFromSource                   | No       | -       | Env from sources          |
+| `securityContext`          | PodSecurityContext                | No       | -       | Pod security              |
+| `containerSecurityContext` | SecurityContext                   | No       | -       | Container security        |
+| `hpa`                      | [HPASpec](#hpaspec)               | No       | -       | Horizontal Pod Autoscaler |
 
 ### Common Types
 
@@ -412,11 +425,222 @@ Valid values for OpenSearch node roles:
 
 #### CredentialsSecretRef
 
-| Field         | Type   | Required | Default    | Description  |
-| ------------- | ------ | -------- | ---------- | ------------ |
-| `secretName`  | string | No       | -          | Secret name  |
-| `usernameKey` | string | No       | `username` | Username key |
-| `passwordKey` | string | No       | `password` | Password key |
+| Field               | Type                                    | Required | Default    | Description                         |
+| ------------------- | --------------------------------------- | -------- | ---------- | ----------------------------------- |
+| `secretName`        | string                                  | No       | -          | Native K8s Secret name              |
+| `externalSecretRef` | [ExternalSecretRef](#externalsecretref) | No       | -          | External Secrets Operator reference |
+| `usernameKey`       | string                                  | No       | `username` | Username key in secret              |
+| `passwordKey`       | string                                  | No       | `password` | Password key in secret              |
+
+> **Note:** Use either `secretName` for native K8s Secrets or `externalSecretRef` for External Secrets Operator (ESO) integration.
+
+#### ExternalSecretRef
+
+Support for External Secrets Operator (ESO) to integrate with Vault, AWS Secrets Manager, Azure Key Vault, etc.
+
+| Field             | Type                                          | Required | Default | Description                              |
+| ----------------- | --------------------------------------------- | -------- | ------- | ---------------------------------------- |
+| `name`            | string                                        | **Yes**  | -       | ExternalSecret name (creates K8s Secret) |
+| `namespace`       | string                                        | No       | -       | Namespace (defaults to parent resource)  |
+| `secretStoreRef`  | [SecretStoreReference](#secretstorereference) | No       | -       | SecretStore or ClusterSecretStore ref    |
+| `remoteRef`       | [RemoteSecretRef](#remotesecretref)           | No       | -       | Remote secret location in provider       |
+| `refreshInterval` | string                                        | No       | `1h`    | Sync interval (e.g., "1h", "30m")        |
+
+#### SecretStoreReference
+
+| Field  | Type   | Required | Default       | Description                                 |
+| ------ | ------ | -------- | ------------- | ------------------------------------------- |
+| `name` | string | **Yes**  | -             | SecretStore or ClusterSecretStore name      |
+| `kind` | string | No       | `SecretStore` | Kind: `SecretStore` or `ClusterSecretStore` |
+
+#### RemoteSecretRef
+
+| Field      | Type   | Required | Default | Description                               |
+| ---------- | ------ | -------- | ------- | ----------------------------------------- |
+| `key`      | string | **Yes**  | -       | Key/path in external provider             |
+| `property` | string | No       | -       | Specific property within the secret       |
+| `version`  | string | No       | -       | Version of the secret (provider-specific) |
+
+#### HPASpec
+
+Configuration for Horizontal Pod Autoscaler (supported on Dashboard, Workers, Indexer).
+
+| Field                               | Type                        | Required | Default | Description                       |
+| ----------------------------------- | --------------------------- | -------- | ------- | --------------------------------- |
+| `enabled`                           | bool                        | No       | `false` | Enable HPA                        |
+| `minReplicas`                       | \*int32                     | No       | `1`     | Minimum replicas                  |
+| `maxReplicas`                       | int32                       | No       | `10`    | Maximum replicas                  |
+| `targetCPUUtilizationPercentage`    | \*int32                     | No       | `80`    | Target CPU utilization (1-100)    |
+| `targetMemoryUtilizationPercentage` | \*int32                     | No       | -       | Target memory utilization (1-100) |
+| `behavior`                          | [HPABehavior](#hpabehavior) | No       | -       | Scaling behavior configuration    |
+
+#### HPABehavior
+
+| Field       | Type                                | Required | Default | Description              |
+| ----------- | ----------------------------------- | -------- | ------- | ------------------------ |
+| `scaleDown` | [HPAScalingRules](#hpascalingrules) | No       | -       | Scale down configuration |
+| `scaleUp`   | [HPAScalingRules](#hpascalingrules) | No       | -       | Scale up configuration   |
+
+#### HPAScalingRules
+
+| Field                        | Type    | Required | Default | Description                                |
+| ---------------------------- | ------- | -------- | ------- | ------------------------------------------ |
+| `stabilizationWindowSeconds` | \*int32 | No       | -       | Stabilization window (0-3600)              |
+| `selectPolicy`               | string  | No       | -       | Policy selection: `Max`, `Min`, `Disabled` |
+
+#### AntiAffinitySpec
+
+| Field         | Type   | Required | Default                  | Description                                   |
+| ------------- | ------ | -------- | ------------------------ | --------------------------------------------- |
+| `enabled`     | bool   | No       | `false`                  | Enable anti-affinity                          |
+| `type`        | string | No       | `required`               | Anti-affinity type: `required` or `preferred` |
+| `topologyKey` | string | No       | `kubernetes.io/hostname` | Topology key for spreading                    |
+| `weight`      | int32  | No       | `100`                    | Weight for preferred anti-affinity (1-100)    |
+
+#### GatewayAPISpec
+
+Configuration for exposing services via Gateway API (HTTPRoute, TCPRoute, UDPRoute) instead of legacy Ingress.
+
+| Field        | Type                                    | Required | Default | Description                 |
+| ------------ | --------------------------------------- | -------- | ------- | --------------------------- |
+| `enabled`    | bool                                    | No       | `false` | Enable Gateway API          |
+| `gatewayRef` | [GatewayReference](#gatewayreference)   | No       | -       | Reference to parent Gateway |
+| `hostnames`  | []string                                | No       | -       | Hostnames for HTTPRoute     |
+| `http`       | [GatewayHTTPConfig](#gatewayhttpconfig) | No       | -       | HTTP route configuration    |
+| `tcp`        | [GatewayTCPConfig](#gatewaytcpconfig)   | No       | -       | TCP route configuration     |
+| `udp`        | [GatewayUDPConfig](#gatewayudpconfig)   | No       | -       | UDP route configuration     |
+
+#### GatewayReference
+
+| Field         | Type   | Required | Default | Description                     |
+| ------------- | ------ | -------- | ------- | ------------------------------- |
+| `name`        | string | **Yes**  | -       | Name of the Gateway             |
+| `namespace`   | string | No       | -       | Namespace of the Gateway        |
+| `sectionName` | string | No       | -       | Section name within the Gateway |
+
+#### GatewayHTTPConfig
+
+| Field         | Type              | Required | Default | Description                |
+| ------------- | ----------------- | -------- | ------- | -------------------------- |
+| `annotations` | map[string]string | No       | -       | HTTPRoute annotations      |
+| `pathPrefix`  | string            | No       | `/`     | Path prefix for HTTP route |
+
+#### GatewayTCPConfig
+
+| Field               | Type              | Required | Default | Description                            |
+| ------------------- | ----------------- | -------- | ------- | -------------------------------------- |
+| `enabled`           | bool              | No       | `false` | Enable TCP routes                      |
+| `enrollmentEnabled` | bool              | No       | `false` | TCP route for enrollment (port 1515)   |
+| `eventsEnabled`     | bool              | No       | `false` | TCP route for agent events (port 1514) |
+| `clusterEnabled`    | bool              | No       | `false` | TCP route for cluster comm (port 1516) |
+| `annotations`       | map[string]string | No       | -       | TCPRoute annotations                   |
+
+#### GatewayUDPConfig
+
+| Field         | Type              | Required | Default | Description                 |
+| ------------- | ----------------- | -------- | ------- | --------------------------- |
+| `enabled`     | bool              | No       | `false` | Enable UDP route for syslog |
+| `syslogPort`  | int32             | No       | `514`   | UDP port for syslog         |
+| `annotations` | map[string]string | No       | -       | UDPRoute annotations        |
+
+---
+
+## WazuhManager
+
+Standalone CRD for managing Wazuh Manager configuration. Used in reference mode with WazuhCluster.
+
+**API Group:** `resources.wazuh.com/v1`
+**Kind:** `WazuhManager`
+**Short Name:** `wmgr`
+
+### Spec Fields
+
+| Field                    | Type                                          | Required | Default | Description                   |
+| ------------------------ | --------------------------------------------- | -------- | ------- | ----------------------------- |
+| `version`                | string                                        | **Yes**  | -       | Wazuh version (format: X.Y.Z) |
+| `master`                 | [MasterSpec](#masterspec)                     | **Yes**  | -       | Master node configuration     |
+| `workers`                | [WorkerSpec](#workerspec)                     | **Yes**  | -       | Worker nodes configuration    |
+| `clusterKeySecretRef`    | SecretKeySelector                             | No       | -       | Cluster key secret            |
+| `apiCredentials`         | [CredentialsSecretRef](#credentialssecretref) | No       | -       | API credentials               |
+| `authdPasswordSecretRef` | SecretKeySelector                             | No       | -       | Authd password                |
+| `image`                  | [ImageSpec](#imagespec)                       | No       | -       | Image override                |
+| `config`                 | [WazuhConfigSpec](#wazuhconfigspec)           | No       | -       | OSSEC configuration           |
+| `logRotation`            | [LogRotationSpec](#logrotationspec)           | No       | -       | Log rotation CronJob          |
+
+---
+
+## WazuhWorker
+
+Standalone CRD for managing Wazuh Worker configuration. Used for per-worker overrides.
+
+**API Group:** `resources.wazuh.com/v1`
+**Kind:** `WazuhWorker`
+**Short Name:** `wwork`
+
+### Spec Fields
+
+| Field          | Type                 | Required | Default | Description             |
+| -------------- | -------------------- | -------- | ------- | ----------------------- |
+| `clusterRef`   | string               | **Yes**  | -       | Reference to cluster    |
+| `workerIndex`  | int32                | **Yes**  | -       | Worker index (0-based)  |
+| `extraConfig`  | string               | No       | -       | Extra ossec.conf XML    |
+| `resources`    | ResourceRequirements | No       | -       | Resource overrides      |
+| `nodeSelector` | map[string]string    | No       | -       | Node selector overrides |
+| `tolerations`  | []Toleration         | No       | -       | Toleration overrides    |
+
+---
+
+## OpenSearch Core CRDs
+
+### OpenSearchIndexer
+
+Standalone CRD for managing OpenSearch Indexer configuration. Used in reference mode with WazuhCluster.
+
+**API Group:** `resources.wazuh.com/v1`
+**Kind:** `OpenSearchIndexer`
+**Short Name:** `osidxr`
+
+#### Spec Fields
+
+| Field              | Type                                          | Required | Default                                          | Description          |
+| ------------------ | --------------------------------------------- | -------- | ------------------------------------------------ | -------------------- |
+| `version`          | string                                        | **Yes**  | -                                                | OpenSearch version   |
+| `clusterRef`       | string                                        | No       | -                                                | Reference to cluster |
+| `replicas`         | int32                                         | No       | `3`                                              | Number of replicas   |
+| `resources`        | ResourceRequirements                          | No       | -                                                | Container resources  |
+| `storageSize`      | string                                        | No       | `50Gi`                                           | Storage size         |
+| `storageClassName` | string                                        | No       | -                                                | Storage class        |
+| `image`            | [ImageSpec](#imagespec)                       | No       | -                                                | Image override       |
+| `javaOpts`         | string                                        | No       | `-Xms1g -Xmx1g -Dlog4j2.formatMsgNoLookups=true` | Java options         |
+| `clusterName`      | string                                        | No       | `wazuh`                                          | Cluster name         |
+| `credentials`      | [CredentialsSecretRef](#credentialssecretref) | No       | -                                                | Admin credentials    |
+| `nodeSelector`     | map[string]string                             | No       | -                                                | Node selector        |
+| `tolerations`      | []Toleration                                  | No       | -                                                | Tolerations          |
+| `affinity`         | Affinity                                      | No       | -                                                | Affinity rules       |
+
+### OpenSearchDashboard
+
+Standalone CRD for managing OpenSearch Dashboard configuration. Used in reference mode with WazuhCluster.
+
+**API Group:** `resources.wazuh.com/v1`
+**Kind:** `OpenSearchDashboard`
+**Short Name:** `osdash`
+
+#### Spec Fields
+
+| Field          | Type                        | Required | Default | Description           |
+| -------------- | --------------------------- | -------- | ------- | --------------------- |
+| `version`      | string                      | **Yes**  | -       | Dashboard version     |
+| `clusterRef`   | string                      | No       | -       | Reference to cluster  |
+| `indexerRef`   | string                      | **Yes**  | -       | Reference to indexer  |
+| `replicas`     | int32                       | No       | `1`     | Number of replicas    |
+| `resources`    | ResourceRequirements        | No       | -       | Container resources   |
+| `image`        | [ImageSpec](#imagespec)     | No       | -       | Image override        |
+| `enableSSL`    | bool                        | No       | `false` | Enable SSL            |
+| `nodeSelector` | map[string]string           | No       | -       | Node selector         |
+| `tolerations`  | []Toleration                | No       | -       | Tolerations           |
+| `affinity`     | Affinity                    | No       | -       | Affinity rules        |
+| `ingress`      | [IngressSpec](#ingressspec) | No       | -       | Ingress configuration |
 
 ---
 
@@ -651,7 +875,7 @@ Triggers manual snapshots on-demand.
 
 Restores indices from a snapshot.
 
-**Short Name:** `osrest`
+**Short Name:** `osrestore`
 
 | Field                | Type                  | Required | Default | Description                        |
 | -------------------- | --------------------- | -------- | ------- | ---------------------------------- |
@@ -715,6 +939,46 @@ Manages custom log decoders.
 | `priority`      | int32                 | No       | `500`   | Application priority        |
 | `overwrite`     | bool                  | No       | `false` | Overwrite existing          |
 | `parentDecoder` | string                | No       | -       | Parent decoder name         |
+
+### WazuhCertificate
+
+Manages TLS certificates for Wazuh cluster components.
+
+**Short Name:** `wzcert`
+
+| Field               | Type                    | Required | Default | Description                                                     |
+| ------------------- | ----------------------- | -------- | ------- | --------------------------------------------------------------- |
+| `clusterRef`        | string                  | **Yes**  | -       | Cluster reference                                               |
+| `type`              | string                  | **Yes**  | -       | Certificate type: ca, node, admin, filebeat, indexer, dashboard |
+| `distinguishedName` | DistinguishedNameConfig | No       | -       | X.509 DN configuration                                          |
+| `validity`          | string                  | No       | `365d`  | Certificate validity duration (e.g., "365d", "24h", "30m")      |
+| `autoRenewal`       | AutoRenewalConfig       | No       | -       | Auto-renewal configuration                                      |
+| `sans`              | []string                | No       | -       | Subject Alternative Names                                       |
+| `autoGenerateSANs`  | AutoGenerateSANsConfig  | No       | -       | Auto-generate SANs from cluster topology                        |
+| `secretName`        | string                  | **Yes**  | -       | Secret name to store the certificate                            |
+| `hotReload`         | bool                    | No       | `false` | Enable hot-reload for OpenSearch (2.13+)                        |
+| `keyConfig`         | KeyConfig               | No       | -       | Key algorithm and size configuration                            |
+
+#### DistinguishedNameConfig
+
+| Field                | Type   | Required | Default  | Description        |
+| -------------------- | ------ | -------- | -------- | ------------------ |
+| `country`            | string | No       | `FR`     | X.509 Country      |
+| `state`              | string | No       | `Alsace` | X.509 State        |
+| `locality`           | string | No       | `S`      | X.509 Locality     |
+| `organization`       | string | No       | `Wazuh`  | X.509 Organization |
+| `organizationalUnit` | string | No       | `Wazuh`  | X.509 OU           |
+| `commonName`         | string | No       | -        | X.509 CN           |
+
+#### AutoRenewalConfig
+
+| Field                        | Type    | Required | Default     | Description                         |
+| ---------------------------- | ------- | -------- | ----------- | ----------------------------------- |
+| `enabled`                    | bool    | No       | `true`      | Enable auto-renewal                 |
+| `thresholdDays`              | int     | No       | `30`        | Days before expiry to renew (1-365) |
+| `schedule`                   | string  | No       | `0 2 * * *` | Cron schedule for renewal checks    |
+| `successfulJobsHistoryLimit` | \*int32 | No       | `3`         | Successful job history to keep      |
+| `failedJobsHistoryLimit`     | \*int32 | No       | `1`         | Failed job history to keep          |
 
 ---
 
@@ -1000,28 +1264,28 @@ See `config/samples/` for example manifests:
 
 ### WazuhCluster Examples
 
-- `wazuh_v1alpha1_wazuhcluster_minimal.yaml` - Minimal development setup
-- `wazuh_v1alpha1_wazuhcluster_production.yaml` - Production configuration
-- `wazuh_v1alpha1_wazuhcluster_complete.yaml` - All options documented
-- `wazuh_v1alpha1_wazuhcluster_monitoring.yaml` - Prometheus monitoring
-- `wazuh_v1alpha1_wazuhcluster_tls.yaml` - TLS configurations
-- `wazuh_v1alpha1_wazuhcluster_cloud_workers.yaml` - Cloud log collection
+- `wazuh_v1_wazuhcluster_minimal.yaml` - Minimal development setup
+- `wazuh_v1_wazuhcluster_production.yaml` - Production configuration
+- `wazuh_v1_wazuhcluster_complete.yaml` - All options documented
+- `wazuh_v1_wazuhcluster_monitoring.yaml` - Prometheus monitoring
+- `wazuh_v1_wazuhcluster_tls.yaml` - TLS configurations
+- `wazuh_v1_wazuhcluster_cloud_workers.yaml` - Cloud log collection
 
 ### Wazuh Configuration
 
-- `wazuh_v1alpha1_rule.yaml` - Custom rule example
-- `wazuh_v1alpha1_decoder.yaml` - Custom decoder example
+- `wazuh_v1_rule.yaml` - Custom rule example
+- `wazuh_v1_decoder.yaml` - Custom decoder example
 
 ### OpenSearch Security & Index Management
 
-- `opensearch_v1alpha1_*.yaml` - OpenSearch resource examples
+- `opensearch_v1_*.yaml` - OpenSearch resource examples
 
 ### Backup & Restore
 
-- `opensearch_v1alpha1_opensearchsnapshotrepository_s3.yaml` - AWS S3 repository
-- `opensearch_v1alpha1_opensearchsnapshotrepository_minio.yaml` - MinIO repository
-- `opensearch_v1alpha1_opensearchsnapshot_manual.yaml` - Manual snapshot trigger
-- `opensearch_v1alpha1_opensearchrestore.yaml` - Restore from snapshot
-- `wazuh_v1alpha1_wazuhbackup_scheduled.yaml` - Scheduled Wazuh backups
-- `wazuh_v1alpha1_wazuhbackup_oneshot.yaml` - One-shot Wazuh backup
-- `wazuh_v1alpha1_wazuhrestore.yaml` - Wazuh restore examples
+- `opensearch_v1_opensearchsnapshotrepository_s3.yaml` - AWS S3 repository
+- `opensearch_v1_opensearchsnapshotrepository_minio.yaml` - MinIO repository
+- `opensearch_v1_opensearchsnapshot_manual.yaml` - Manual snapshot trigger
+- `opensearch_v1_opensearchrestore.yaml` - Restore from snapshot
+- `wazuh_v1_wazuhbackup_scheduled.yaml` - Scheduled Wazuh backups
+- `wazuh_v1_wazuhbackup_oneshot.yaml` - One-shot Wazuh backup
+- `wazuh_v1_wazuhrestore.yaml` - Wazuh restore examples

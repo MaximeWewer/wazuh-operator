@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import (
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -44,7 +44,7 @@ type ManagerDrainer interface {
 	CancelDrain(ctx context.Context) error
 
 	// EvaluateFeasibility checks if drain is feasible without executing (for dry-run)
-	EvaluateFeasibility(ctx context.Context, nodeName string) (*v1alpha1.DryRunResult, error)
+	EvaluateFeasibility(ctx context.Context, nodeName string) (*v1.DryRunResult, error)
 }
 
 // ManagerDrainProgress represents the current state of a manager drain operation
@@ -80,7 +80,7 @@ type ManagerDrainerImpl struct {
 }
 
 // NewManagerDrainer creates a new ManagerDrainer instance
-func NewManagerDrainer(client *adapters.WazuhAPIAdapter, log logr.Logger, config *v1alpha1.ManagerDrainConfig) *ManagerDrainerImpl {
+func NewManagerDrainer(client *adapters.WazuhAPIAdapter, log logr.Logger, config *v1.ManagerDrainConfig) *ManagerDrainerImpl {
 	timeout := constants.DefaultManagerDrainTimeout
 	queueCheckInterval := constants.DefaultManagerQueueCheckInterval
 
@@ -229,8 +229,8 @@ func (d *ManagerDrainerImpl) CancelDrain(ctx context.Context) error {
 }
 
 // EvaluateFeasibility checks if drain is feasible without executing (dry-run mode)
-func (d *ManagerDrainerImpl) EvaluateFeasibility(ctx context.Context, nodeName string) (*v1alpha1.DryRunResult, error) {
-	result := &v1alpha1.DryRunResult{
+func (d *ManagerDrainerImpl) EvaluateFeasibility(ctx context.Context, nodeName string) (*v1.DryRunResult, error) {
+	result := &v1.DryRunResult{
 		Feasible:    true,
 		EvaluatedAt: metav1.Now(),
 		Component:   constants.DrainComponentManager,
@@ -272,7 +272,7 @@ func (d *ManagerDrainerImpl) EvaluateFeasibility(ctx context.Context, nodeName s
 	} else if queueStatus.TotalEvents > 0 {
 		// Estimate duration based on queue depth
 		// Rough estimate: 1000 events per second
-		estimatedSeconds := int64(queueStatus.TotalEvents / 1000)
+		estimatedSeconds := queueStatus.TotalEvents / 1000
 		if estimatedSeconds < 60 {
 			estimatedSeconds = 60 // Minimum 1 minute
 		}
@@ -314,7 +314,7 @@ func (d *ManagerDrainerImpl) EvaluateFeasibility(ctx context.Context, nodeName s
 }
 
 // WaitForDrainComplete blocks until drain completes or timeout
-func (d *ManagerDrainerImpl) WaitForDrainComplete(ctx context.Context, nodeName string, status *v1alpha1.ComponentDrainStatus) error {
+func (d *ManagerDrainerImpl) WaitForDrainComplete(ctx context.Context, nodeName string, status *v1.ComponentDrainStatus) error {
 	startTime := time.Now()
 	ticker := time.NewTicker(d.queueCheckInterval)
 	defer ticker.Stop()

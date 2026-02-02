@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,26 +23,26 @@ import (
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // RetryManager handles retry logic for failed drain operations
 type RetryManager interface {
 	// ShouldRetry determines if another retry attempt should be made
-	ShouldRetry(status *v1alpha1.ComponentDrainStatus, config *v1alpha1.DrainRetryConfig) bool
+	ShouldRetry(status *v1.ComponentDrainStatus, config *v1.DrainRetryConfig) bool
 
 	// CalculateNextRetryTime calculates when the next retry should occur
-	CalculateNextRetryTime(status *v1alpha1.ComponentDrainStatus, config *v1alpha1.DrainRetryConfig) time.Time
+	CalculateNextRetryTime(status *v1.ComponentDrainStatus, config *v1.DrainRetryConfig) time.Time
 
 	// IncrementAttempt updates the attempt count and sets next retry time
-	IncrementAttempt(status *v1alpha1.ComponentDrainStatus, config *v1alpha1.DrainRetryConfig)
+	IncrementAttempt(status *v1.ComponentDrainStatus, config *v1.DrainRetryConfig)
 
 	// IsRetryDue checks if it's time to retry
-	IsRetryDue(status *v1alpha1.ComponentDrainStatus) bool
+	IsRetryDue(status *v1.ComponentDrainStatus) bool
 
 	// ResetRetryState clears retry-related state
-	ResetRetryState(status *v1alpha1.ComponentDrainStatus)
+	ResetRetryState(status *v1.ComponentDrainStatus)
 }
 
 // RetryManagerImpl implements RetryManager
@@ -58,9 +58,9 @@ func NewRetryManager(log logr.Logger) *RetryManagerImpl {
 }
 
 // ShouldRetry determines if another retry attempt should be made
-func (r *RetryManagerImpl) ShouldRetry(status *v1alpha1.ComponentDrainStatus, config *v1alpha1.DrainRetryConfig) bool {
+func (r *RetryManagerImpl) ShouldRetry(status *v1.ComponentDrainStatus, config *v1.DrainRetryConfig) bool {
 	// If no config, use defaults
-	maxAttempts := int32(constants.DefaultDrainRetryMaxAttempts)
+	maxAttempts := constants.DefaultDrainRetryMaxAttempts
 	if config != nil && config.MaxAttempts > 0 {
 		maxAttempts = config.MaxAttempts
 	}
@@ -74,7 +74,7 @@ func (r *RetryManagerImpl) ShouldRetry(status *v1alpha1.ComponentDrainStatus, co
 	}
 
 	// Only retry if in Failed state
-	if status.Phase != v1alpha1.DrainPhaseFailed {
+	if status.Phase != v1.DrainPhaseFailed {
 		return false
 	}
 
@@ -82,7 +82,7 @@ func (r *RetryManagerImpl) ShouldRetry(status *v1alpha1.ComponentDrainStatus, co
 }
 
 // CalculateNextRetryTime calculates when the next retry should occur using exponential backoff
-func (r *RetryManagerImpl) CalculateNextRetryTime(status *v1alpha1.ComponentDrainStatus, config *v1alpha1.DrainRetryConfig) time.Time {
+func (r *RetryManagerImpl) CalculateNextRetryTime(status *v1.ComponentDrainStatus, config *v1.DrainRetryConfig) time.Time {
 	// Get configuration values with defaults
 	initialDelay := constants.DefaultDrainRetryInitialDelay
 	if config != nil && config.InitialDelay != nil {
@@ -127,7 +127,7 @@ func (r *RetryManagerImpl) CalculateNextRetryTime(status *v1alpha1.ComponentDrai
 }
 
 // IncrementAttempt updates the attempt count and sets next retry time
-func (r *RetryManagerImpl) IncrementAttempt(status *v1alpha1.ComponentDrainStatus, config *v1alpha1.DrainRetryConfig) {
+func (r *RetryManagerImpl) IncrementAttempt(status *v1.ComponentDrainStatus, config *v1.DrainRetryConfig) {
 	status.AttemptCount++
 
 	// Calculate and set next retry time
@@ -140,7 +140,7 @@ func (r *RetryManagerImpl) IncrementAttempt(status *v1alpha1.ComponentDrainStatu
 }
 
 // IsRetryDue checks if it's time to retry
-func (r *RetryManagerImpl) IsRetryDue(status *v1alpha1.ComponentDrainStatus) bool {
+func (r *RetryManagerImpl) IsRetryDue(status *v1.ComponentDrainStatus) bool {
 	if status.NextRetryTime == nil {
 		return false
 	}
@@ -149,15 +149,15 @@ func (r *RetryManagerImpl) IsRetryDue(status *v1alpha1.ComponentDrainStatus) boo
 }
 
 // ResetRetryState clears retry-related state
-func (r *RetryManagerImpl) ResetRetryState(status *v1alpha1.ComponentDrainStatus) {
+func (r *RetryManagerImpl) ResetRetryState(status *v1.ComponentDrainStatus) {
 	status.AttemptCount = 0
 	status.NextRetryTime = nil
 	r.log.Info("Reset retry state")
 }
 
 // GetRetryStatus returns human-readable retry status
-func (r *RetryManagerImpl) GetRetryStatus(status *v1alpha1.ComponentDrainStatus, config *v1alpha1.DrainRetryConfig) string {
-	maxAttempts := int32(constants.DefaultDrainRetryMaxAttempts)
+func (r *RetryManagerImpl) GetRetryStatus(status *v1.ComponentDrainStatus, config *v1.DrainRetryConfig) string {
+	maxAttempts := constants.DefaultDrainRetryMaxAttempts
 	if config != nil && config.MaxAttempts > 0 {
 		maxAttempts = config.MaxAttempts
 	}
@@ -194,8 +194,8 @@ type RetryDecision struct {
 }
 
 // EvaluateRetry provides a comprehensive retry decision
-func (r *RetryManagerImpl) EvaluateRetry(status *v1alpha1.ComponentDrainStatus, config *v1alpha1.DrainRetryConfig) *RetryDecision {
-	maxAttempts := int32(constants.DefaultDrainRetryMaxAttempts)
+func (r *RetryManagerImpl) EvaluateRetry(status *v1.ComponentDrainStatus, config *v1.DrainRetryConfig) *RetryDecision {
+	maxAttempts := constants.DefaultDrainRetryMaxAttempts
 	if config != nil && config.MaxAttempts > 0 {
 		maxAttempts = config.MaxAttempts
 	}
@@ -213,7 +213,7 @@ func (r *RetryManagerImpl) EvaluateRetry(status *v1alpha1.ComponentDrainStatus, 
 	}
 
 	// Check if in correct state for retry
-	if status.Phase != v1alpha1.DrainPhaseFailed {
+	if status.Phase != v1.DrainPhaseFailed {
 		decision.ShouldRetry = false
 		decision.Reason = "not in failed state"
 		return decision

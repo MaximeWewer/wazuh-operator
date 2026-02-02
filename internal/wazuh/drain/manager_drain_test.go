@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,13 +17,14 @@ limitations under the License.
 package drain
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -35,12 +36,12 @@ func getTestLogger() logr.Logger {
 // testLoggerImpl is a simple logger for tests that discards output
 type testLoggerImpl struct{}
 
-func (t testLoggerImpl) Enabled(level int) bool                                    { return false }
-func (t testLoggerImpl) Info(level int, msg string, keysAndValues ...interface{})  {}
-func (t testLoggerImpl) Error(err error, msg string, keysAndValues ...interface{}) {}
-func (t testLoggerImpl) WithValues(keysAndValues ...interface{}) logr.LogSink      { return t }
-func (t testLoggerImpl) WithName(name string) logr.LogSink                         { return t }
-func (t testLoggerImpl) Init(info logr.RuntimeInfo)                                {}
+func (t testLoggerImpl) Enabled(_ int) bool                { return false }
+func (t testLoggerImpl) Info(_ int, _ string, _ ...any)    {}
+func (t testLoggerImpl) Error(_ error, _ string, _ ...any) {}
+func (t testLoggerImpl) WithValues(_ ...any) logr.LogSink  { return t }
+func (t testLoggerImpl) WithName(_ string) logr.LogSink    { return t }
+func (t testLoggerImpl) Init(_ logr.RuntimeInfo)           {}
 
 // Ensure testLoggerImpl implements logr.LogSink
 var _ logr.LogSink = testLoggerImpl{}
@@ -68,7 +69,7 @@ func TestNewManagerDrainer_CustomConfig(t *testing.T) {
 	customInterval := 10 * time.Second
 	customGracePeriod := 60 * time.Second
 
-	config := &v1alpha1.ManagerDrainConfig{
+	config := &v1.ManagerDrainConfig{
 		Timeout:            &metav1.Duration{Duration: customTimeout},
 		QueueCheckInterval: &metav1.Duration{Duration: customInterval},
 		GracePeriod:        &metav1.Duration{Duration: customGracePeriod},
@@ -220,7 +221,7 @@ func TestDryRunResult_ManagerDrain(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a mock result based on the conditions
-			result := &v1alpha1.DryRunResult{
+			result := &v1.DryRunResult{
 				Feasible:    true,
 				EvaluatedAt: metav1.Now(),
 				Component:   constants.DrainComponentManager,
@@ -259,7 +260,7 @@ func TestCancelDrain_ResetsState(t *testing.T) {
 	drainer.emptyQueueSeenTime = &now
 
 	// Cancel drain
-	_ = drainer.CancelDrain(nil)
+	_ = drainer.CancelDrain(context.TODO())
 
 	// Verify state is reset
 	if drainer.initialQueueDepth != 0 {

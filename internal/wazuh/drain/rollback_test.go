@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -55,14 +55,14 @@ func TestRollbackManager_ExecuteRollback_Indexer(t *testing.T) {
 
 	// Set up cluster with drain status containing previous replicas
 	previousReplicas := int32(3)
-	cluster := &v1alpha1.WazuhCluster{
+	cluster := &v1.WazuhCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "default",
 		},
-		Status: v1alpha1.WazuhClusterStatus{
-			Drain: &v1alpha1.DrainStatus{
-				Indexer: &v1alpha1.ComponentDrainStatus{
+		Status: v1.WazuhClusterStatus{
+			Drain: &v1.DrainStatus{
+				Indexer: &v1.ComponentDrainStatus{
 					PreviousReplicas: &previousReplicas,
 				},
 			},
@@ -111,14 +111,14 @@ func TestRollbackManager_ExecuteRollback_Manager(t *testing.T) {
 
 	// Set up cluster with drain status containing previous replicas
 	previousReplicas := int32(2)
-	cluster := &v1alpha1.WazuhCluster{
+	cluster := &v1.WazuhCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "default",
 		},
-		Status: v1alpha1.WazuhClusterStatus{
-			Drain: &v1alpha1.DrainStatus{
-				Manager: &v1alpha1.ComponentDrainStatus{
+		Status: v1.WazuhClusterStatus{
+			Drain: &v1.DrainStatus{
+				Manager: &v1.ComponentDrainStatus{
 					PreviousReplicas: &previousReplicas,
 				},
 			},
@@ -146,7 +146,7 @@ func TestRollbackManager_ExecuteRollback_UnknownComponent(t *testing.T) {
 	fakeClient := fake.NewClientBuilder().Build()
 	manager := NewRollbackManager(fakeClient, getTestLogger())
 
-	cluster := &v1alpha1.WazuhCluster{
+	cluster := &v1.WazuhCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "default",
@@ -216,14 +216,14 @@ func TestRollbackManager_VerifyRollbackComplete_Indexer(t *testing.T) {
 
 			manager := NewRollbackManager(fakeClient, getTestLogger())
 
-			cluster := &v1alpha1.WazuhCluster{
+			cluster := &v1.WazuhCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-cluster",
 					Namespace: "default",
 				},
-				Status: v1alpha1.WazuhClusterStatus{
-					Drain: &v1alpha1.DrainStatus{
-						Indexer: &v1alpha1.ComponentDrainStatus{
+				Status: v1.WazuhClusterStatus{
+					Drain: &v1.DrainStatus{
+						Indexer: &v1.ComponentDrainStatus{
 							PreviousReplicas: &tt.previousReplicas,
 						},
 					},

@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 	"context"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,8 +29,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 )
 
 // OpenSearchSnapshotRepositoryReconciler reconciles a OpenSearchSnapshotRepository object
@@ -48,10 +51,26 @@ type OpenSearchSnapshotRepositoryReconciler struct {
 
 // Reconcile is the main reconciliation loop for OpenSearchSnapshotRepository
 func (r *OpenSearchSnapshotRepositoryReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// Start tracing span
+	ctx, span := telemetry.Tracer().Start(ctx, "OpenSearchSnapshotRepository.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("namespace", req.Namespace),
+			attribute.String("name", req.Name),
+		))
+	defer span.End()
+
+	// Track reconciliation metrics
+	startTime := time.Now()
+	var reconcileResult = "success"
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		metrics.RecordReconciliation("OpenSearchSnapshotRepository", req.Namespace, reconcileResult, duration)
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Fetch the OpenSearchSnapshotRepository instance
-	repo := &wazuhv1alpha1.OpenSearchSnapshotRepository{}
+	repo := &wazuhv1.OpenSearchSnapshotRepository{}
 	if err := r.Get(ctx, req.NamespacedName, repo); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("OpenSearchSnapshotRepository resource not found, ignoring since object must be deleted")
@@ -75,7 +94,7 @@ func (r *OpenSearchSnapshotRepositoryReconciler) Reconcile(ctx context.Context, 
 // SetupWithManager sets up the controller with the Manager
 func (r *OpenSearchSnapshotRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1alpha1.OpenSearchSnapshotRepository{}).
+		For(&wazuhv1.OpenSearchSnapshotRepository{}).
 		// Watch Secrets that may contain credentials
 		Watches(
 			&corev1.Secret{},
@@ -94,7 +113,7 @@ func (r *OpenSearchSnapshotRepositoryReconciler) findRepositoriesForSecret(ctx c
 	}
 
 	// List all repositories in the same namespace
-	repoList := &wazuhv1alpha1.OpenSearchSnapshotRepositoryList{}
+	repoList := &wazuhv1.OpenSearchSnapshotRepositoryList{}
 	if err := r.List(ctx, repoList, client.InNamespace(secret.Namespace)); err != nil {
 		log.Error(err, "Failed to list OpenSearchSnapshotRepository resources")
 		return nil

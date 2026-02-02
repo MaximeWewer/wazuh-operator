@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,13 +27,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // BackupJobBuilder builds Job/CronJob resources for Wazuh Manager backups
 type BackupJobBuilder struct {
-	backup         *wazuhv1alpha1.WazuhBackup
+	backup         *wazuhv1.WazuhBackup
 	clusterName    string
 	namespace      string
 	managerPodName string
@@ -41,7 +41,7 @@ type BackupJobBuilder struct {
 }
 
 // NewBackupJobBuilder creates a new BackupJobBuilder
-func NewBackupJobBuilder(backup *wazuhv1alpha1.WazuhBackup) *BackupJobBuilder {
+func NewBackupJobBuilder(backup *wazuhv1.WazuhBackup) *BackupJobBuilder {
 	return &BackupJobBuilder{
 		backup:      backup,
 		clusterName: backup.Spec.ClusterRef.Name,
@@ -344,6 +344,14 @@ func (b *BackupJobBuilder) BuildJob() *batchv1.Job {
 				Spec: corev1.PodSpec{
 					ServiceAccountName: b.serviceAccountName(),
 					RestartPolicy:      corev1.RestartPolicyOnFailure,
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot: func() *bool { b := true; return &b }(),
+						RunAsUser:    func() *int64 { u := int64(1000); return &u }(),
+						FSGroup:      func() *int64 { g := int64(1000); return &g }(),
+						SeccompProfile: &corev1.SeccompProfile{
+							Type: corev1.SeccompProfileTypeRuntimeDefault,
+						},
+					},
 					Containers: []corev1.Container{
 						{
 							Name:            "backup",
@@ -353,6 +361,13 @@ func (b *BackupJobBuilder) BuildJob() *batchv1.Job {
 							Args:            []string{script},
 							Env:             b.buildEnvVars(),
 							Resources:       b.getResources(),
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: func() *bool { b := false; return &b }(),
+								ReadOnlyRootFilesystem:   func() *bool { b := false; return &b }(),
+								Capabilities: &corev1.Capabilities{
+									Drop: []corev1.Capability{"ALL"},
+								},
+							},
 						},
 					},
 				},
@@ -395,6 +410,14 @@ func (b *BackupJobBuilder) BuildCronJob() *batchv1.CronJob {
 						Spec: corev1.PodSpec{
 							ServiceAccountName: b.serviceAccountName(),
 							RestartPolicy:      corev1.RestartPolicyOnFailure,
+							SecurityContext: &corev1.PodSecurityContext{
+								RunAsNonRoot: func() *bool { b := true; return &b }(),
+								RunAsUser:    func() *int64 { u := int64(1000); return &u }(),
+								FSGroup:      func() *int64 { g := int64(1000); return &g }(),
+								SeccompProfile: &corev1.SeccompProfile{
+									Type: corev1.SeccompProfileTypeRuntimeDefault,
+								},
+							},
 							Containers: []corev1.Container{
 								{
 									Name:            "backup",
@@ -404,6 +427,13 @@ func (b *BackupJobBuilder) BuildCronJob() *batchv1.CronJob {
 									Args:            []string{script},
 									Env:             b.buildEnvVars(),
 									Resources:       b.getResources(),
+									SecurityContext: &corev1.SecurityContext{
+										AllowPrivilegeEscalation: func() *bool { b := false; return &b }(),
+										ReadOnlyRootFilesystem:   func() *bool { b := false; return &b }(),
+										Capabilities: &corev1.Capabilities{
+											Drop: []corev1.Capability{"ALL"},
+										},
+									},
 								},
 							},
 						},

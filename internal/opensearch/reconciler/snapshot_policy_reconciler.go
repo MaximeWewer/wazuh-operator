@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 )
 
@@ -52,7 +52,7 @@ func (r *SnapshotPolicyReconciler) WithAPIClient(apiClient *api.Client) *Snapsho
 }
 
 // Reconcile reconciles an OpenSearch snapshot policy
-func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1alpha1.OpenSearchSnapshotPolicy) error {
+func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSearchSnapshotPolicy) error {
 	log := logf.FromContext(ctx)
 
 	if r.APIClient == nil {
@@ -118,7 +118,7 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 }
 
 // buildSnapshotPolicy converts the CRD spec to a snapshot policy
-func (r *SnapshotPolicyReconciler) buildSnapshotPolicy(policy *wazuhv1alpha1.OpenSearchSnapshotPolicy) api.SnapshotPolicy {
+func (r *SnapshotPolicyReconciler) buildSnapshotPolicy(policy *wazuhv1.OpenSearchSnapshotPolicy) api.SnapshotPolicy {
 	snapshotPolicy := api.SnapshotPolicy{
 		Description: policy.Spec.Description,
 		Enabled:     true, // Enabled by default
@@ -176,7 +176,7 @@ func (r *SnapshotPolicyReconciler) buildSnapshotPolicy(policy *wazuhv1alpha1.Ope
 }
 
 // updateStatus updates the policy status
-func (r *SnapshotPolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1alpha1.OpenSearchSnapshotPolicy, phase, message string) error {
+func (r *SnapshotPolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.OpenSearchSnapshotPolicy, phase, message string) error {
 	policy.Status.Phase = phase
 	policy.Status.Message = message
 	now := metav1.Now()
@@ -186,7 +186,7 @@ func (r *SnapshotPolicyReconciler) updateStatus(ctx context.Context, policy *waz
 }
 
 // Delete handles cleanup when a snapshot policy is deleted
-func (r *SnapshotPolicyReconciler) Delete(ctx context.Context, policy *wazuhv1alpha1.OpenSearchSnapshotPolicy) error {
+func (r *SnapshotPolicyReconciler) Delete(ctx context.Context, policy *wazuhv1.OpenSearchSnapshotPolicy) error {
 	log := logf.FromContext(ctx)
 
 	if r.APIClient == nil {

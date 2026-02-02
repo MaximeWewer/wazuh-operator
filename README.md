@@ -1,43 +1,31 @@
 # Wazuh Kubernetes Operator
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-1.24+-blue.svg)](https://kubernetes.io/)
-[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8.svg)](https://golang.org/)
-
 A Kubernetes operator for managing Wazuh clusters, providing a declarative way to deploy and configure Wazuh security monitoring platforms.
 
 ## Features
 
-- **Declarative Cluster Management**: Define your entire Wazuh cluster using Kubernetes custom resources
-- **Automated Deployment**: Automatically provisions Manager (master/workers), Indexer, and Dashboard components
-- **Rule & Decoder Management**: Manage Wazuh detection rules and log decoders as Kubernetes resources
-- **Filebeat Configuration**: Declarative management of Filebeat config, index templates, and ingest pipelines
-- **OpenSearch Security CRDs**: Manage users, roles, role mappings, and tenants declaratively
-- **Index Lifecycle Management**: Configure ISM policies, index templates, and snapshot policies via CRDs
-- **Backup & Restore**: Complete data protection for both OpenSearch indices and Wazuh Manager data
-  - OpenSearch snapshots to S3/MinIO with scheduled and manual triggers
-  - Wazuh Manager backups (agent keys, FIM database, configurations) to S3/MinIO
-  - Point-in-time restore with pre-restore safety backups
-- **TLS Automation**: Auto-generated certificates with hot reload support (Wazuh 4.9+)
-- **Log Rotation**: Automated log cleanup via CronJob with configurable retention
-- **High Availability**: Built-in support for multi-node deployments with pod disruption budgets
-- **Monitoring Ready**: Prometheus exporters and ServiceMonitor integration
-- **Upgrade Management**: Rolling updates with zero-downtime upgrades
-- **Helm Charts**: Both operator and cluster deployment via Helm
+- **Declarative Cluster Management** - Define your entire Wazuh cluster using Kubernetes custom resources
+- **Automated Deployment** - Automatically provisions Manager, Indexer, and Dashboard components
+- **Rule & Decoder Management** - Manage Wazuh detection rules and log decoders as CRDs
+- **OpenSearch Security CRDs** - Manage users, roles, role mappings, and tenants declaratively
+- **Index Lifecycle Management** - Configure ISM policies, index templates, and snapshot policies
+- **Backup & Restore** - OpenSearch snapshots and Wazuh Manager backups to S3/MinIO
+- **TLS Automation** - Auto-generated certificates with hot reload support (Wazuh 4.9+)
+- **High Availability** - Multi-node deployments with pod disruption budgets
+- **Monitoring Ready** - Prometheus metrics and ServiceMonitor integration
+- **OpenTelemetry Tracing** - Distributed tracing support for observability
 
 ## Architecture
-
-The Wazuh operator manages three main components:
 
 ```
 ┌───────────────────────────────────────────────────┐
 │                  WazuhCluster                     │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐   │
-│  │  Manager   │  │  Indexer   │  │ Dashboard  │   │
-│  │ Master+    │  │  (Modified │  │ (Modified  │   │
-│  │ Workers    │  │ OpenSearch)│  │ OpenSearch │   │
-│  └────────────┘  └────────────┘  │ Dashboard) │   │
-│                                  └────────────┘   │
+│  ┌────────────┐  ┌─────────────┐  ┌────────────┐  │
+│  │  Manager   │  │  Indexer    │  │ Dashboard  │  │
+│  │ Master+    │  │  (Modified  │  │ (Modified  │  │
+│  │ Workers    │  │ OpenSearch) │  │ OpenSearch │  │
+│  └────────────┘  └─────────────┘  │ Dashboard) │  │
+│                                   └────────────┘  │
 └───────────────────────────────────────────────────┘
 ```
 
@@ -45,649 +33,96 @@ The Wazuh operator manages three main components:
 
 ### Prerequisites
 
-- Kubernetes 1.24+
-- kubectl configured to access your cluster
+- Kubernetes 1.25+
+- kubectl configured
 - 16GB+ RAM recommended
-- Storage provisioner for PersistentVolumeClaims
 
-### Installation
-
-#### Using Helm (Recommended)
-
-The Helm charts are published to GitHub Container Registry (GHCR):
-
-- **Operator chart**: `oci://ghcr.io/maximewewer/charts/wazuh-operator`
-- **Cluster chart**: `oci://ghcr.io/maximewewer/charts/wazuh-cluster`
-
-1. **Install the operator**:
+### Installation with Helm
 
 ```bash
-# From OCI registry (recommended)
+# Install the operator
 helm install wazuh-operator oci://ghcr.io/maximewewer/charts/wazuh-operator \
   -n wazuh-system --create-namespace
 
-# Or from local chart
-helm install wazuh-operator ./charts/wazuh-operator -n wazuh-system --create-namespace
-```
-
-2. **Verify installation**:
-
-```bash
-kubectl get pods -n wazuh-system
-```
-
-3. **Deploy a Wazuh cluster**:
-
-```bash
-# From OCI registry (recommended)
+# Deploy a Wazuh cluster
 helm install wazuh-cluster oci://ghcr.io/maximewewer/charts/wazuh-cluster \
   -n wazuh --create-namespace
 
-# Or from local chart
-helm install wazuh-cluster ./charts/wazuh-cluster -n wazuh --create-namespace
+# Check status
+kubectl get wazuhcluster -n wazuh
 ```
 
-> **Note:** Credentials (OpenSearch admin, Wazuh API) are automatically generated. See [Credentials Management](docs/usage/features/credentials.md) for details.
-
-#### Using kubectl
-
-1. **Install the operator CRDs**:
+### Access Dashboard
 
 ```bash
-kubectl apply -f config/crd/
+kubectl port-forward svc/wazuh-cluster-dashboard -n wazuh 5601:5601
 ```
 
-2. **Install RBAC resources**:
+Open <https://localhost:5601> - Credentials are auto-generated in secrets.
 
-```bash
-kubectl apply -f config/rbac/
-```
-
-3. **Deploy the operator**:
-
-```bash
-kubectl apply -f config/manager/manager.yaml
-```
-
-4. **Verify installation**:
-
-```bash
-kubectl get pods -n wazuh-system
-```
-
-### Deploy a Wazuh Cluster
-
-1. **Create a WazuhCluster resource**:
-
-```bash
-kubectl apply -f config/samples/wazuh_v1alpha1_wazuhcluster.yaml
-```
-
-2. **Check deployment status**:
-
-```bash
-# Watch the cluster status
-kubectl get wazuhcluster -w
-
-# Get detailed status
-kubectl describe wazuhcluster wazuh-cluster-sample
-
-# Check all pods
-kubectl get pods -l app.kubernetes.io/instance=wazuh-cluster-sample
-```
-
-3. **Access the Dashboard**:
-
-```bash
-# Port-forward to dashboard
-kubectl port-forward svc/wazuh-cluster-sample-dashboard 5601:5601
-```
-
-Open https://localhost:5601 in your browser.
-
-Credentials:
-
-- Username: `admin`
-- Password: Auto-generated. Retrieve from secret:
-
-```bash
-# Get the auto-generated admin password
-kubectl get secret wazuh-cluster-sample-indexer-credentials \
-  -o jsonpath='{.data.admin-password}' | base64 -d && echo
-```
-
-> **Security:** All passwords are cryptographically generated. There are no default passwords like "admin" or "wazuh".
+> See [Quick Start Guide](docs/usage/getting-started/quick-start.md) for detailed instructions.
 
 ## Custom Resource Definitions
 
-**API Group**: `resources.wazuh.com/v1alpha1`
+**API Group**: `resources.wazuh.com/v1`
 
-The operator provides 23 CRDs organized into categories:
+| Category                | CRDs                                                                                                                 | Short Names                                    |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| **Wazuh Core**          | WazuhCluster, WazuhManager, WazuhWorker                                                                              | wc, wmgr, wwork                                |
+| **Wazuh Config**        | WazuhRule, WazuhDecoder, WazuhCertificate, WazuhFilebeat                                                             | wrule, wdecoder, wzcert, wfb                   |
+| **Wazuh Backup**        | WazuhBackup, WazuhRestore                                                                                            | wbak, wrest                                    |
+| **OpenSearch Core**     | OpenSearchIndexer, OpenSearchDashboard                                                                               | osidxr, osdash                                 |
+| **OpenSearch Security** | OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchActionGroup, OpenSearchTenant, OpenSearchAuthConfig | osuser, osrole, osrmap, osag, ostenant, osauth |
+| **OpenSearch Index**    | OpenSearchIndex, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchPolicy, OpenSearchSnapshotPolicy    | osidx, osidxt, osctpl, osism, ossnap           |
+| **OpenSearch Backup**   | OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore                                                  | osrepo, ossnapshot, osrestore                  |
 
-| Category                | CRDs                                                                                                                 | Short Names                            |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| **Wazuh Core**          | WazuhCluster, WazuhManager, WazuhIndexer, WazuhDashboard                                                             | wc, wmgr, widx, wdash                  |
-| **Wazuh Config**        | WazuhRule, WazuhDecoder, WazuhCertificate, WazuhFilebeat                                                             | wrule, wdec, wcert, wfb                |
-| **Wazuh Backup**        | WazuhBackup, WazuhRestore                                                                                            | wbak, wrest                            |
-| **OpenSearch Security** | OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchActionGroup, OpenSearchTenant                       | osuser, osrole, osrmap, osag, ostenant |
-| **OpenSearch Index**    | OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchISMPolicy, OpenSearchIndex, OpenSearchSnapshotPolicy | osidxt, osctpl, osism, osidx, ossnap   |
-| **OpenSearch Backup**   | OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore                                                  | osrepo, ossnapshot, osrest             |
-
-### WazuhCluster
-
-The main CRD for deploying a complete Wazuh cluster. Supports inline or reference mode.
-
-```yaml
-apiVersion: resources.wazuh.com/v1alpha1
-kind: WazuhCluster
-metadata:
-  name: my-wazuh
-spec:
-  version: "4.14.0"
-
-  # Inline mode - define components directly
-  manager:
-    master:
-      storageSize: 50Gi
-      resources:
-        requests:
-          cpu: 500m
-          memory: 512Mi
-    workers:
-      replicas: 2
-      storageSize: 50Gi
-
-  indexer:
-    replicas: 3
-    storageSize: 50Gi
-    resources:
-      requests:
-        cpu: 500m
-        memory: 1Gi
-
-  dashboard:
-    replicas: 2
-    resources:
-      requests:
-        cpu: 500m
-        memory: 512Mi
-```
-
-Or use **reference mode** with separate component CRDs:
-
-```yaml
-apiVersion: resources.wazuh.com/v1alpha1
-kind: WazuhCluster
-metadata:
-  name: my-wazuh
-spec:
-  version: "4.14.0"
-  managerRef:
-    name: my-wazuh-manager
-  indexerRef:
-    name: my-wazuh-indexer
-  dashboardRef:
-    name: my-wazuh-dashboard
-```
-
-### WazuhManager, WazuhIndexer, WazuhDashboard (Separate CRDs)
-
-For complex deployments, use individual component CRDs:
-
-```yaml
-apiVersion: resources.wazuh.com/v1alpha1
-kind: WazuhManager
-metadata:
-  name: my-wazuh-manager
-spec:
-  version: "4.14.0"
-  master:
-    storageSize: "50Gi"
-  workers:
-    replicas: 2
-    storageSize: "50Gi"
----
-apiVersion: resources.wazuh.com/v1alpha1
-kind: WazuhIndexer
-metadata:
-  name: my-wazuh-indexer
-spec:
-  version: "4.14.0"
-  replicas: 3
-  storageSize: "50Gi"
----
-apiVersion: resources.wazuh.com/v1alpha1
-kind: WazuhDashboard
-metadata:
-  name: my-wazuh-dashboard
-spec:
-  version: "4.14.0"
-  replicas: 2
-  indexerRef:
-    name: my-wazuh-indexer
-```
-
-### WazuhRule
-
-Manage Wazuh detection rules declaratively.
-
-```yaml
-apiVersion: resources.wazuh.com/v1alpha1
-kind: WazuhRule
-metadata:
-  name: ssh-brute-force
-spec:
-  clusterRef:
-    name: my-wazuh
-  group: ssh
-  targetNodes: all
-  priority: 100
-  rules: |
-    <group name="ssh,syslog,">
-      <rule id="100001" level="10" frequency="5" timeframe="360">
-        <if_matched_sid>5710</if_matched_sid>
-        <description>SSH brute force detected</description>
-      </rule>
-    </group>
-```
-
-### WazuhDecoder
-
-Manage Wazuh log decoders declaratively.
-
-```yaml
-apiVersion: resources.wazuh.com/v1alpha1
-kind: WazuhDecoder
-metadata:
-  name: nginx-logs
-spec:
-  clusterRef:
-    name: my-wazuh
-  decoderName: nginx
-  targetNodes: all
-  priority: 100
-  decoders: |
-    <decoder name="nginx-access">
-      <program_name>^nginx</program_name>
-      <type>nginx-access</type>
-    </decoder>
-```
-
-### OpenSearch Security CRDs
-
-Manage OpenSearch security resources declaratively:
-
-```yaml
-apiVersion: resources.wazuh.com/v1alpha1
-kind: OpenSearchUser
-metadata:
-  name: wazuh-admin
-spec:
-  clusterRef:
-    name: my-wazuh
-  username: wazuh_admin
-  passwordSecretRef:
-    name: wazuh-admin-secret
-    key: password
-  backendRoles:
-    - admin
----
-apiVersion: resources.wazuh.com/v1alpha1
-kind: OpenSearchRole
-metadata:
-  name: wazuh-alerts-reader
-spec:
-  clusterRef:
-    name: my-wazuh
-  indexPermissions:
-    - indexPatterns:
-        - "wazuh-alerts-*"
-      allowedActions:
-        - read
-        - search
-```
+> See [CRD Reference](docs/usage/CRD-REFERENCE.md) for complete API documentation.
 
 ## Documentation
 
-### User Documentation (`docs/usage/`)
+### User Guide
 
-- **Getting Started**:
-  - [Installation Guide](docs/usage/getting-started/installation.md) - How to install the operator
-  - [Quick Start](docs/usage/getting-started/quick-start.md) - Deploy your first cluster
-- **Feature Guides**:
-  - [Credentials Management](docs/usage/features/credentials.md) - Auto-generated passwords, secrets
-  - [TLS Configuration](docs/usage/features/tls.md) - Certificate management
-  - [Monitoring](docs/usage/features/monitoring.md) - Prometheus integration
-  - [Log Rotation](docs/usage/features/log-rotation.md) - Automated log cleanup
-  - [Filebeat Configuration](docs/usage/features/filebeat-configuration.md) - Index templates, ingest pipelines
-  - [Advanced Indexer Topology](docs/usage/features/advanced-indexer-topology.md) - NodePools, dedicated roles
-  - [Backup & Restore](docs/usage/features/backup-restore.md) - OpenSearch snapshots and Wazuh backups
-  - [Drain Strategy](docs/usage/features/drain-strategy.md) - Safe scale-down operations
-- **Examples**:
-  - [Quick Start Examples](docs/usage/examples/quick-start/) - Minimal deployment
-  - [Production Examples](docs/usage/examples/production/) - Production configuration
-  - [OpenSearch CRDs](docs/usage/examples/opensearch-crds/) - Security and index management
-- **Reference**:
-  - [CRD Reference](docs/usage/CRD-REFERENCE.md) - Complete API documentation
-- **Troubleshooting**:
-  - [Common Issues](docs/usage/troubleshooting/common-issues.md) - Frequently encountered problems
-  - [Debugging Guide](docs/usage/troubleshooting/debugging.md) - How to debug issues
+| Topic                                                                 | Description                       |
+| --------------------------------------------------------------------- | --------------------------------- |
+| [Installation](docs/usage/getting-started/installation.md)            | How to install the operator       |
+| [Quick Start](docs/usage/getting-started/quick-start.md)              | Deploy your first cluster         |
+| [Credentials](docs/usage/features/credentials.md)                     | Auto-generated passwords, secrets |
+| [TLS Configuration](docs/usage/features/tls.md)                       | Certificate management            |
+| [Monitoring](docs/usage/features/monitoring.md)                       | Prometheus integration            |
+| [Backup & Restore](docs/usage/features/backup-restore.md)             | Data protection                   |
+| [Advanced Topology](docs/usage/features/advanced-indexer-topology.md) | NodePools, dedicated roles        |
+| [Examples](docs/usage/examples/)                                      | Configuration examples            |
+| [Troubleshooting](docs/usage/troubleshooting/)                        | Common issues and debugging       |
 
-### Developer Documentation (`docs/dev/`)
+### Developer Guide
 
-- **Architecture**:
-  - [Operator Design](docs/dev/architecture/operator-design.md) - Overall architecture
-  - [Reconciliation Flow](docs/dev/architecture/reconciliation-flow.md) - How reconciliation works
-  - [Certificate Reconciliation](docs/dev/architecture/certificate-reconciliation.md) - TLS internals
-- **Testing**:
-  - [Testing Guide](docs/dev/testing/testing-guide.md) - How to run and write tests
-  - [Certificate Renewal Scenarios](docs/dev/testing/certificate-renewal-scenarios.md) - Certificate tests
-- **Contributing**:
-  - [Contributing Guide](docs/dev/contributing/CONTRIBUTING.md) - How to contribute
-  - [Code Style](docs/dev/contributing/code-style.md) - Coding conventions
-
-## Configuration Examples
-
-### TLS Configuration
-
-TLS is enabled by default with auto-generated certificates:
-
-```yaml
-spec:
-  tls:
-    enabled: true
-    certConfig:
-      organization: "My Organization"
-      validityDays: 365 # Certificate validity
-      renewalThresholdDays: 30 # Renew 30 days before expiry
-      caValidityDays: 730 # CA validity (2 years)
-    hotReload:
-      enabled: true # Reload certs without restart (Wazuh 4.9+)
-```
-
-### Ingress Configuration
-
-```yaml
-spec:
-  dashboard:
-    ingress:
-      enabled: true
-      ingressClassName: nginx
-      hosts:
-        - host: wazuh.example.com
-          paths:
-            - path: /
-              pathType: Prefix
-      tls:
-        - secretName: wazuh-tls
-          hosts:
-            - wazuh.example.com
-```
-
-### High Availability Setup
-
-```yaml
-spec:
-  manager:
-    workers:
-      replicas: 3
-      podDisruptionBudget:
-        enabled: true
-        maxUnavailable: 1
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchLabels:
-                  app: wazuh-manager
-              topologyKey: kubernetes.io/hostname
-
-  indexer:
-    replicas: 3
-    podDisruptionBudget:
-      enabled: true
-      maxUnavailable: 1
-
-  dashboard:
-    replicas: 2
-    podDisruptionBudget:
-      enabled: true
-      maxUnavailable: 1
-```
-
-### Monitoring with Prometheus
-
-```yaml
-spec:
-  monitoring:
-    enabled: true
-    wazuhExporter:
-      enabled: true
-    indexerExporter:
-      enabled: true
-    serviceMonitor:
-      enabled: true
-      labels:
-        release: prometheus
-      interval: 30s
-```
-
-### Log Rotation
-
-```yaml
-spec:
-  manager:
-    logRotation:
-      enabled: true
-      schedule: "0 0 * * 1" # Weekly on Monday
-      retentionDays: 7 # Keep logs for 7 days
-      maxFileSizeMB: 100 # Delete files > 100MB
-      combinationMode: "or" # Delete if old OR large
-```
-
-### Backup & Restore
-
-**OpenSearch Snapshots** - Backup OpenSearch indices to S3/MinIO:
-
-```yaml
-# 1. Create a snapshot repository
-apiVersion: resources.wazuh.com/v1alpha1
-kind: OpenSearchSnapshotRepository
-metadata:
-  name: minio-backups
-spec:
-  clusterRef:
-    name: wazuh-cluster
-  type: s3
-  settings:
-    bucket: wazuh-backups
-    basePath: opensearch
-    endpoint: http://minio.minio.svc:9000
-    pathStyleAccess: true
-    credentialsSecret:
-      name: minio-credentials
----
-# 2. Trigger a manual snapshot before upgrades
-apiVersion: resources.wazuh.com/v1alpha1
-kind: OpenSearchSnapshot
-metadata:
-  name: pre-upgrade
-spec:
-  clusterRef:
-    name: wazuh-cluster
-  repository: minio-backups
-  indices:
-    - "wazuh-alerts-*"
-    - "wazuh-archives-*"
-```
-
-**Wazuh Manager Backups** - Backup agent keys and configuration to S3/MinIO:
-
-```yaml
-apiVersion: resources.wazuh.com/v1alpha1
-kind: WazuhBackup
-metadata:
-  name: daily-backup
-spec:
-  clusterRef:
-    name: wazuh-cluster
-  schedule: "0 2 * * *" # Daily at 2 AM
-  components:
-    agentKeys: true # Critical for agent reconnection
-    fimDatabase: true
-  retention:
-    maxBackups: 14
-  storage:
-    type: s3
-    bucket: wazuh-backups
-    endpoint: http://minio.minio.svc:9000
-    forcePathStyle: true
-    credentialsSecret:
-      name: minio-credentials
-```
-
-See [Backup & Restore Guide](docs/usage/features/backup-restore.md) for full documentation.
-
-## Operations
-
-### Scaling
-
-```bash
-# Scale indexer nodes
-kubectl patch wazuhcluster my-wazuh --type=merge \
-  -p '{"spec":{"indexer":{"replicas":5}}}'
-
-# Scale manager workers
-kubectl patch wazuhcluster my-wazuh --type=merge \
-  -p '{"spec":{"manager":{"workers":{"replicas":4}}}}'
-
-# Scale dashboard
-kubectl patch wazuhcluster my-wazuh --type=merge \
-  -p '{"spec":{"dashboard":{"replicas":3}}}'
-```
-
-### Upgrading
-
-```bash
-# Upgrade to new version
-kubectl patch wazuhcluster my-wazuh --type=merge \
-  -p '{"spec":{"version":"4.13.0"}}'
-
-# Monitor upgrade
-kubectl get wazuhcluster my-wazuh -w
-```
-
-### Backup
-
-```bash
-# Backup cluster configuration
-kubectl get wazuhcluster my-wazuh -o yaml > wazuh-backup.yaml
-
-# Backup rules and decoders
-kubectl get wazuhrules,wazuhdecoders -o yaml > wazuh-config-backup.yaml
-```
+| Topic                                                    | Description                |
+| -------------------------------------------------------- | -------------------------- |
+| [Architecture](docs/dev/architecture/operator-design.md) | Overall design             |
+| [Testing Guide](docs/dev/testing/testing-guide.md)       | How to run and write tests |
+| [Contributing](docs/dev/contributing/CONTRIBUTING.md)    | How to contribute          |
 
 ## Development
-
-### Prerequisites
-
-- Go 1.25+
-- Docker
-- kubectl
-- Access to a Kubernetes cluster
-
-### Project Structure
-
-```
-wazuh-operator/
-├── api/v1alpha1/           # CRD type definitions (flat structure per Kubebuilder)
-├── internal/controller/    # Controller implementations
-│   ├── wazuhcluster/       # WazuhCluster reconciler
-│   ├── certificate/        # Certificate management
-│   ├── opensearch/         # OpenSearch CRD controllers
-│   ├── wazuh/              # Rule and Decoder controllers
-│   └── shared/             # Shared utilities (metrics, status)
-├── pkg/resources/          # Kubernetes resource builders
-│   ├── indexer/            # Indexer resources
-│   ├── manager/            # Manager resources
-│   ├── dashboard/          # Dashboard resources
-│   └── shared/             # Shared utilities (labels, common)
-├── config/                 # Kubernetes manifests
-│   ├── crd/                # Generated CRD manifests
-│   ├── rbac/               # RBAC configuration
-│   └── samples/            # Example resources
-└── charts/                 # Helm charts
-```
-
-### Build
 
 ```bash
 # Generate manifests and code
 make manifests generate
 
-# Build operator binary
-make build
-
-# Run tests
-make test
+# Build and test
+make build test
 
 # Build Docker image
 make docker-build IMG=myregistry/wazuh-operator:dev
+
+# Run locally
+make install run
 ```
 
-### Local Development
-
-```bash
-# Install CRDs
-make install
-
-# Run operator locally
-make run
-
-# In another terminal, create a test cluster
-kubectl apply -f config/samples/wazuh_v1alpha1_wazuhcluster.yaml
-```
+> See [Testing Guide](docs/dev/testing/testing-guide.md) for complete testing instructions.
 
 ## Contributing
 
 We welcome contributions! Please see [CONTRIBUTING.md](docs/dev/contributing/CONTRIBUTING.md) for details.
-
-## Comparison with Helm Chart
-
-| Feature                    | Operator            | Helm Chart        |
-| -------------------------- | ------------------- | ----------------- |
-| Declarative Management     | ✅ Full             | ⚠️ Limited        |
-| Dynamic Rule Management    | ✅ WazuhRule CRD    | ❌ ConfigMap only |
-| Dynamic Decoder Management | ✅ WazuhDecoder CRD | ❌ ConfigMap only |
-| Automatic Upgrades         | ✅ Yes              | ❌ Manual         |
-| Self-Healing               | ✅ Yes              | ⚠️ Limited        |
-| Status Reporting           | ✅ Rich Status      | ❌ No             |
-| Configuration Validation   | ✅ Webhooks         | ❌ No             |
-| Multi-Cluster Support      | ✅ Planned          | ❌ No             |
-
-## Roadmap
-
-- [x] Core operator functionality
-- [x] WazuhCluster CRD
-- [x] WazuhRule CRD
-- [x] WazuhDecoder CRD
-- [x] OpenSearch Security CRDs (User, Role, RoleMapping, Tenant, ActionGroup)
-- [x] OpenSearch Index Management CRDs (IndexTemplate, ISMPolicy, ComponentTemplate, SnapshotPolicy)
-- [x] TLS with auto-generated certificates and hot reload
-- [x] Wazuh (master/worker) log rotation CronJob
-- [x] Helm charts for operator and cluster
-- [x] Prometheus monitoring integration
-- [x] WazuhFilebeat CRD for declarative Filebeat configuration (not released)
-- [x] Advanced Indexer Topology - NodePools with dedicated roles (not released)
-- [x] Drain strategy for scale down (not released)
-- [x] Scaling PVC - increase disk size (not released)
-- [x] Backup & Restore - OpenSearch snapshots and Wazuh Manager backups (not released)
-- [ ] Ability to deploy multiple clusters
-- [ ] More tests
-- [ ] NetworkPolicies
-- [ ] GatewayAPI support
-- [ ] Validation webhooks
-- [ ] OLM/OperatorHub support
 
 ## License
 
@@ -697,7 +132,6 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 - [GitHub Issues](https://github.com/MaximeWewer/wazuh-operator/issues)
 - [Wazuh Documentation](https://documentation.wazuh.com/)
-- [Community Forum](https://groups.google.com/g/wazuh)
 
 ## Acknowledgments
 

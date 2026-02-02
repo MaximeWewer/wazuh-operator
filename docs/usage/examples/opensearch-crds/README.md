@@ -75,7 +75,7 @@ kubectl delete opensearchusers,opensearchroles,opensearchrolemappings --all -n w
 
 See [config/samples/](../../../config/samples/) for more OpenSearch CRD examples:
 
-- `opensearch_v1alpha1_tenant.yaml` - Multi-tenancy
-- `opensearch_v1alpha1_snapshotpolicy.yaml` - Automated backups
-- `opensearch_v1alpha1_componenttemplate.yaml` - Reusable template components
-- `opensearch_v1alpha1_actiongroup.yaml` - Permission groups
+- `opensearch_v1_tenant.yaml` - Multi-tenancy
+- `opensearch_v1_snapshotpolicy.yaml` - Automated backups
+- `opensearch_v1_componenttemplate.yaml` - Reusable template components
+- `opensearch_v1_actiongroup.yaml` - Permission groups

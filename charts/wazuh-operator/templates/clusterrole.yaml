@@ -1,4 +1,4 @@
-{{- if and (include "wazuh-operator.installOperator" .) .Values.rbac.create }}
+{{- if and (include "wazuh-operator.installOperator" .) .Values.rbac.create (not .Values.rbac.namespaceScoped.enabled) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -92,6 +92,22 @@ rules:
   - patch
   - update
   - watch
+# Gateway API resources
+- apiGroups:
+  - gateway.networking.k8s.io
+  resources:
+  - httproutes
+  - tcproutes
+  - udproutes
+  - referencegrants
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 # RBAC resources
 - apiGroups:
   - rbac.authorization.k8s.io
@@ -143,6 +159,11 @@ rules:
   - opensearchsnapshotpolicies
   - opensearchtenants
   - opensearchusers
+  - opensearchsnapshots
+  - opensearchsnapshotrepositories
+  - opensearchrestores
+  - wazuhbackups
+  - wazuhrestores
   verbs:
   - create
   - delete
@@ -174,6 +195,11 @@ rules:
   - opensearchsnapshotpolicies/finalizers
   - opensearchtenants/finalizers
   - opensearchusers/finalizers
+  - opensearchsnapshots/finalizers
+  - opensearchsnapshotrepositories/finalizers
+  - opensearchrestores/finalizers
+  - wazuhbackups/finalizers
+  - wazuhrestores/finalizers
   verbs:
   - update
 - apiGroups:
@@ -199,6 +225,11 @@ rules:
   - opensearchsnapshotpolicies/status
   - opensearchtenants/status
   - opensearchusers/status
+  - opensearchsnapshots/status
+  - opensearchsnapshotrepositories/status
+  - opensearchrestores/status
+  - wazuhbackups/status
+  - wazuhrestores/status
   verbs:
   - get
   - patch

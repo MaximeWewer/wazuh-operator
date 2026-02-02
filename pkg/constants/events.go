@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -102,4 +102,20 @@ const (
 
 	// EventReasonClusterNotReady indicates the referenced WazuhCluster is not ready
 	EventReasonClusterNotReady = "ClusterNotReady"
+)
+
+// Certificate hot reload event reasons
+const (
+	// EventReasonCertificateHotReloadStarted indicates certificate hot reload has started
+	EventReasonCertificateHotReloadStarted = "CertificateHotReloadStarted"
+
+	// EventReasonCertificateHotReloadSucceeded indicates certificate hot reload completed successfully
+	EventReasonCertificateHotReloadSucceeded = "CertificateHotReloadSucceeded"
+
+	// EventReasonCertificateHotReloadFailed indicates certificate hot reload failed
+	EventReasonCertificateHotReloadFailed = "CertificateHotReloadFailed"
+
+	// EventReasonCertificateHotReloadSkipped indicates certificate hot reload was skipped
+	// (e.g., automatic reload for version 4.12+)
+	EventReasonCertificateHotReloadSkipped = "CertificateHotReloadSkipped"
 )

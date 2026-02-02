@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -93,11 +93,6 @@ func NewShardRelocator(client *api.Client, log logr.Logger, nodeName string) *Sh
 	}
 }
 
-// shardKey generates a unique key for a shard
-func shardKey(indexName, shardNum, prirep string) string {
-	return fmt.Sprintf("%s/%s/%s", indexName, shardNum, prirep)
-}
-
 // Start begins tracking shard relocations
 func (r *ShardRelocator) Start(ctx context.Context) error {
 	r.mu.Lock()
@@ -161,7 +156,7 @@ func (r *ShardRelocator) GetProgress(ctx context.Context) (*RelocationProgress, 
 
 	// Calculate percentage
 	if initialCount > 0 {
-		progress.PercentComplete = int32((progress.RelocatedShards * 100) / progress.TotalShards)
+		progress.PercentComplete = (progress.RelocatedShards * 100) / progress.TotalShards
 	} else {
 		progress.PercentComplete = 100
 	}

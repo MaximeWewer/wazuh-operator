@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,8 +21,9 @@ import (
 	"fmt"
 	"text/template"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
+	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
 
 // FilebeatConfig holds configuration for filebeat.yml generation
@@ -200,8 +201,8 @@ func (b *FilebeatConfigBuilder) SetSSLVerificationMode(mode string) *FilebeatCon
 
 // NewFilebeatConfigBuilderFromSpec creates a FilebeatConfigBuilder from a WazuhFilebeatSpec
 // This factory function applies all spec settings to the builder
-func NewFilebeatConfigBuilderFromSpec(spec *wazuhv1alpha1.WazuhFilebeatSpec, clusterName, namespace, indexerService string) *FilebeatConfigBuilder {
-	indexerHost := fmt.Sprintf("%s.%s%s", indexerService, namespace, constants.KubernetesDNSSuffix)
+func NewFilebeatConfigBuilderFromSpec(spec *wazuhv1.WazuhFilebeatSpec, clusterName, namespace, indexerService string) *FilebeatConfigBuilder {
+	indexerHost := dns.ServiceFQDN(indexerService, namespace)
 	builder := NewFilebeatConfigBuilder(DefaultFilebeatConfig(clusterName, indexerHost))
 
 	// Apply alerts config
@@ -244,7 +245,7 @@ func NewFilebeatConfigBuilderFromSpec(spec *wazuhv1alpha1.WazuhFilebeatSpec, clu
 // BuildFilebeatConfig builds filebeat.yml for a Wazuh manager
 // The username parameter should be resolved from the cluster's indexer credentials (CredentialsSecretRef)
 // If username is empty, it defaults to "admin" for backwards compatibility
-func BuildFilebeatConfig(clusterName, namespace, indexerService string, sslVerificationMode string) (string, error) {
+func BuildFilebeatConfig(clusterName, namespace, indexerService, sslVerificationMode string) (string, error) {
 	return BuildFilebeatConfigWithCredentials(clusterName, namespace, indexerService, sslVerificationMode, "", "")
 }
 
@@ -253,7 +254,7 @@ func BuildFilebeatConfig(clusterName, namespace, indexerService string, sslVerif
 // indexer's CredentialsSecretRef and pass them here
 // The password is passed via INDEXER_PASSWORD env var in the container, so only username is embedded
 func BuildFilebeatConfigWithCredentials(clusterName, namespace, indexerService, sslVerificationMode, username, password string) (string, error) {
-	indexerHost := fmt.Sprintf("%s.%s%s", indexerService, namespace, constants.KubernetesDNSSuffix)
+	indexerHost := dns.ServiceFQDN(indexerService, namespace)
 
 	// Default to OpenSearch admin username if no username provided (backwards compatibility)
 	if username == "" {
@@ -284,9 +285,9 @@ func BuildFilebeatConfigWithCredentials(clusterName, namespace, indexerService, 
 	return NewFilebeatConfigBuilder(config).Build()
 }
 
-// GenerateIndexerServiceName generates the indexer service name
+// GenerateIndexerServiceName generates the indexer service name (FQDN)
 func GenerateIndexerServiceName(clusterName, namespace string) string {
-	return fmt.Sprintf("%s-indexer.%s%s", clusterName, namespace, constants.KubernetesDNSSuffix)
+	return dns.ServiceFQDN(clusterName+"-indexer", namespace)
 }
 
 // filebeatConfigTemplate is the template for generating filebeat.yml

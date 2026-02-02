@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -116,7 +116,7 @@ func (c *ManagerHealthChecker) Check(ctx context.Context) (*ManagerHealthStatus,
 
 	// Check API health
 	apiURL := fmt.Sprintf("https://%s:%d/", c.host, c.port)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, http.NoBody)
 	if err != nil {
 		status.Error = fmt.Sprintf("failed to create request: %v", err)
 		return status, err
@@ -170,7 +170,7 @@ type ClusterStatus struct {
 // getClusterStatus gets the cluster status from the API
 func (c *ManagerHealthChecker) getClusterStatus(ctx context.Context) (*ClusterStatus, error) {
 	url := fmt.Sprintf("https://%s:%d/cluster/status", c.host, c.port)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +215,7 @@ type AgentStats struct {
 // getAgentStats gets agent statistics from the API
 func (c *ManagerHealthChecker) getAgentStats(ctx context.Context) (*AgentStats, error) {
 	url := fmt.Sprintf("https://%s:%d/agents/summary/status", c.host, c.port)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}

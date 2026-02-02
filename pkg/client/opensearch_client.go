@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -110,7 +110,7 @@ func (c *OpenSearchClient) IsHealthy(ctx context.Context) bool {
 }
 
 // CreateIndex creates an index with the given settings
-func (c *OpenSearchClient) CreateIndex(ctx context.Context, indexName string, settings map[string]interface{}) error {
+func (c *OpenSearchClient) CreateIndex(ctx context.Context, indexName string, settings map[string]any) error {
 	return c.adapter.CreateIndex(ctx, indexName, settings)
 }
 

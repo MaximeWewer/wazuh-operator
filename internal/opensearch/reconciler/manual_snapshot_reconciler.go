@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -60,7 +60,7 @@ func (r *ManualSnapshotReconciler) WithAPIClient(apiClient *api.Client) *ManualS
 }
 
 // Reconcile reconciles an OpenSearch manual snapshot
-func (r *ManualSnapshotReconciler) Reconcile(ctx context.Context, snapshot *wazuhv1alpha1.OpenSearchSnapshot) error {
+func (r *ManualSnapshotReconciler) Reconcile(ctx context.Context, snapshot *wazuhv1.OpenSearchSnapshot) error {
 	log := logf.FromContext(ctx)
 
 	// Handle finalizer
@@ -139,7 +139,7 @@ func (r *ManualSnapshotReconciler) generateSnapshotName(baseName string) string 
 }
 
 // updateSnapshotStatus polls and updates snapshot status from OpenSearch
-func (r *ManualSnapshotReconciler) updateSnapshotStatus(ctx context.Context, snapshot *wazuhv1alpha1.OpenSearchSnapshot, snapshotsAPI *api.SnapshotsAPI) error {
+func (r *ManualSnapshotReconciler) updateSnapshotStatus(ctx context.Context, snapshot *wazuhv1.OpenSearchSnapshot, snapshotsAPI *api.SnapshotsAPI) error {
 	log := logf.FromContext(ctx)
 
 	snapshotName := snapshot.Status.SnapshotName
@@ -165,7 +165,7 @@ func (r *ManualSnapshotReconciler) updateSnapshotStatus(ctx context.Context, sna
 	statusResult, err := snapshotsAPI.GetSnapshotStatus(ctx, snapshot.Spec.Repository, snapshotName)
 	if err == nil && statusResult != nil && len(statusResult.Snapshots) > 0 {
 		status := statusResult.Snapshots[0]
-		snapshot.Status.Shards = &wazuhv1alpha1.ShardStats{
+		snapshot.Status.Shards = &wazuhv1.ShardStats{
 			Total:      int32(status.ShardsStats.Total),
 			Successful: int32(status.ShardsStats.Successful),
 			Failed:     int32(status.ShardsStats.Failed),
@@ -215,7 +215,7 @@ func (r *ManualSnapshotReconciler) updateSnapshotStatus(ctx context.Context, sna
 }
 
 // handleDeletion handles snapshot cleanup on CRD deletion
-func (r *ManualSnapshotReconciler) handleDeletion(ctx context.Context, snapshot *wazuhv1alpha1.OpenSearchSnapshot) error {
+func (r *ManualSnapshotReconciler) handleDeletion(ctx context.Context, snapshot *wazuhv1.OpenSearchSnapshot) error {
 	log := logf.FromContext(ctx)
 
 	// Note: We don't delete the actual snapshot from OpenSearch
@@ -236,7 +236,7 @@ func (r *ManualSnapshotReconciler) handleDeletion(ctx context.Context, snapshot 
 }
 
 // updateStatus updates the snapshot status
-func (r *ManualSnapshotReconciler) updateStatus(ctx context.Context, snapshot *wazuhv1alpha1.OpenSearchSnapshot, phase, state, message string) error {
+func (r *ManualSnapshotReconciler) updateStatus(ctx context.Context, snapshot *wazuhv1.OpenSearchSnapshot, phase, state, message string) error {
 	snapshot.Status.Phase = phase
 	snapshot.Status.Message = message
 	if state != "" {
@@ -247,12 +247,13 @@ func (r *ManualSnapshotReconciler) updateStatus(ctx context.Context, snapshot *w
 	// Set condition
 	conditionStatus := metav1.ConditionFalse
 	reason := "SnapshotInProgress"
-	if phase == constants.SnapshotPhaseCompleted {
+	switch phase {
+	case constants.SnapshotPhaseCompleted:
 		conditionStatus = metav1.ConditionTrue
 		reason = "SnapshotComplete"
-	} else if phase == constants.SnapshotPhaseFailed {
+	case constants.SnapshotPhaseFailed:
 		reason = "SnapshotFailed"
-	} else if phase == constants.SnapshotPhasePartial {
+	case constants.SnapshotPhasePartial:
 		conditionStatus = metav1.ConditionTrue
 		reason = "SnapshotPartial"
 	}
@@ -294,6 +295,6 @@ func formatDuration(d time.Duration) string {
 }
 
 // Delete handles cleanup when a snapshot CRD is deleted (called by controller)
-func (r *ManualSnapshotReconciler) Delete(ctx context.Context, snapshot *wazuhv1alpha1.OpenSearchSnapshot) error {
+func (r *ManualSnapshotReconciler) Delete(ctx context.Context, snapshot *wazuhv1.OpenSearchSnapshot) error {
 	return r.handleDeletion(ctx, snapshot)
 }

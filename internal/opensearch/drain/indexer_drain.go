@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import (
 	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	drainstate "github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
@@ -46,7 +46,7 @@ type IndexerDrainer interface {
 	CancelDrain(ctx context.Context) error
 
 	// EvaluateFeasibility checks if drain is feasible without executing (for dry-run)
-	EvaluateFeasibility(ctx context.Context, nodeName string) (*v1alpha1.DryRunResult, error)
+	EvaluateFeasibility(ctx context.Context, nodeName string) (*v1.DryRunResult, error)
 }
 
 // DrainProgress represents the current state of a drain operation
@@ -80,7 +80,7 @@ type IndexerDrainerImpl struct {
 }
 
 // NewIndexerDrainer creates a new IndexerDrainer instance
-func NewIndexerDrainer(client *api.Client, log logr.Logger, config *v1alpha1.IndexerDrainConfig) *IndexerDrainerImpl {
+func NewIndexerDrainer(client *api.Client, log logr.Logger, config *v1.IndexerDrainConfig) *IndexerDrainerImpl {
 	timeout := constants.DefaultIndexerDrainTimeout
 	healthCheckInterval := constants.DefaultIndexerHealthCheckInterval
 
@@ -213,8 +213,8 @@ func (d *IndexerDrainerImpl) CancelDrain(ctx context.Context) error {
 }
 
 // EvaluateFeasibility checks if drain is feasible without executing (dry-run mode)
-func (d *IndexerDrainerImpl) EvaluateFeasibility(ctx context.Context, nodeName string) (*v1alpha1.DryRunResult, error) {
-	result := &v1alpha1.DryRunResult{
+func (d *IndexerDrainerImpl) EvaluateFeasibility(ctx context.Context, nodeName string) (*v1.DryRunResult, error) {
+	result := &v1.DryRunResult{
 		Feasible:    true,
 		EvaluatedAt: metav1.Now(),
 		Component:   constants.DrainComponentIndexer,
@@ -286,7 +286,7 @@ func (d *IndexerDrainerImpl) EvaluateFeasibility(ctx context.Context, nodeName s
 }
 
 // WaitForDrainComplete blocks until drain completes or timeout
-func (d *IndexerDrainerImpl) WaitForDrainComplete(ctx context.Context, nodeName string, status *v1alpha1.ComponentDrainStatus) error {
+func (d *IndexerDrainerImpl) WaitForDrainComplete(ctx context.Context, nodeName string, status *v1.ComponentDrainStatus) error {
 	startTime := time.Now()
 	ticker := time.NewTicker(d.healthCheckInterval)
 	defer ticker.Stop()

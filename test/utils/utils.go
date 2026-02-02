@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package utils
+package utils //nolint:revive // utils is a common package name for test utilities
 
 import (
 	"bufio"
@@ -24,7 +24,7 @@ import (
 	"os/exec"
 	"strings"
 
-	. "github.com/onsi/ginkgo/v2" // nolint:revive,staticcheck
+	. "github.com/onsi/ginkgo/v2" //nolint:revive,staticcheck // Dot import required for Ginkgo DSL (Describe, It, etc.)
 )
 
 const (
@@ -90,7 +90,7 @@ func InstallCertManager() error {
 	}
 	// Wait for cert-manager-webhook to be ready, which can take time if cert-manager
 	// was re-installed after uninstalling on a cluster.
-	cmd = exec.Command("kubectl", "wait", "deployment.apps/cert-manager-webhook",
+	cmd = exec.Command("kubectl", "wait", "deployment.apps/cert-manager-webhook", //nolint:noctx // Test utility function
 		"--for", "condition=Available",
 		"--namespace", "cert-manager",
 		"--timeout", "5m",
@@ -114,7 +114,7 @@ func IsCertManagerCRDsInstalled() bool {
 	}
 
 	// Execute the kubectl command to get all CRDs
-	cmd := exec.Command("kubectl", "get", "crds")
+	cmd := exec.Command("kubectl", "get", "crds") //nolint:noctx // Test utility function
 	output, err := Run(cmd)
 	if err != nil {
 		return false
@@ -176,9 +176,7 @@ func GetProjectDir() (string, error) {
 // UncommentCode searches for target in the file and remove the comment prefix
 // of the target content. The target content may span multiple lines.
 func UncommentCode(filename, target, prefix string) error {
-	// false positive
-	// nolint:gosec
-	content, err := os.ReadFile(filename)
+	content, err := os.ReadFile(filename) //nolint:gosec // False positive: filename is controlled by test code
 	if err != nil {
 		return fmt.Errorf("failed to read file %q: %w", filename, err)
 	}
@@ -216,9 +214,7 @@ func UncommentCode(filename, target, prefix string) error {
 		return fmt.Errorf("failed to write to output: %w", err)
 	}
 
-	// false positive
-	// nolint:gosec
-	if err = os.WriteFile(filename, out.Bytes(), 0644); err != nil {
+	if err = os.WriteFile(filename, out.Bytes(), 0o644); err != nil { //nolint:gosec // False positive: filename and content are controlled by test code
 		return fmt.Errorf("failed to write file %q: %w", filename, err)
 	}
 

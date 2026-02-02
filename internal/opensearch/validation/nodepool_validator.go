@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -61,7 +61,7 @@ var nodePoolNameRegex = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 
 // ValidateNodePools validates the complete nodePool configuration
 // This includes mode exclusivity, quorum requirements, and data node minimum
-func ValidateNodePools(spec *v1alpha1.WazuhIndexerClusterSpec) *ValidationResult {
+func ValidateNodePools(spec *v1.WazuhIndexerClusterSpec) *ValidationResult {
 	result := &ValidationResult{Valid: true}
 
 	// Check mode exclusivity: cannot have both replicas and nodePools
@@ -144,7 +144,7 @@ func ValidateNodePools(spec *v1alpha1.WazuhIndexerClusterSpec) *ValidationResult
 }
 
 // ValidateNodePoolSpec validates a single nodePool specification
-func ValidateNodePoolSpec(pool *v1alpha1.IndexerNodePoolSpec, fieldPrefix string) *ValidationResult {
+func ValidateNodePoolSpec(pool *v1.IndexerNodePoolSpec, fieldPrefix string) *ValidationResult {
 	result := &ValidationResult{Valid: true}
 
 	// Validate name
@@ -205,7 +205,7 @@ func ValidateModeTransition(currentMode, newMode string) error {
 
 // ValidateScaleDown checks if a nodePool scale-down is safe
 // Returns warnings and blockers
-func ValidateScaleDown(pool *v1alpha1.IndexerNodePoolSpec, currentReplicas, desiredReplicas int32, totalClusterManagers int32) *ValidationResult {
+func ValidateScaleDown(pool *v1.IndexerNodePoolSpec, currentReplicas, desiredReplicas, totalClusterManagers int32) *ValidationResult {
 	result := &ValidationResult{Valid: true}
 
 	if desiredReplicas >= currentReplicas {
@@ -233,7 +233,7 @@ func ValidateScaleDown(pool *v1alpha1.IndexerNodePoolSpec, currentReplicas, desi
 }
 
 // isValidRole checks if a role is a valid OpenSearch node role
-func isValidRole(role v1alpha1.IndexerNodeRole) bool {
+func isValidRole(role v1.IndexerNodeRole) bool {
 	roleStr := string(role)
 	return constants.IsValidOpenSearchRole(roleStr)
 }

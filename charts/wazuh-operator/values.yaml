@@ -1,229 +1,495 @@
 # Default values for wazuh-operator.
 # This is a YAML-formatted file.
-# Declare variables to be passed into your templates.
 
-# ============================================
-# Name Overrides
-# ============================================
+# @section Name Overrides
 
-# Override the name of the chart
+# -- Override the name of the chart
 nameOverride: ""
 
-# Override the full name of the release
+# -- Override the full name of the release
 fullnameOverride: ""
 
-# ============================================
-# Deployment Mode Configuration
-# ============================================
+# @section Deployment Mode Configuration
 
-# deploymentMode determines what gets deployed:
-# - "operator": Deploy the operator (without CRDs if crds.install=false)
-# - "crds": Deploy only CRDs (no operator)
-# - "all": Deploy both CRDs and operator
+# -- Deployment mode: "all" (CRDs + operator), "crds" (CRDs only), "operator" (operator only)
 deploymentMode: "all"
 
-# ============================================
-# CRD Configuration
-# ============================================
+# @section CRD Configuration
 
 crds:
-  # Install CRDs as part of the chart
-  # Set to false if CRDs are managed separately or already installed
+  # -- Install CRDs as part of the chart. Set to false if CRDs are managed separately.
   install: true
 
-# ============================================
-# Operator Configuration
-# ============================================
+# @section Operator Configuration
 
 operator:
-  # Enable operator deployment
-  # Set to false for CRD-only deployment
+  # -- Enable operator deployment. Set to false for CRD-only deployment.
   enabled: true
 
+  # @extra operator.image Container image configuration
   image:
+    # -- Operator image repository
     repository: ghcr.io/maximewewer/wazuh-operator
+    # -- Image pull policy
     pullPolicy: IfNotPresent
-    # Overrides the image tag whose default is the chart appVersion
+    # -- Image tag (defaults to chart appVersion)
     tag: ""
 
-  # Image pull secrets for private registries
-  imagePullSecrets:
-    []
+  # -- Image pull secrets for private registries
+  imagePullSecrets: []
     # - name: docker-registry-secret
 
-  # Operator name
+  # -- Operator name
   name: "wazuh-operator"
 
-  # Health probe configuration
+  # -- Kubernetes cluster DNS domain. Change if using custom CoreDNS configuration.
+  # @default -- `"cluster.local"`
+  clusterDomain: "cluster.local"
+
+  # -- vm.max_map_count kernel parameter for OpenSearch. Init container sets this if system value is lower.
+  # @default -- `262144`
+  vmMaxMapCount: 262144
+
+  # @extra operator.logging Logging configuration
+  logging:
+    # -- Log format: "json" (production) or "console" (human-readable)
+    format: "json"
+    # -- Log level: "debug", "info", "warn", "error"
+    level: "info"
+
+  # @extra operator.rateLimiting Rate limiting for reconcilers
+  rateLimiting:
+    # -- Enable rate limiting
+    enabled: true
+    # -- Maximum concurrent reconciliations per controller
+    maxConcurrentReconciles: 3
+    # -- Base delay for exponential backoff on failures
+    baseDelay: "5ms"
+    # -- Maximum delay for exponential backoff
+    maxDelay: "1000s"
+    # -- Queries per second limit
+    qps: 10
+    # -- Burst size for rate limiter bucket
+    burst: 100
+
+  # @extra operator.healthProbe Health probe configuration
   healthProbe:
+    # -- Health probe port
     port: 8081
+    # -- Initial delay before probing
     initialDelaySeconds: 15
+    # -- Probe interval
     periodSeconds: 20
 
-  # Metrics configuration
+  # @extra operator.metrics Metrics configuration
   metrics:
+    # -- Enable Prometheus metrics
     enabled: true
+    # -- Metrics port
     port: 8080
-    # Service for metrics
+    # @extra operator.metrics.service Metrics service configuration
     service:
+      # -- Metrics service type
       type: ClusterIP
+      # -- Metrics service annotations
       annotations: {}
 
-  # Service monitor for Prometheus Operator
+  # @extra operator.serviceMonitor Prometheus ServiceMonitor configuration
   serviceMonitor:
+    # -- Enable ServiceMonitor for Prometheus Operator
     enabled: false
-    # Additional labels for service monitor
-    labels:
-      {}
+    # -- Additional labels for ServiceMonitor
+    labels: {}
       # prometheus: kube-prometheus
+    # -- Scrape interval
     interval: "30s"
+    # -- Scrape timeout
     scrapeTimeout: "10s"
 
-  # Resources for operator pod
+  # @extra operator.prometheusRules Prometheus alerting rules
+  prometheusRules:
+    # -- Enable PrometheusRule resource
+    enabled: false
+    # -- Additional labels for PrometheusRule
+    labels: {}
+    # @extra operator.prometheusRules.alerts Alert configurations
+    alerts:
+      # @extra operator.prometheusRules.alerts.clusterUnhealthy Cluster unhealthy alert
+      clusterUnhealthy:
+        for: "5m"
+        severity: warning
+        labels: {}
+        runbookUrl: ""
+      # @extra operator.prometheusRules.alerts.clusterCritical Cluster critical alert
+      clusterCritical:
+        for: "2m"
+        severity: critical
+        labels: {}
+        runbookUrl: ""
+      # @extra operator.prometheusRules.alerts.componentUnhealthy Component unhealthy alert
+      componentUnhealthy:
+        for: "5m"
+        severity: warning
+      # @extra operator.prometheusRules.alerts.replicasMismatch Replicas mismatch alert
+      replicasMismatch:
+        for: "10m"
+        severity: warning
+      # @extra operator.prometheusRules.alerts.certExpiringSoon Certificate expiring alert
+      certExpiringSoon:
+        threshold: 30  # days
+        for: "1h"
+        severity: warning
+      # @extra operator.prometheusRules.alerts.certExpiryCritical Certificate critical alert
+      certExpiryCritical:
+        threshold: 7  # days
+        for: "1h"
+        severity: critical
+      # @extra operator.prometheusRules.alerts.certExpired Certificate expired alert
+      certExpired:
+        for: "5m"
+        severity: critical
+      # @extra operator.prometheusRules.alerts.reconcileErrors Reconcile errors alert
+      reconcileErrors:
+        threshold: 0.1  # errors per second
+        for: "10m"
+        severity: warning
+      # @extra operator.prometheusRules.alerts.reconcileDuration Reconcile duration alert
+      reconcileDuration:
+        threshold: 60  # seconds (P99)
+        for: "15m"
+        severity: warning
+      # @extra operator.prometheusRules.alerts.operatorDown Operator down alert
+      operatorDown:
+        for: "5m"
+        severity: critical
+
+  # @extra operator.resources Resource requests and limits
   resources:
+    # @extra operator.resources.limits Resource limits
     limits:
+      # -- CPU limit
       cpu: 500m
+      # -- Memory limit
       memory: 512Mi
+    # @extra operator.resources.requests Resource requests
     requests:
+      # -- CPU request
       cpu: 100m
+      # -- Memory request
       memory: 128Mi
 
-  # Node selector for operator pod
-  nodeSelector:
-    {}
+  # -- Node selector for operator pod
+  nodeSelector: {}
     # node-role.kubernetes.io/control-plane: ""
 
-  # Tolerations for operator pod
-  tolerations:
-    []
+  # -- Tolerations for operator pod
+  tolerations: []
     # - key: "node-role.kubernetes.io/control-plane"
     #   operator: "Exists"
     #   effect: "NoSchedule"
 
-  # Affinity for operator pod
+  # -- Affinity for operator pod
   affinity: {}
 
-  # Security context for operator pod
+  # @extra operator.podSecurityContext Pod security context
   podSecurityContext:
+    # -- Run as non-root user
     runAsNonRoot: true
+    # @extra operator.podSecurityContext.seccompProfile Seccomp profile
     seccompProfile:
+      # -- Seccomp profile type
       type: RuntimeDefault
 
-  # Security context for operator container
+  # @extra operator.securityContext Container security context
   securityContext:
+    # -- Prevent privilege escalation
     allowPrivilegeEscalation: false
+    # @extra operator.securityContext.capabilities Linux capabilities
     capabilities:
+      # -- Drop all capabilities
       drop:
         - ALL
+    # -- Read-only root filesystem
     readOnlyRootFilesystem: true
 
-  # Pod annotations
+  # -- Pod annotations
   podAnnotations: {}
 
-  # Service account configuration
+  # @extra operator.serviceAccount Service account configuration
   serviceAccount:
-    # Specifies whether a service account should be created
+    # -- Create service account
     create: true
-    # Annotations to add to the service account
+    # -- Service account annotations
     annotations: {}
-    # The name of the service account to use.
-    # If not set and create is true, a name is generated using the fullname template
+    # -- Service account name (auto-generated if empty)
     name: ""
 
-  # Environment variables for operator
-  env:
-    []
+  # -- Environment variables for operator container
+  env: []
     # - name: LOG_LEVEL
     #   value: "info"
 
-  # Extra volumes
-  extraVolumes:
-    []
+  # -- Extra volumes
+  extraVolumes: []
     # - name: tmp
     #   emptyDir: {}
 
-  # Extra volume mounts
-  extraVolumeMounts:
-    []
+  # -- Extra volume mounts
+  extraVolumeMounts: []
     # - name: tmp
     #   mountPath: /tmp
 
-# ============================================
-# RBAC Configuration
-# ============================================
+# @section RBAC Configuration
 
 rbac:
-  # Create RBAC resources
+  # -- Create RBAC resources
   create: true
 
-  # Role name
-  # If not set, a name is generated using the fullname template
+  # -- Role name (auto-generated if empty)
   roleName: ""
 
-  # Additional rules for the operator role
-  extraRules:
-    []
+  # -- Additional rules for the operator role
+  extraRules: []
     # - apiGroups: [""]
     #   resources: ["configmaps"]
     #   verbs: ["get", "list"]
 
-# ============================================
-# Namespace Configuration
-# ============================================
+  # @extra rbac.namespaceScoped Namespace-scoped RBAC for multi-tenant deployments
+  namespaceScoped:
+    # -- Enable namespace-scoped RBAC (creates Role/RoleBinding per namespace)
+    enabled: false
+    # -- List of namespaces the operator should manage (empty = release namespace only)
+    namespaces: []
+    # Example:
+    # namespaces:
+    #   - wazuh-prod
+    #   - wazuh-staging
+    #   - wazuh-dev
+
+# @section Namespace Configuration
 
 namespace:
-  # Create namespace for operator
+  # -- Create namespace for operator
   create: false
 
-  # Namespace name
-  # If not set, uses Release.Namespace
+  # -- Namespace name (defaults to Release.Namespace)
   name: ""
 
-  # Namespace labels
-  labels:
-    {}
+  # -- Namespace labels
+  labels: {}
     # environment: production
 
-  # Namespace annotations
+  # -- Namespace annotations
   annotations: {}
 
-# ============================================
-# Common Labels
-# ============================================
+# @section Common Labels
 
-# Additional labels to add to all resources
-commonLabels:
-  {}
+# -- Additional labels to add to all resources
+commonLabels: {}
   # managed-by: helm
   # environment: production
 
-# Additional annotations to add to all resources
+# -- Additional annotations to add to all resources
 commonAnnotations: {}
 
-# ============================================
-# Advanced Configuration
-# ============================================
+# @section OpenTelemetry Configuration
 
-# Additional arguments for the operator
-# Commonly used args:
-# - --zap-log-level=debug     # Set log level (debug, info, error)
-# - --zap-encoder=console     # Use console encoder instead of JSON
-# - --zap-stacktrace-level=error  # Enable stacktraces at error level
-# - --zap-devel=true          # Enable development mode (more verbose)
-extraArgs:
-  []
+telemetry:
+  # -- Enable OpenTelemetry distributed tracing
+  enabled: false
+
+  # -- OTLP exporter endpoint (gRPC). Examples: "jaeger-collector.observability:4317", "otel-collector.monitoring:4317"
+  endpoint: ""
+
+  # -- Use insecure connection (no TLS). Set to true for local development or service mesh.
+  insecure: true
+
+  # -- Service name reported in traces
+  serviceName: "wazuh-operator"
+
+  # -- Service version reported in traces (defaults to chart appVersion)
+  serviceVersion: ""
+
+# @section Gateway API Configuration
+
+gatewayAPI:
+  # -- Enable Gateway API support. When enabled, operator watches HTTPRoute, TCPRoute, UDPRoute resources.
+  enabled: false
+
+# @section Advanced Configuration
+
+# -- Additional arguments for the operator. Common: --zap-log-level=debug, --zap-encoder=console
+extraArgs: []
   # - --zap-log-level=debug
   # - --zap-encoder=console
 
-# Certificate test mode - enables short-lived certificates (5 min validity)
-# DO NOT USE IN PRODUCTION - Only for testing certificate renewal
-certTestMode: false
-
-# Non-blocking rollouts - enables parallel certificate renewals
-# When true, certificate renewals don't block waiting for pod rollouts
-# This allows all components to renew certificates in parallel
-# Recommended: true (default)
+# -- Enable non-blocking rollouts for parallel certificate renewals
 nonBlockingRollouts: true
 
-# Termination grace period seconds
+# -- Termination grace period in seconds
 terminationGracePeriodSeconds: 10
+
+# @section High Availability Configuration
+
+# -- Number of operator replicas. For HA, set > 1 AND enable leaderElection.
+replicaCount: 1
+
+# @extra leaderElection Leader Election for HA deployments
+leaderElection:
+  # -- Enable leader election (REQUIRED when replicaCount > 1)
+  enabled: false
+  # -- Leader election lease name
+  id: "wazuh-operator-leader"
+
+# @section Update Strategy Configuration
+
+# @extra updateStrategy Rolling update strategy
+updateStrategy:
+  # -- Update strategy type
+  type: RollingUpdate
+  # @extra updateStrategy.rollingUpdate Rolling update parameters
+  rollingUpdate:
+    # -- Max unavailable pods during update
+    maxUnavailable: 0
+    # -- Max extra pods during update
+    maxSurge: 1
+
+# @section Network Policy Configuration
+
+networkPolicy:
+  # -- Enable NetworkPolicy for operator namespace
+  enabled: false
+
+  # @extra networkPolicy.prometheus Prometheus configuration for metrics scraping
+  prometheus:
+    # -- Namespace selector for Prometheus pods
+    namespaceSelector: {}
+    # -- Pod selector for Prometheus pods
+    podSelector: {}
+    # Example:
+    # namespaceSelector:
+    #   matchLabels:
+    #     kubernetes.io/metadata.name: monitoring
+    # podSelector:
+    #   matchLabels:
+    #     app.kubernetes.io/name: prometheus
+
+  # @extra networkPolicy.apiServer Kubernetes API server configuration
+  apiServer:
+    # -- CIDR for API server access
+    cidr: "0.0.0.0/0"
+
+  # -- Managed namespaces (where Wazuh clusters run). If empty, allows egress to all namespaces.
+  managedNamespaces: []
+  # Example:
+  # managedNamespaces:
+  #   - wazuh
+  #   - wazuh-prod
+  #   - wazuh-staging
+
+# @section Resource Quota Configuration
+
+resourceQuota:
+  # -- Enable ResourceQuota and LimitRange for operator namespace
+  enabled: false
+
+  # -- Maximum number of pods in namespace
+  pods: "10"
+
+  # @extra resourceQuota.requests Resource request limits
+  requests:
+    # -- Total CPU requests limit
+    cpu: "2"
+    # -- Total memory requests limit
+    memory: "4Gi"
+
+  # @extra resourceQuota.limits Resource limits
+  limits:
+    # -- Total CPU limits
+    cpu: "4"
+    # -- Total memory limits
+    memory: "8Gi"
+
+  # -- Maximum ConfigMaps in namespace
+  configmaps: "20"
+  # -- Maximum Secrets in namespace
+  secrets: "20"
+  # -- Maximum Services in namespace
+  services: "10"
+
+  # @extra resourceQuota.limitRange LimitRange for containers without explicit resources
+  limitRange:
+    # @extra resourceQuota.limitRange.defaultRequest Default requests
+    defaultRequest:
+      # -- Default CPU request
+      cpu: "100m"
+      # -- Default memory request
+      memory: "128Mi"
+    # @extra resourceQuota.limitRange.default Default limits
+    default:
+      # -- Default CPU limit
+      cpu: "500m"
+      # -- Default memory limit
+      memory: "512Mi"
+    # @extra resourceQuota.limitRange.max Maximum allowed
+    max:
+      # -- Maximum CPU per container
+      cpu: "2"
+      # -- Maximum memory per container
+      memory: "4Gi"
+    # @extra resourceQuota.limitRange.min Minimum required
+    min:
+      # -- Minimum CPU per container
+      cpu: "50m"
+      # -- Minimum memory per container
+      memory: "64Mi"
+
+# @section Admission Webhook Configuration
+
+webhook:
+  # -- Enable admission webhooks for CR validation
+  enabled: false
+
+  # -- Failure policy: Fail or Ignore
+  failurePolicy: Fail
+
+  # -- CA bundle for webhook TLS (not needed with cert-manager)
+  caBundle: ""
+
+  # -- Namespace selector to limit webhook scope
+  namespaceSelector: {}
+  # Example:
+  # namespaceSelector:
+  #   matchLabels:
+  #     wazuh-webhook: enabled
+
+# @section cert-manager Integration
+
+certManager:
+  # -- Enable cert-manager for TLS certificate management
+  enabled: false
+
+  # @extra certManager.ca CA certificate settings
+  ca:
+    # -- CA certificate duration (default: 10 years)
+    duration: "87600h"
+    # -- Renew before expiration (default: 90 days)
+    renewBefore: "2160h"
+
+  # @extra certManager.webhook Webhook certificate settings
+  webhook:
+    # -- Enable webhook certificate
+    enabled: true
+    # -- Certificate duration (default: 1 year)
+    duration: "8760h"
+    # -- Renew before expiration (default: 30 days)
+    renewBefore: "720h"
+
+  # @extra certManager.metrics Metrics server certificate settings
+  metrics:
+    # -- Enable metrics certificate for secure scraping
+    enabled: false
+    # -- Certificate duration (default: 1 year)
+    duration: "8760h"
+    # -- Renew before expiration (default: 30 days)
+    renewBefore: "720h"

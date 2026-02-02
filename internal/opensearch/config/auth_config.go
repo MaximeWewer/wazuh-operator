@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,18 +21,18 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
 // AuthConfigBuilder builds the config.yml authentication section from CRD spec
 type AuthConfigBuilder struct {
-	authConfig *v1alpha1.OpenSearchAuthConfigSpec
+	authConfig *v1.OpenSearchAuthConfigSpec
 	// Resolved secrets (populated by reconciler)
 	resolvedSecrets map[string]string
 }
 
 // NewAuthConfigBuilder creates a new AuthConfigBuilder
-func NewAuthConfigBuilder(spec *v1alpha1.OpenSearchAuthConfigSpec) *AuthConfigBuilder {
+func NewAuthConfigBuilder(spec *v1.OpenSearchAuthConfigSpec) *AuthConfigBuilder {
 	return &AuthConfigBuilder{
 		authConfig:      spec,
 		resolvedSecrets: make(map[string]string),
@@ -53,9 +53,9 @@ type AuthDomainConfig struct {
 	TransportEnabled    bool
 	Challenge           bool
 	AuthenticatorType   string
-	AuthenticatorConfig map[string]interface{}
+	AuthenticatorConfig map[string]any
 	BackendType         string
-	BackendConfig       map[string]interface{}
+	BackendConfig       map[string]any
 	Description         string
 }
 
@@ -209,7 +209,7 @@ func (b *AuthConfigBuilder) formatAuthzDomain(domain AuthDomainConfig) string {
 // ============================================================================
 
 // buildBasicAuthDomain creates the basic auth domain configuration
-func (b *AuthConfigBuilder) buildBasicAuthDomain(spec *v1alpha1.BasicAuthSpec) AuthDomainConfig {
+func (b *AuthConfigBuilder) buildBasicAuthDomain(spec *v1.BasicAuthSpec) AuthDomainConfig {
 	return AuthDomainConfig{
 		Name:              "basic_internal_auth_domain",
 		Order:             spec.Order,
@@ -241,7 +241,7 @@ func DefaultBasicAuthDomain() AuthDomainConfig {
 // ============================================================================
 
 // formatConfigMap formats a map for YAML output with proper indentation
-func formatConfigMap(config map[string]interface{}, indent int) string {
+func formatConfigMap(config map[string]any, indent int) string {
 	var sb strings.Builder
 	prefix := strings.Repeat(" ", indent)
 
@@ -270,7 +270,7 @@ func formatConfigMap(config map[string]interface{}, indent int) string {
 			for _, item := range v {
 				sb.WriteString(fmt.Sprintf("%s  - \"%s\"\n", prefix, item))
 			}
-		case map[string]interface{}:
+		case map[string]any:
 			sb.WriteString(fmt.Sprintf("%s%s:\n", prefix, key))
 			sb.WriteString(formatConfigMap(v, indent+2))
 		default:

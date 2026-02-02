@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -33,10 +34,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/deployments"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/hpa"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/secrets"
 	osservices "github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
@@ -67,7 +69,7 @@ func (r *DashboardReconciler) WithRecorder(recorder record.EventRecorder) *Dashb
 }
 
 // Reconcile reconciles the OpenSearch Dashboard
-func (r *DashboardReconciler) Reconcile(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *DashboardReconciler) Reconcile(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Reconcile Secrets
@@ -95,12 +97,17 @@ func (r *DashboardReconciler) Reconcile(ctx context.Context, cluster *wazuhv1alp
 		return fmt.Errorf("failed to reconcile dashboard PDB: %w", err)
 	}
 
+	// Reconcile HorizontalPodAutoscaler
+	if err := r.reconcileHPA(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to reconcile dashboard HPA: %w", err)
+	}
+
 	log.Info("Dashboard reconciliation completed")
 	return nil
 }
 
 // reconcileSecrets reconciles dashboard secrets
-func (r *DashboardReconciler) reconcileSecrets(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *DashboardReconciler) reconcileSecrets(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Check if certificates already exist
@@ -160,7 +167,7 @@ type dashboardCertificates struct {
 // generateDashboardCertificates generates certificates for the dashboard
 // This generates a self-signed certificate for the dashboard HTTPS server.
 // The CA for connecting to OpenSearch comes from the indexer-certs secret.
-func (r *DashboardReconciler) generateDashboardCertificates(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, indexerCACert []byte) (*dashboardCertificates, error) {
+func (r *DashboardReconciler) generateDashboardCertificates(ctx context.Context, cluster *wazuhv1.WazuhCluster, _ []byte) (*dashboardCertificates, error) {
 	log := logf.FromContext(ctx)
 
 	// Generate a self-signed CA for dashboard's HTTPS server certificate
@@ -193,7 +200,7 @@ func (r *DashboardReconciler) generateDashboardCertificates(ctx context.Context,
 }
 
 // reconcileConfigMap reconciles the dashboard ConfigMap
-func (r *DashboardReconciler) reconcileConfigMap(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *DashboardReconciler) reconcileConfigMap(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Build dashboard configuration (already generates opensearch_dashboards.yml)
@@ -223,7 +230,7 @@ func (r *DashboardReconciler) reconcileConfigMap(ctx context.Context, cluster *w
 }
 
 // getConfigHash retrieves the current config hash from the dashboard ConfigMap
-func (r *DashboardReconciler) getConfigHash(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) string {
+func (r *DashboardReconciler) getConfigHash(ctx context.Context, cluster *wazuhv1.WazuhCluster) string {
 	configMapName := constants.DashboardConfigName(cluster.Name)
 	configMap := &corev1.ConfigMap{}
 	err := r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: cluster.Namespace}, configMap)
@@ -235,7 +242,7 @@ func (r *DashboardReconciler) getConfigHash(ctx context.Context, cluster *wazuhv
 
 // resolveAPIEndpointCredentials resolves credentials from secret references for API endpoints
 // Returns a map with keys "endpointID:username" and "endpointID:password"
-func (r *DashboardReconciler) resolveAPIEndpointCredentials(ctx context.Context, namespace string, wazuhPlugin *wazuhv1alpha1.WazuhPluginConfig) (map[string]string, error) {
+func (r *DashboardReconciler) resolveAPIEndpointCredentials(ctx context.Context, namespace string, wazuhPlugin *wazuhv1.WazuhPluginConfig) (map[string]string, error) {
 	resolvedCredentials := make(map[string]string)
 
 	if wazuhPlugin == nil {
@@ -244,32 +251,34 @@ func (r *DashboardReconciler) resolveAPIEndpointCredentials(ctx context.Context,
 
 	// Resolve credentials for explicit API endpoints
 	for _, endpoint := range wazuhPlugin.APIEndpoints {
-		if endpoint.CredentialsSecretRef != nil && endpoint.CredentialsSecretRef.SecretName != "" {
-			secret := &corev1.Secret{}
-			secretName := endpoint.CredentialsSecretRef.SecretName
+		if endpoint.CredentialsSecretRef == nil || endpoint.CredentialsSecretRef.SecretName == "" {
+			continue
+		}
 
-			err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get secret %s for endpoint %s: %w", secretName, endpoint.ID, err)
-			}
+		secret := &corev1.Secret{}
+		secretName := endpoint.CredentialsSecretRef.SecretName
 
-			// Get username key (default: "username")
-			usernameKey := endpoint.CredentialsSecretRef.UsernameKey
-			if usernameKey == "" {
-				usernameKey = "username"
-			}
-			if usernameBytes, ok := secret.Data[usernameKey]; ok {
-				resolvedCredentials[endpoint.ID+":username"] = string(usernameBytes)
-			}
+		err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get secret %s for endpoint %s: %w", secretName, endpoint.ID, err)
+		}
 
-			// Get password key (default: "password")
-			passwordKey := endpoint.CredentialsSecretRef.PasswordKey
-			if passwordKey == "" {
-				passwordKey = "password"
-			}
-			if passwordBytes, ok := secret.Data[passwordKey]; ok {
-				resolvedCredentials[endpoint.ID+":password"] = string(passwordBytes)
-			}
+		// Get username key (default: "username")
+		usernameKey := endpoint.CredentialsSecretRef.UsernameKey
+		if usernameKey == "" {
+			usernameKey = "username"
+		}
+		if usernameBytes, ok := secret.Data[usernameKey]; ok {
+			resolvedCredentials[endpoint.ID+":username"] = string(usernameBytes)
+		}
+
+		// Get password key (default: "password")
+		passwordKey := endpoint.CredentialsSecretRef.PasswordKey
+		if passwordKey == "" {
+			passwordKey = "password"
+		}
+		if passwordBytes, ok := secret.Data[passwordKey]; ok {
+			resolvedCredentials[endpoint.ID+":password"] = string(passwordBytes)
 		}
 	}
 
@@ -307,7 +316,7 @@ func (r *DashboardReconciler) resolveAPIEndpointCredentials(ctx context.Context,
 }
 
 // reconcileService reconciles the dashboard service
-func (r *DashboardReconciler) reconcileService(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *DashboardReconciler) reconcileService(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	serviceBuilder := osservices.NewDashboardServiceBuilder(cluster.Name, cluster.Namespace)
 	service := serviceBuilder.Build()
 
@@ -319,13 +328,13 @@ func (r *DashboardReconciler) reconcileService(ctx context.Context, cluster *waz
 }
 
 // reconcileDeployment reconciles the dashboard Deployment
-func (r *DashboardReconciler) reconcileDeployment(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *DashboardReconciler) reconcileDeployment(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	return r.reconcileDeploymentWithCertHash(ctx, cluster, "")
 }
 
 // reconcileDeploymentWithCertHash reconciles the dashboard Deployment with an optional certificate hash
 // When the cert hash changes, the deployment will be updated which triggers a pod rollout
-func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, certHash string) error {
+func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) error {
 	log := logf.FromContext(ctx)
 
 	deployBuilder := deployments.NewDashboardDeploymentBuilder(cluster.Name, cluster.Namespace)
@@ -364,7 +373,7 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 		return fmt.Errorf("failed to get dashboard deployment: %w", err)
 	}
 
-	// Check if update is needed (cert hash changed)
+	// Check if update is needed (cert hash changed or replicas changed)
 	existingCertHash := ""
 	if found.Spec.Template.Annotations != nil {
 		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
@@ -372,6 +381,7 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 
 	// Update if cert hash changed (including from empty to non-empty)
 	needsUpdate := false
+	certHashChanged := false
 	if certHash != existingCertHash {
 		if certHash != "" {
 			log.Info("Updating Dashboard Deployment due to certificate hash change",
@@ -379,7 +389,18 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 				"oldHash", utils.ShortHash(existingCertHash),
 				"newHash", utils.ShortHash(certHash))
 			needsUpdate = true
+			certHashChanged = true
 		}
+	}
+
+	// Check if replicas changed
+	desiredReplicas := cluster.Spec.Dashboard.Replicas
+	if found.Spec.Replicas != nil && *found.Spec.Replicas != desiredReplicas {
+		log.Info("Updating Dashboard Deployment due to replica count change",
+			"name", deployment.Name,
+			"oldReplicas", *found.Spec.Replicas,
+			"newReplicas", desiredReplicas)
+		needsUpdate = true
 	}
 
 	if needsUpdate {
@@ -388,34 +409,36 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 			return fmt.Errorf("failed to update dashboard deployment: %w", err)
 		}
 
-		// Wait for the deployment to be ready after update (graceful rollout)
-		// This ensures new pods are healthy before the reconcile completes
-		log.Info("Waiting for Dashboard deployment to be ready after certificate renewal",
-			"name", deployment.Name,
-			"timeout", utils.DefaultRolloutTimeout)
-
-		waiter := utils.NewRolloutWaiter(r.Client)
-		result := waiter.WaitForDeploymentReadyWithResult(ctx, deployment.Namespace, deployment.Name)
-		if result.TimedOut {
-			log.Error(result.Error, "Timeout waiting for Dashboard deployment to be ready",
+		// Only wait for rollout on cert hash changes (pod restart required)
+		// Replica changes don't need rollout wait - Kubernetes handles scaling
+		if certHashChanged {
+			log.Info("Waiting for Dashboard deployment to be ready after certificate renewal",
 				"name", deployment.Name,
 				"timeout", utils.DefaultRolloutTimeout)
-			// Don't fail the reconcile on timeout - the deployment strategy ensures
-			// maxUnavailable=0, so old pods are kept until new ones are ready
-			return nil
-		}
-		if result.Error != nil {
-			return fmt.Errorf("error waiting for dashboard deployment to be ready: %w", result.Error)
-		}
 
-		log.Info("Dashboard deployment is ready after certificate renewal", "name", deployment.Name)
+			waiter := utils.NewRolloutWaiter(r.Client)
+			result := waiter.WaitForDeploymentReadyWithResult(ctx, deployment.Namespace, deployment.Name)
+			if result.TimedOut {
+				log.Error(result.Error, "Timeout waiting for Dashboard deployment to be ready",
+					"name", deployment.Name,
+					"timeout", utils.DefaultRolloutTimeout)
+				// Don't fail the reconcile on timeout - the deployment strategy ensures
+				// maxUnavailable=0, so old pods are kept until new ones are ready
+				return nil
+			}
+			if result.Error != nil {
+				return fmt.Errorf("error waiting for dashboard deployment to be ready: %w", result.Error)
+			}
+
+			log.Info("Dashboard deployment is ready after certificate renewal", "name", deployment.Name)
+		}
 	}
 
 	return nil
 }
 
 // reconcilePDB reconciles the PodDisruptionBudget for dashboard pods
-func (r *DashboardReconciler) reconcilePDB(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *DashboardReconciler) reconcilePDB(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	pdbName := pdb.GetPDBName(cluster.Name)
@@ -467,9 +490,74 @@ func (r *DashboardReconciler) reconcilePDB(ctx context.Context, cluster *wazuhv1
 	return nil
 }
 
-// ReconcileWithCertHash reconciles the OpenSearch Dashboard with certificate hash for pod restart
-// DEPRECATED: Use ReconcileNonBlocking for non-blocking rollouts
-func (r *DashboardReconciler) ReconcileWithCertHash(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, certHash string) error {
+// reconcileHPA reconciles the HorizontalPodAutoscaler for dashboard
+func (r *DashboardReconciler) reconcileHPA(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	hpaName := cluster.Name + "-dashboard"
+
+	// Check if HPA should be enabled
+	hpaEnabled := cluster.Spec.Dashboard != nil &&
+		cluster.Spec.Dashboard.HPA != nil &&
+		cluster.Spec.Dashboard.HPA.Enabled
+
+	if !hpaEnabled {
+		// If HPA should not exist, delete it if it does
+		existing := &autoscalingv2.HorizontalPodAutoscaler{}
+		err := r.Get(ctx, types.NamespacedName{Name: hpaName, Namespace: cluster.Namespace}, existing)
+		if err == nil {
+			log.Info("Deleting Dashboard HPA (no longer needed)", "name", hpaName)
+			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+				return fmt.Errorf("failed to delete dashboard HPA: %w", err)
+			}
+		} else if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get dashboard HPA: %w", err)
+		}
+		return nil
+	}
+
+	// Build the HPA
+	builder := hpa.NewDashboardHPABuilder(cluster.Name, cluster.Namespace).
+		WithSpec(cluster.Spec.Dashboard.HPA)
+
+	dashboardHPA := builder.Build()
+	if dashboardHPA == nil {
+		return nil
+	}
+
+	if err := controllerutil.SetControllerReference(cluster, dashboardHPA, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for dashboard HPA: %w", err)
+	}
+
+	// Check if HPA exists
+	existing := &autoscalingv2.HorizontalPodAutoscaler{}
+	err := r.Get(ctx, types.NamespacedName{Name: hpaName, Namespace: cluster.Namespace}, existing)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating Dashboard HPA", "name", hpaName,
+			"minReplicas", *dashboardHPA.Spec.MinReplicas,
+			"maxReplicas", dashboardHPA.Spec.MaxReplicas)
+		if err := r.Create(ctx, dashboardHPA); err != nil {
+			return fmt.Errorf("failed to create dashboard HPA: %w", err)
+		}
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("failed to get dashboard HPA: %w", err)
+	}
+
+	// Update HPA if needed
+	dashboardHPA.SetResourceVersion(existing.GetResourceVersion())
+	log.V(1).Info("Updating Dashboard HPA", "name", hpaName)
+	if err := r.Update(ctx, dashboardHPA); err != nil {
+		return fmt.Errorf("failed to update dashboard HPA: %w", err)
+	}
+
+	return nil
+}
+
+// ReconcileWithCertHash reconciles the OpenSearch Dashboard with certificate hash for pod restart.
+//
+// Deprecated: Use ReconcileNonBlocking for non-blocking rollouts.
+func (r *DashboardReconciler) ReconcileWithCertHash(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) error {
 	log := logf.FromContext(ctx)
 
 	// Reconcile Secrets
@@ -497,6 +585,11 @@ func (r *DashboardReconciler) ReconcileWithCertHash(ctx context.Context, cluster
 		return fmt.Errorf("failed to reconcile dashboard PDB: %w", err)
 	}
 
+	// Reconcile HorizontalPodAutoscaler
+	if err := r.reconcileHPA(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to reconcile dashboard HPA: %w", err)
+	}
+
 	log.Info("Dashboard reconciliation completed")
 	return nil
 }
@@ -511,7 +604,7 @@ type DashboardReconcileResult struct {
 
 // ReconcileNonBlocking reconciles the OpenSearch Dashboard without blocking on rollouts
 // Returns a pending rollout that should be tracked and monitored by the caller
-func (r *DashboardReconciler) ReconcileNonBlocking(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, certHash string) DashboardReconcileResult {
+func (r *DashboardReconciler) ReconcileNonBlocking(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) DashboardReconcileResult {
 	log := logf.FromContext(ctx)
 
 	// Reconcile Secrets
@@ -540,13 +633,18 @@ func (r *DashboardReconciler) ReconcileNonBlocking(ctx context.Context, cluster 
 		return DashboardReconcileResult{Error: fmt.Errorf("failed to reconcile dashboard PDB: %w", err)}
 	}
 
+	// Reconcile HorizontalPodAutoscaler
+	if err := r.reconcileHPA(ctx, cluster); err != nil {
+		return DashboardReconcileResult{Error: fmt.Errorf("failed to reconcile dashboard HPA: %w", err)}
+	}
+
 	log.Info("Dashboard reconciliation completed (non-blocking)", "hasPendingRollout", pendingRollout != nil)
 	return DashboardReconcileResult{PendingRollout: pendingRollout}
 }
 
 // reconcileDeploymentNonBlocking reconciles the dashboard Deployment without blocking on rollout
 // Returns a PendingRollout if a rollout was initiated, nil otherwise
-func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, certHash string) (*utils.PendingRollout, error) {
+func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) (*utils.PendingRollout, error) {
 	log := logf.FromContext(ctx)
 
 	// Extract spec values for hash computation
@@ -703,7 +801,7 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		if updateReason == "" {
 			updateReason = "certificate-renewal"
 		} else {
-			updateReason = updateReason + ",certificate-renewal"
+			updateReason += ",certificate-renewal"
 		}
 	}
 
@@ -722,7 +820,7 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		if updateReason == "" {
 			updateReason = "config-change"
 		} else {
-			updateReason = updateReason + ",config-change"
+			updateReason += ",config-change"
 		}
 
 		// Emit event for config change detection
@@ -757,7 +855,7 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 }
 
 // GetStatus gets the dashboard status
-func (r *DashboardReconciler) GetStatus(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*wazuhv1alpha1.ComponentStatus, error) {
+func (r *DashboardReconciler) GetStatus(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*wazuhv1.ComponentStatus, error) {
 	dep := &appsv1.Deployment{}
 	name := constants.DashboardName(cluster.Name)
 
@@ -768,10 +866,17 @@ func (r *DashboardReconciler) GetStatus(ctx context.Context, cluster *wazuhv1alp
 		return nil, err
 	}
 
-	return &wazuhv1alpha1.ComponentStatus{
-		Replicas:      dep.Status.Replicas,
-		ReadyReplicas: dep.Status.ReadyReplicas,
-		Phase:         getDeploymentPhase(dep),
+	// Get desired replicas from the spec
+	var desiredReplicas int32
+	if cluster.Spec.Dashboard != nil {
+		desiredReplicas = cluster.Spec.Dashboard.Replicas
+	}
+
+	return &wazuhv1.ComponentStatus{
+		Replicas:        dep.Status.Replicas,
+		ReadyReplicas:   dep.Status.ReadyReplicas,
+		DesiredReplicas: desiredReplicas,
+		Phase:           getDeploymentPhase(dep),
 	}, nil
 }
 
@@ -784,7 +889,10 @@ func (r *DashboardReconciler) createOrUpdate(ctx context.Context, obj client.Obj
 		Namespace: obj.GetNamespace(),
 	}
 
-	existing := obj.DeepCopyObject().(client.Object)
+	existing, ok := obj.DeepCopyObject().(client.Object)
+	if !ok {
+		return fmt.Errorf("failed to deep copy object")
+	}
 
 	err := r.Get(ctx, key, existing)
 	if err != nil && errors.IsNotFound(err) {
@@ -796,9 +904,10 @@ func (r *DashboardReconciler) createOrUpdate(ctx context.Context, obj client.Obj
 
 	// Preserve immutable fields for Services
 	if svc, ok := obj.(*corev1.Service); ok {
-		existingSvc := existing.(*corev1.Service)
-		svc.Spec.ClusterIP = existingSvc.Spec.ClusterIP
-		svc.Spec.ClusterIPs = existingSvc.Spec.ClusterIPs
+		if existingSvc, ok := existing.(*corev1.Service); ok {
+			svc.Spec.ClusterIP = existingSvc.Spec.ClusterIP
+			svc.Spec.ClusterIPs = existingSvc.Spec.ClusterIPs
+		}
 	}
 
 	log.V(1).Info("Updating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
@@ -821,7 +930,7 @@ func getDeploymentPhase(dep *appsv1.Deployment) string {
 }
 
 // ReconcileStandalone reconciles a standalone OpenSearchDashboard resource
-func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard *wazuhv1alpha1.OpenSearchDashboard) error {
+func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard *wazuhv1.OpenSearchDashboard) error {
 	log := logf.FromContext(ctx)
 
 	// Check if certificates exist, generate if needed
@@ -926,7 +1035,7 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 }
 
 // generateStandaloneDashboardCertificates generates certificates for standalone dashboard
-func (r *DashboardReconciler) generateStandaloneDashboardCertificates(ctx context.Context, dashboard *wazuhv1alpha1.OpenSearchDashboard) (*dashboardCertificates, error) {
+func (r *DashboardReconciler) generateStandaloneDashboardCertificates(ctx context.Context, dashboard *wazuhv1.OpenSearchDashboard) (*dashboardCertificates, error) {
 	log := logf.FromContext(ctx)
 
 	// Generate CA

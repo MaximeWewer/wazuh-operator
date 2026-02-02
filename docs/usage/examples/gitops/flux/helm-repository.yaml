@@ -1,0 +1,16 @@
+# Flux HelmRepository for Wazuh Operator OCI charts
+#
+# This creates a source for pulling Helm charts from GHCR.
+#
+# Usage:
+#   kubectl apply -f helm-repository.yaml
+#
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: wazuh-operator
+  namespace: flux-system
+spec:
+  type: oci
+  interval: 5m
+  url: oci://ghcr.io/maximewewer/charts

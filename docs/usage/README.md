@@ -1,67 +1,66 @@
 # User Documentation
 
-This directory contains documentation for users of the Wazuh Operator.
+Documentation for users of the Wazuh Operator.
 
-## Contents
+## Getting Started
 
-### Getting Started
-
+- [Prerequisites](../requirements.md) - Required tools and cluster requirements
 - [Installation](getting-started/installation.md) - How to install the operator
-- [Quick Start](getting-started/quick-start.md) - Deploy your first Wazuh cluster
+- [Quick Start](getting-started/quick-start.md) - Deploy your first cluster
 
-### Features
+## Features
 
-- [Credentials Management](features/credentials.md) - Auto-generated passwords, secrets management
-- [Sizing Profiles](features/sizing.md) - Cluster sizing guide
-- [Volume Expansion](features/volume-expansion.md) - Online PVC storage expansion
+### Core Configuration
+
+- [Inline Mode](features/inline-mode.md) - Default configuration pattern (recommended)
+- [Reference Mode](features/reference-mode.md) - Advanced pattern with separate CRs
+- [Credentials](features/credentials.md) - Password and secret management
 - [TLS Configuration](features/tls.md) - Certificate management
+- [Sizing Profiles](features/sizing.md) - Cluster sizing guide
+
+### Storage and Scaling
+
+- [Volume Expansion](features/volume-expansion.md) - Online PVC resizing
+- [Drain Strategy](features/drain-strategy.md) - Safe scale-down
+- [Advanced Indexer Topology](features/advanced-indexer-topology.md) - NodePools and roles
+
+### Observability
+
 - [Monitoring](features/monitoring.md) - Prometheus integration
-- [Log Rotation](features/log-rotation.md) - Automated log cleanup
-- [Filebeat Configuration](features/filebeat-configuration.md) - Declarative Filebeat management (template, pipeline)
-- [Wazuh Multi-API Hosts](features/wazuh-api-hosts.md) - Multiple Wazuh Manager APIs
+- [OpenTelemetry](features/opentelemetry.md) - Distributed tracing
+
+### OpenSearch Management
+
 - [OpenSearch Security](features/opensearch-security.md) - Users, roles, tenants
-- [OpenSearch Index Management](features/opensearch-indices.md) - Templates, ISM policies
-- [Drain Strategy](features/drain-strategy.md) - Safe scale-down with shard relocation and queue drain
-- [Advanced Indexer Topology](features/advanced-indexer-topology.md) - Multi-role OpenSearch clusters with nodePools
+- [OpenSearch Indices](features/opensearch-indices.md) - Templates and ISM policies
 
-### Examples
+### Networking
 
-Ready-to-use deployment examples:
+- [Gateway API](features/gateway-api.md) - Expose services via Gateway API (HTTPRoute, TCPRoute, UDPRoute)
 
-- [Quick Start Examples](examples/quick-start/) - Minimal deployment
-- [Production Examples](examples/production/) - Production-ready configuration
+### Other Features
+
+- [Backup and Restore](features/backup-restore.md) - Data protection
+- [Log Rotation](features/log-rotation.md) - Automated log cleanup
+- [Filebeat Configuration](features/filebeat-configuration.md) - Log forwarding
+- [Wazuh API Hosts](features/wazuh-api-hosts.md) - Multi-API configuration
+
+## Examples
+
+- [Quick Start Examples](examples/quick-start/) - Minimal deployments
+- [Production Examples](examples/production/) - Production configurations
 - [OpenSearch CRDs](examples/opensearch-crds/) - Security and index management
 
-### Reference
+## Reference
 
-- [CRD Reference](CRD-REFERENCE.md) - Complete API documentation for all CRDs
+- [CRD Reference](CRD-REFERENCE.md) - Complete API documentation for all 27 CRDs
 
-### Troubleshooting
+## Troubleshooting
 
 - [Common Issues](troubleshooting/common-issues.md) - Solutions to frequent problems
 - [Debugging Guide](troubleshooting/debugging.md) - How to debug issues
 
-## Quick Links
-
-### Install the Operator
-
-```bash
-helm install wazuh-operator ./charts/wazuh-operator -n wazuh-system --create-namespace
-```
-
-### Deploy a Cluster
-
-```bash
-helm install wazuh-cluster ./charts/wazuh-cluster -n wazuh --create-namespace
-```
-
-### Check Status
-
-```bash
-kubectl get wazuhcluster -n wazuh
-```
-
 ## Related Resources
 
-- [Developer Documentation](../dev/README.md) - For contributors
-- [GitHub Repository](https://github.com/MaximeWewer/wazuh-operator)
+- [Developer Documentation](../dev/README.md)
+- [Technical Reference](../reference/)

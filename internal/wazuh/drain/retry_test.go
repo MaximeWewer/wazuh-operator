@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -31,47 +31,47 @@ func TestRetryManager_ShouldRetry(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		status        *v1alpha1.ComponentDrainStatus
-		config        *v1alpha1.DrainRetryConfig
+		status        *v1.ComponentDrainStatus
+		config        *v1.DrainRetryConfig
 		expectedRetry bool
 	}{
 		{
 			name: "should retry - failed state, under max attempts",
-			status: &v1alpha1.ComponentDrainStatus{
-				Phase:        v1alpha1.DrainPhaseFailed,
+			status: &v1.ComponentDrainStatus{
+				Phase:        v1.DrainPhaseFailed,
 				AttemptCount: 1,
 			},
-			config: &v1alpha1.DrainRetryConfig{
+			config: &v1.DrainRetryConfig{
 				MaxAttempts: 3,
 			},
 			expectedRetry: true,
 		},
 		{
 			name: "should not retry - max attempts reached",
-			status: &v1alpha1.ComponentDrainStatus{
-				Phase:        v1alpha1.DrainPhaseFailed,
+			status: &v1.ComponentDrainStatus{
+				Phase:        v1.DrainPhaseFailed,
 				AttemptCount: 3,
 			},
-			config: &v1alpha1.DrainRetryConfig{
+			config: &v1.DrainRetryConfig{
 				MaxAttempts: 3,
 			},
 			expectedRetry: false,
 		},
 		{
 			name: "should not retry - not in failed state",
-			status: &v1alpha1.ComponentDrainStatus{
-				Phase:        v1alpha1.DrainPhaseDraining,
+			status: &v1.ComponentDrainStatus{
+				Phase:        v1.DrainPhaseDraining,
 				AttemptCount: 1,
 			},
-			config: &v1alpha1.DrainRetryConfig{
+			config: &v1.DrainRetryConfig{
 				MaxAttempts: 3,
 			},
 			expectedRetry: false,
 		},
 		{
 			name: "should retry - use default config",
-			status: &v1alpha1.ComponentDrainStatus{
-				Phase:        v1alpha1.DrainPhaseFailed,
+			status: &v1.ComponentDrainStatus{
+				Phase:        v1.DrainPhaseFailed,
 				AttemptCount: 1,
 			},
 			config:        nil,
@@ -79,8 +79,8 @@ func TestRetryManager_ShouldRetry(t *testing.T) {
 		},
 		{
 			name: "should not retry - exceeded default max",
-			status: &v1alpha1.ComponentDrainStatus{
-				Phase:        v1alpha1.DrainPhaseFailed,
+			status: &v1.ComponentDrainStatus{
+				Phase:        v1.DrainPhaseFailed,
 				AttemptCount: constants.DefaultDrainRetryMaxAttempts,
 			},
 			config:        nil,
@@ -104,7 +104,7 @@ func TestRetryManager_CalculateNextRetryTime(t *testing.T) {
 	tests := []struct {
 		name           string
 		attemptCount   int32
-		config         *v1alpha1.DrainRetryConfig
+		config         *v1.DrainRetryConfig
 		minExpectedDur time.Duration
 		maxExpectedDur time.Duration
 	}{
@@ -118,7 +118,7 @@ func TestRetryManager_CalculateNextRetryTime(t *testing.T) {
 		{
 			name:         "second attempt - exponential backoff",
 			attemptCount: 2,
-			config: &v1alpha1.DrainRetryConfig{
+			config: &v1.DrainRetryConfig{
 				InitialDelay:      &metav1.Duration{Duration: 1 * time.Minute},
 				BackoffMultiplier: "2.0",
 			},
@@ -128,7 +128,7 @@ func TestRetryManager_CalculateNextRetryTime(t *testing.T) {
 		{
 			name:         "capped at max delay",
 			attemptCount: 10,
-			config: &v1alpha1.DrainRetryConfig{
+			config: &v1.DrainRetryConfig{
 				InitialDelay:      &metav1.Duration{Duration: 5 * time.Minute},
 				BackoffMultiplier: "2.0",
 				MaxDelay:          &metav1.Duration{Duration: 10 * time.Minute},
@@ -140,7 +140,7 @@ func TestRetryManager_CalculateNextRetryTime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status := &v1alpha1.ComponentDrainStatus{
+			status := &v1.ComponentDrainStatus{
 				AttemptCount: tt.attemptCount,
 			}
 
@@ -157,11 +157,11 @@ func TestRetryManager_CalculateNextRetryTime(t *testing.T) {
 func TestRetryManager_IncrementAttempt(t *testing.T) {
 	manager := NewRetryManager(getTestLogger())
 
-	status := &v1alpha1.ComponentDrainStatus{
+	status := &v1.ComponentDrainStatus{
 		AttemptCount: 1,
 	}
 
-	config := &v1alpha1.DrainRetryConfig{
+	config := &v1.DrainRetryConfig{
 		InitialDelay:      &metav1.Duration{Duration: 1 * time.Minute},
 		BackoffMultiplier: "2.0",
 	}
@@ -186,26 +186,26 @@ func TestRetryManager_IsRetryDue(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		status      *v1alpha1.ComponentDrainStatus
+		status      *v1.ComponentDrainStatus
 		expectedDue bool
 	}{
 		{
 			name: "retry is due - time has passed",
-			status: &v1alpha1.ComponentDrainStatus{
+			status: &v1.ComponentDrainStatus{
 				NextRetryTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 			},
 			expectedDue: true,
 		},
 		{
 			name: "retry not due - time in future",
-			status: &v1alpha1.ComponentDrainStatus{
+			status: &v1.ComponentDrainStatus{
 				NextRetryTime: &metav1.Time{Time: time.Now().Add(5 * time.Minute)},
 			},
 			expectedDue: false,
 		},
 		{
 			name: "retry not due - no time set",
-			status: &v1alpha1.ComponentDrainStatus{
+			status: &v1.ComponentDrainStatus{
 				NextRetryTime: nil,
 			},
 			expectedDue: false,
@@ -225,7 +225,7 @@ func TestRetryManager_IsRetryDue(t *testing.T) {
 func TestRetryManager_ResetRetryState(t *testing.T) {
 	manager := NewRetryManager(getTestLogger())
 
-	status := &v1alpha1.ComponentDrainStatus{
+	status := &v1.ComponentDrainStatus{
 		AttemptCount:  3,
 		NextRetryTime: &metav1.Time{Time: time.Now().Add(5 * time.Minute)},
 	}
@@ -246,18 +246,18 @@ func TestRetryManager_EvaluateRetry(t *testing.T) {
 
 	tests := []struct {
 		name                     string
-		status                   *v1alpha1.ComponentDrainStatus
-		config                   *v1alpha1.DrainRetryConfig
+		status                   *v1.ComponentDrainStatus
+		config                   *v1.DrainRetryConfig
 		expectedShouldRetry      bool
 		expectedRemainingGreater int32
 	}{
 		{
 			name: "should retry with remaining attempts",
-			status: &v1alpha1.ComponentDrainStatus{
-				Phase:        v1alpha1.DrainPhaseFailed,
+			status: &v1.ComponentDrainStatus{
+				Phase:        v1.DrainPhaseFailed,
 				AttemptCount: 1,
 			},
-			config: &v1alpha1.DrainRetryConfig{
+			config: &v1.DrainRetryConfig{
 				MaxAttempts: 3,
 			},
 			expectedShouldRetry:      true,
@@ -265,11 +265,11 @@ func TestRetryManager_EvaluateRetry(t *testing.T) {
 		},
 		{
 			name: "max attempts reached",
-			status: &v1alpha1.ComponentDrainStatus{
-				Phase:        v1alpha1.DrainPhaseFailed,
+			status: &v1.ComponentDrainStatus{
+				Phase:        v1.DrainPhaseFailed,
 				AttemptCount: 3,
 			},
-			config: &v1alpha1.DrainRetryConfig{
+			config: &v1.DrainRetryConfig{
 				MaxAttempts: 3,
 			},
 			expectedShouldRetry:      false,
@@ -297,38 +297,38 @@ func TestRetryManager_GetRetryStatus(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		status   *v1alpha1.ComponentDrainStatus
-		config   *v1alpha1.DrainRetryConfig
+		status   *v1.ComponentDrainStatus
+		config   *v1.DrainRetryConfig
 		contains string
 	}{
 		{
 			name: "max attempts reached",
-			status: &v1alpha1.ComponentDrainStatus{
+			status: &v1.ComponentDrainStatus{
 				AttemptCount: 3,
 			},
-			config: &v1alpha1.DrainRetryConfig{
+			config: &v1.DrainRetryConfig{
 				MaxAttempts: 3,
 			},
 			contains: "manual intervention",
 		},
 		{
 			name: "retry scheduled in future",
-			status: &v1alpha1.ComponentDrainStatus{
+			status: &v1.ComponentDrainStatus{
 				AttemptCount:  1,
 				NextRetryTime: &metav1.Time{Time: time.Now().Add(5 * time.Minute)},
 			},
-			config: &v1alpha1.DrainRetryConfig{
+			config: &v1.DrainRetryConfig{
 				MaxAttempts: 3,
 			},
 			contains: "retry scheduled",
 		},
 		{
 			name: "retry due",
-			status: &v1alpha1.ComponentDrainStatus{
+			status: &v1.ComponentDrainStatus{
 				AttemptCount:  1,
 				NextRetryTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 			},
-			config: &v1alpha1.DrainRetryConfig{
+			config: &v1.DrainRetryConfig{
 				MaxAttempts: 3,
 			},
 			contains: "retry due",

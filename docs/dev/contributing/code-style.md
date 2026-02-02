@@ -74,10 +74,10 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 ```
 internal/controller/wazuhcluster/
-├── wazuhcluster_controller.go    # Main reconciler
-├── indexer_reconciler.go         # Indexer component
-├── manager_reconciler.go         # Manager component
-├── dashboard_reconciler.go       # Dashboard component
+├── wazuhcluster_controller.go       # Main reconciler
+├── indexer_reconciler.go            # Indexer component
+├── manager_reconciler.go            # Manager component
+├── dashboard_reconciler.go          # Dashboard component
 └── wazuhcluster_controller_test.go  # Tests
 ```
 
@@ -86,11 +86,11 @@ internal/controller/wazuhcluster/
 ```go
 // Builder for complex objects
 type IndexerStatefulSetBuilder struct {
-    cluster *v1alpha1.WazuhCluster
+    cluster *v1.WazuhCluster
     labels  map[string]string
 }
 
-func NewIndexerStatefulSetBuilder(cluster *v1alpha1.WazuhCluster) *IndexerStatefulSetBuilder {
+func NewIndexerStatefulSetBuilder(cluster *v1.WazuhCluster) *IndexerStatefulSetBuilder {
     return &IndexerStatefulSetBuilder{
         cluster: cluster,
         labels:  make(map[string]string),
@@ -160,7 +160,7 @@ func (r *MyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Re
     log := r.Log.WithValues("resource", req.NamespacedName)
 
     // 1. Fetch the resource
-    resource := &v1alpha1.MyResource{}
+    resource := &v1.MyResource{}
     if err := r.Get(ctx, req.NamespacedName, resource); err != nil {
         if errors.IsNotFound(err) {
             return ctrl.Result{}, nil
@@ -188,7 +188,7 @@ func (r *MyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Re
 
 ```go
 // Update status in a separate function
-func (r *MyReconciler) updateStatus(ctx context.Context, resource *v1alpha1.MyResource) error {
+func (r *MyReconciler) updateStatus(ctx context.Context, resource *v1.MyResource) error {
     resource.Status.Phase = "Running"
     resource.Status.ObservedGeneration = resource.Generation
 
@@ -219,12 +219,12 @@ mypackage/
 var _ = Describe("Component", func() {
     var (
         ctx     context.Context
-        cluster *v1alpha1.WazuhCluster
+        cluster *v1.WazuhCluster
     )
 
     BeforeEach(func() {
         ctx = context.Background()
-        cluster = &v1alpha1.WazuhCluster{
+        cluster = &v1.WazuhCluster{
             // Setup
         }
     })

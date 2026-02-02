@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,11 +23,11 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
 // ValidateWazuhManager validates a WazuhManager resource
-func ValidateWazuhManager(manager *wazuhv1alpha1.WazuhManager) field.ErrorList {
+func ValidateWazuhManager(manager *wazuhv1.WazuhManager) field.ErrorList {
 	var allErrs field.ErrorList
 
 	// Validate name
@@ -55,7 +55,7 @@ func ValidateWazuhManager(manager *wazuhv1alpha1.WazuhManager) field.ErrorList {
 }
 
 // ValidateWazuhCluster validates a WazuhCluster resource
-func ValidateWazuhCluster(cluster *wazuhv1alpha1.WazuhCluster) field.ErrorList {
+func ValidateWazuhCluster(cluster *wazuhv1.WazuhCluster) field.ErrorList {
 	var allErrs field.ErrorList
 
 	// Validate name
@@ -100,7 +100,7 @@ func ValidateWazuhCluster(cluster *wazuhv1alpha1.WazuhCluster) field.ErrorList {
 }
 
 // ValidateWazuhRule validates a WazuhRule resource
-func ValidateWazuhRule(rule *wazuhv1alpha1.WazuhRule) field.ErrorList {
+func ValidateWazuhRule(rule *wazuhv1.WazuhRule) field.ErrorList {
 	var allErrs field.ErrorList
 
 	specPath := field.NewPath("spec")
@@ -119,7 +119,7 @@ func ValidateWazuhRule(rule *wazuhv1alpha1.WazuhRule) field.ErrorList {
 }
 
 // ValidateWazuhDecoder validates a WazuhDecoder resource
-func ValidateWazuhDecoder(decoder *wazuhv1alpha1.WazuhDecoder) field.ErrorList {
+func ValidateWazuhDecoder(decoder *wazuhv1.WazuhDecoder) field.ErrorList {
 	var allErrs field.ErrorList
 
 	specPath := field.NewPath("spec")
@@ -138,19 +138,19 @@ func ValidateWazuhDecoder(decoder *wazuhv1alpha1.WazuhDecoder) field.ErrorList {
 }
 
 // ValidateWazuhCertificate validates a WazuhCertificate resource
-func ValidateWazuhCertificate(cert *wazuhv1alpha1.WazuhCertificate) field.ErrorList {
+func ValidateWazuhCertificate(cert *wazuhv1.WazuhCertificate) field.ErrorList {
 	var allErrs field.ErrorList
 
 	specPath := field.NewPath("spec")
 
 	// Validate certificate type
-	validTypes := []wazuhv1alpha1.CertificateType{
-		wazuhv1alpha1.CertificateTypeCA,
-		wazuhv1alpha1.CertificateTypeNode,
-		wazuhv1alpha1.CertificateTypeAdmin,
-		wazuhv1alpha1.CertificateTypeFilebeat,
-		wazuhv1alpha1.CertificateTypeIndexer,
-		wazuhv1alpha1.CertificateTypeDashboard,
+	validTypes := []wazuhv1.CertificateType{
+		wazuhv1.CertificateTypeCA,
+		wazuhv1.CertificateTypeNode,
+		wazuhv1.CertificateTypeAdmin,
+		wazuhv1.CertificateTypeFilebeat,
+		wazuhv1.CertificateTypeIndexer,
+		wazuhv1.CertificateTypeDashboard,
 	}
 	if !isValidCertificateType(cert.Spec.Type, validTypes) {
 		allErrs = append(allErrs, field.NotSupported(specPath.Child("type"), string(cert.Spec.Type), toStringSlice(validTypes)))
@@ -160,7 +160,7 @@ func ValidateWazuhCertificate(cert *wazuhv1alpha1.WazuhCertificate) field.ErrorL
 }
 
 // toStringSlice converts CertificateType slice to string slice
-func toStringSlice(types []wazuhv1alpha1.CertificateType) []string {
+func toStringSlice(types []wazuhv1.CertificateType) []string {
 	result := make([]string, len(types))
 	for i, t := range types {
 		result[i] = string(t)
@@ -169,7 +169,7 @@ func toStringSlice(types []wazuhv1alpha1.CertificateType) []string {
 }
 
 // isValidCertificateType checks if a certificate type is valid
-func isValidCertificateType(certType wazuhv1alpha1.CertificateType, validTypes []wazuhv1alpha1.CertificateType) bool {
+func isValidCertificateType(certType wazuhv1.CertificateType, validTypes []wazuhv1.CertificateType) bool {
 	for _, t := range validTypes {
 		if t == certType {
 			return true

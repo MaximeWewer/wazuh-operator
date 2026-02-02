@@ -1,0 +1,71 @@
+# ArgoCD AppProject for Wazuh
+#
+# Optional: Creates an isolated project for Wazuh applications.
+# This provides additional RBAC and resource restrictions.
+#
+# Usage:
+#   kubectl apply -f appproject.yaml
+#
+apiVersion: argoproj.io/v1
+kind: AppProject
+metadata:
+  name: wazuh
+  namespace: argocd
+spec:
+  description: Wazuh Operator and Clusters
+
+  # Source repositories
+  sourceRepos:
+    - https://github.com/MaximeWewer/wazuh-operator.git
+    - oci://ghcr.io/maximewewer/charts/*
+
+  # Destination clusters and namespaces
+  destinations:
+    # Operator namespace
+    - namespace: wazuh-system
+      server: https://kubernetes.default.svc
+    # Wazuh cluster namespaces
+    - namespace: wazuh
+      server: https://kubernetes.default.svc
+    - namespace: wazuh-*
+      server: https://kubernetes.default.svc
+
+  # Allowed cluster-scoped resources
+  clusterResourceWhitelist:
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+
+  # Allowed namespace-scoped resources
+  namespaceResourceWhitelist:
+    - group: ""
+      kind: "*"
+    - group: apps
+      kind: "*"
+    - group: batch
+      kind: "*"
+    - group: resources.wazuh.com
+      kind: "*"
+    - group: monitoring.coreos.com
+      kind: ServiceMonitor
+    - group: networking.k8s.io
+      kind: NetworkPolicy
+
+  # Roles for project access
+  roles:
+    - name: admin
+      description: Full access to Wazuh applications
+      policies:
+        - p, proj:wazuh:admin, applications, *, wazuh/*, allow
+      groups:
+        - wazuh-admins
+
+    - name: readonly
+      description: Read-only access to Wazuh applications
+      policies:
+        - p, proj:wazuh:readonly, applications, get, wazuh/*, allow
+      groups:
+        - wazuh-viewers

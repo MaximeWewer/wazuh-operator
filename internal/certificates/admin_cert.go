@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@ limitations under the License.
 package certificates
 
 import (
+	"crypto"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -27,9 +27,6 @@ import (
 )
 
 const (
-	// DefaultAdminValidityDays is the default validity period for admin certificates
-	DefaultAdminValidityDays = 365
-
 	// DefaultAdminCommonName is the default common name for admin certificates
 	DefaultAdminCommonName = "admin"
 )
@@ -42,9 +39,10 @@ type AdminCertConfig struct {
 	Country            string
 	State              string
 	Locality           string
-	ValidityDays       int
-	ValidityMinutes    int // For testing short-lived certs (takes precedence over ValidityDays if > 0)
-	KeySize            int
+	Validity           time.Duration // Certificate validity as duration
+	KeySize            int           // Only used for RSA
+	KeyAlgorithm       KeyAlgorithm
+	ECDSACurve         ECDSACurve
 }
 
 // DefaultAdminCertConfig returns an AdminCertConfig with default values
@@ -56,15 +54,17 @@ func DefaultAdminCertConfig() *AdminCertConfig {
 		Country:            DefaultCountry,
 		State:              DefaultState,
 		Locality:           DefaultLocality,
-		ValidityDays:       DefaultAdminValidityDays,
+		Validity:           MustParseCertDuration(DefaultNodeValidityStr), // Admin uses node validity
 		KeySize:            DefaultKeySize,
+		KeyAlgorithm:       KeyAlgorithmRSA,
+		ECDSACurve:         ECDSACurveP256,
 	}
 }
 
 // AdminCertResult contains the generated admin certificate and private key
 type AdminCertResult struct {
 	Certificate    *x509.Certificate
-	PrivateKey     *rsa.PrivateKey
+	PrivateKey     crypto.PrivateKey
 	CertificatePEM []byte
 	PrivateKeyPEM  []byte
 }
@@ -99,17 +99,17 @@ func GenerateAdminCert(config *AdminCertConfig, ca *CAResult) (*AdminCertResult,
 	if config.Locality == "" {
 		config.Locality = DefaultLocality
 	}
-	if config.ValidityDays <= 0 {
-		config.ValidityDays = DefaultAdminValidityDays
+	if config.Validity <= 0 {
+		config.Validity = MustParseCertDuration(DefaultNodeValidityStr)
 	}
 	if config.KeySize <= 0 {
 		config.KeySize = DefaultKeySize
 	}
 
-	// Generate RSA private key
-	privateKey, err := rsa.GenerateKey(rand.Reader, config.KeySize)
+	// Generate private key based on algorithm
+	privateKey, err := generatePrivateKey(config.KeyAlgorithm, config.KeySize, config.ECDSACurve)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate RSA key: %w", err)
+		return nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
 
 	// Generate serial number
@@ -120,13 +120,7 @@ func GenerateAdminCert(config *AdminCertConfig, ca *CAResult) (*AdminCertResult,
 
 	// Calculate validity period
 	notBefore := time.Now()
-	var notAfter time.Time
-	if config.ValidityMinutes > 0 {
-		// Use minutes for testing short-lived certificates
-		notAfter = notBefore.Add(time.Duration(config.ValidityMinutes) * time.Minute)
-	} else {
-		notAfter = notBefore.AddDate(0, 0, config.ValidityDays)
-	}
+	notAfter := notBefore.Add(config.Validity)
 
 	// Create certificate template for admin cert
 	// Admin certs only need client authentication for running security commands
@@ -152,7 +146,8 @@ func GenerateAdminCert(config *AdminCertConfig, ca *CAResult) (*AdminCertResult,
 	}
 
 	// Sign the certificate with the CA
-	certDER, err := x509.CreateCertificate(rand.Reader, template, ca.Certificate, &privateKey.PublicKey, ca.PrivateKey)
+	publicKey := getPublicKey(privateKey)
+	certDER, err := x509.CreateCertificate(rand.Reader, template, ca.Certificate, publicKey, ca.PrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create admin certificate: %w", err)
 	}
@@ -170,10 +165,10 @@ func GenerateAdminCert(config *AdminCertConfig, ca *CAResult) (*AdminCertResult,
 	})
 
 	// Encode private key to PEM
-	keyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
-	})
+	keyPEM, err := encodePrivateKeyToPEM(privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode private key: %w", err)
+	}
 
 	return &AdminCertResult{
 		Certificate:    cert,
@@ -197,30 +192,9 @@ func ParseAdminCert(certPEM, keyPEM []byte) (*AdminCertResult, error) {
 	}
 
 	// Parse private key
-	keyBlock, _ := pem.Decode(keyPEM)
-	if keyBlock == nil {
-		return nil, fmt.Errorf("failed to decode private key PEM")
-	}
-
-	var privateKey *rsa.PrivateKey
-	switch keyBlock.Type {
-	case "RSA PRIVATE KEY":
-		privateKey, err = x509.ParsePKCS1PrivateKey(keyBlock.Bytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse PKCS1 private key: %w", err)
-		}
-	case "PRIVATE KEY":
-		key, err := x509.ParsePKCS8PrivateKey(keyBlock.Bytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse PKCS8 private key: %w", err)
-		}
-		var ok bool
-		privateKey, ok = key.(*rsa.PrivateKey)
-		if !ok {
-			return nil, fmt.Errorf("private key is not RSA")
-		}
-	default:
-		return nil, fmt.Errorf("unsupported private key type: %s", keyBlock.Type)
+	privateKey, err := parsePrivateKeyFromPEM(keyPEM)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
 
 	return &AdminCertResult{
@@ -237,8 +211,9 @@ func (a *AdminCertResult) IsExpired() bool {
 }
 
 // NeedsRenewal checks if the admin certificate needs renewal
-func (a *AdminCertResult) NeedsRenewal(renewBeforeDays int) bool {
-	renewalTime := a.Certificate.NotAfter.AddDate(0, 0, -renewBeforeDays)
+// The threshold parameter specifies how long before expiry to trigger renewal
+func (a *AdminCertResult) NeedsRenewal(threshold time.Duration) bool {
+	renewalTime := a.Certificate.NotAfter.Add(-threshold)
 	return time.Now().After(renewalTime)
 }
 
@@ -246,17 +221,4 @@ func (a *AdminCertResult) NeedsRenewal(renewBeforeDays int) bool {
 func (a *AdminCertResult) DaysUntilExpiry() int {
 	duration := time.Until(a.Certificate.NotAfter)
 	return int(duration.Hours() / 24)
-}
-
-// NeedsRenewalMinutes checks if the admin certificate needs renewal based on minutes
-// Useful for testing short-lived certificates
-func (a *AdminCertResult) NeedsRenewalMinutes(renewBeforeMinutes int) bool {
-	renewalTime := a.Certificate.NotAfter.Add(-time.Duration(renewBeforeMinutes) * time.Minute)
-	return time.Now().After(renewalTime)
-}
-
-// MinutesUntilExpiry returns the number of minutes until the certificate expires
-func (a *AdminCertResult) MinutesUntilExpiry() int {
-	duration := time.Until(a.Certificate.NotAfter)
-	return int(duration.Minutes())
 }

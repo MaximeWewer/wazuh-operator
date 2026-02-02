@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -47,8 +47,8 @@ type ExpansionStatusUpdate struct {
 }
 
 // NewComponentExpansionStatus creates a new ComponentExpansionStatus from an update
-func NewComponentExpansionStatus(update ExpansionStatusUpdate) *v1alpha1.ComponentExpansionStatus {
-	return &v1alpha1.ComponentExpansionStatus{
+func NewComponentExpansionStatus(update ExpansionStatusUpdate) *v1.ComponentExpansionStatus {
+	return &v1.ComponentExpansionStatus{
 		Phase:              update.Phase,
 		RequestedSize:      update.RequestedSize,
 		CurrentSize:        update.CurrentSize,
@@ -61,7 +61,7 @@ func NewComponentExpansionStatus(update ExpansionStatusUpdate) *v1alpha1.Compone
 
 // UpdateComponentExpansionStatus updates an existing ComponentExpansionStatus.
 // It only updates the LastTransitionTime if the phase has changed.
-func UpdateComponentExpansionStatus(existing *v1alpha1.ComponentExpansionStatus, update ExpansionStatusUpdate) *v1alpha1.ComponentExpansionStatus {
+func UpdateComponentExpansionStatus(existing *v1.ComponentExpansionStatus, update ExpansionStatusUpdate) *v1.ComponentExpansionStatus {
 	if existing == nil {
 		return NewComponentExpansionStatus(update)
 	}
@@ -135,18 +135,18 @@ func CreateFailedStatus(requestedSize, currentSize, errorMessage string, pvcsExp
 }
 
 // ClearExpansionStatus creates an empty status update indicating no expansion is active
-func ClearExpansionStatus() *v1alpha1.ComponentExpansionStatus {
+func ClearExpansionStatus() *v1.ComponentExpansionStatus {
 	return nil
 }
 
 // IsExpansionInProgress returns true if expansion is in progress for any component
-func IsExpansionInProgress(status *v1alpha1.VolumeExpansionStatus) bool {
+func IsExpansionInProgress(status *v1.VolumeExpansionStatus) bool {
 	if status == nil {
 		return false
 	}
 
 	// Check each component
-	for _, component := range []*v1alpha1.ComponentExpansionStatus{
+	for _, component := range []*v1.ComponentExpansionStatus{
 		status.IndexerExpansion,
 		status.ManagerMasterExpansion,
 		status.ManagerWorkersExpansion,
@@ -163,12 +163,12 @@ func IsExpansionInProgress(status *v1alpha1.VolumeExpansionStatus) bool {
 }
 
 // IsAnyExpansionFailed returns true if any component expansion has failed
-func IsAnyExpansionFailed(status *v1alpha1.VolumeExpansionStatus) bool {
+func IsAnyExpansionFailed(status *v1.VolumeExpansionStatus) bool {
 	if status == nil {
 		return false
 	}
 
-	for _, component := range []*v1alpha1.ComponentExpansionStatus{
+	for _, component := range []*v1.ComponentExpansionStatus{
 		status.IndexerExpansion,
 		status.ManagerMasterExpansion,
 		status.ManagerWorkersExpansion,

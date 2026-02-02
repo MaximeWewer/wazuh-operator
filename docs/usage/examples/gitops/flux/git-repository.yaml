@@ -1,0 +1,19 @@
+# Flux GitRepository for Wazuh Operator
+#
+# Alternative to HelmRepository - pulls charts from Git.
+#
+# Usage:
+#   kubectl apply -f git-repository.yaml
+#
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: wazuh-operator
+  namespace: flux-system
+spec:
+  interval: 5m
+  url: https://github.com/MaximeWewer/wazuh-operator.git
+  ref:
+    branch: main
+    # Or use a specific tag:
+    # tag: v1.0.0

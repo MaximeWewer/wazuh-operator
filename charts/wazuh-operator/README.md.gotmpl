@@ -1,0 +1,419 @@
+{{ template "chart.header" . }}
+
+{{ template "chart.deprecationWarning" . }}
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+## Prerequisites
+
+- Kubernetes 1.24+
+- Helm 3.10+
+- (Optional) Prometheus Operator for ServiceMonitor support
+- (Optional) cert-manager v1.0+ for webhook TLS
+
+## Documentation
+
+| Resource                                             | Description                  |
+| ---------------------------------------------------- | ---------------------------- |
+| [User Documentation](../../docs/usage/README.md)     | Full usage guide             |
+| [Getting Started](../../docs/usage/getting-started/) | Installation and quick start |
+| [CRD Reference](../../docs/usage/CRD-REFERENCE.md)   | Complete API documentation   |
+
+## Installation
+
+### Quick Start (CRDs + Operator)
+
+```bash
+helm install wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-system \
+  --create-namespace
+```
+
+### Install CRDs Only
+
+```bash
+helm install wazuh-crds ./charts/wazuh-operator \
+  --set deploymentMode=crds \
+  --namespace wazuh-system \
+  --create-namespace
+```
+
+### Install Operator Only
+
+```bash
+helm install wazuh-operator ./charts/wazuh-operator \
+  --set deploymentMode=operator \
+  --set crds.install=false \
+  --namespace wazuh-system \
+  --create-namespace
+```
+
+## Upgrading
+
+```bash
+helm upgrade wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-system
+```
+
+### Upgrade CRDs
+
+CRDs are not automatically upgraded by Helm. To upgrade:
+
+```bash
+# Method 1: Using Helm template
+helm template wazuh-operator ./charts/wazuh-operator \
+  --set deploymentMode=crds | kubectl apply -f -
+
+# Method 2: Using kubectl
+kubectl apply -f charts/wazuh-operator/crds/
+```
+
+## Uninstallation
+
+```bash
+helm uninstall wazuh-operator --namespace wazuh-system
+```
+
+> **Warning:** If `crds.keep=true` (default), CRDs will not be deleted automatically.
+
+## Values
+
+{{ define "chart.valuesTableRow" }}| {{ .Key }} | {{ .Type }} | {{ if .Default }}{{ .Default }}{{ else }}{{ .AutoDefault }}{{ end }} | {{ if .Description }}{{ .Description }}{{ else }}{{ .AutoDescription }}{{ end }} |{{ end }}
+
+### Name Overrides
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if or (eq .Key "nameOverride") (eq .Key "fullnameOverride") }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Deployment Mode
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if eq .Key "deploymentMode" }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### CRD Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "crds" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Operator Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "operator" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### RBAC Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "rbac" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Namespace Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "namespace" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Common Labels & Annotations
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if or (hasPrefix "commonLabels" .Key) (hasPrefix "commonAnnotations" .Key) }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### OpenTelemetry Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "telemetry" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Gateway API Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "gatewayAPI" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Advanced Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if or (eq .Key "extraArgs") (eq .Key "nonBlockingRollouts") (eq .Key "terminationGracePeriodSeconds") }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### High Availability Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if or (eq .Key "replicaCount") (hasPrefix "leaderElection" .Key) }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Update Strategy Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "updateStrategy" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Network Policy Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "networkPolicy" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Resource Quota Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "resourceQuota" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Admission Webhook Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "webhook" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### cert-manager Integration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "certManager" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+## Examples
+
+### High Availability Deployment
+
+```yaml
+replicaCount: 3
+
+leaderElection:
+  enabled: true
+  id: "wazuh-operator-leader"
+
+operator:
+  resources:
+    limits:
+      cpu: 1
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+```
+
+### With Prometheus Monitoring
+
+```yaml
+operator:
+  metrics:
+    enabled: true
+    port: 8080
+
+  serviceMonitor:
+    enabled: true
+    labels:
+      prometheus: kube-prometheus
+    interval: "30s"
+
+  prometheusRules:
+    enabled: true
+    alerts:
+      clusterUnhealthy:
+        for: "5m"
+        severity: warning
+      operatorDown:
+        for: "5m"
+        severity: critical
+```
+
+### With Gateway API Support
+
+```yaml
+gatewayAPI:
+  enabled: true
+```
+
+> **Note:** Requires Gateway API CRDs to be installed:
+>
+> ```bash
+> kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/latest/download/standard-install.yaml
+> kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/latest/download/experimental-install.yaml
+> ```
+
+### With OpenTelemetry Tracing
+
+```yaml
+telemetry:
+  enabled: true
+  endpoint: "jaeger-collector.observability:4317"
+  insecure: true
+  serviceName: "wazuh-operator"
+```
+
+### With Network Policy
+
+```yaml
+networkPolicy:
+  enabled: true
+  prometheus:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: monitoring
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: prometheus
+  managedNamespaces:
+    - wazuh
+    - wazuh-prod
+```
+
+### With cert-manager for Webhooks
+
+```yaml
+webhook:
+  enabled: true
+  failurePolicy: Fail
+
+certManager:
+  enabled: true
+  ca:
+    duration: "87600h"
+    renewBefore: "2160h"
+  webhook:
+    enabled: true
+    duration: "8760h"
+    renewBefore: "720h"
+```
+
+### Namespace-Scoped RBAC (Multi-Tenant)
+
+```yaml
+rbac:
+  namespaceScoped:
+    enabled: true
+    namespaces:
+      - wazuh-prod
+      - wazuh-staging
+      - wazuh-dev
+```
+
+## Deployment Modes
+
+| Mode       | Description            | Use Case                                     |
+| ---------- | ---------------------- | -------------------------------------------- |
+| `all`      | Deploy CRDs + Operator | First-time installation, single deployment   |
+| `crds`     | Deploy CRDs only       | Centralized CRD management, GitOps workflows |
+| `operator` | Deploy Operator only   | CRDs already exist, operator-only updates    |
+
+## Architecture
+
+- **One Operator** per namespace manages **One WazuhCluster**
+- **High Availability** via `replicaCount > 1` + `leaderElection.enabled`
+- **Leader Election** ensures only one active replica (others standby)
+- **Automatic Namespace Detection** from WazuhCluster resource location
+
+## Troubleshooting
+
+### CRDs Not Found
+
+```bash
+# Verify CRDs
+kubectl get crds | grep resources.wazuh.com
+
+# Install if missing
+helm upgrade wazuh-operator ./charts/wazuh-operator --set crds.install=true --force
+```
+
+### Operator Not Starting
+
+```bash
+# Check logs
+kubectl logs -n wazuh-system deployment/wazuh-operator-controller-manager
+
+# Check events
+kubectl describe pod -n wazuh-system -l app.kubernetes.io/name=wazuh-operator
+
+# Verify RBAC
+kubectl auth can-i create wazuhclusters.resources.wazuh.com \
+  --as=system:serviceaccount:wazuh-system:wazuh-operator
+```
+
+### Metrics Not Available
+
+```bash
+# Verify metrics enabled
+helm get values wazuh-operator -n wazuh-system
+
+# Test endpoint
+kubectl port-forward -n wazuh-system svc/wazuh-operator-metrics 8080:8080
+curl http://localhost:8080/metrics
+```
+
+## Support
+
+- GitHub Issues: https://github.com/MaximeWewer/wazuh-operator/issues
+- Documentation: https://documentation.wazuh.com/

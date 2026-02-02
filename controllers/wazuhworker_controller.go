@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +17,14 @@ limitations under the License.
 package controllers
 
 import (
+	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+
 	"context"
+
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -27,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
 )
 
@@ -46,10 +53,26 @@ type WazuhWorkerReconciler struct {
 
 // Reconcile is the main reconciliation loop for WazuhWorker
 func (r *WazuhWorkerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// Start tracing span
+	ctx, span := telemetry.Tracer().Start(ctx, "WazuhWorker.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("namespace", req.Namespace),
+			attribute.String("name", req.Name),
+		))
+	defer span.End()
+
+	// Track reconciliation metrics
+	startTime := time.Now()
+	var reconcileResult = "success"
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		metrics.RecordReconciliation("WazuhWorker", req.Namespace, reconcileResult, duration)
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Fetch the WazuhWorker instance
-	worker := &wazuhv1alpha1.WazuhWorker{}
+	worker := &wazuhv1.WazuhWorker{}
 	if err := r.Get(ctx, req.NamespacedName, worker); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("WazuhWorker resource not found, ignoring since object must be deleted")
@@ -72,7 +95,7 @@ func (r *WazuhWorkerReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 // SetupWithManager sets up the controller with the Manager
 func (r *WazuhWorkerReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1alpha1.WazuhWorker{}).
+		For(&wazuhv1.WazuhWorker{}).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).

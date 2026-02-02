@@ -1,39 +1,88 @@
-🎉 Wazuh Cluster deployment initiated!
+===============================================
+  Wazuh Cluster Deployment Initiated
+===============================================
 
 Namespace: {{ .Values.namespace }}
+Cluster Name: {{ .Values.cluster.name }}
 {{- if .Values.sizing.profile }}
 Sizing Profile: {{ .Values.sizing.profile }}
 {{- end }}
 
-📦 Secrets created:
-{{- if and .Values.secrets.wazuhApi .Values.secrets.wazuhApi.username .Values.secrets.wazuhApi.password }}
-  ✓ wazuh-api-credentials
-{{- end }}
-{{- if and .Values.secrets.indexerAdmin .Values.secrets.indexerAdmin.username .Values.secrets.indexerAdmin.password }}
-  ✓ indexer-admin-credentials
-{{- end }}
-{{- if .Values.secrets.wazuhAuthd.enabled }}
-  ✓ wazuh-authd-pass
-{{- end }}
-
 {{- if .Values.cluster.enabled }}
-🚀 WazuhCluster resource created:
-  ✓ {{ .Values.cluster.name }}
 
-To check the status of your Wazuh cluster:
+Secrets:
+{{- $esoEnabled := and .Values.externalSecrets .Values.externalSecrets.enabled }}
+{{- if $esoEnabled }}
+  Using External Secrets Operator for credentials
+  {{- if and .Values.externalSecrets.indexerAdmin .Values.externalSecrets.indexerAdmin.name }}
+  - indexerAdmin: {{ .Values.externalSecrets.indexerAdmin.name }} (ExternalSecret)
+  {{- end }}
+  {{- if and .Values.externalSecrets.wazuhApi .Values.externalSecrets.wazuhApi.name }}
+  - wazuhApi: {{ .Values.externalSecrets.wazuhApi.name }} (ExternalSecret)
+  {{- end }}
+  {{- if and .Values.externalSecrets.wazuhAuthd .Values.externalSecrets.wazuhAuthd.name }}
+  - wazuhAuthd: {{ .Values.externalSecrets.wazuhAuthd.name }} (ExternalSecret)
+  {{- end }}
+{{- else }}
+  {{- if and .Values.secrets.wazuhApi .Values.secrets.wazuhApi.password }}
+  - wazuh-api-credentials (inline)
+  {{- end }}
+  {{- if and .Values.secrets.indexerAdmin .Values.secrets.indexerAdmin.password }}
+  - indexer-admin-credentials (inline)
+  {{- end }}
+  {{- if .Values.secrets.wazuhAuthd.enabled }}
+  - wazuh-authd-pass (inline)
+  {{- end }}
+{{- end }}
+
+{{- if .Values.networkPolicy.enabled }}
+
+Network Policies: Enabled
+  - Operator namespace: {{ .Values.networkPolicy.operatorNamespace }}
+  {{- if .Values.networkPolicy.manager.allowAgentConnections }}
+  - Agent connections: Allowed
+  {{- end }}
+{{- end }}
+
+Check cluster status:
+
   kubectl get wazuhcluster {{ .Values.cluster.name }} -n {{ .Values.namespace }}
 
-To view detailed status:
+Watch deployment progress:
+
+  kubectl get pods -n {{ .Values.namespace }} -l app.kubernetes.io/instance={{ .Values.cluster.name }} -w
+
+View detailed status:
+
   kubectl describe wazuhcluster {{ .Values.cluster.name }} -n {{ .Values.namespace }}
 
-To access the Wazuh dashboard (once deployed):
+Access the Wazuh Dashboard (once deployed):
+
+  # Get the service
   kubectl get svc {{ .Values.cluster.name }}-dashboard -n {{ .Values.namespace }}
 
+  # Port forward for local access
+  kubectl port-forward -n {{ .Values.namespace }} svc/{{ .Values.cluster.name }}-dashboard 5601:5601
+
+  # Open https://localhost:5601 in your browser
+
 {{- else }}
-ℹ️  Cluster deployment is disabled.
+
+Cluster deployment is disabled (cluster.enabled: false).
+Only secrets have been created.
 
 To deploy a cluster, set 'cluster.enabled: true' in your values.yaml.
 {{- end }}
 
-⚠️  SECURITY WARNING:
-Please ensure you update the default passwords in your values.yaml for production use!
+{{- if and (not .Values.externalSecrets.enabled) (or (eq .Values.secrets.wazuhApi.password "CHANGE_ME_STRONG_PASSWORD_HERE") (eq .Values.secrets.indexerAdmin.password "CHANGE_ME_STRONG_PASSWORD_HERE")) }}
+
+** SECURITY WARNING **
+Default passwords detected! For production use:
+1. Change all default passwords, OR
+2. Use External Secrets Operator (externalSecrets.enabled: true)
+{{- end }}
+
+Documentation:
+  - Sizing Guide: https://github.com/MaximeWewer/wazuh-operator/blob/main/docs/usage/features/sizing.md
+  - User Guide: https://github.com/MaximeWewer/wazuh-operator/tree/main/docs/usage
+  - Wazuh Docs: https://documentation.wazuh.com/

@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -36,30 +36,30 @@ func NewTemplatesAPI(client *Client) *TemplatesAPI {
 
 // IndexTemplate represents an index template
 type IndexTemplate struct {
-	IndexPatterns   []string               `json:"index_patterns"`
-	Template        *TemplateSpec          `json:"template,omitempty"`
-	ComposedOf      []string               `json:"composed_of,omitempty"`
-	Priority        int                    `json:"priority,omitempty"`
-	Version         int                    `json:"version,omitempty"`
-	Meta            map[string]interface{} `json:"_meta,omitempty"`
-	DataStream      *DataStreamSpec        `json:"data_stream,omitempty"`
-	AllowAutoCreate *bool                  `json:"allow_auto_create,omitempty"`
+	IndexPatterns   []string        `json:"index_patterns"`
+	Template        *TemplateSpec   `json:"template,omitempty"`
+	ComposedOf      []string        `json:"composed_of,omitempty"`
+	Priority        int             `json:"priority,omitempty"`
+	Version         int             `json:"version,omitempty"`
+	Meta            map[string]any  `json:"_meta,omitempty"`
+	DataStream      *DataStreamSpec `json:"data_stream,omitempty"`
+	AllowAutoCreate *bool           `json:"allow_auto_create,omitempty"`
 }
 
 // TemplateSpec represents the template specification
 type TemplateSpec struct {
-	Settings map[string]interface{} `json:"settings,omitempty"`
-	Mappings map[string]interface{} `json:"mappings,omitempty"`
-	Aliases  map[string]AliasSpec   `json:"aliases,omitempty"`
+	Settings map[string]any       `json:"settings,omitempty"`
+	Mappings map[string]any       `json:"mappings,omitempty"`
+	Aliases  map[string]AliasSpec `json:"aliases,omitempty"`
 }
 
 // AliasSpec represents an alias specification
 type AliasSpec struct {
-	Filter        map[string]interface{} `json:"filter,omitempty"`
-	IndexRouting  string                 `json:"index_routing,omitempty"`
-	SearchRouting string                 `json:"search_routing,omitempty"`
-	IsHidden      *bool                  `json:"is_hidden,omitempty"`
-	IsWriteIndex  *bool                  `json:"is_write_index,omitempty"`
+	Filter        map[string]any `json:"filter,omitempty"`
+	IndexRouting  string         `json:"index_routing,omitempty"`
+	SearchRouting string         `json:"search_routing,omitempty"`
+	IsHidden      *bool          `json:"is_hidden,omitempty"`
+	IsWriteIndex  *bool          `json:"is_write_index,omitempty"`
 }
 
 // DataStreamSpec represents data stream specification
@@ -72,25 +72,25 @@ type DataStreamSpec struct {
 type ComponentTemplate struct {
 	Template *ComponentTemplateSpec `json:"template"`
 	Version  int                    `json:"version,omitempty"`
-	Meta     map[string]interface{} `json:"_meta,omitempty"`
+	Meta     map[string]any         `json:"_meta,omitempty"`
 }
 
 // ComponentTemplateSpec represents the component template specification
 type ComponentTemplateSpec struct {
-	Settings    map[string]interface{} `json:"settings,omitempty"`
-	Mappings    map[string]interface{} `json:"mappings,omitempty"`
-	Aliases     map[string]AliasSpec   `json:"aliases,omitempty"`
-	SettingsRaw json.RawMessage        `json:"-"`
-	MappingsRaw json.RawMessage        `json:"-"`
+	Settings    map[string]any       `json:"settings,omitempty"`
+	Mappings    map[string]any       `json:"mappings,omitempty"`
+	Aliases     map[string]AliasSpec `json:"aliases,omitempty"`
+	SettingsRaw json.RawMessage      `json:"-"`
+	MappingsRaw json.RawMessage      `json:"-"`
 }
 
 // MarshalJSON implements custom JSON marshaling for ComponentTemplateSpec
 func (s ComponentTemplateSpec) MarshalJSON() ([]byte, error) {
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 
 	// Use raw settings if provided
 	if len(s.SettingsRaw) > 0 {
-		var settings interface{}
+		var settings any
 		if err := json.Unmarshal(s.SettingsRaw, &settings); err == nil {
 			result["settings"] = settings
 		}
@@ -100,7 +100,7 @@ func (s ComponentTemplateSpec) MarshalJSON() ([]byte, error) {
 
 	// Use raw mappings if provided
 	if len(s.MappingsRaw) > 0 {
-		var mappings interface{}
+		var mappings any
 		if err := json.Unmarshal(s.MappingsRaw, &mappings); err == nil {
 			result["mappings"] = mappings
 		}

@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -108,7 +108,7 @@ func (c *WorkerHealthChecker) Check(ctx context.Context) (*WorkerHealthStatus, e
 
 	// Check node info
 	nodeURL := fmt.Sprintf("https://%s:%d/cluster/local/info", c.host, c.port)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, nodeURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, nodeURL, http.NoBody)
 	if err != nil {
 		status.Error = fmt.Sprintf("failed to create request: %v", err)
 		return status, nil
@@ -165,7 +165,7 @@ func (c *WorkerHealthChecker) Check(ctx context.Context) (*WorkerHealthStatus, e
 // getAgentCount returns the number of agents connected to this worker
 func (c *WorkerHealthChecker) getAgentCount(ctx context.Context) (int, error) {
 	agentURL := fmt.Sprintf("https://%s:%d/agents?select=id&node_name=%s", c.host, c.port, c.host)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, agentURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, agentURL, http.NoBody)
 	if err != nil {
 		return 0, err
 	}

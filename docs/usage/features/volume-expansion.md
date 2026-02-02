@@ -46,7 +46,7 @@ Volume expansion is supported in Kubernetes 1.11+ (beta) and stable in 1.24+.
 Simply update the `storageSize` field in your WazuhCluster spec:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhCluster
 metadata:
   name: wazuh
@@ -254,7 +254,7 @@ kubectl rollout restart statefulset wazuh-indexer -n wazuh
 ### Initial Deployment
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhCluster
 metadata:
   name: wazuh-prod
@@ -274,7 +274,7 @@ spec:
 ### Expansion After 6 Months
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhCluster
 metadata:
   name: wazuh-prod

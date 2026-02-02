@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,23 +17,36 @@ limitations under the License.
 package controllers
 
 import (
+	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+
 	"context"
+
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
 )
 
 // WazuhDecoderReconciler reconciles a WazuhDecoder object
 type WazuhDecoderReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 
 	// Helper reconciler
 	DecoderReconciler *wazuhreconciler.DecoderReconciler
@@ -45,10 +58,26 @@ type WazuhDecoderReconciler struct {
 
 // Reconcile is the main reconciliation loop for WazuhDecoder
 func (r *WazuhDecoderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// Start tracing span
+	ctx, span := telemetry.Tracer().Start(ctx, "WazuhDecoder.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("namespace", req.Namespace),
+			attribute.String("name", req.Name),
+		))
+	defer span.End()
+
+	// Track reconciliation metrics
+	startTime := time.Now()
+	var reconcileResult = "success"
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		metrics.RecordReconciliation("WazuhDecoder", req.Namespace, reconcileResult, duration)
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Fetch the WazuhDecoder instance
-	decoder := &wazuhv1alpha1.WazuhDecoder{}
+	decoder := &wazuhv1.WazuhDecoder{}
 	if err := r.Get(ctx, req.NamespacedName, decoder); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("WazuhDecoder resource not found, ignoring since object must be deleted")
@@ -56,6 +85,40 @@ func (r *WazuhDecoderReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 		log.Error(err, "Failed to get WazuhDecoder")
 		return ctrl.Result{}, err
+	}
+
+	// Handle deletion
+	if !decoder.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(decoder, wazuhreconciler.DecoderFinalizer) {
+			log.Info("Handling deletion of WazuhDecoder", "name", decoder.Name)
+
+			// Perform cleanup
+			if err := r.DecoderReconciler.Delete(ctx, decoder); err != nil {
+				log.Error(err, "Failed to cleanup WazuhDecoder")
+				return ctrl.Result{}, err
+			}
+
+			// Remove finalizer
+			controllerutil.RemoveFinalizer(decoder, wazuhreconciler.DecoderFinalizer)
+			if err := r.Update(ctx, decoder); err != nil {
+				log.Error(err, "Failed to remove finalizer")
+				return ctrl.Result{}, err
+			}
+			log.Info("Successfully removed finalizer from WazuhDecoder", "name", decoder.Name)
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Add finalizer if not present
+	if !controllerutil.ContainsFinalizer(decoder, wazuhreconciler.DecoderFinalizer) {
+		log.Info("Adding finalizer to WazuhDecoder", "name", decoder.Name)
+		controllerutil.AddFinalizer(decoder, wazuhreconciler.DecoderFinalizer)
+		if err := r.Update(ctx, decoder); err != nil {
+			log.Error(err, "Failed to add finalizer")
+			return ctrl.Result{}, err
+		}
+		// Requeue after adding finalizer
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	// Delegate to helper reconciler
@@ -71,8 +134,53 @@ func (r *WazuhDecoderReconciler) Reconcile(ctx context.Context, req ctrl.Request
 // SetupWithManager sets up the controller with the Manager
 func (r *WazuhDecoderReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1alpha1.WazuhDecoder{}).
+		For(&wazuhv1.WazuhDecoder{}).
 		Owns(&corev1.ConfigMap{}).
+		// Watch for WazuhCluster changes to re-reconcile decoders when cluster changes
+		Watches(
+			&wazuhv1.WazuhCluster{},
+			handler.EnqueueRequestsFromMapFunc(r.findDecodersForCluster),
+		).
 		Named("wazuhdecoder").
 		Complete(r)
+}
+
+// findDecodersForCluster returns reconcile requests for all WazuhDecoders that reference a given cluster
+func (r *WazuhDecoderReconciler) findDecodersForCluster(ctx context.Context, obj client.Object) []reconcile.Request {
+	log := logf.FromContext(ctx)
+	cluster, ok := obj.(*wazuhv1.WazuhCluster)
+	if !ok {
+		return nil
+	}
+
+	// List all WazuhDecoders in the cluster's namespace
+	decoderList := &wazuhv1.WazuhDecoderList{}
+	if err := r.List(ctx, decoderList, client.InNamespace(cluster.Namespace)); err != nil {
+		log.Error(err, "Failed to list WazuhDecoders for cluster", "cluster", cluster.Name)
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, decoder := range decoderList.Items {
+		// Check if this decoder references the changed cluster
+		clusterNamespace := decoder.Spec.ClusterRef.Namespace
+		if clusterNamespace == "" {
+			clusterNamespace = decoder.Namespace
+		}
+		if decoder.Spec.ClusterRef.Name == cluster.Name && clusterNamespace == cluster.Namespace {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      decoder.Name,
+					Namespace: decoder.Namespace,
+				},
+			})
+		}
+	}
+
+	if len(requests) > 0 {
+		log.Info("Cluster changed, triggering reconciliation for decoders",
+			"cluster", cluster.Name, "decodersCount", len(requests))
+	}
+
+	return requests
 }

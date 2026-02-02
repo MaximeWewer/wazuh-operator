@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,8 +32,8 @@ type IndexSettings struct {
 
 // IndexConfig represents index configuration
 type IndexConfig struct {
-	Settings IndexSettings          `json:"settings,omitempty"`
-	Mappings map[string]interface{} `json:"mappings,omitempty"`
+	Settings IndexSettings  `json:"settings,omitempty"`
+	Mappings map[string]any `json:"mappings,omitempty"`
 }
 
 // IndexAPI provides index management operations
@@ -90,7 +90,7 @@ func (a *IndexAPI) Delete(ctx context.Context, indexName string) error {
 }
 
 // GetSettings retrieves index settings
-func (a *IndexAPI) GetSettings(ctx context.Context, indexName string) (map[string]interface{}, error) {
+func (a *IndexAPI) GetSettings(ctx context.Context, indexName string) (map[string]any, error) {
 	resp, err := a.client.Get(ctx, "/"+indexName+"/_settings")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get index settings: %w", err)
@@ -102,7 +102,7 @@ func (a *IndexAPI) GetSettings(ctx context.Context, indexName string) (map[strin
 		return nil, fmt.Errorf("failed to get index settings: %s", string(body))
 	}
 
-	var settings map[string]interface{}
+	var settings map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&settings); err != nil {
 		return nil, fmt.Errorf("failed to decode settings: %w", err)
 	}
@@ -111,7 +111,7 @@ func (a *IndexAPI) GetSettings(ctx context.Context, indexName string) (map[strin
 }
 
 // UpdateSettings updates index settings
-func (a *IndexAPI) UpdateSettings(ctx context.Context, indexName string, settings map[string]interface{}) error {
+func (a *IndexAPI) UpdateSettings(ctx context.Context, indexName string, settings map[string]any) error {
 	resp, err := a.client.Put(ctx, "/"+indexName+"/_settings", settings)
 	if err != nil {
 		return fmt.Errorf("failed to update index settings: %w", err)

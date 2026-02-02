@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,16 +19,16 @@ package validation
 import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
 // ValidateClusterCreate validates a WazuhCluster for creation
-func ValidateClusterCreate(cluster *wazuhv1alpha1.WazuhCluster) field.ErrorList {
+func ValidateClusterCreate(cluster *wazuhv1.WazuhCluster) field.ErrorList {
 	return ValidateWazuhCluster(cluster)
 }
 
 // ValidateClusterUpdate validates a WazuhCluster for update
-func ValidateClusterUpdate(newCluster, oldCluster *wazuhv1alpha1.WazuhCluster) field.ErrorList {
+func ValidateClusterUpdate(newCluster, oldCluster *wazuhv1.WazuhCluster) field.ErrorList {
 	allErrs := ValidateWazuhCluster(newCluster)
 
 	specPath := field.NewPath("spec")
@@ -47,7 +47,7 @@ func ValidateClusterUpdate(newCluster, oldCluster *wazuhv1alpha1.WazuhCluster) f
 }
 
 // ValidateIndexerSpec validates the indexer specification
-func ValidateIndexerSpec(spec *wazuhv1alpha1.WazuhIndexerClusterSpec) field.ErrorList {
+func ValidateIndexerSpec(spec *wazuhv1.WazuhIndexerClusterSpec) field.ErrorList {
 	var allErrs field.ErrorList
 
 	if spec == nil {
@@ -71,7 +71,7 @@ func ValidateIndexerSpec(spec *wazuhv1alpha1.WazuhIndexerClusterSpec) field.Erro
 }
 
 // ValidateManagerSpec validates the manager specification
-func ValidateManagerSpec(spec *wazuhv1alpha1.WazuhManagerClusterSpec) field.ErrorList {
+func ValidateManagerSpec(spec *wazuhv1.WazuhManagerClusterSpec) field.ErrorList {
 	var allErrs field.ErrorList
 
 	if spec == nil {
@@ -93,7 +93,7 @@ func ValidateManagerSpec(spec *wazuhv1alpha1.WazuhManagerClusterSpec) field.Erro
 }
 
 // ValidateDashboardSpec validates the dashboard specification
-func ValidateDashboardSpec(spec *wazuhv1alpha1.WazuhDashboardClusterSpec) field.ErrorList {
+func ValidateDashboardSpec(spec *wazuhv1.WazuhDashboardClusterSpec) field.ErrorList {
 	var allErrs field.ErrorList
 
 	if spec == nil {
@@ -111,7 +111,7 @@ func ValidateDashboardSpec(spec *wazuhv1alpha1.WazuhDashboardClusterSpec) field.
 }
 
 // ValidateClusterReferences validates cross-references in a cluster
-func ValidateClusterReferences(cluster *wazuhv1alpha1.WazuhCluster) field.ErrorList {
+func ValidateClusterReferences(_ *wazuhv1.WazuhCluster) field.ErrorList {
 	var allErrs field.ErrorList
 
 	// Add any cross-reference validation here

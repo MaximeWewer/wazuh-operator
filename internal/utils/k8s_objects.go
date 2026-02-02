@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,11 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package utils
+package utils //nolint:revive // utils is a common package name
 
 import (
 	"fmt"
+	"strings"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -170,4 +172,24 @@ func BoolPtr(b bool) *bool {
 // StringPtr returns a pointer to a string
 func StringPtr(s string) *string {
 	return &s
+}
+
+// IsCRDNotInstalledError checks if the error is due to a CRD not being installed.
+// This is useful for handling optional CRD dependencies gracefully (e.g., Gateway API,
+// Prometheus Operator, cert-manager, etc.).
+//
+// Returns true if the error indicates that the CRD/Kind is not registered in the cluster.
+func IsCRDNotInstalledError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check for meta.NoKindMatchError (CRD not registered)
+	if meta.IsNoMatchError(err) {
+		return true
+	}
+	// Check for common error message patterns
+	errMsg := err.Error()
+	return strings.Contains(errMsg, "no matches for kind") ||
+		strings.Contains(errMsg, "no kind is registered") ||
+		strings.Contains(errMsg, "the server could not find the requested resource")
 }

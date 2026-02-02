@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +17,14 @@ limitations under the License.
 package controllers
 
 import (
+	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+
 	"context"
+
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -26,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
 )
 
@@ -45,10 +52,26 @@ type WazuhCertificateReconciler struct {
 
 // Reconcile is the main reconciliation loop for WazuhCertificate
 func (r *WazuhCertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// Start tracing span
+	ctx, span := telemetry.Tracer().Start(ctx, "WazuhCertificate.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("namespace", req.Namespace),
+			attribute.String("name", req.Name),
+		))
+	defer span.End()
+
+	// Track reconciliation metrics
+	startTime := time.Now()
+	var reconcileResult = "success"
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		metrics.RecordReconciliation("WazuhCertificate", req.Namespace, reconcileResult, duration)
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Fetch the WazuhCertificate instance
-	cert := &wazuhv1alpha1.WazuhCertificate{}
+	cert := &wazuhv1.WazuhCertificate{}
 	if err := r.Get(ctx, req.NamespacedName, cert); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("WazuhCertificate resource not found, ignoring since object must be deleted")
@@ -71,7 +94,7 @@ func (r *WazuhCertificateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 // SetupWithManager sets up the controller with the Manager
 func (r *WazuhCertificateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1alpha1.WazuhCertificate{}).
+		For(&wazuhv1.WazuhCertificate{}).
 		Owns(&corev1.Secret{}).
 		Named("wazuhcertificate").
 		Complete(r)

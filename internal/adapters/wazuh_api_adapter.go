@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -53,6 +54,9 @@ func NewWazuhAPIAdapter(config WazuhAPIConfig) *WazuhAPIAdapter {
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: config.Insecure},
 	}
 
+	// Wrap transport with OpenTelemetry instrumentation
+	instrumentedTransport := telemetry.WrapTransport(transport, "wazuh-api")
+
 	timeout := config.Timeout
 	if timeout == 0 {
 		timeout = constants.TimeoutAPIRequest
@@ -63,7 +67,7 @@ func NewWazuhAPIAdapter(config WazuhAPIConfig) *WazuhAPIAdapter {
 		username: config.Username,
 		password: config.Password,
 		httpClient: &http.Client{
-			Transport: transport,
+			Transport: instrumentedTransport,
 			Timeout:   timeout,
 		},
 	}
@@ -83,7 +87,7 @@ func (a *WazuhAPIAdapter) Authenticate(ctx context.Context) error {
 		return nil
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", a.baseURL+"/security/user/authenticate", nil)
+	req, err := http.NewRequestWithContext(ctx, "POST", a.baseURL+"/security/user/authenticate", http.NoBody)
 	if err != nil {
 		return fmt.Errorf("failed to create auth request: %w", err)
 	}
@@ -114,6 +118,8 @@ func (a *WazuhAPIAdapter) Authenticate(ctx context.Context) error {
 }
 
 // doRequest performs an authenticated request
+//
+//nolint:unparam // body param kept for future POST/PUT support
 func (a *WazuhAPIAdapter) doRequest(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
 	if err := a.Authenticate(ctx); err != nil {
 		return nil, err
@@ -355,4 +361,141 @@ func (a *WazuhAPIAdapter) GetAllNodesStatus(ctx context.Context) ([]ClusterNodeS
 	}
 
 	return result.Data.AffectedItems, nil
+}
+
+// RestartResponse represents the response from restart operations
+type RestartResponse struct {
+	AffectedItems []string `json:"affected_items"`
+	TotalItems    int      `json:"total_affected_items"`
+	FailedItems   []string `json:"failed_items"`
+}
+
+// RestartManager restarts the Wazuh manager to reload configuration and rules
+// This is required after adding or modifying custom rules
+func (a *WazuhAPIAdapter) RestartManager(ctx context.Context) (*RestartResponse, error) {
+	resp, err := a.doRequest(ctx, "PUT", "/manager/restart", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to restart manager: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("manager restart failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Data RestartResponse `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode restart response: %w", err)
+	}
+
+	return &result.Data, nil
+}
+
+// RestartCluster restarts all nodes in the Wazuh cluster to reload configuration and rules
+// Use this when there are worker nodes that also need to reload rules
+func (a *WazuhAPIAdapter) RestartCluster(ctx context.Context) (*RestartResponse, error) {
+	resp, err := a.doRequest(ctx, "PUT", "/cluster/restart", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to restart cluster: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("cluster restart failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Data RestartResponse `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode restart response: %w", err)
+	}
+
+	return &result.Data, nil
+}
+
+// RestartNode restarts a specific node in the Wazuh cluster
+func (a *WazuhAPIAdapter) RestartNode(ctx context.Context, nodeName string) (*RestartResponse, error) {
+	path := fmt.Sprintf("/cluster/%s/restart", nodeName)
+	resp, err := a.doRequest(ctx, "PUT", path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to restart node %s: %w", nodeName, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("node restart failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Data RestartResponse `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode restart response: %w", err)
+	}
+
+	return &result.Data, nil
+}
+
+// ReloadRules reloads the rules on the Wazuh manager without a full restart
+// Note: For Wazuh 4.x, rules typically require a manager restart to take effect
+// This method attempts to use the API reload endpoint if available
+func (a *WazuhAPIAdapter) ReloadRules(ctx context.Context) error {
+	// For Wazuh 4.x, the rules/reload endpoint may not be available
+	// Fall back to manager restart if needed
+	resp, err := a.doRequest(ctx, "PUT", "/manager/configuration/validation", nil)
+	if err != nil {
+		return fmt.Errorf("failed to validate configuration: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("configuration validation failed: %s", string(body))
+	}
+
+	// If validation passes, restart manager to apply rules
+	_, err = a.RestartManager(ctx)
+	return err
+}
+
+// AgentsSummary represents the summary of agents by status
+// API: GET /agents/summary/status
+type AgentsSummary struct {
+	Active       int `json:"active"`
+	Disconnected int `json:"disconnected"`
+	NeverConn    int `json:"never_connected"`
+	Pending      int `json:"pending"`
+	Total        int `json:"total"`
+}
+
+// GetAgentsSummary returns the summary of agents by connection status
+// This is used for metrics: connected agents count
+func (a *WazuhAPIAdapter) GetAgentsSummary(ctx context.Context) (*AgentsSummary, error) {
+	resp, err := a.doRequest(ctx, "GET", "/agents/summary/status", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get agents summary: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("agents summary request failed: %s", string(body))
+	}
+
+	var result struct {
+		Data struct {
+			Connection AgentsSummary `json:"connection"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode agents summary: %w", err)
+	}
+
+	return &result.Data.Connection, nil
 }

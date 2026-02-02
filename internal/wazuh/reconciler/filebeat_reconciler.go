@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
@@ -55,7 +55,7 @@ func NewFilebeatReconciler(c client.Client, scheme *runtime.Scheme, recorder rec
 }
 
 // Reconcile reconciles the WazuhFilebeat resource
-func (r *FilebeatReconciler) Reconcile(ctx context.Context, filebeat *wazuhv1alpha1.WazuhFilebeat) error {
+func (r *FilebeatReconciler) Reconcile(ctx context.Context, filebeat *wazuhv1.WazuhFilebeat) error {
 	log := logf.FromContext(ctx)
 	log.Info("Reconciling WazuhFilebeat", "name", filebeat.Name, "namespace", filebeat.Namespace)
 
@@ -63,7 +63,7 @@ func (r *FilebeatReconciler) Reconcile(ctx context.Context, filebeat *wazuhv1alp
 	cluster, err := r.getCluster(ctx, filebeat)
 	if err != nil {
 		r.setCondition(filebeat, constants.ConditionTypeReconciled, metav1.ConditionFalse, "ClusterNotFound", err.Error())
-		if err := r.updateStatus(ctx, filebeat, wazuhv1alpha1.FilebeatPhaseFailed, err.Error()); err != nil {
+		if err := r.updateStatus(ctx, filebeat, wazuhv1.FilebeatPhaseFailed, err.Error()); err != nil {
 			log.Error(err, "Failed to update status")
 		}
 		if r.Recorder != nil {
@@ -76,7 +76,7 @@ func (r *FilebeatReconciler) Reconcile(ctx context.Context, filebeat *wazuhv1alp
 	if cluster.Status.Phase != "Ready" && cluster.Status.Phase != "Running" {
 		msg := fmt.Sprintf("WazuhCluster %s is not ready (phase: %s)", cluster.Name, cluster.Status.Phase)
 		r.setCondition(filebeat, constants.ConditionTypeReconciled, metav1.ConditionFalse, "ClusterNotReady", msg)
-		if err := r.updateStatus(ctx, filebeat, wazuhv1alpha1.FilebeatPhasePending, msg); err != nil {
+		if err := r.updateStatus(ctx, filebeat, wazuhv1.FilebeatPhasePending, msg); err != nil {
 			log.Error(err, "Failed to update status")
 		}
 		if r.Recorder != nil {
@@ -89,7 +89,7 @@ func (r *FilebeatReconciler) Reconcile(ctx context.Context, filebeat *wazuhv1alp
 	filebeatConfig, err := r.buildFilebeatConfig(ctx, filebeat, cluster)
 	if err != nil {
 		r.setCondition(filebeat, constants.ConditionTypeConfigMapReady, metav1.ConditionFalse, "ConfigGenerationFailed", err.Error())
-		if err := r.updateStatus(ctx, filebeat, wazuhv1alpha1.FilebeatPhaseFailed, err.Error()); err != nil {
+		if err := r.updateStatus(ctx, filebeat, wazuhv1.FilebeatPhaseFailed, err.Error()); err != nil {
 			log.Error(err, "Failed to update status")
 		}
 		return fmt.Errorf("failed to build filebeat config: %w", err)
@@ -98,7 +98,7 @@ func (r *FilebeatReconciler) Reconcile(ctx context.Context, filebeat *wazuhv1alp
 	indexTemplate, templateVersion, err := r.buildIndexTemplate(ctx, filebeat)
 	if err != nil {
 		r.setCondition(filebeat, constants.ConditionTypeTemplateApplied, metav1.ConditionFalse, "TemplateGenerationFailed", err.Error())
-		if err := r.updateStatus(ctx, filebeat, wazuhv1alpha1.FilebeatPhaseFailed, err.Error()); err != nil {
+		if err := r.updateStatus(ctx, filebeat, wazuhv1.FilebeatPhaseFailed, err.Error()); err != nil {
 			log.Error(err, "Failed to update status")
 		}
 		return fmt.Errorf("failed to build index template: %w", err)
@@ -107,7 +107,7 @@ func (r *FilebeatReconciler) Reconcile(ctx context.Context, filebeat *wazuhv1alp
 	pipeline, pipelineVersion, err := r.buildIngestPipeline(ctx, filebeat)
 	if err != nil {
 		r.setCondition(filebeat, constants.ConditionTypePipelineApplied, metav1.ConditionFalse, "PipelineGenerationFailed", err.Error())
-		if err := r.updateStatus(ctx, filebeat, wazuhv1alpha1.FilebeatPhaseFailed, err.Error()); err != nil {
+		if err := r.updateStatus(ctx, filebeat, wazuhv1.FilebeatPhaseFailed, err.Error()); err != nil {
 			log.Error(err, "Failed to update status")
 		}
 		return fmt.Errorf("failed to build ingest pipeline: %w", err)
@@ -119,7 +119,7 @@ func (r *FilebeatReconciler) Reconcile(ctx context.Context, filebeat *wazuhv1alp
 	// Reconcile ConfigMap
 	if err := r.reconcileConfigMap(ctx, filebeat, cluster, filebeatConfig, indexTemplate, pipeline); err != nil {
 		r.setCondition(filebeat, constants.ConditionTypeConfigMapReady, metav1.ConditionFalse, "ConfigMapFailed", err.Error())
-		if err := r.updateStatus(ctx, filebeat, wazuhv1alpha1.FilebeatPhaseFailed, err.Error()); err != nil {
+		if err := r.updateStatus(ctx, filebeat, wazuhv1.FilebeatPhaseFailed, err.Error()); err != nil {
 			log.Error(err, "Failed to update status")
 		}
 		if r.Recorder != nil {
@@ -137,11 +137,11 @@ func (r *FilebeatReconciler) Reconcile(ctx context.Context, filebeat *wazuhv1alp
 	filebeat.Status.TemplateVersion = templateVersion
 	filebeat.Status.PipelineVersion = pipelineVersion
 	filebeat.Status.ConfigHash = configHash
-	filebeat.Status.ConfigMapRef = &wazuhv1alpha1.ConfigMapReference{
+	filebeat.Status.ConfigMapRef = &wazuhv1.ConfigMapReference{
 		Name: configmaps.GetConfigMapName(cluster.Name),
 	}
 
-	if err := r.updateStatus(ctx, filebeat, wazuhv1alpha1.FilebeatPhaseReady, "Configuration applied successfully"); err != nil {
+	if err := r.updateStatus(ctx, filebeat, wazuhv1.FilebeatPhaseReady, "Configuration applied successfully"); err != nil {
 		log.Error(err, "Failed to update status")
 		return err
 	}
@@ -155,8 +155,8 @@ func (r *FilebeatReconciler) Reconcile(ctx context.Context, filebeat *wazuhv1alp
 }
 
 // getCluster retrieves the referenced WazuhCluster
-func (r *FilebeatReconciler) getCluster(ctx context.Context, filebeat *wazuhv1alpha1.WazuhFilebeat) (*wazuhv1alpha1.WazuhCluster, error) {
-	cluster := &wazuhv1alpha1.WazuhCluster{}
+func (r *FilebeatReconciler) getCluster(ctx context.Context, filebeat *wazuhv1.WazuhFilebeat) (*wazuhv1.WazuhCluster, error) {
+	cluster := &wazuhv1.WazuhCluster{}
 	namespace := filebeat.Spec.ClusterRef.Namespace
 	if namespace == "" {
 		namespace = filebeat.Namespace
@@ -173,7 +173,7 @@ func (r *FilebeatReconciler) getCluster(ctx context.Context, filebeat *wazuhv1al
 }
 
 // buildFilebeatConfig generates the filebeat.yml content
-func (r *FilebeatReconciler) buildFilebeatConfig(ctx context.Context, filebeat *wazuhv1alpha1.WazuhFilebeat, cluster *wazuhv1alpha1.WazuhCluster) (string, error) {
+func (r *FilebeatReconciler) buildFilebeatConfig(_ context.Context, filebeat *wazuhv1.WazuhFilebeat, cluster *wazuhv1.WazuhCluster) (string, error) {
 	indexerService := fmt.Sprintf("%s-indexer", cluster.Name)
 	builder := config.NewFilebeatConfigBuilderFromSpec(&filebeat.Spec, cluster.Name, cluster.Namespace, indexerService)
 
@@ -181,7 +181,7 @@ func (r *FilebeatReconciler) buildFilebeatConfig(ctx context.Context, filebeat *
 }
 
 // buildIndexTemplate generates the wazuh-template.json content
-func (r *FilebeatReconciler) buildIndexTemplate(ctx context.Context, filebeat *wazuhv1alpha1.WazuhFilebeat) (string, string, error) {
+func (r *FilebeatReconciler) buildIndexTemplate(ctx context.Context, filebeat *wazuhv1.WazuhFilebeat) (string, string, error) {
 	// Check for custom template reference
 	if filebeat.Spec.Template != nil && filebeat.Spec.Template.CustomTemplateRef != nil {
 		ref := filebeat.Spec.Template.CustomTemplateRef
@@ -226,7 +226,7 @@ func (r *FilebeatReconciler) buildIndexTemplate(ctx context.Context, filebeat *w
 }
 
 // buildIngestPipeline generates the pipeline.json content
-func (r *FilebeatReconciler) buildIngestPipeline(ctx context.Context, filebeat *wazuhv1alpha1.WazuhFilebeat) (string, string, error) {
+func (r *FilebeatReconciler) buildIngestPipeline(ctx context.Context, filebeat *wazuhv1.WazuhFilebeat) (string, string, error) {
 	// Check for custom pipeline reference
 	if filebeat.Spec.Pipeline != nil && filebeat.Spec.Pipeline.CustomPipelineRef != nil {
 		ref := filebeat.Spec.Pipeline.CustomPipelineRef
@@ -268,7 +268,7 @@ func (r *FilebeatReconciler) buildIngestPipeline(ctx context.Context, filebeat *
 }
 
 // reconcileConfigMap creates or updates the Filebeat ConfigMap
-func (r *FilebeatReconciler) reconcileConfigMap(ctx context.Context, filebeat *wazuhv1alpha1.WazuhFilebeat, cluster *wazuhv1alpha1.WazuhCluster, filebeatConfig, indexTemplate, pipeline string) error {
+func (r *FilebeatReconciler) reconcileConfigMap(ctx context.Context, filebeat *wazuhv1.WazuhFilebeat, cluster *wazuhv1.WazuhCluster, filebeatConfig, indexTemplate, pipeline string) error {
 	log := logf.FromContext(ctx)
 
 	cm := configmaps.NewFilebeatConfigMapBuilder(cluster.Name, cluster.Namespace).
@@ -318,7 +318,7 @@ func (r *FilebeatReconciler) calculateConfigHash(filebeatConfig, indexTemplate, 
 }
 
 // setCondition sets a condition on the WazuhFilebeat status
-func (r *FilebeatReconciler) setCondition(filebeat *wazuhv1alpha1.WazuhFilebeat, conditionType string, status metav1.ConditionStatus, reason, message string) {
+func (r *FilebeatReconciler) setCondition(filebeat *wazuhv1.WazuhFilebeat, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	now := metav1.Now()
 	condition := metav1.Condition{
 		Type:               conditionType,
@@ -346,7 +346,7 @@ func (r *FilebeatReconciler) setCondition(filebeat *wazuhv1alpha1.WazuhFilebeat,
 }
 
 // updateStatus updates the WazuhFilebeat status
-func (r *FilebeatReconciler) updateStatus(ctx context.Context, filebeat *wazuhv1alpha1.WazuhFilebeat, phase wazuhv1alpha1.FilebeatPhase, message string) error {
+func (r *FilebeatReconciler) updateStatus(ctx context.Context, filebeat *wazuhv1.WazuhFilebeat, phase wazuhv1.FilebeatPhase, message string) error {
 	filebeat.Status.Phase = phase
 	filebeat.Status.Message = message
 	filebeat.Status.ObservedGeneration = filebeat.Generation
@@ -357,7 +357,7 @@ func (r *FilebeatReconciler) updateStatus(ctx context.Context, filebeat *wazuhv1
 }
 
 // Delete handles cleanup when a WazuhFilebeat is deleted
-func (r *FilebeatReconciler) Delete(ctx context.Context, filebeat *wazuhv1alpha1.WazuhFilebeat) error {
+func (r *FilebeatReconciler) Delete(ctx context.Context, filebeat *wazuhv1.WazuhFilebeat) error {
 	log := logf.FromContext(ctx)
 	// The ConfigMap will be garbage collected due to owner reference
 	log.Info("WazuhFilebeat deletion handled", "name", filebeat.Name)

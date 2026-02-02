@@ -1,0 +1,262 @@
+{{ template "chart.header" . }}
+
+{{ template "chart.deprecationWarning" . }}
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+## Prerequisites
+
+- Kubernetes 1.19+
+- Helm 3.0+
+- Wazuh Operator installed (use the `wazuh-operator` chart)
+
+## Documentation
+
+| Resource                                                       | Description                     |
+| -------------------------------------------------------------- | ------------------------------- |
+| [User Documentation](../../docs/usage/README.md)               | Full usage guide                |
+| [Quick Start Examples](../../docs/usage/examples/quick-start/) | Minimal deployment examples     |
+| [Production Examples](../../docs/usage/examples/production/)   | Production-ready configurations |
+| [Sizing Profiles](../../docs/usage/features/sizing.md)         | Cluster sizing guide            |
+| [CRD Reference](../../docs/usage/CRD-REFERENCE.md)             | Complete API documentation      |
+
+## Installation
+
+### Quick Start
+
+1. Install the Wazuh Operator first (if not already installed):
+
+```bash
+helm install wazuh-operator ./charts/wazuh-operator
+```
+
+2. Install the chart with a sizing profile:
+
+```bash
+helm install my-wazuh-cluster ./charts/wazuh-cluster \
+  --set sizing.profile=M \
+  --namespace wazuh --create-namespace
+```
+
+## Upgrading
+
+```bash
+helm upgrade my-wazuh-cluster ./charts/wazuh-cluster -f my-values.yaml
+```
+
+## Uninstallation
+
+```bash
+helm uninstall my-wazuh-cluster
+```
+
+> **Note:** This will delete all WazuhCluster resources and secrets. The operator will clean up all associated Kubernetes resources.
+
+## Values
+
+{{ define "chart.valuesTableRow" }}| {{ .Key }} | {{ .Type }} | {{ if .Default }}{{ .Default }}{{ else }}{{ .AutoDefault }}{{ end }} | {{ if .Description }}{{ .Description }}{{ else }}{{ .AutoDescription }}{{ end }} |{{ end }}
+
+### Global Parameters
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if or (eq .Key "namespace") (eq .Key "createNamespace") }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Sizing Profiles
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "sizing" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Inline Secrets
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "secrets" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### External Secrets Operator (ESO)
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "externalSecrets" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### WazuhCluster Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "cluster" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Backup Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if or (hasPrefix "opensearchRepository" .Key) (hasPrefix "opensearchSnapshotPolicy" .Key) (hasPrefix "wazuhBackup" .Key) (hasPrefix "backupCredentials" .Key) }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Network Policy Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "networkPolicy" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Resource Quota Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "resourceQuota" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+## Examples
+
+### Minimal Deployment
+
+```yaml
+sizing:
+  profile: S
+
+secrets:
+  wazuhApi:
+    password: "MySecurePassword123!"
+  indexerAdmin:
+    password: "MySecurePassword456!"
+  wazuhAuthd:
+    password: "MySecurePassword789!"
+```
+
+### Production with External Secrets (Vault)
+
+```yaml
+sizing:
+  profile: L
+
+# Disable inline secrets
+secrets:
+  wazuhApi:
+    password: ""
+  indexerAdmin:
+    password: ""
+
+# Use External Secrets Operator
+externalSecrets:
+  enabled: true
+  indexerAdmin:
+    name: wazuh-indexer-credentials
+    secretStoreRef:
+      name: vault-backend
+      kind: SecretStore
+    remoteRef:
+      key: secret/data/wazuh/indexer
+  wazuhApi:
+    name: wazuh-api-credentials
+    secretStoreRef:
+      name: vault-backend
+      kind: SecretStore
+    remoteRef:
+      key: secret/data/wazuh/api
+```
+
+### HPA and High Availability
+
+```yaml
+sizing:
+  profile: L
+
+cluster:
+  spec:
+    indexer:
+      antiAffinity:
+        enabled: true
+        type: required
+        topologyKey: topology.kubernetes.io/zone
+    manager:
+      workers:
+        hpa:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 10
+          targetCPUUtilizationPercentage: 80
+    dashboard:
+      hpa:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 5
+```
+
+### Gateway API Configuration
+
+```yaml
+cluster:
+  spec:
+    dashboard:
+      gatewayAPI:
+        enabled: true
+        gatewayRef:
+          name: wazuh-gateway
+          namespace: gateway-system
+        hostnames:
+          - dashboard.wazuh.example.com
+        http:
+          pathPrefix: /
+    manager:
+      workers:
+        gatewayAPI:
+          enabled: true
+          gatewayRef:
+            name: wazuh-gateway
+          tcp:
+            enabled: true
+            enrollmentEnabled: true
+            eventsEnabled: true
+```
+
+## Security Considerations
+
+**IMPORTANT**: The default passwords in this chart are for demonstration purposes only.
+
+For production use, you **MUST**:
+
+1. Change all default passwords
+2. Use External Secrets Operator for credential management
+3. Enable TLS for all communications
+4. Review and apply appropriate RBAC policies
+5. Enable anti-affinity for high availability
+6. Configure network policies
+
+## Support
+
+- GitHub Issues: https://github.com/MaximeWewer/wazuh-operator/issues
+- Documentation: https://documentation.wazuh.com/

@@ -8,7 +8,10 @@ This directory contains ready-to-use examples for deploying Wazuh clusters using
 examples/
 ├── quick-start/         # Minimal examples to get started quickly
 ├── production/          # Production-ready configurations
-└── opensearch-crds/     # OpenSearch security and index management CRDs
+├── opensearch-crds/     # OpenSearch security and index management CRDs
+└── gitops/              # GitOps deployment examples (ArgoCD, Flux)
+    ├── argocd/          # ArgoCD Application manifests
+    └── flux/            # Flux HelmRelease and GitRepository manifests
 ```
 
 ## Quick Start
@@ -53,9 +56,25 @@ kubectl apply -f opensearch-crds/role.yaml
 kubectl apply -f opensearch-crds/rolemapping.yaml
 ```
 
+## GitOps Deployment
+
+For GitOps workflows using ArgoCD or Flux:
+
+```bash
+# ArgoCD
+kubectl apply -f gitops/argocd/appproject.yaml
+kubectl apply -f gitops/argocd/operator-application.yaml
+kubectl apply -f gitops/argocd/cluster-application.yaml
+
+# Flux
+kubectl apply -f gitops/flux/
+```
+
+See [gitops/argocd/README.md](gitops/argocd/README.md) and [gitops/flux/README.md](gitops/flux/README.md) for detailed instructions.
+
 ## More Examples
 
-See [config/samples/](../../config/samples/) for additional examples covering:
+See [config/samples/](../../../config/samples/) for additional examples covering:
 
 - TLS configuration
 - Email alerts

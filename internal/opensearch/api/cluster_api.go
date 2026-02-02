@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -61,15 +61,15 @@ type ShardInfo struct {
 
 // ClusterSettings represents cluster settings
 type ClusterSettings struct {
-	Persistent map[string]interface{} `json:"persistent"`
-	Transient  map[string]interface{} `json:"transient"`
-	Defaults   map[string]interface{} `json:"defaults,omitempty"`
+	Persistent map[string]any `json:"persistent"`
+	Transient  map[string]any `json:"transient"`
+	Defaults   map[string]any `json:"defaults,omitempty"`
 }
 
 // ClusterSettingsUpdate represents a cluster settings update request
 type ClusterSettingsUpdate struct {
-	Persistent map[string]interface{} `json:"persistent,omitempty"`
-	Transient  map[string]interface{} `json:"transient,omitempty"`
+	Persistent map[string]any `json:"persistent,omitempty"`
+	Transient  map[string]any `json:"transient,omitempty"`
 }
 
 // GetClusterHealth retrieves the cluster health status
@@ -106,7 +106,7 @@ func (c *Client) IsClusterGreen(ctx context.Context) (bool, error) {
 // This causes OpenSearch to relocate all shards away from the specified node
 func (c *Client) SetAllocationExclusion(ctx context.Context, nodeName string) error {
 	settings := ClusterSettingsUpdate{
-		Transient: map[string]interface{}{
+		Transient: map[string]any{
 			constants.OpenSearchAllocationExcludeNameKey: nodeName,
 		},
 	}
@@ -128,7 +128,7 @@ func (c *Client) SetAllocationExclusion(ctx context.Context, nodeName string) er
 // ClearAllocationExclusion removes the node exclusion for shard allocation
 func (c *Client) ClearAllocationExclusion(ctx context.Context) error {
 	settings := ClusterSettingsUpdate{
-		Transient: map[string]interface{}{
+		Transient: map[string]any{
 			constants.OpenSearchAllocationExcludeNameKey: nil,
 		},
 	}
@@ -240,6 +240,64 @@ func (c *Client) GetClusterSettings(ctx context.Context, includeDefaults bool) (
 	return &settings, nil
 }
 
+// PutClusterSettings updates cluster settings via the Cluster Settings API
+// Settings can be persistent (survive restarts) or transient (cleared on restart)
+// Pass nil for a setting value to reset it to its default
+func (c *Client) PutClusterSettings(ctx context.Context, settings *ClusterSettingsUpdate) (*ClusterSettings, error) {
+	if settings == nil {
+		return nil, fmt.Errorf("settings cannot be nil")
+	}
+
+	resp, err := c.Put(ctx, "/_cluster/settings", settings)
+	if err != nil {
+		return nil, fmt.Errorf("failed to put cluster settings: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("put cluster settings failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result ClusterSettings
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode cluster settings response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// PutClusterSettingsFromMap is a convenience method that accepts map[string]string
+// and converts it to the proper format for the API
+func (c *Client) PutClusterSettingsFromMap(ctx context.Context, persistent, transient map[string]string) (*ClusterSettings, error) {
+	settings := &ClusterSettingsUpdate{}
+
+	if len(persistent) > 0 {
+		settings.Persistent = make(map[string]any)
+		for k, v := range persistent {
+			// Allow nil/empty values to reset settings to default
+			if v == "" {
+				settings.Persistent[k] = nil
+			} else {
+				settings.Persistent[k] = v
+			}
+		}
+	}
+
+	if len(transient) > 0 {
+		settings.Transient = make(map[string]any)
+		for k, v := range transient {
+			if v == "" {
+				settings.Transient[k] = nil
+			} else {
+				settings.Transient[k] = v
+			}
+		}
+	}
+
+	return c.PutClusterSettings(ctx, settings)
+}
+
 // GetAllocationExclusion returns the current allocation exclusion node name, if any
 func (c *Client) GetAllocationExclusion(ctx context.Context) (string, error) {
 	settings, err := c.GetClusterSettings(ctx, false)
@@ -249,10 +307,10 @@ func (c *Client) GetAllocationExclusion(ctx context.Context) (string, error) {
 
 	// Check transient settings first
 	if transient := settings.Transient; transient != nil {
-		if cluster, ok := transient["cluster"].(map[string]interface{}); ok {
-			if routing, ok := cluster["routing"].(map[string]interface{}); ok {
-				if allocation, ok := routing["allocation"].(map[string]interface{}); ok {
-					if exclude, ok := allocation["exclude"].(map[string]interface{}); ok {
+		if cluster, ok := transient["cluster"].(map[string]any); ok {
+			if routing, ok := cluster["routing"].(map[string]any); ok {
+				if allocation, ok := routing["allocation"].(map[string]any); ok {
+					if exclude, ok := allocation["exclude"].(map[string]any); ok {
 						if name, ok := exclude["_name"].(string); ok {
 							return name, nil
 						}
@@ -264,10 +322,10 @@ func (c *Client) GetAllocationExclusion(ctx context.Context) (string, error) {
 
 	// Check persistent settings
 	if persistent := settings.Persistent; persistent != nil {
-		if cluster, ok := persistent["cluster"].(map[string]interface{}); ok {
-			if routing, ok := cluster["routing"].(map[string]interface{}); ok {
-				if allocation, ok := routing["allocation"].(map[string]interface{}); ok {
-					if exclude, ok := allocation["exclude"].(map[string]interface{}); ok {
+		if cluster, ok := persistent["cluster"].(map[string]any); ok {
+			if routing, ok := cluster["routing"].(map[string]any); ok {
+				if allocation, ok := routing["allocation"].(map[string]any); ok {
+					if exclude, ok := allocation["exclude"].(map[string]any); ok {
 						if name, ok := exclude["_name"].(string); ok {
 							return name, nil
 						}

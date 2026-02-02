@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -85,6 +85,20 @@ const (
 const (
 	// DefaultDashboardPDBMinAvailable is the minimum available Dashboard pods
 	DefaultDashboardPDBMinAvailable int32 = 1
+)
+
+// Manager PDB defaults
+const (
+	// DefaultManagerPDBMinAvailable is the minimum available Manager pods
+	// Set to 2 to ensure quorum during maintenance for HA clusters (3+ nodes)
+	DefaultManagerPDBMinAvailable int32 = 2
+)
+
+// Indexer PDB defaults
+const (
+	// DefaultIndexerPDBMinAvailable is the minimum available Indexer pods
+	// Set to 2 to ensure quorum during maintenance for HA clusters (3+ nodes)
+	DefaultIndexerPDBMinAvailable int32 = 2
 )
 
 // Drain event reasons

@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/jobs"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -58,7 +58,7 @@ func NewWazuhRestoreReconciler(c client.Client, scheme *runtime.Scheme) *WazuhRe
 }
 
 // Reconcile reconciles a WazuhRestore resource
-func (r *WazuhRestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1alpha1.WazuhRestore) error {
+func (r *WazuhRestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1.WazuhRestore) error {
 	log := logf.FromContext(ctx)
 
 	// Handle finalizer
@@ -81,7 +81,7 @@ func (r *WazuhRestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1
 	}
 
 	// Validate the referenced WazuhCluster exists
-	cluster := &wazuhv1alpha1.WazuhCluster{}
+	cluster := &wazuhv1.WazuhCluster{}
 	clusterKey := types.NamespacedName{
 		Name:      restore.Spec.ClusterRef.Name,
 		Namespace: restore.Namespace,
@@ -116,7 +116,7 @@ func (r *WazuhRestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1
 }
 
 // validateSource validates the restore source configuration
-func (r *WazuhRestoreReconciler) validateSource(ctx context.Context, restore *wazuhv1alpha1.WazuhRestore) error {
+func (r *WazuhRestoreReconciler) validateSource(ctx context.Context, restore *wazuhv1.WazuhRestore) error {
 	if restore.Spec.Source.S3 == nil && restore.Spec.Source.WazuhBackupRef == nil {
 		return fmt.Errorf("either s3 or wazuhBackupRef must be specified")
 	}
@@ -148,7 +148,7 @@ func (r *WazuhRestoreReconciler) validateSource(ctx context.Context, restore *wa
 		ref := restore.Spec.Source.WazuhBackupRef
 
 		// Validate WazuhBackup exists
-		backup := &wazuhv1alpha1.WazuhBackup{}
+		backup := &wazuhv1.WazuhBackup{}
 		backupKey := types.NamespacedName{
 			Name:      ref.Name,
 			Namespace: restore.Namespace,
@@ -170,7 +170,7 @@ func (r *WazuhRestoreReconciler) validateSource(ctx context.Context, restore *wa
 }
 
 // reconcileRBAC ensures ServiceAccount, Role, and RoleBinding exist
-func (r *WazuhRestoreReconciler) reconcileRBAC(ctx context.Context, restore *wazuhv1alpha1.WazuhRestore, builder *jobs.RestoreJobBuilder) error {
+func (r *WazuhRestoreReconciler) reconcileRBAC(ctx context.Context, restore *wazuhv1.WazuhRestore, builder *jobs.RestoreJobBuilder) error {
 	log := logf.FromContext(ctx)
 
 	// Reconcile ServiceAccount
@@ -207,7 +207,7 @@ func (r *WazuhRestoreReconciler) reconcileRBAC(ctx context.Context, restore *waz
 }
 
 // reconcileJob creates or monitors the restore Job
-func (r *WazuhRestoreReconciler) reconcileJob(ctx context.Context, restore *wazuhv1alpha1.WazuhRestore, builder *jobs.RestoreJobBuilder) error {
+func (r *WazuhRestoreReconciler) reconcileJob(ctx context.Context, restore *wazuhv1.WazuhRestore, builder *jobs.RestoreJobBuilder) error {
 	log := logf.FromContext(ctx)
 
 	job := builder.BuildJob()
@@ -227,7 +227,7 @@ func (r *WazuhRestoreReconciler) reconcileJob(ctx context.Context, restore *wazu
 
 			// Set source info
 			if restore.Spec.Source.S3 != nil {
-				restore.Status.SourceBackup = &wazuhv1alpha1.RestoreSourceInfo{
+				restore.Status.SourceBackup = &wazuhv1.RestoreSourceInfo{
 					Location: fmt.Sprintf("s3://%s/%s", restore.Spec.Source.S3.Bucket, restore.Spec.Source.S3.Key),
 				}
 			}
@@ -276,7 +276,10 @@ func (r *WazuhRestoreReconciler) reconcileJob(ctx context.Context, restore *wazu
 
 // createOrUpdate creates or updates a resource
 func (r *WazuhRestoreReconciler) createOrUpdate(ctx context.Context, obj client.Object) error {
-	existing := obj.DeepCopyObject().(client.Object)
+	existing, ok := obj.DeepCopyObject().(client.Object)
+	if !ok {
+		return fmt.Errorf("failed to deep copy object")
+	}
 	err := r.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, existing)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -288,27 +291,30 @@ func (r *WazuhRestoreReconciler) createOrUpdate(ctx context.Context, obj client.
 	// Update based on type
 	switch o := obj.(type) {
 	case *corev1.ServiceAccount:
-		e := existing.(*corev1.ServiceAccount)
-		e.Labels = o.Labels
-		return r.Update(ctx, e)
+		if e, ok := existing.(*corev1.ServiceAccount); ok {
+			e.Labels = o.Labels
+			return r.Update(ctx, e)
+		}
 	case *rbacv1.Role:
-		e := existing.(*rbacv1.Role)
-		e.Labels = o.Labels
-		e.Rules = o.Rules
-		return r.Update(ctx, e)
+		if e, ok := existing.(*rbacv1.Role); ok {
+			e.Labels = o.Labels
+			e.Rules = o.Rules
+			return r.Update(ctx, e)
+		}
 	case *rbacv1.RoleBinding:
-		e := existing.(*rbacv1.RoleBinding)
-		e.Labels = o.Labels
-		e.RoleRef = o.RoleRef
-		e.Subjects = o.Subjects
-		return r.Update(ctx, e)
+		if e, ok := existing.(*rbacv1.RoleBinding); ok {
+			e.Labels = o.Labels
+			e.RoleRef = o.RoleRef
+			e.Subjects = o.Subjects
+			return r.Update(ctx, e)
+		}
 	}
 
 	return nil
 }
 
 // handleDeletion handles cleanup when the WazuhRestore is deleted
-func (r *WazuhRestoreReconciler) handleDeletion(ctx context.Context, restore *wazuhv1alpha1.WazuhRestore) error {
+func (r *WazuhRestoreReconciler) handleDeletion(ctx context.Context, restore *wazuhv1.WazuhRestore) error {
 	log := logf.FromContext(ctx)
 
 	log.Info("Handling deletion of WazuhRestore", "name", restore.Name)
@@ -324,7 +330,7 @@ func (r *WazuhRestoreReconciler) handleDeletion(ctx context.Context, restore *wa
 }
 
 // updateStatus updates the WazuhRestore status
-func (r *WazuhRestoreReconciler) updateStatus(ctx context.Context, restore *wazuhv1alpha1.WazuhRestore, phase, message string) error {
+func (r *WazuhRestoreReconciler) updateStatus(ctx context.Context, restore *wazuhv1.WazuhRestore, phase, message string) error {
 	restore.Status.Phase = phase
 	restore.Status.Message = message
 	restore.Status.ObservedGeneration = restore.Generation
@@ -332,10 +338,11 @@ func (r *WazuhRestoreReconciler) updateStatus(ctx context.Context, restore *wazu
 	// Set condition
 	conditionStatus := metav1.ConditionFalse
 	reason := "RestoreInProgress"
-	if phase == constants.WazuhRestorePhaseCompleted {
+	switch phase {
+	case constants.WazuhRestorePhaseCompleted:
 		conditionStatus = metav1.ConditionTrue
 		reason = "RestoreComplete"
-	} else if phase == constants.WazuhRestorePhaseFailed {
+	case constants.WazuhRestorePhaseFailed:
 		reason = "RestoreFailed"
 	}
 
@@ -351,7 +358,7 @@ func (r *WazuhRestoreReconciler) updateStatus(ctx context.Context, restore *wazu
 }
 
 // Delete handles cleanup when a WazuhRestore CRD is deleted (called by controller)
-func (r *WazuhRestoreReconciler) Delete(ctx context.Context, restore *wazuhv1alpha1.WazuhRestore) error {
+func (r *WazuhRestoreReconciler) Delete(ctx context.Context, restore *wazuhv1.WazuhRestore) error {
 	return r.handleDeletion(ctx, restore)
 }
 

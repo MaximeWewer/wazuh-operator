@@ -22,24 +22,16 @@ sources:
 
 maintainers:
   - name: Maxime Wewer
+    url: https://github.com/MaximeWewer
 
 icon: https://wazuh.com/brand-assets/Wazuh-Logo.svg
 
 annotations:
   # Recommended minimum Kubernetes version
-  kubernetes.io/minimum-version: "1.24.0"
+  kubernetes.io/minimum-version: "1.25.0"
 
   # Category for artifact hub
   category: "Security"
-
-  # Changelog
-  artifacthub.io/changes: |
-    - kind: added
-      description: Initial Helm chart release
-    - kind: added
-      description: Support for CRD-only deployment mode
-    - kind: added
-      description: Support for multi-operator architecture
 
   # Screenshots for artifact hub
   artifacthub.io/screenshots: |

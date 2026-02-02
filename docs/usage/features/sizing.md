@@ -16,14 +16,15 @@ The Wazuh Operator Helm chart provides predefined sizing profiles for quick depl
 
 Minimal profile for testing purposes only. **Not recommended for production.**
 
-| Component | Replicas | CPU (req/lim) | Memory (req/lim) | Storage |
-|-----------|----------|---------------|------------------|---------|
-| Indexer | 1 | 200m / 1 | 1.5Gi / 2Gi | 10Gi |
-| Manager Master | 1 | 100m / 500m | 256Mi / 512Mi | 5Gi |
-| Manager Workers | 0 | - | - | - |
-| Dashboard | 1 | 100m / 500m | 256Mi / 512Mi | - |
+| Component       | Replicas | CPU (req/lim) | Memory (req/lim) | Storage |
+| --------------- | -------- | ------------- | ---------------- | ------- |
+| Indexer         | 1        | 200m / 1      | 1.5Gi / 2Gi      | 10Gi    |
+| Manager Master  | 1        | 100m / 500m   | 256Mi / 512Mi    | 5Gi     |
+| Manager Workers | 0        | -             | -                | -       |
+| Dashboard       | 1        | 100m / 500m   | 256Mi / 512Mi    | -       |
 
 **Total Resources:**
+
 - CPU: ~400m requests, ~2 cores limits
 - Memory: ~2Gi requests, ~3Gi limits
 - Storage: ~15Gi
@@ -40,14 +41,15 @@ helm install wazuh-cluster ./charts/wazuh-cluster \
 
 Suitable for development environments and small test deployments.
 
-| Component | Replicas | CPU (req/lim) | Memory (req/lim) | Storage |
-|-----------|----------|---------------|------------------|---------|
-| Indexer | 1 | 500m / 1 | 1Gi / 2Gi | 20Gi |
-| Manager Master | 1 | 500m / 1 | 1Gi / 2Gi | 10Gi |
-| Manager Workers | 1 | 500m / 1 | 1Gi / 2Gi | 10Gi |
-| Dashboard | 1 | 250m / 500m | 512Mi / 1Gi | - |
+| Component       | Replicas | CPU (req/lim) | Memory (req/lim) | Storage |
+| --------------- | -------- | ------------- | ---------------- | ------- |
+| Indexer         | 1        | 500m / 1      | 1Gi / 2Gi        | 20Gi    |
+| Manager Master  | 1        | 500m / 1      | 1Gi / 2Gi        | 10Gi    |
+| Manager Workers | 1        | 500m / 1      | 1Gi / 2Gi        | 10Gi    |
+| Dashboard       | 1        | 250m / 500m   | 512Mi / 1Gi      | -       |
 
 **Total Resources:**
+
 - CPU: ~1.75 cores requests, ~3.5 cores limits
 - Memory: ~3.5Gi requests, ~7Gi limits
 - Storage: ~40Gi
@@ -64,14 +66,15 @@ helm install wazuh-cluster ./charts/wazuh-cluster \
 
 Balanced profile for small production environments with high availability.
 
-| Component | Replicas | CPU (req/lim) | Memory (req/lim) | Storage |
-|-----------|----------|---------------|------------------|---------|
-| Indexer | 3 | 2 / 4 | 4Gi / 8Gi | 50Gi |
-| Manager Master | 1 | 1 / 2 | 2Gi / 4Gi | 20Gi |
-| Manager Workers | 2 | 1 / 2 | 2Gi / 4Gi | 20Gi |
-| Dashboard | 1 | 500m / 1 | 1Gi / 2Gi | - |
+| Component       | Replicas | CPU (req/lim) | Memory (req/lim) | Storage |
+| --------------- | -------- | ------------- | ---------------- | ------- |
+| Indexer         | 3        | 2 / 4         | 4Gi / 8Gi        | 50Gi    |
+| Manager Master  | 1        | 1 / 2         | 2Gi / 4Gi        | 20Gi    |
+| Manager Workers | 2        | 1 / 2         | 2Gi / 4Gi        | 20Gi    |
+| Dashboard       | 1        | 500m / 1      | 1Gi / 2Gi        | -       |
 
 **Total Resources:**
+
 - CPU: ~9.5 cores requests, ~19 cores limits
 - Memory: ~19Gi requests, ~38Gi limits
 - Storage: ~210Gi
@@ -88,14 +91,15 @@ helm install wazuh-cluster ./charts/wazuh-cluster \
 
 High-capacity profile for production environments with high availability.
 
-| Component | Replicas | CPU (req/lim) | Memory (req/lim) | Storage |
-|-----------|----------|---------------|------------------|---------|
-| Indexer | 3 | 4 / 8 | 8Gi / 16Gi | 100Gi |
-| Manager Master | 1 | 2 / 4 | 4Gi / 8Gi | 50Gi |
-| Manager Workers | 3 | 2 / 4 | 4Gi / 8Gi | 50Gi |
-| Dashboard | 2 | 1 / 2 | 2Gi / 4Gi | - |
+| Component       | Replicas | CPU (req/lim) | Memory (req/lim) | Storage |
+| --------------- | -------- | ------------- | ---------------- | ------- |
+| Indexer         | 3        | 4 / 8         | 8Gi / 16Gi       | 100Gi   |
+| Manager Master  | 1        | 2 / 4         | 4Gi / 8Gi        | 50Gi    |
+| Manager Workers | 3        | 2 / 4         | 4Gi / 8Gi        | 50Gi    |
+| Dashboard       | 2        | 1 / 2         | 2Gi / 4Gi        | -       |
 
 **Total Resources:**
+
 - CPU: ~22 cores requests, ~44 cores limits
 - Memory: ~44Gi requests, ~88Gi limits
 - Storage: ~500Gi
@@ -112,14 +116,15 @@ helm install wazuh-cluster ./charts/wazuh-cluster \
 
 Enterprise-grade profile for large-scale deployments.
 
-| Component | Replicas | CPU (req/lim) | Memory (req/lim) | Storage |
-|-----------|----------|---------------|------------------|---------|
-| Indexer | 5 | 8 / 16 | 16Gi / 32Gi | 200Gi |
-| Manager Master | 1 | 4 / 8 | 8Gi / 16Gi | 100Gi |
-| Manager Workers | 5 | 4 / 8 | 8Gi / 16Gi | 100Gi |
-| Dashboard | 3 | 2 / 4 | 4Gi / 8Gi | - |
+| Component       | Replicas | CPU (req/lim) | Memory (req/lim) | Storage |
+| --------------- | -------- | ------------- | ---------------- | ------- |
+| Indexer         | 5        | 8 / 16        | 16Gi / 32Gi      | 200Gi   |
+| Manager Master  | 1        | 4 / 8         | 8Gi / 16Gi       | 100Gi   |
+| Manager Workers | 5        | 4 / 8         | 8Gi / 16Gi       | 100Gi   |
+| Dashboard       | 3        | 2 / 4         | 4Gi / 8Gi        | -       |
 
 **Total Resources:**
+
 - CPU: ~70 cores requests, ~140 cores limits
 - Memory: ~140Gi requests, ~280Gi limits
 - Storage: ~1700Gi
@@ -134,13 +139,13 @@ helm install wazuh-cluster ./charts/wazuh-cluster \
 
 ## Profile Comparison
 
-| Profile | Indexer | Workers | Dashboard | Total CPU | Total Memory | Total Storage | Max Agents |
-|---------|---------|---------|-----------|-----------|--------------|---------------|------------|
-| XS | 1 | 0 | 1 | ~2 cores | ~3Gi | ~15Gi | Testing |
-| S | 1 | 1 | 1 | ~3.5 cores | ~7Gi | ~40Gi | ~50 |
-| M | 3 | 2 | 1 | ~19 cores | ~38Gi | ~210Gi | ~500 |
-| L | 3 | 3 | 2 | ~44 cores | ~88Gi | ~500Gi | ~5000 |
-| XL | 5 | 5 | 3 | ~140 cores | ~280Gi | ~1700Gi | 5000+ |
+| Profile | Indexer | Workers | Dashboard | Total CPU  | Total Memory | Total Storage | Max Agents |
+| ------- | ------- | ------- | --------- | ---------- | ------------ | ------------- | ---------- |
+| XS      | 1       | 0       | 1         | ~2 cores   | ~3Gi         | ~15Gi         | Testing    |
+| S       | 1       | 1       | 1         | ~3.5 cores | ~7Gi         | ~40Gi         | ~50        |
+| M       | 3       | 2       | 1         | ~19 cores  | ~38Gi        | ~210Gi        | ~500       |
+| L       | 3       | 3       | 2         | ~44 cores  | ~88Gi        | ~500Gi        | ~5000      |
+| XL      | 5       | 5       | 3         | ~140 cores | ~280Gi       | ~1700Gi       | 5000+      |
 
 ## Customizing Profiles
 
@@ -239,15 +244,15 @@ cluster:
 
 ## Recommendations
 
-| Environment | Profile | Notes |
-|-------------|---------|-------|
-| Local dev | XS | Single node, minimal resources |
-| CI/CD testing | XS | Quick spin-up, tear-down |
-| Dev team shared | S | Multiple developers |
-| Staging | M | Production-like testing |
-| Small production | M | Up to 500 agents |
-| Production | L | Up to 5000 agents |
-| Enterprise | XL | Large scale, HA required |
+| Environment      | Profile | Notes                          |
+| ---------------- | ------- | ------------------------------ |
+| Local dev        | XS      | Single node, minimal resources |
+| CI/CD testing    | XS      | Quick spin-up, tear-down       |
+| Dev team shared  | S       | Multiple developers            |
+| Staging          | M       | Production-like testing        |
+| Small production | M       | Up to 500 agents               |
+| Production       | L       | Up to 5000 agents              |
+| Enterprise       | XL      | Large scale, HA required       |
 
 ## See Also
 

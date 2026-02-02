@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -75,50 +75,33 @@ const (
 	DefaultKibanaServerCertCommonName = "kibanaserver"
 )
 
-// Certificate validity defaults
+// Certificate validity defaults (duration strings)
+// Use internal/certificates.ParseCertDuration() to parse these values
 const (
-	// DefaultCACertValidityYears is the default validity period for CA certificates
-	DefaultCACertValidityYears = 10
+	// DefaultCACertValidity is the default validity period for CA certificates (10 years)
+	DefaultCACertValidity = "3650d"
 
-	// DefaultCACertValidityDays is the default validity period for CA certificates in days (10 years)
-	DefaultCACertValidityDays = 3650
+	// DefaultNodeCertValidity is the default validity period for node certificates (1 year)
+	DefaultNodeCertValidity = "365d"
 
-	// DefaultNodeCertValidityDays is the default validity period for node certificates (1 year)
-	DefaultNodeCertValidityDays = 365
+	// DefaultAdminCertValidity is the default validity period for admin certificates (1 year)
+	DefaultAdminCertValidity = "365d"
 
-	// DefaultAdminCertValidityDays is the default validity period for admin certificates
-	DefaultAdminCertValidityDays = 365
+	// DefaultDashboardCertValidity is the default validity period for dashboard certificates (1 year)
+	DefaultDashboardCertValidity = "365d"
 
-	// DefaultDashboardCertValidityDays is the default validity period for dashboard certificates
-	DefaultDashboardCertValidityDays = 365
+	// DefaultFilebeatCertValidity is the default validity period for filebeat certificates (1 year)
+	DefaultFilebeatCertValidity = "365d"
 
-	// DefaultFilebeatCertValidityDays is the default validity period for filebeat certificates
-	DefaultFilebeatCertValidityDays = 365
-
-	// DefaultCertRenewalThresholdDays is the default threshold for certificate renewal
-	DefaultCertRenewalThresholdDays = 30
+	// DefaultCertRenewalThreshold is the default threshold for certificate renewal (30 days)
+	DefaultCertRenewalThreshold = "30d"
 )
 
-// Certificate renewal thresholds
+// Certificate renewal thresholds (duration strings)
 const (
-	// CertRenewalThresholdCADays is the threshold in days before CA certificate expiry to trigger renewal
-	CertRenewalThresholdCADays = 60
+	// CertRenewalThresholdCA is the threshold before CA certificate expiry to trigger renewal (60 days)
+	CertRenewalThresholdCA = "60d"
 
-	// CertRenewalThresholdNodeDays is the threshold in days before node certificate expiry to trigger renewal
-	CertRenewalThresholdNodeDays = 30
-)
-
-// Test mode certificate durations (in minutes)
-const (
-	// TestModeCAValidityMinutes is the CA certificate validity in test mode
-	TestModeCAValidityMinutes = 15
-
-	// TestModeNodeValidityMinutes is the node certificate validity in test mode
-	TestModeNodeValidityMinutes = 8
-
-	// TestModeCARenewalThresholdMinutes is the CA renewal threshold in test mode
-	TestModeCARenewalThresholdMinutes = 5
-
-	// TestModeNodeRenewalThresholdMinutes is the node renewal threshold in test mode
-	TestModeNodeRenewalThresholdMinutes = 3
+	// CertRenewalThresholdNode is the threshold before node certificate expiry to trigger renewal (30 days)
+	CertRenewalThresholdNode = "30d"
 )

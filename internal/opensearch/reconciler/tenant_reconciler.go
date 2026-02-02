@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 )
 
@@ -51,7 +51,7 @@ func (r *TenantReconciler) WithAPIClient(apiClient *api.Client) *TenantReconcile
 }
 
 // Reconcile reconciles an OpenSearch tenant
-func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1alpha1.OpenSearchTenant) error {
+func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSearchTenant) error {
 	log := logf.FromContext(ctx)
 
 	if r.APIClient == nil {
@@ -94,14 +94,14 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1alpha1.
 }
 
 // buildTenant converts the CRD spec to a tenant
-func (r *TenantReconciler) buildTenant(tenant *wazuhv1alpha1.OpenSearchTenant) api.Tenant {
+func (r *TenantReconciler) buildTenant(tenant *wazuhv1.OpenSearchTenant) api.Tenant {
 	return api.Tenant{
 		Description: tenant.Spec.Description,
 	}
 }
 
 // updateStatus updates the tenant status
-func (r *TenantReconciler) updateStatus(ctx context.Context, tenant *wazuhv1alpha1.OpenSearchTenant, phase, message string) error {
+func (r *TenantReconciler) updateStatus(ctx context.Context, tenant *wazuhv1.OpenSearchTenant, phase, message string) error {
 	tenant.Status.Phase = phase
 	tenant.Status.Message = message
 	now := metav1.Now()
@@ -111,7 +111,7 @@ func (r *TenantReconciler) updateStatus(ctx context.Context, tenant *wazuhv1alph
 }
 
 // Delete handles cleanup when a tenant is deleted
-func (r *TenantReconciler) Delete(ctx context.Context, tenant *wazuhv1alpha1.OpenSearchTenant) error {
+func (r *TenantReconciler) Delete(ctx context.Context, tenant *wazuhv1.OpenSearchTenant) error {
 	log := logf.FromContext(ctx)
 
 	if r.APIClient == nil {

@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -90,15 +90,15 @@ func (b *FilebeatTemplateBuilder) WithAdditionalMappings(mappings json.RawMessag
 // Build generates the wazuh-template.json content as a string
 func (b *FilebeatTemplateBuilder) Build() (string, error) {
 	// Parse the default template
-	var template map[string]interface{}
+	var template map[string]any
 	if err := json.Unmarshal([]byte(DefaultWazuhTemplateJSON), &template); err != nil {
 		return "", fmt.Errorf("failed to parse default template: %w", err)
 	}
 
 	// Update settings with builder values
-	settings, ok := template["settings"].(map[string]interface{})
+	settings, ok := template["settings"].(map[string]any)
 	if !ok {
-		settings = make(map[string]interface{})
+		settings = make(map[string]any)
 		template["settings"] = settings
 	}
 
@@ -124,21 +124,21 @@ func (b *FilebeatTemplateBuilder) Build() (string, error) {
 }
 
 // mergeAdditionalMappings merges custom mappings into the template
-func (b *FilebeatTemplateBuilder) mergeAdditionalMappings(template map[string]interface{}) error {
-	var additionalProps map[string]interface{}
+func (b *FilebeatTemplateBuilder) mergeAdditionalMappings(template map[string]any) error {
+	var additionalProps map[string]any
 	if err := json.Unmarshal(b.additionalMappings, &additionalProps); err != nil {
 		return fmt.Errorf("failed to parse additional mappings: %w", err)
 	}
 
-	mappings, ok := template["mappings"].(map[string]interface{})
+	mappings, ok := template["mappings"].(map[string]any)
 	if !ok {
-		mappings = make(map[string]interface{})
+		mappings = make(map[string]any)
 		template["mappings"] = mappings
 	}
 
-	properties, ok := mappings["properties"].(map[string]interface{})
+	properties, ok := mappings["properties"].(map[string]any)
 	if !ok {
-		properties = make(map[string]interface{})
+		properties = make(map[string]any)
 		mappings["properties"] = properties
 	}
 
@@ -167,7 +167,7 @@ func LoadCustomTemplate(ctx context.Context, c client.Client, namespace, configM
 	}
 
 	// Validate JSON
-	var template map[string]interface{}
+	var template map[string]any
 	if err := json.Unmarshal([]byte(content), &template); err != nil {
 		return "", fmt.Errorf("invalid JSON in ConfigMap %s/%s key %q: %w", namespace, configMapName, key, err)
 	}

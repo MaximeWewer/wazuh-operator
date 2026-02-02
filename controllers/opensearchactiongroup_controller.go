@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +17,14 @@ limitations under the License.
 package controllers
 
 import (
+	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+
 	"context"
+
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -25,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
 )
 
@@ -44,10 +51,26 @@ type OpenSearchActionGroupReconciler struct {
 
 // Reconcile is the main reconciliation loop for OpenSearchActionGroup
 func (r *OpenSearchActionGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// Start tracing span
+	ctx, span := telemetry.Tracer().Start(ctx, "OpenSearchActionGroup.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("namespace", req.Namespace),
+			attribute.String("name", req.Name),
+		))
+	defer span.End()
+
+	// Track reconciliation metrics
+	startTime := time.Now()
+	var reconcileResult = "success"
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		metrics.RecordReconciliation("OpenSearchActionGroup", req.Namespace, reconcileResult, duration)
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Fetch the OpenSearchActionGroup instance
-	actionGroup := &wazuhv1alpha1.OpenSearchActionGroup{}
+	actionGroup := &wazuhv1.OpenSearchActionGroup{}
 	if err := r.Get(ctx, req.NamespacedName, actionGroup); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("OpenSearchActionGroup resource not found, ignoring since object must be deleted")
@@ -70,7 +93,7 @@ func (r *OpenSearchActionGroupReconciler) Reconcile(ctx context.Context, req ctr
 // SetupWithManager sets up the controller with the Manager
 func (r *OpenSearchActionGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1alpha1.OpenSearchActionGroup{}).
+		For(&wazuhv1.OpenSearchActionGroup{}).
 		Named("opensearchactiongroup").
 		Complete(r)
 }

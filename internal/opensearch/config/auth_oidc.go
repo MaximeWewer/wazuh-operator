@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ limitations under the License.
 package config
 
 import (
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
 // ============================================================================
@@ -25,8 +25,8 @@ import (
 // ============================================================================
 
 // buildOIDCAuthDomain creates the OIDC auth domain configuration
-func (b *AuthConfigBuilder) buildOIDCAuthDomain(spec *v1alpha1.OIDCAuthSpec) AuthDomainConfig {
-	config := make(map[string]interface{})
+func (b *AuthConfigBuilder) buildOIDCAuthDomain(spec *v1.OIDCAuthSpec) AuthDomainConfig {
+	config := make(map[string]any)
 
 	// Required OIDC settings
 	config["openid_connect_url"] = spec.ConnectURL
@@ -70,12 +70,12 @@ func (b *AuthConfigBuilder) buildOIDCAuthDomain(spec *v1alpha1.OIDCAuthSpec) Aut
 
 // OIDCConfigBuilder builds OIDC-specific configuration
 type OIDCConfigBuilder struct {
-	spec            *v1alpha1.OIDCAuthSpec
+	spec            *v1.OIDCAuthSpec
 	resolvedSecrets map[string]string
 }
 
 // NewOIDCConfigBuilder creates a new OIDCConfigBuilder
-func NewOIDCConfigBuilder(spec *v1alpha1.OIDCAuthSpec) *OIDCConfigBuilder {
+func NewOIDCConfigBuilder(spec *v1.OIDCAuthSpec) *OIDCConfigBuilder {
 	return &OIDCConfigBuilder{
 		spec:            spec,
 		resolvedSecrets: make(map[string]string),
@@ -89,8 +89,8 @@ func (b *OIDCConfigBuilder) WithClientSecret(secret string) *OIDCConfigBuilder {
 }
 
 // BuildAuthenticatorConfig returns the OIDC authenticator configuration map
-func (b *OIDCConfigBuilder) BuildAuthenticatorConfig() map[string]interface{} {
-	config := make(map[string]interface{})
+func (b *OIDCConfigBuilder) BuildAuthenticatorConfig() map[string]any {
+	config := make(map[string]any)
 
 	config["openid_connect_url"] = b.spec.ConnectURL
 	config["client_id"] = b.spec.ClientID

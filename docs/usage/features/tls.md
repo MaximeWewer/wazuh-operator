@@ -15,7 +15,7 @@ TLS is enabled by default and supports three modes:
 TLS is configured in the `tls` section of the WazuhCluster spec:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhCluster
 metadata:
   name: wazuh
@@ -24,13 +24,33 @@ spec:
   tls:
     enabled: true
     certConfig:
-      validityDays: 365
-      renewalThresholdDays: 30
-      caValidityDays: 730
-      caRenewalThresholdDays: 60
+      # Duration string format (recommended)
+      validity: "365d"           # Node certificate validity
+      renewalThreshold: "30d"    # Renew when expires within this duration
+      caValidity: "3650d"        # CA certificate validity (10 years)
+      caRenewalThreshold: "60d"  # CA renewal threshold
     hotReload:
       enabled: true
 ```
+
+### Duration Format
+
+Certificate validity and renewal thresholds can be specified using duration strings:
+
+| Unit | Example | Description          |
+|------|---------|----------------------|
+| `d`  | `365d`  | Days (24 hours each) |
+| `h`  | `24h`   | Hours                |
+| `m`  | `30m`   | Minutes              |
+
+**Examples:**
+
+- `365d` - 1 year
+- `730d` - 2 years
+- `24h` - 1 day
+- `30m` - 30 minutes (useful for testing)
+
+> **Note:** Minute and hour granularity is useful for testing certificate renewal scenarios. In production, use day-based durations.
 
 ## Auto-Generated Certificates
 
@@ -38,18 +58,39 @@ By default, the operator generates a self-signed CA and node certificates.
 
 ### Certificate Configuration
 
-| Field                    | Type   | Default      | Description                      |
-| ------------------------ | ------ | ------------ | -------------------------------- |
-| `country`                | string | `US`         | X.509 Country                    |
-| `state`                  | string | `California` | X.509 State                      |
-| `locality`               | string | `California` | X.509 Locality                   |
-| `organization`           | string | `Wazuh`      | X.509 Organization               |
-| `organizationalUnit`     | string | `Wazuh`      | X.509 OU                         |
-| `commonName`             | string | `admin`      | X.509 Common Name                |
-| `validityDays`           | int    | `365`        | Node certificate validity (days) |
-| `renewalThresholdDays`   | int    | `30`         | Days before expiry to renew      |
-| `caValidityDays`         | int    | `730`        | CA certificate validity (days)   |
-| `caRenewalThresholdDays` | int    | `60`         | Days before CA expiry to renew   |
+| Field                | Type   | Default      | Description                                             |
+| -------------------- | ------ | ------------ | ------------------------------------------------------- |
+| `country`            | string | `FR`         | X.509 Country                                           |
+| `state`              | string | `Alsace`     | X.509 State                                             |
+| `locality`           | string | `Srasbourg`  | X.509 Locality                                          |
+| `organization`       | string | `Wazuh`      | X.509 Organization                                      |
+| `organizationalUnit` | string | `Wazuh`      | X.509 OU                                                |
+| `commonName`         | string | `admin`      | X.509 Common Name                                       |
+| `validity`           | string | `365d`       | Node certificate validity (duration string)             |
+| `renewalThreshold`   | string | `30d`        | Renew when expires within this duration                 |
+| `caValidity`         | string | `3650d`      | CA certificate validity (duration string)               |
+| `caRenewalThreshold` | string | `60d`        | CA renewal threshold (duration string)                  |
+| `keyAlgorithm`       | string | `RSA`        | Key algorithm: `RSA` or `ECDSA`                         |
+| `ecdsaCurve`         | string | `P256`       | ECDSA curve: `P256`, `P384`, or `P521` (only for ECDSA) |
+
+### Key Algorithm
+
+The operator supports two key algorithms:
+
+- **RSA** (default): 2048-bit keys, widely compatible with all systems
+- **ECDSA**: Elliptic curve keys, smaller keys with equivalent security
+  - **P-256**: ~128 bits security, best performance (default)
+  - **P-384**: ~192 bits security, larger keys
+  - **P-521**: ~256 bits security, highest level
+
+Example with ECDSA P-521 (maximum security):
+
+```yaml
+tls:
+  certConfig:
+    keyAlgorithm: ECDSA
+    ecdsaCurve: P521  # or P256/P384
+```
 
 ### Generated Certificates
 
@@ -91,14 +132,14 @@ tls:
 | Wazuh Version | OpenSearch | Hot Reload Method              |
 | ------------- | ---------- | ------------------------------ |
 | 4.9.x         | 2.13-2.18  | Config + API call              |
-| 5.0+          | 2.19+      | Automatic file-based detection |
+| 4.12+         | 2.19+      | Automatic file-based detection |
 
 ### How It Works
 
 1. Operator detects certificate renewal is needed
 2. New certificates are generated and stored in Secrets
 3. For Wazuh 4.9.x: Operator calls the reload certificates API
-4. For Wazuh 5.0+: OpenSearch automatically detects file changes
+4. For Wazuh 4.12+: OpenSearch automatically detects file changes
 5. Components reload certificates without restart
 
 ## Cert-Manager Integration
@@ -181,8 +222,8 @@ data:
 
 The operator automatically renews certificates before expiry based on the threshold settings:
 
-- Node certificates: Renewed when `renewalThresholdDays` before expiry
-- CA certificates: Renewed when `caRenewalThresholdDays` before expiry
+- Node certificates: Renewed when `renewalThreshold` duration remains before expiry
+- CA certificates: Renewed when `caRenewalThreshold` duration remains before expiry
 
 ### Manual Renewal
 
@@ -229,32 +270,16 @@ kubectl logs -n wazuh <indexer-pod> | grep -i "certificate"
 
 ## Troubleshooting
 
-### Certificate Errors
+For certificate-related issues, see [Common Issues](../troubleshooting/common-issues.md#certificate-issues).
 
-1. Check certificate secrets exist:
+**Quick checks:**
 
-   ```bash
-   kubectl get secrets -n wazuh | grep cert
-   ```
+```bash
+# List certificate secrets
+kubectl get secrets -n wazuh | grep cert
 
-2. Verify certificate validity:
-   ```bash
-   kubectl get secret -n wazuh <secret> -o jsonpath='{.data.tls\.crt}' | \
-     base64 -d | openssl x509 -noout -text
-   ```
-
-### Hot Reload Not Working
-
-1. Check Wazuh version supports hot reload (4.9.0+)
-2. Verify `hotReload.enabled` is true
-3. Check operator logs for reload attempts
-
-### Connection Errors
-
-1. Verify CA certificate is trusted:
-
-   ```bash
-   kubectl exec -n wazuh <pod> -- cat /etc/ssl/ca.crt
-   ```
-
-2. Check certificate SANs include the service DNS name
+# Check certificate expiry
+kubectl get secret -n wazuh wazuh-indexer-certs \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d | \
+  openssl x509 -noout -dates
+```

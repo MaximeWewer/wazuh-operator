@@ -1,0 +1,257 @@
+{{- if .Values.networkPolicy.enabled }}
+---
+# NetworkPolicy for Wazuh Indexer (OpenSearch)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Values.cluster.name }}-indexer
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "wazuh-cluster.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: wazuh-indexer
+      app.kubernetes.io/instance: {{ .Values.cluster.name }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from other indexer pods (cluster communication)
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: wazuh-indexer
+              app.kubernetes.io/instance: {{ .Values.cluster.name }}
+      ports:
+        - protocol: TCP
+          port: 9200
+        - protocol: TCP
+          port: 9300
+        - protocol: TCP
+          port: 9600  # Performance analyzer
+    # Allow from manager pods
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: wazuh-manager
+              app.kubernetes.io/instance: {{ .Values.cluster.name }}
+      ports:
+        - protocol: TCP
+          port: 9200
+    # Allow from dashboard pods
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: wazuh-dashboard
+              app.kubernetes.io/instance: {{ .Values.cluster.name }}
+      ports:
+        - protocol: TCP
+          port: 9200
+    # Allow from operator namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.operatorNamespace | default "wazuh-system" }}
+      ports:
+        - protocol: TCP
+          port: 9200
+    {{- if .Values.networkPolicy.indexer.additionalIngress }}
+    {{- toYaml .Values.networkPolicy.indexer.additionalIngress | nindent 4 }}
+    {{- end }}
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow to other indexer pods
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: wazuh-indexer
+              app.kubernetes.io/instance: {{ .Values.cluster.name }}
+      ports:
+        - protocol: TCP
+          port: 9200
+        - protocol: TCP
+          port: 9300
+    {{- if .Values.networkPolicy.indexer.additionalEgress }}
+    {{- toYaml .Values.networkPolicy.indexer.additionalEgress | nindent 4 }}
+    {{- end }}
+---
+# NetworkPolicy for Wazuh Manager
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Values.cluster.name }}-manager
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "wazuh-cluster.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: wazuh-manager
+      app.kubernetes.io/instance: {{ .Values.cluster.name }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from other manager pods (cluster communication)
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: wazuh-manager
+              app.kubernetes.io/instance: {{ .Values.cluster.name }}
+      ports:
+        - protocol: TCP
+          port: 1516  # Cluster daemon
+    # Allow from dashboard pods (Wazuh API)
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: wazuh-dashboard
+              app.kubernetes.io/instance: {{ .Values.cluster.name }}
+      ports:
+        - protocol: TCP
+          port: 55000
+    # Allow from operator namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.operatorNamespace | default "wazuh-system" }}
+      ports:
+        - protocol: TCP
+          port: 55000
+        - protocol: TCP
+          port: 1515
+    # Allow agent connections (configurable)
+    {{- if .Values.networkPolicy.manager.allowAgentConnections }}
+    - from:
+        {{- if .Values.networkPolicy.manager.agentCIDRs }}
+        {{- range .Values.networkPolicy.manager.agentCIDRs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+        {{- else }}
+        - ipBlock:
+            cidr: 0.0.0.0/0
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 1514  # Agent events
+        - protocol: TCP
+          port: 1515  # Agent enrollment
+    {{- end }}
+    {{- if .Values.networkPolicy.manager.additionalIngress }}
+    {{- toYaml .Values.networkPolicy.manager.additionalIngress | nindent 4 }}
+    {{- end }}
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow to indexer
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: wazuh-indexer
+              app.kubernetes.io/instance: {{ .Values.cluster.name }}
+      ports:
+        - protocol: TCP
+          port: 9200
+    # Allow to other managers
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: wazuh-manager
+              app.kubernetes.io/instance: {{ .Values.cluster.name }}
+      ports:
+        - protocol: TCP
+          port: 1516
+    {{- if .Values.networkPolicy.manager.additionalEgress }}
+    {{- toYaml .Values.networkPolicy.manager.additionalEgress | nindent 4 }}
+    {{- end }}
+---
+# NetworkPolicy for Wazuh Dashboard
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Values.cluster.name }}-dashboard
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "wazuh-cluster.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: wazuh-dashboard
+      app.kubernetes.io/instance: {{ .Values.cluster.name }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow from ingress controller or load balancer
+    {{- if .Values.networkPolicy.dashboard.ingressFrom }}
+    {{- toYaml .Values.networkPolicy.dashboard.ingressFrom | nindent 4 }}
+    {{- else }}
+    # Default: allow from anywhere on dashboard port
+    - from: []
+      ports:
+        - protocol: TCP
+          port: 5601
+    {{- end }}
+    # Allow from operator namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.operatorNamespace | default "wazuh-system" }}
+      ports:
+        - protocol: TCP
+          port: 5601
+  egress:
+    # Allow DNS
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow to indexer
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: wazuh-indexer
+              app.kubernetes.io/instance: {{ .Values.cluster.name }}
+      ports:
+        - protocol: TCP
+          port: 9200
+    # Allow to manager (Wazuh API)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: wazuh-manager
+              app.kubernetes.io/instance: {{ .Values.cluster.name }}
+      ports:
+        - protocol: TCP
+          port: 55000
+    {{- if .Values.networkPolicy.dashboard.additionalEgress }}
+    {{- toYaml .Values.networkPolicy.dashboard.additionalEgress | nindent 4 }}
+    {{- end }}
+{{- end }}

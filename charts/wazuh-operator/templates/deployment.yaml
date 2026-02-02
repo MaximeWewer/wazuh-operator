@@ -12,7 +12,11 @@ metadata:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicaCount | default 1 }}
+  {{- with .Values.updateStrategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "wazuh-operator.selectorLabels" . | nindent 6 }}
@@ -50,24 +54,81 @@ spec:
         {{- else }}
         - --metrics-bind-address=0
         {{- end }}
-        {{- if .Values.certTestMode }}
-        - --cert-test-mode
-        {{- end }}
         {{- if .Values.nonBlockingRollouts }}
         - --non-blocking-rollouts=true
         {{- else }}
         - --non-blocking-rollouts=false
         {{- end }}
+        {{- if .Values.leaderElection.enabled }}
+        - --leader-elect=true
+        - --leader-election-id={{ .Values.leaderElection.id }}
+        {{- end }}
+        {{- if .Values.webhook.enabled }}
+        - --webhook-cert-path=/tmp/k8s-webhook-server/serving-certs
+        {{- end }}
         {{- with .Values.extraArgs }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+        {{- if .Values.webhook.enabled }}
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        {{- end }}
         env:
+        {{- if .Values.webhook.enabled }}
+        - name: ENABLE_WEBHOOKS
+          value: "true"
+        {{- else }}
+        - name: ENABLE_WEBHOOKS
+          value: "false"
+        {{- end }}
+        {{- if .Values.rbac.namespaceScoped.enabled }}
+        - name: WATCH_NAMESPACES
+          value: {{ .Values.rbac.namespaceScoped.namespaces | join "," | quote }}
+        {{- end }}
         - name: POD_NAME
           valueFrom:
             fieldRef:
               fieldPath: metadata.name
         - name: OPERATOR_NAME
           value: {{ include "wazuh-operator.operatorName" . | quote }}
+        {{- if .Values.telemetry.enabled }}
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: {{ .Values.telemetry.endpoint | quote }}
+        - name: OTEL_EXPORTER_OTLP_INSECURE
+          value: {{ .Values.telemetry.insecure | quote }}
+        - name: OTEL_SERVICE_NAME
+          value: {{ .Values.telemetry.serviceName | default "wazuh-operator" | quote }}
+        - name: OTEL_SERVICE_VERSION
+          value: {{ .Values.telemetry.serviceVersion | default .Chart.AppVersion | quote }}
+        {{- end }}
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ .Values.operator.clusterDomain | default "cluster.local" | quote }}
+        - name: VM_MAX_MAP_COUNT
+          value: {{ .Values.operator.vmMaxMapCount | default 262144 | quote }}
+        - name: GATEWAY_API_ENABLED
+          value: {{ .Values.gatewayAPI.enabled | default false | quote }}
+        # Logging configuration
+        - name: LOG_FORMAT
+          value: {{ .Values.operator.logging.format | default "json" | quote }}
+        - name: LOG_LEVEL
+          value: {{ .Values.operator.logging.level | default "info" | quote }}
+        # Rate limiting configuration
+        {{- if .Values.operator.rateLimiting.enabled }}
+        - name: RATE_LIMIT_ENABLED
+          value: "true"
+        - name: RATE_LIMIT_MAX_CONCURRENT
+          value: {{ .Values.operator.rateLimiting.maxConcurrentReconciles | default 3 | quote }}
+        - name: RATE_LIMIT_BASE_DELAY
+          value: {{ .Values.operator.rateLimiting.baseDelay | default "5ms" | quote }}
+        - name: RATE_LIMIT_MAX_DELAY
+          value: {{ .Values.operator.rateLimiting.maxDelay | default "1000s" | quote }}
+        - name: RATE_LIMIT_QPS
+          value: {{ .Values.operator.rateLimiting.qps | default 10 | quote }}
+        - name: RATE_LIMIT_BURST
+          value: {{ .Values.operator.rateLimiting.burst | default 100 | quote }}
+        {{- end }}
         {{- with .Values.operator.env }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -94,12 +155,23 @@ spec:
         volumeMounts:
         - name: tmp
           mountPath: /tmp
+        {{- if .Values.webhook.enabled }}
+        - name: webhook-cert
+          mountPath: /tmp/k8s-webhook-server/serving-certs
+          readOnly: true
+        {{- end }}
         {{- with .Values.operator.extraVolumeMounts }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
       volumes:
       - name: tmp
         emptyDir: {}
+      {{- if .Values.webhook.enabled }}
+      - name: webhook-cert
+        secret:
+          defaultMode: 420
+          secretName: {{ include "wazuh-operator.fullname" . }}-webhook-cert
+      {{- end }}
       {{- with .Values.operator.extraVolumes }}
       {{- toYaml . | nindent 6 }}
       {{- end }}

@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@ limitations under the License.
 package certificates
 
 import (
+	"crypto"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -28,9 +28,6 @@ import (
 )
 
 const (
-	// DefaultCAValidityDays is the default validity period for CA certificates
-	DefaultCAValidityDays = 3650 // 10 years
-
 	// DefaultKeySize is the default RSA key size
 	DefaultKeySize = 2048
 
@@ -41,13 +38,13 @@ const (
 	DefaultOrganizationalUnit = "Wazuh"
 
 	// DefaultCountry is the default country code
-	DefaultCountry = "US"
+	DefaultCountry = "FR"
 
 	// DefaultState is the default state/province
-	DefaultState = "California"
+	DefaultState = "Alsace"
 
 	// DefaultLocality is the default city/locality
-	DefaultLocality = "California"
+	DefaultLocality = "Strasbourg"
 )
 
 // CAConfig holds configuration for CA certificate generation
@@ -58,9 +55,10 @@ type CAConfig struct {
 	Country            string
 	State              string
 	Locality           string
-	ValidityDays       int
-	ValidityMinutes    int // For testing short-lived certs (takes precedence over ValidityDays if > 0)
-	KeySize            int
+	Validity           time.Duration // Certificate validity as duration
+	KeySize            int           // Only used for RSA
+	KeyAlgorithm       KeyAlgorithm
+	ECDSACurve         ECDSACurve
 }
 
 // DefaultCAConfig returns a CAConfig with default values
@@ -72,8 +70,10 @@ func DefaultCAConfig(commonName string) *CAConfig {
 		Country:            DefaultCountry,
 		State:              DefaultState,
 		Locality:           DefaultLocality,
-		ValidityDays:       DefaultCAValidityDays,
+		Validity:           MustParseCertDuration(DefaultCAValidityStr),
 		KeySize:            DefaultKeySize,
+		KeyAlgorithm:       KeyAlgorithmRSA,
+		ECDSACurve:         ECDSACurveP256,
 	}
 }
 
@@ -100,7 +100,7 @@ func DefaultNodesDN() string {
 // CAResult contains the generated CA certificate and private key
 type CAResult struct {
 	Certificate    *x509.Certificate
-	PrivateKey     *rsa.PrivateKey
+	PrivateKey     crypto.PrivateKey
 	CertificatePEM []byte
 	PrivateKeyPEM  []byte
 }
@@ -131,17 +131,17 @@ func GenerateCA(config *CAConfig) (*CAResult, error) {
 	if config.Locality == "" {
 		config.Locality = DefaultLocality
 	}
-	if config.ValidityDays <= 0 {
-		config.ValidityDays = DefaultCAValidityDays
+	if config.Validity <= 0 {
+		config.Validity = MustParseCertDuration(DefaultCAValidityStr)
 	}
 	if config.KeySize <= 0 {
 		config.KeySize = DefaultKeySize
 	}
 
-	// Generate RSA private key
-	privateKey, err := rsa.GenerateKey(rand.Reader, config.KeySize)
+	// Generate private key based on algorithm
+	privateKey, err := generatePrivateKey(config.KeyAlgorithm, config.KeySize, config.ECDSACurve)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate RSA key: %w", err)
+		return nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
 
 	// Generate serial number
@@ -152,13 +152,7 @@ func GenerateCA(config *CAConfig) (*CAResult, error) {
 
 	// Calculate validity period
 	notBefore := time.Now()
-	var notAfter time.Time
-	if config.ValidityMinutes > 0 {
-		// Use minutes for testing short-lived certificates
-		notAfter = notBefore.Add(time.Duration(config.ValidityMinutes) * time.Minute)
-	} else {
-		notAfter = notBefore.AddDate(0, 0, config.ValidityDays)
-	}
+	notAfter := notBefore.Add(config.Validity)
 
 	// Create CA certificate template
 	template := &x509.Certificate{
@@ -180,7 +174,8 @@ func GenerateCA(config *CAConfig) (*CAResult, error) {
 	}
 
 	// Self-sign the CA certificate
-	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &privateKey.PublicKey, privateKey)
+	publicKey := getPublicKey(privateKey)
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, publicKey, privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CA certificate: %w", err)
 	}
@@ -198,10 +193,10 @@ func GenerateCA(config *CAConfig) (*CAResult, error) {
 	})
 
 	// Encode private key to PEM
-	keyPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
-	})
+	keyPEM, err := encodePrivateKeyToPEM(privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode private key: %w", err)
+	}
 
 	return &CAResult{
 		Certificate:    cert,
@@ -225,30 +220,9 @@ func ParseCA(certPEM, keyPEM []byte) (*CAResult, error) {
 	}
 
 	// Parse private key
-	keyBlock, _ := pem.Decode(keyPEM)
-	if keyBlock == nil {
-		return nil, fmt.Errorf("failed to decode private key PEM")
-	}
-
-	var privateKey *rsa.PrivateKey
-	switch keyBlock.Type {
-	case "RSA PRIVATE KEY":
-		privateKey, err = x509.ParsePKCS1PrivateKey(keyBlock.Bytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse PKCS1 private key: %w", err)
-		}
-	case "PRIVATE KEY":
-		key, err := x509.ParsePKCS8PrivateKey(keyBlock.Bytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse PKCS8 private key: %w", err)
-		}
-		var ok bool
-		privateKey, ok = key.(*rsa.PrivateKey)
-		if !ok {
-			return nil, fmt.Errorf("private key is not RSA")
-		}
-	default:
-		return nil, fmt.Errorf("unsupported private key type: %s", keyBlock.Type)
+	privateKey, err := parsePrivateKeyFromPEM(keyPEM)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
 
 	return &CAResult{
@@ -271,8 +245,9 @@ func (ca *CAResult) IsExpired() bool {
 }
 
 // NeedsRenewal checks if the CA certificate needs renewal
-func (ca *CAResult) NeedsRenewal(renewBeforeDays int) bool {
-	renewalTime := ca.Certificate.NotAfter.AddDate(0, 0, -renewBeforeDays)
+// The threshold parameter specifies how long before expiry to trigger renewal
+func (ca *CAResult) NeedsRenewal(threshold time.Duration) bool {
+	renewalTime := ca.Certificate.NotAfter.Add(-threshold)
 	return time.Now().After(renewalTime)
 }
 
@@ -282,15 +257,17 @@ func (ca *CAResult) DaysUntilExpiry() int {
 	return int(duration.Hours() / 24)
 }
 
-// NeedsRenewalMinutes checks if the CA certificate needs renewal based on minutes
-// Useful for testing short-lived certificates
-func (ca *CAResult) NeedsRenewalMinutes(renewBeforeMinutes int) bool {
-	renewalTime := ca.Certificate.NotAfter.Add(-time.Duration(renewBeforeMinutes) * time.Minute)
-	return time.Now().After(renewalTime)
-}
+// GetCertificateExpiry extracts the expiry time from a PEM-encoded certificate
+func GetCertificateExpiry(certPEM []byte) (time.Time, error) {
+	certBlock, _ := pem.Decode(certPEM)
+	if certBlock == nil {
+		return time.Time{}, fmt.Errorf("failed to decode certificate PEM")
+	}
 
-// MinutesUntilExpiry returns the number of minutes until the certificate expires
-func (ca *CAResult) MinutesUntilExpiry() int {
-	duration := time.Until(ca.Certificate.NotAfter)
-	return int(duration.Minutes())
+	cert, err := x509.ParseCertificate(certBlock.Bytes)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("failed to parse certificate: %w", err)
+	}
+
+	return cert.NotAfter, nil
 }

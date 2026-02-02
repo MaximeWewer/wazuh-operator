@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 	"context"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -28,7 +29,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -53,10 +56,26 @@ type WazuhBackupReconciler struct {
 
 // Reconcile is the main reconciliation loop for WazuhBackup
 func (r *WazuhBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// Start tracing span
+	ctx, span := telemetry.Tracer().Start(ctx, "WazuhBackup.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("namespace", req.Namespace),
+			attribute.String("name", req.Name),
+		))
+	defer span.End()
+
+	// Track reconciliation metrics
+	startTime := time.Now()
+	var reconcileResult = "success"
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		metrics.RecordReconciliation("WazuhBackup", req.Namespace, reconcileResult, duration)
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Fetch the WazuhBackup instance
-	backup := &wazuhv1alpha1.WazuhBackup{}
+	backup := &wazuhv1.WazuhBackup{}
 	if err := r.Get(ctx, req.NamespacedName, backup); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("WazuhBackup resource not found, ignoring since object must be deleted")
@@ -89,12 +108,12 @@ func (r *WazuhBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 // SetupWithManager sets up the controller with the Manager
 func (r *WazuhBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1alpha1.WazuhBackup{}).
+		For(&wazuhv1.WazuhBackup{}).
 		Owns(&batchv1.Job{}).
 		Owns(&batchv1.CronJob{}).
 		Watches(
 			&batchv1.Job{},
-			handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &wazuhv1alpha1.WazuhBackup{}),
+			handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), &wazuhv1.WazuhBackup{}),
 		).
 		Named("wazuhbackup").
 		Complete(r)

@@ -6,18 +6,39 @@ This document describes test scenarios for validating certificate renewal functi
 
 - Minikube or similar Kubernetes cluster
 - Operator built and loaded: `make docker-build IMG=wazuh-operator:dev && minikube image load wazuh-operator:dev`
-- Test mode enabled via `--cert-test-mode` flag
 
 ## Test Configuration
 
-### Operator Deployment (Test Mode)
+### Short-Lived Certificates for Testing
+
+To test certificate renewal quickly, configure short validity periods via the WazuhCluster CRD:
+
+```yaml
+spec:
+  tls:
+    enabled: true
+    certConfig:
+      caValidity: "24h"        # 1 day CA validity
+      validity: "1h"           # 1 hour node cert validity
+      renewalThreshold: "30m"  # Renew 30 minutes before expiry
+      caRenewalThreshold: "6h" # Renew CA 6 hours before expiry
+```
+
+Duration format supports: `d` (days), `h` (hours), `m` (minutes). For example:
+
+- `365d` - 1 year
+- `24h` - 1 day
+- `30m` - 30 minutes (useful for quick tests)
+
+For even shorter testing periods, you can use a minimal cluster with the operator's default configuration and simply wait for the renewal threshold to be reached.
+
+### Operator Deployment
 
 ```bash
-# Deploy operator with test mode enabled
+# Deploy operator
 helm upgrade --install wazuh-operator charts/wazuh-operator \
   --namespace wazuh-operator-system \
-  --create-namespace \
-  -f charts/wazuh-operator/examples/values-cert-test.yaml
+  --create-namespace
 ```
 
 ### Test Cluster Deployment
@@ -27,17 +48,16 @@ helm upgrade --install wazuh-operator charts/wazuh-operator \
 helm upgrade --install wazuh-test charts/wazuh-cluster \
   --namespace wazuh-test \
   --create-namespace \
-  -f charts/wazuh-cluster/examples/values-cert-test.yaml
+  -f charts/wazuh-cluster/examples/values-minimal.yaml
 ```
 
-## Test Mode Timing
+## Certificate Timing (Default Production Settings)
 
-| Parameter          | Value      | Description                            |
-| ------------------ | ---------- | -------------------------------------- |
-| CA Validity        | 10 minutes | CA certificate lifetime                |
-| Node Cert Validity | 5 minutes  | Node certificate lifetime              |
-| Renewal Threshold  | 2 minutes  | Renew when this much time remains      |
-| Expected Renewal   | ~3 minutes | Certificate renewed at 3 min remaining |
+| Parameter          | Default Value | Description                            |
+| ------------------ | ------------- | -------------------------------------- |
+| CA Validity        | 3650 days     | CA certificate lifetime (10 years)     |
+| Node Cert Validity | 365 days      | Node certificate lifetime (1 year)     |
+| Renewal Threshold  | 30 days       | Renew when this much time remains      |
 
 ## Scenario 1: Initial Certificate Creation
 
@@ -75,7 +95,7 @@ kubectl get secrets -n wazuh-test | grep -E "(cert|ca)"
 
 1. Deploy cluster and wait for ready
 2. Note initial certificate expiry times
-3. Wait 3 minutes (until renewal threshold)
+3. Wait until renewal threshold is reached
 4. Verify certificates are renewed
 
 **Verification**:
@@ -86,11 +106,11 @@ kubectl get secret -n wazuh-test wazuh-test-indexer-certs \
   -o jsonpath='{.data.tls\.crt}' | base64 -d | \
   openssl x509 -noout -dates
 
-# Wait 3 minutes, then check again
-# Expiry should be ~5 minutes from NOW (not from original creation)
+# Check again after threshold is reached
+# Expiry should be updated to a new date
 ```
 
-**Expected Result**: Certificate `notAfter` date updates to ~5 minutes from current time.
+**Expected Result**: Certificate `notAfter` date updates when renewal threshold is reached.
 
 ## Scenario 3: CA Certificate Renewal
 
@@ -99,7 +119,7 @@ kubectl get secret -n wazuh-test wazuh-test-indexer-certs \
 **Steps**:
 
 1. Deploy cluster and wait for ready
-2. Wait 8 minutes (until CA renewal threshold at 2 min remaining)
+2. Wait until CA renewal threshold is reached
 3. Verify CA is renewed
 4. Verify all node certificates are re-signed with new CA
 
@@ -132,7 +152,7 @@ openssl verify -CAfile /tmp/ca.crt /tmp/node.crt
 
 1. Deploy cluster and wait for ready
 2. Note pod creation timestamps
-3. Wait for certificate renewal (3 minutes)
+3. Wait for certificate renewal
 4. Verify pods have been restarted
 
 **Verification**:
@@ -148,16 +168,16 @@ kubectl get statefulset -n wazuh-test wazuh-test-indexer \
 
 **Expected Result**: Pods are restarted with updated certificate hash annotation.
 
-## Scenario 5: Concurrent Certificate Renewal (Current Issue)
+## Scenario 5: Concurrent Certificate Renewal
 
-**Objective**: Identify blocking behavior during rollouts.
+**Objective**: Verify parallel rollouts work correctly.
 
 **Steps**:
 
 1. Deploy cluster with multiple replicas
 2. Enable debug logging
 3. Watch operator logs during certificate renewal
-4. Identify blocking wait patterns
+4. Verify all components update correctly
 
 **Verification**:
 
@@ -166,16 +186,9 @@ kubectl get statefulset -n wazuh-test wazuh-test-indexer \
 kubectl logs -n wazuh-operator-system \
   deploy/wazuh-operator-controller-manager -f | \
   grep -E "(Waiting for|StatefulSet|certificate|renewal)"
-
-# Look for patterns like:
-# "Waiting for Master StatefulSet to be ready"
-# followed by long gaps before:
-# "Waiting for Worker StatefulSet to be ready"
 ```
 
-**Expected Result (Current Behavior)**: Sequential blocking waits observed.
-
-**Expected Result (After Fix)**: All components update in parallel.
+**Expected Result**: All components update without blocking each other.
 
 ## Scenario 6: Optimistic Locking Errors
 
@@ -196,9 +209,7 @@ kubectl logs -n wazuh-operator-system \
   grep -i "modified"
 ```
 
-**Expected Result (Current)**: Errors cause reconciliation failures.
-
-**Expected Result (After Fix)**: Automatic retry succeeds.
+**Expected Result**: Automatic retry succeeds.
 
 ## Scenario 7: Certificate Expiry Under Load
 
@@ -232,9 +243,7 @@ cluster:
 kubectl logs -n wazuh-test wazuh-test-indexer-0 | grep -i "expired"
 ```
 
-**Expected Result (Current)**: Certificates may expire during long rollouts.
-
-**Expected Result (After Fix)**: Certificates renewed before expiry regardless of rollout duration.
+**Expected Result**: Certificates renewed before expiry regardless of rollout duration.
 
 ## Scenario 8: Recovery After Failure
 
@@ -261,6 +270,40 @@ kubectl get wazuhcluster -n wazuh-test wazuh-test
 ```
 
 **Expected Result**: Secrets recreated, pods restarted, cluster healthy.
+
+## Scenario 9: ECDSA Certificate Support
+
+**Objective**: Verify ECDSA certificates work correctly.
+
+**Steps**:
+
+1. Deploy cluster with ECDSA key algorithm configured
+2. Verify certificates are generated with ECDSA keys
+3. Verify TLS connections work
+
+**Configuration** (via CRD when supported):
+
+```yaml
+spec:
+  tls:
+    enabled: true
+    certConfig:
+      keyAlgorithm: ECDSA
+      ecdsaCurve: P256  # or P384, P521
+```
+
+**Verification**:
+
+```bash
+# Check certificate key algorithm
+kubectl get secret -n wazuh-test wazuh-test-indexer-certs \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d | \
+  openssl x509 -noout -text | grep "Public Key Algorithm"
+
+# Expected: ecdsa-with-SHA256 or similar
+```
+
+**Expected Result**: Certificates generated with ECDSA keys, TLS works correctly.
 
 ## Monitoring Commands
 
@@ -296,16 +339,17 @@ kubectl logs -n wazuh-operator-system \
 
 ## Success Criteria
 
-| Scenario           | Current Status | Target Status |
-| ------------------ | -------------- | ------------- |
-| Initial Creation   | PASS           | PASS          |
-| Node Cert Renewal  | PARTIAL        | PASS          |
-| CA Cert Renewal    | PARTIAL        | PASS          |
-| Pod Rollout        | PARTIAL        | PASS          |
-| Concurrent Renewal | FAIL           | PASS          |
-| Optimistic Locking | FAIL           | PASS          |
-| Expiry Under Load  | FAIL           | PASS          |
-| Recovery           | PASS           | PASS          |
+| Scenario           | Expected Status |
+| ------------------ | --------------- |
+| Initial Creation   | PASS            |
+| Node Cert Renewal  | PASS            |
+| CA Cert Renewal    | PASS            |
+| Pod Rollout        | PASS            |
+| Concurrent Renewal | PASS            |
+| Optimistic Locking | PASS            |
+| Expiry Under Load  | PASS            |
+| Recovery           | PASS            |
+| ECDSA Support      | PASS            |
 
 ## Troubleshooting
 

@@ -35,7 +35,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         description: WazuhCluster is the Schema for the wazuhclusters API
@@ -1396,6 +1396,175 @@ spec:
                       type: object
                     type: array
                     x-kubernetes-preserve-unknown-fields: true
+                  gatewayAPI:
+                    description: GatewayAPI configuration (alternative to Ingress)
+                    properties:
+                      enabled:
+                        description: Enable Gateway API instead of Ingress
+                        type: boolean
+                      gatewayRef:
+                        description: Reference to parent Gateway
+                        properties:
+                          name:
+                            description: Name of the Gateway
+                            type: string
+                          namespace:
+                            description: Namespace of the Gateway (defaults to same
+                              namespace as the resource)
+                            type: string
+                          sectionName:
+                            description: SectionName is the name of a section within
+                              the Gateway
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      hostnames:
+                        description: Hostnames for HTTPRoute
+                        items:
+                          type: string
+                        type: array
+                      http:
+                        description: HTTP route configuration (Dashboard, Manager
+                          API)
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            description: Annotations for the HTTPRoute resource
+                            type: object
+                          pathPrefix:
+                            default: /
+                            description: 'PathPrefix for the HTTP route (default:
+                              "/")'
+                            type: string
+                        type: object
+                      tcp:
+                        description: TCP route configuration (Agent enrollment/events)
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            description: Annotations for the TCPRoute resources
+                            type: object
+                          clusterEnabled:
+                            description: ClusterEnabled enables TCP route for cluster
+                              communication (port 1516)
+                            type: boolean
+                          enabled:
+                            description: Enable TCP routes for agent traffic
+                            type: boolean
+                          enrollmentEnabled:
+                            description: EnrollmentEnabled enables TCP route for agent
+                              enrollment (port 1515)
+                            type: boolean
+                          eventsEnabled:
+                            description: EventsEnabled enables TCP route for agent
+                              events (port 1514)
+                            type: boolean
+                        type: object
+                      udp:
+                        description: UDP route configuration (Syslog)
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            description: Annotations for the UDPRoute resource
+                            type: object
+                          enabled:
+                            description: Enable UDP route for syslog
+                            type: boolean
+                          syslogPort:
+                            default: 514
+                            description: 'SyslogPort is the UDP port for syslog (default:
+                              514)'
+                            format: int32
+                            maximum: 65535
+                            minimum: 1
+                            type: integer
+                        type: object
+                    type: object
+                  hpa:
+                    description: |-
+                      HorizontalPodAutoscaler configuration for automatic scaling
+                      When enabled, the Dashboard will scale based on CPU/memory utilization
+                    properties:
+                      behavior:
+                        description: Behavior configures the scaling behavior (optional
+                          advanced config)
+                        properties:
+                          scaleDown:
+                            description: ScaleDown configures scale down behavior
+                            properties:
+                              selectPolicy:
+                                description: SelectPolicy is the policy selection
+                                  (Max, Min, Disabled)
+                                enum:
+                                - Max
+                                - Min
+                                - Disabled
+                                type: string
+                              stabilizationWindowSeconds:
+                                description: StabilizationWindowSeconds is the stabilization
+                                  window in seconds
+                                format: int32
+                                maximum: 3600
+                                minimum: 0
+                                type: integer
+                            type: object
+                          scaleUp:
+                            description: ScaleUp configures scale up behavior
+                            properties:
+                              selectPolicy:
+                                description: SelectPolicy is the policy selection
+                                  (Max, Min, Disabled)
+                                enum:
+                                - Max
+                                - Min
+                                - Disabled
+                                type: string
+                              stabilizationWindowSeconds:
+                                description: StabilizationWindowSeconds is the stabilization
+                                  window in seconds
+                                format: int32
+                                maximum: 3600
+                                minimum: 0
+                                type: integer
+                            type: object
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      enabled:
+                        default: false
+                        description: Enabled enables HPA for the component
+                        type: boolean
+                      maxReplicas:
+                        default: 10
+                        description: MaxReplicas is the maximum number of replicas
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      minReplicas:
+                        default: 1
+                        description: MinReplicas is the minimum number of replicas
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      targetCPUUtilizationPercentage:
+                        default: 80
+                        description: TargetCPUUtilizationPercentage is the target
+                          CPU utilization for scaling
+                        format: int32
+                        maximum: 100
+                        minimum: 1
+                        type: integer
+                      targetMemoryUtilizationPercentage:
+                        description: TargetMemoryUtilizationPercentage is the target
+                          memory utilization for scaling
+                        format: int32
+                        maximum: 100
+                        minimum: 1
+                        type: integer
+                    type: object
                   image:
                     description: Image override
                     properties:
@@ -2171,16 +2340,84 @@ spec:
                                 Credentials reference from a secret (contains both username and password)
                                 The secret should have keys: 'username' and 'password' (or custom keys via usernameKey/passwordKey)
                               properties:
+                                externalSecretRef:
+                                  description: |-
+                                    ExternalSecretRef references an ExternalSecret from ESO
+                                    When specified, the operator will read credentials from the K8s Secret
+                                    created by the ExternalSecret controller
+                                  properties:
+                                    name:
+                                      description: |-
+                                        Name of the ExternalSecret resource that will be created/referenced
+                                        The ExternalSecret will sync the secret from the external provider to a K8s Secret
+                                      type: string
+                                    namespace:
+                                      description: Namespace of the ExternalSecret
+                                        (defaults to same namespace as the parent
+                                        resource)
+                                      type: string
+                                    refreshInterval:
+                                      default: 1h
+                                      description: RefreshInterval is how often to
+                                        sync the secret (e.g., "1h", "30m")
+                                      type: string
+                                    remoteRef:
+                                      description: RemoteRef specifies the remote
+                                        secret location in the external provider
+                                      properties:
+                                        key:
+                                          description: |-
+                                            Key is the key/path in the external secret provider
+                                            For Vault: "secret/data/myapp/config"
+                                            For AWS SM: "myapp/database-credentials"
+                                          type: string
+                                        property:
+                                          description: |-
+                                            Property is the specific property within the secret to extract
+                                            If not specified, the entire secret is used
+                                          type: string
+                                        version:
+                                          description: Version is the version of the
+                                            secret to fetch (provider-specific)
+                                          type: string
+                                      required:
+                                      - key
+                                      type: object
+                                    secretStoreRef:
+                                      description: SecretStoreRef references the SecretStore
+                                        or ClusterSecretStore to use
+                                      properties:
+                                        kind:
+                                          default: SecretStore
+                                          description: Kind is the kind of secret
+                                            store (SecretStore or ClusterSecretStore)
+                                          enum:
+                                          - SecretStore
+                                          - ClusterSecretStore
+                                          type: string
+                                        name:
+                                          description: Name of the SecretStore or
+                                            ClusterSecretStore
+                                          type: string
+                                      required:
+                                      - name
+                                      type: object
+                                  required:
+                                  - name
+                                  type: object
                                 passwordKey:
                                   default: password
-                                  description: Password key in secret
+                                  description: PasswordKey is the key in the secret
+                                    containing the password
                                   type: string
                                 secretName:
-                                  description: Secret name
+                                  description: SecretName references a native Kubernetes
+                                    Secret
                                   type: string
                                 usernameKey:
                                   default: username
-                                  description: Username key in secret
+                                  description: UsernameKey is the key in the secret
+                                    containing the username
                                   type: string
                               type: object
                             id:
@@ -2304,16 +2541,82 @@ spec:
                               Credentials from a secret for the default API endpoint
                               The secret should have keys for username and password
                             properties:
+                              externalSecretRef:
+                                description: |-
+                                  ExternalSecretRef references an ExternalSecret from ESO
+                                  When specified, the operator will read credentials from the K8s Secret
+                                  created by the ExternalSecret controller
+                                properties:
+                                  name:
+                                    description: |-
+                                      Name of the ExternalSecret resource that will be created/referenced
+                                      The ExternalSecret will sync the secret from the external provider to a K8s Secret
+                                    type: string
+                                  namespace:
+                                    description: Namespace of the ExternalSecret (defaults
+                                      to same namespace as the parent resource)
+                                    type: string
+                                  refreshInterval:
+                                    default: 1h
+                                    description: RefreshInterval is how often to sync
+                                      the secret (e.g., "1h", "30m")
+                                    type: string
+                                  remoteRef:
+                                    description: RemoteRef specifies the remote secret
+                                      location in the external provider
+                                    properties:
+                                      key:
+                                        description: |-
+                                          Key is the key/path in the external secret provider
+                                          For Vault: "secret/data/myapp/config"
+                                          For AWS SM: "myapp/database-credentials"
+                                        type: string
+                                      property:
+                                        description: |-
+                                          Property is the specific property within the secret to extract
+                                          If not specified, the entire secret is used
+                                        type: string
+                                      version:
+                                        description: Version is the version of the
+                                          secret to fetch (provider-specific)
+                                        type: string
+                                    required:
+                                    - key
+                                    type: object
+                                  secretStoreRef:
+                                    description: SecretStoreRef references the SecretStore
+                                      or ClusterSecretStore to use
+                                    properties:
+                                      kind:
+                                        default: SecretStore
+                                        description: Kind is the kind of secret store
+                                          (SecretStore or ClusterSecretStore)
+                                        enum:
+                                        - SecretStore
+                                        - ClusterSecretStore
+                                        type: string
+                                      name:
+                                        description: Name of the SecretStore or ClusterSecretStore
+                                        type: string
+                                    required:
+                                    - name
+                                    type: object
+                                required:
+                                - name
+                                type: object
                               passwordKey:
                                 default: password
-                                description: Password key in secret
+                                description: PasswordKey is the key in the secret
+                                  containing the password
                                 type: string
                               secretName:
-                                description: Secret name
+                                description: SecretName references a native Kubernetes
+                                  Secret
                                 type: string
                               usernameKey:
                                 default: username
-                                description: Username key in secret
+                                description: UsernameKey is the key in the secret
+                                  containing the username
                                 type: string
                             type: object
                           port:
@@ -3450,10 +3753,70 @@ spec:
                       type: string
                     description: Annotations for the StatefulSet
                     type: object
+                  antiAffinity:
+                    description: |-
+                      AntiAffinity configures pod anti-affinity rules for indexer pods
+                      When enabled, indexer pods are spread across different nodes or zones
+                      This helps ensure high availability by preventing all indexers from running on the same node
+                    properties:
+                      enabled:
+                        default: false
+                        description: |-
+                          Enabled enables pod anti-affinity for spreading pods across topology domains
+                          When false (default), no anti-affinity rules are added to pods
+                        type: boolean
+                      topologyKey:
+                        default: kubernetes.io/hostname
+                        description: |-
+                          TopologyKey is the key for node labels used to define topology domains
+                          Pods will be spread across nodes with different values for this label
+                          Common values: kubernetes.io/hostname (default), topology.kubernetes.io/zone
+                        type: string
+                      type:
+                        default: required
+                        description: |-
+                          Type specifies whether the anti-affinity rule is required (hard) or preferred (soft)
+                          "required": Pods MUST be scheduled on different topology domains (pods stay Pending if not possible)
+                          "preferred": Scheduler PREFERS different topology domains but can co-locate if necessary
+                        enum:
+                        - required
+                        - preferred
+                        type: string
+                      weight:
+                        default: 100
+                        description: |-
+                          Weight is the weight (1-100) for preferred anti-affinity rules
+                          Higher weight means the scheduler tries harder to satisfy this preference
+                          Only applicable when Type=preferred, ignored for Type=required
+                        format: int32
+                        maximum: 100
+                        minimum: 1
+                        type: integer
+                    type: object
                   clusterName:
                     default: wazuh
                     description: Cluster name
                     type: string
+                  clusterSettings:
+                    description: |-
+                      ClusterSettings defines cluster-level settings to apply via the Cluster Settings API
+                      These settings are applied after the cluster is healthy (green/yellow)
+                    properties:
+                      persistent:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          Persistent settings survive cluster restarts
+                          Common settings: cluster.routing.allocation.enable, indices.recovery.max_bytes_per_sec
+                        type: object
+                      transient:
+                        additionalProperties:
+                          type: string
+                        description: |-
+                          Transient settings are cleared on cluster restart
+                          Useful for temporary maintenance settings
+                        type: object
+                    type: object
                   containerSecurityContext:
                     description: Security context for the container
                     properties:
@@ -3650,16 +4013,81 @@ spec:
                   credentials:
                     description: Credentials for indexer
                     properties:
+                      externalSecretRef:
+                        description: |-
+                          ExternalSecretRef references an ExternalSecret from ESO
+                          When specified, the operator will read credentials from the K8s Secret
+                          created by the ExternalSecret controller
+                        properties:
+                          name:
+                            description: |-
+                              Name of the ExternalSecret resource that will be created/referenced
+                              The ExternalSecret will sync the secret from the external provider to a K8s Secret
+                            type: string
+                          namespace:
+                            description: Namespace of the ExternalSecret (defaults
+                              to same namespace as the parent resource)
+                            type: string
+                          refreshInterval:
+                            default: 1h
+                            description: RefreshInterval is how often to sync the
+                              secret (e.g., "1h", "30m")
+                            type: string
+                          remoteRef:
+                            description: RemoteRef specifies the remote secret location
+                              in the external provider
+                            properties:
+                              key:
+                                description: |-
+                                  Key is the key/path in the external secret provider
+                                  For Vault: "secret/data/myapp/config"
+                                  For AWS SM: "myapp/database-credentials"
+                                type: string
+                              property:
+                                description: |-
+                                  Property is the specific property within the secret to extract
+                                  If not specified, the entire secret is used
+                                type: string
+                              version:
+                                description: Version is the version of the secret
+                                  to fetch (provider-specific)
+                                type: string
+                            required:
+                            - key
+                            type: object
+                          secretStoreRef:
+                            description: SecretStoreRef references the SecretStore
+                              or ClusterSecretStore to use
+                            properties:
+                              kind:
+                                default: SecretStore
+                                description: Kind is the kind of secret store (SecretStore
+                                  or ClusterSecretStore)
+                                enum:
+                                - SecretStore
+                                - ClusterSecretStore
+                                type: string
+                              name:
+                                description: Name of the SecretStore or ClusterSecretStore
+                                type: string
+                            required:
+                            - name
+                            type: object
+                        required:
+                        - name
+                        type: object
                       passwordKey:
                         default: password
-                        description: Password key in secret
+                        description: PasswordKey is the key in the secret containing
+                          the password
                         type: string
                       secretName:
-                        description: Secret name
+                        description: SecretName references a native Kubernetes Secret
                         type: string
                       usernameKey:
                         default: username
-                        description: Username key in secret
+                        description: UsernameKey is the key in the secret containing
+                          the username
                         type: string
                     type: object
                   env:
@@ -3869,6 +4297,176 @@ spec:
                       type: object
                     type: array
                     x-kubernetes-preserve-unknown-fields: true
+                  gatewayAPI:
+                    description: GatewayAPI configuration (alternative to Ingress)
+                    properties:
+                      enabled:
+                        description: Enable Gateway API instead of Ingress
+                        type: boolean
+                      gatewayRef:
+                        description: Reference to parent Gateway
+                        properties:
+                          name:
+                            description: Name of the Gateway
+                            type: string
+                          namespace:
+                            description: Namespace of the Gateway (defaults to same
+                              namespace as the resource)
+                            type: string
+                          sectionName:
+                            description: SectionName is the name of a section within
+                              the Gateway
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      hostnames:
+                        description: Hostnames for HTTPRoute
+                        items:
+                          type: string
+                        type: array
+                      http:
+                        description: HTTP route configuration (Dashboard, Manager
+                          API)
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            description: Annotations for the HTTPRoute resource
+                            type: object
+                          pathPrefix:
+                            default: /
+                            description: 'PathPrefix for the HTTP route (default:
+                              "/")'
+                            type: string
+                        type: object
+                      tcp:
+                        description: TCP route configuration (Agent enrollment/events)
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            description: Annotations for the TCPRoute resources
+                            type: object
+                          clusterEnabled:
+                            description: ClusterEnabled enables TCP route for cluster
+                              communication (port 1516)
+                            type: boolean
+                          enabled:
+                            description: Enable TCP routes for agent traffic
+                            type: boolean
+                          enrollmentEnabled:
+                            description: EnrollmentEnabled enables TCP route for agent
+                              enrollment (port 1515)
+                            type: boolean
+                          eventsEnabled:
+                            description: EventsEnabled enables TCP route for agent
+                              events (port 1514)
+                            type: boolean
+                        type: object
+                      udp:
+                        description: UDP route configuration (Syslog)
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            description: Annotations for the UDPRoute resource
+                            type: object
+                          enabled:
+                            description: Enable UDP route for syslog
+                            type: boolean
+                          syslogPort:
+                            default: 514
+                            description: 'SyslogPort is the UDP port for syslog (default:
+                              514)'
+                            format: int32
+                            maximum: 65535
+                            minimum: 1
+                            type: integer
+                        type: object
+                    type: object
+                  hpa:
+                    description: |-
+                      HorizontalPodAutoscaler configuration for automatic scaling
+                      Note: HPA for StatefulSet requires careful consideration as OpenSearch
+                      needs shard rebalancing after scaling. Use with caution.
+                    properties:
+                      behavior:
+                        description: Behavior configures the scaling behavior (optional
+                          advanced config)
+                        properties:
+                          scaleDown:
+                            description: ScaleDown configures scale down behavior
+                            properties:
+                              selectPolicy:
+                                description: SelectPolicy is the policy selection
+                                  (Max, Min, Disabled)
+                                enum:
+                                - Max
+                                - Min
+                                - Disabled
+                                type: string
+                              stabilizationWindowSeconds:
+                                description: StabilizationWindowSeconds is the stabilization
+                                  window in seconds
+                                format: int32
+                                maximum: 3600
+                                minimum: 0
+                                type: integer
+                            type: object
+                          scaleUp:
+                            description: ScaleUp configures scale up behavior
+                            properties:
+                              selectPolicy:
+                                description: SelectPolicy is the policy selection
+                                  (Max, Min, Disabled)
+                                enum:
+                                - Max
+                                - Min
+                                - Disabled
+                                type: string
+                              stabilizationWindowSeconds:
+                                description: StabilizationWindowSeconds is the stabilization
+                                  window in seconds
+                                format: int32
+                                maximum: 3600
+                                minimum: 0
+                                type: integer
+                            type: object
+                        type: object
+                        x-kubernetes-preserve-unknown-fields: true
+                      enabled:
+                        default: false
+                        description: Enabled enables HPA for the component
+                        type: boolean
+                      maxReplicas:
+                        default: 10
+                        description: MaxReplicas is the maximum number of replicas
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      minReplicas:
+                        default: 1
+                        description: MinReplicas is the minimum number of replicas
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      targetCPUUtilizationPercentage:
+                        default: 80
+                        description: TargetCPUUtilizationPercentage is the target
+                          CPU utilization for scaling
+                        format: int32
+                        maximum: 100
+                        minimum: 1
+                        type: integer
+                      targetMemoryUtilizationPercentage:
+                        description: TargetMemoryUtilizationPercentage is the target
+                          memory utilization for scaling
+                        format: int32
+                        maximum: 100
+                        minimum: 1
+                        type: integer
+                    type: object
                   image:
                     description: Image override
                     properties:
@@ -7317,19 +7915,124 @@ spec:
               manager:
                 description: Manager configuration (inline mode)
                 properties:
+                  antiAffinity:
+                    description: |-
+                      AntiAffinity configures pod anti-affinity rules for manager pods
+                      When enabled, manager pods are spread across different nodes or zones
+                      This helps ensure high availability by preventing all managers from running on the same node
+                    properties:
+                      enabled:
+                        default: false
+                        description: |-
+                          Enabled enables pod anti-affinity for spreading pods across topology domains
+                          When false (default), no anti-affinity rules are added to pods
+                        type: boolean
+                      topologyKey:
+                        default: kubernetes.io/hostname
+                        description: |-
+                          TopologyKey is the key for node labels used to define topology domains
+                          Pods will be spread across nodes with different values for this label
+                          Common values: kubernetes.io/hostname (default), topology.kubernetes.io/zone
+                        type: string
+                      type:
+                        default: required
+                        description: |-
+                          Type specifies whether the anti-affinity rule is required (hard) or preferred (soft)
+                          "required": Pods MUST be scheduled on different topology domains (pods stay Pending if not possible)
+                          "preferred": Scheduler PREFERS different topology domains but can co-locate if necessary
+                        enum:
+                        - required
+                        - preferred
+                        type: string
+                      weight:
+                        default: 100
+                        description: |-
+                          Weight is the weight (1-100) for preferred anti-affinity rules
+                          Higher weight means the scheduler tries harder to satisfy this preference
+                          Only applicable when Type=preferred, ignored for Type=required
+                        format: int32
+                        maximum: 100
+                        minimum: 1
+                        type: integer
+                    type: object
                   apiCredentials:
                     description: API credentials
                     properties:
+                      externalSecretRef:
+                        description: |-
+                          ExternalSecretRef references an ExternalSecret from ESO
+                          When specified, the operator will read credentials from the K8s Secret
+                          created by the ExternalSecret controller
+                        properties:
+                          name:
+                            description: |-
+                              Name of the ExternalSecret resource that will be created/referenced
+                              The ExternalSecret will sync the secret from the external provider to a K8s Secret
+                            type: string
+                          namespace:
+                            description: Namespace of the ExternalSecret (defaults
+                              to same namespace as the parent resource)
+                            type: string
+                          refreshInterval:
+                            default: 1h
+                            description: RefreshInterval is how often to sync the
+                              secret (e.g., "1h", "30m")
+                            type: string
+                          remoteRef:
+                            description: RemoteRef specifies the remote secret location
+                              in the external provider
+                            properties:
+                              key:
+                                description: |-
+                                  Key is the key/path in the external secret provider
+                                  For Vault: "secret/data/myapp/config"
+                                  For AWS SM: "myapp/database-credentials"
+                                type: string
+                              property:
+                                description: |-
+                                  Property is the specific property within the secret to extract
+                                  If not specified, the entire secret is used
+                                type: string
+                              version:
+                                description: Version is the version of the secret
+                                  to fetch (provider-specific)
+                                type: string
+                            required:
+                            - key
+                            type: object
+                          secretStoreRef:
+                            description: SecretStoreRef references the SecretStore
+                              or ClusterSecretStore to use
+                            properties:
+                              kind:
+                                default: SecretStore
+                                description: Kind is the kind of secret store (SecretStore
+                                  or ClusterSecretStore)
+                                enum:
+                                - SecretStore
+                                - ClusterSecretStore
+                                type: string
+                              name:
+                                description: Name of the SecretStore or ClusterSecretStore
+                                type: string
+                            required:
+                            - name
+                            type: object
+                        required:
+                        - name
+                        type: object
                       passwordKey:
                         default: password
-                        description: Password key in secret
+                        description: PasswordKey is the key in the secret containing
+                          the password
                         type: string
                       secretName:
-                        description: Secret name
+                        description: SecretName references a native Kubernetes Secret
                         type: string
                       usernameKey:
                         default: username
-                        description: Username key in secret
+                        description: UsernameKey is the key in the secret containing
+                          the username
                         type: string
                     type: object
                   authdPasswordSecretRef:
@@ -10955,6 +11658,94 @@ spec:
                           type: object
                         type: array
                         x-kubernetes-preserve-unknown-fields: true
+                      gatewayAPI:
+                        description: GatewayAPI configuration (alternative to Ingress)
+                        properties:
+                          enabled:
+                            description: Enable Gateway API instead of Ingress
+                            type: boolean
+                          gatewayRef:
+                            description: Reference to parent Gateway
+                            properties:
+                              name:
+                                description: Name of the Gateway
+                                type: string
+                              namespace:
+                                description: Namespace of the Gateway (defaults to
+                                  same namespace as the resource)
+                                type: string
+                              sectionName:
+                                description: SectionName is the name of a section
+                                  within the Gateway
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          hostnames:
+                            description: Hostnames for HTTPRoute
+                            items:
+                              type: string
+                            type: array
+                          http:
+                            description: HTTP route configuration (Dashboard, Manager
+                              API)
+                            properties:
+                              annotations:
+                                additionalProperties:
+                                  type: string
+                                description: Annotations for the HTTPRoute resource
+                                type: object
+                              pathPrefix:
+                                default: /
+                                description: 'PathPrefix for the HTTP route (default:
+                                  "/")'
+                                type: string
+                            type: object
+                          tcp:
+                            description: TCP route configuration (Agent enrollment/events)
+                            properties:
+                              annotations:
+                                additionalProperties:
+                                  type: string
+                                description: Annotations for the TCPRoute resources
+                                type: object
+                              clusterEnabled:
+                                description: ClusterEnabled enables TCP route for
+                                  cluster communication (port 1516)
+                                type: boolean
+                              enabled:
+                                description: Enable TCP routes for agent traffic
+                                type: boolean
+                              enrollmentEnabled:
+                                description: EnrollmentEnabled enables TCP route for
+                                  agent enrollment (port 1515)
+                                type: boolean
+                              eventsEnabled:
+                                description: EventsEnabled enables TCP route for agent
+                                  events (port 1514)
+                                type: boolean
+                            type: object
+                          udp:
+                            description: UDP route configuration (Syslog)
+                            properties:
+                              annotations:
+                                additionalProperties:
+                                  type: string
+                                description: Annotations for the UDPRoute resource
+                                type: object
+                              enabled:
+                                description: Enable UDP route for syslog
+                                type: boolean
+                              syslogPort:
+                                default: 514
+                                description: 'SyslogPort is the UDP port for syslog
+                                  (default: 514)'
+                                format: int32
+                                maximum: 65535
+                                minimum: 1
+                                type: integer
+                            type: object
+                        type: object
                       ingress:
                         description: Ingress configuration
                         properties:
@@ -11421,6 +12212,21 @@ spec:
                           type: object
                         type: array
                         x-kubernetes-preserve-unknown-fields: true
+                    type: object
+                  podDisruptionBudget:
+                    description: Pod Disruption Budget for manager pods
+                    properties:
+                      enabled:
+                        description: Enable PDB
+                        type: boolean
+                      maxUnavailable:
+                        description: Max unavailable pods
+                        format: int32
+                        type: integer
+                      minAvailable:
+                        description: Min available pods
+                        format: int32
+                        type: integer
                     type: object
                   workers:
                     description: Worker nodes configuration
@@ -14727,6 +15533,174 @@ spec:
                           type: object
                         type: array
                         x-kubernetes-preserve-unknown-fields: true
+                      gatewayAPI:
+                        description: GatewayAPI configuration (alternative to Ingress)
+                        properties:
+                          enabled:
+                            description: Enable Gateway API instead of Ingress
+                            type: boolean
+                          gatewayRef:
+                            description: Reference to parent Gateway
+                            properties:
+                              name:
+                                description: Name of the Gateway
+                                type: string
+                              namespace:
+                                description: Namespace of the Gateway (defaults to
+                                  same namespace as the resource)
+                                type: string
+                              sectionName:
+                                description: SectionName is the name of a section
+                                  within the Gateway
+                                type: string
+                            required:
+                            - name
+                            type: object
+                          hostnames:
+                            description: Hostnames for HTTPRoute
+                            items:
+                              type: string
+                            type: array
+                          http:
+                            description: HTTP route configuration (Dashboard, Manager
+                              API)
+                            properties:
+                              annotations:
+                                additionalProperties:
+                                  type: string
+                                description: Annotations for the HTTPRoute resource
+                                type: object
+                              pathPrefix:
+                                default: /
+                                description: 'PathPrefix for the HTTP route (default:
+                                  "/")'
+                                type: string
+                            type: object
+                          tcp:
+                            description: TCP route configuration (Agent enrollment/events)
+                            properties:
+                              annotations:
+                                additionalProperties:
+                                  type: string
+                                description: Annotations for the TCPRoute resources
+                                type: object
+                              clusterEnabled:
+                                description: ClusterEnabled enables TCP route for
+                                  cluster communication (port 1516)
+                                type: boolean
+                              enabled:
+                                description: Enable TCP routes for agent traffic
+                                type: boolean
+                              enrollmentEnabled:
+                                description: EnrollmentEnabled enables TCP route for
+                                  agent enrollment (port 1515)
+                                type: boolean
+                              eventsEnabled:
+                                description: EventsEnabled enables TCP route for agent
+                                  events (port 1514)
+                                type: boolean
+                            type: object
+                          udp:
+                            description: UDP route configuration (Syslog)
+                            properties:
+                              annotations:
+                                additionalProperties:
+                                  type: string
+                                description: Annotations for the UDPRoute resource
+                                type: object
+                              enabled:
+                                description: Enable UDP route for syslog
+                                type: boolean
+                              syslogPort:
+                                default: 514
+                                description: 'SyslogPort is the UDP port for syslog
+                                  (default: 514)'
+                                format: int32
+                                maximum: 65535
+                                minimum: 1
+                                type: integer
+                            type: object
+                        type: object
+                      hpa:
+                        description: HorizontalPodAutoscaler configuration for automatic
+                          scaling of workers
+                        properties:
+                          behavior:
+                            description: Behavior configures the scaling behavior
+                              (optional advanced config)
+                            properties:
+                              scaleDown:
+                                description: ScaleDown configures scale down behavior
+                                properties:
+                                  selectPolicy:
+                                    description: SelectPolicy is the policy selection
+                                      (Max, Min, Disabled)
+                                    enum:
+                                    - Max
+                                    - Min
+                                    - Disabled
+                                    type: string
+                                  stabilizationWindowSeconds:
+                                    description: StabilizationWindowSeconds is the
+                                      stabilization window in seconds
+                                    format: int32
+                                    maximum: 3600
+                                    minimum: 0
+                                    type: integer
+                                type: object
+                              scaleUp:
+                                description: ScaleUp configures scale up behavior
+                                properties:
+                                  selectPolicy:
+                                    description: SelectPolicy is the policy selection
+                                      (Max, Min, Disabled)
+                                    enum:
+                                    - Max
+                                    - Min
+                                    - Disabled
+                                    type: string
+                                  stabilizationWindowSeconds:
+                                    description: StabilizationWindowSeconds is the
+                                      stabilization window in seconds
+                                    format: int32
+                                    maximum: 3600
+                                    minimum: 0
+                                    type: integer
+                                type: object
+                            type: object
+                            x-kubernetes-preserve-unknown-fields: true
+                          enabled:
+                            default: false
+                            description: Enabled enables HPA for the component
+                            type: boolean
+                          maxReplicas:
+                            default: 10
+                            description: MaxReplicas is the maximum number of replicas
+                            format: int32
+                            minimum: 1
+                            type: integer
+                          minReplicas:
+                            default: 1
+                            description: MinReplicas is the minimum number of replicas
+                            format: int32
+                            minimum: 1
+                            type: integer
+                          targetCPUUtilizationPercentage:
+                            default: 80
+                            description: TargetCPUUtilizationPercentage is the target
+                              CPU utilization for scaling
+                            format: int32
+                            maximum: 100
+                            minimum: 1
+                            type: integer
+                          targetMemoryUtilizationPercentage:
+                            description: TargetMemoryUtilizationPercentage is the
+                              target memory utilization for scaling
+                            format: int32
+                            maximum: 100
+                            minimum: 1
+                            type: integer
+                        type: object
                       ingress:
                         description: Ingress configuration
                         properties:
@@ -15402,19 +16376,24 @@ spec:
                   certConfig:
                     description: Certificate configuration
                     properties:
-                      caRenewalThresholdDays:
-                        default: 60
+                      caRenewalThreshold:
+                        default: 60d
                         description: |-
-                          CARenewalThresholdDays for the Certificate Authority
-                          CA will be renewed when it expires within this many days
-                        type: integer
-                      caValidityDays:
-                        default: 730
+                          CARenewalThreshold for the Certificate Authority as a duration string
+                          Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
+                          Examples: "60d", "24h"
+                          CA will be renewed when it expires within this duration
+                        pattern: ^\d+[dhm]$
+                        type: string
+                      caValidity:
+                        default: 3650d
                         description: |-
-                          CAValidityDays for the Certificate Authority certificate
-                          CA certificates should have longer validity (1-2 years) as CA renewal
-                          requires restarting the OpenSearch indexer to reload the trust store
-                        type: integer
+                          CAValidity for the Certificate Authority certificate as a duration string
+                          Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
+                          Examples: "3650d" (10 years), "730d" (2 years)
+                          CA certificates should have longer validity as CA renewal requires pod restart
+                        pattern: ^\d+[dhm]$
+                        type: string
                       commonName:
                         default: admin
                         description: CommonName
@@ -15423,8 +16402,32 @@ spec:
                         default: US
                         description: Country
                         type: string
+                      ecdsaCurve:
+                        default: P256
+                        description: |-
+                          ECDSACurve specifies the elliptic curve for ECDSA keys
+                          Only used when KeyAlgorithm is ECDSA
+                          Supported values: P256 (default), P384, P521
+                          P256 offers ~128 bits security with best performance
+                          P384 offers ~192 bits security with larger keys
+                          P521 offers ~256 bits security (highest level, largest keys)
+                        enum:
+                        - P256
+                        - P384
+                        - P521
+                        type: string
+                      keyAlgorithm:
+                        default: RSA
+                        description: |-
+                          KeyAlgorithm specifies the algorithm for key generation
+                          Supported values: RSA (default), ECDSA
+                          ECDSA provides smaller keys with equivalent security
+                        enum:
+                        - RSA
+                        - ECDSA
+                        type: string
                       locality:
-                        default: California
+                        default: Strasbourg
                         description: Locality
                         type: string
                       organization:
@@ -15435,23 +16438,27 @@ spec:
                         default: Wazuh
                         description: OrganizationalUnit
                         type: string
-                      renewalThresholdDays:
-                        default: 30
+                      renewalThreshold:
+                        default: 30d
                         description: |-
-                          RenewalThresholdDays for node certificates
-                          Certificates will be renewed when they expire within this many days
-                        type: integer
+                          RenewalThreshold for node certificates as a duration string
+                          Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
+                          Examples: "30d", "12h", "30m"
+                          Certificates will be renewed when they expire within this duration
+                        pattern: ^\d+[dhm]$
+                        type: string
                       state:
-                        default: California
+                        default: Alsace
                         description: State
                         type: string
-                      validityDays:
-                        default: 365
+                      validity:
+                        default: 365d
                         description: |-
-                          ValidityDays for node certificates (indexer, dashboard, filebeat, admin)
-                          Node certificates can be renewed more frequently without service disruption
-                          using OpenSearch's hot reload feature (plugins.security.ssl_cert_reload_enabled)
-                        type: integer
+                          Validity for node certificates as a duration string
+                          Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
+                          Examples: "365d" (1 year), "24h" (1 day), "30m" (30 minutes)
+                        pattern: ^\d+[dhm]$
+                        type: string
                     type: object
                   certManager:
                     description: Use cert-manager for certificate management
@@ -15714,10 +16721,20 @@ spec:
               dashboard:
                 description: Dashboard status
                 properties:
+                  appliedSettingsHash:
+                    description: |-
+                      AppliedSettingsHash is the hash of successfully applied cluster settings (indexer only)
+                      Used for change detection to avoid unnecessary API calls
+                    type: string
                   configHash:
                     description: ConfigHash is the hash of the component's ConfigMap
                       for change detection
                     type: string
+                  desiredReplicas:
+                    description: DesiredReplicas is the number of replicas requested
+                      in the spec
+                    format: int32
+                    type: integer
                   lastChangeType:
                     description: LastChangeType indicates what triggered the last
                       update
@@ -15784,7 +16801,7 @@ spec:
                     format: int32
                     type: integer
                   replicas:
-                    description: Total replicas
+                    description: Replicas is the current number of replicas
                     format: int32
                     type: integer
                   specHash:
@@ -15984,10 +17001,20 @@ spec:
               indexer:
                 description: Indexer status
                 properties:
+                  appliedSettingsHash:
+                    description: |-
+                      AppliedSettingsHash is the hash of successfully applied cluster settings (indexer only)
+                      Used for change detection to avoid unnecessary API calls
+                    type: string
                   configHash:
                     description: ConfigHash is the hash of the component's ConfigMap
                       for change detection
                     type: string
+                  desiredReplicas:
+                    description: DesiredReplicas is the number of replicas requested
+                      in the spec
+                    format: int32
+                    type: integer
                   lastChangeType:
                     description: LastChangeType indicates what triggered the last
                       update
@@ -16054,7 +17081,7 @@ spec:
                     format: int32
                     type: integer
                   replicas:
-                    description: Total replicas
+                    description: Replicas is the current number of replicas
                     format: int32
                     type: integer
                   specHash:
@@ -16078,10 +17105,20 @@ spec:
               manager:
                 description: Manager status
                 properties:
+                  appliedSettingsHash:
+                    description: |-
+                      AppliedSettingsHash is the hash of successfully applied cluster settings (indexer only)
+                      Used for change detection to avoid unnecessary API calls
+                    type: string
                   configHash:
                     description: ConfigHash is the hash of the component's ConfigMap
                       for change detection
                     type: string
+                  desiredReplicas:
+                    description: DesiredReplicas is the number of replicas requested
+                      in the spec
+                    format: int32
+                    type: integer
                   lastChangeType:
                     description: LastChangeType indicates what triggered the last
                       update
@@ -16148,7 +17185,7 @@ spec:
                     format: int32
                     type: integer
                   replicas:
-                    description: Total replicas
+                    description: Replicas is the current number of replicas
                     format: int32
                     type: integer
                   specHash:
@@ -16183,6 +17220,11 @@ spec:
               security:
                 description: Security holds security-related status
                 properties:
+                  credentialsHash:
+                    description: |-
+                      CredentialsHash is the hash of the last synced credentials secret
+                      Used to detect when credentials change and need to be re-synced to OpenSearch
+                    type: string
                   defaultAdminSource:
                     description: DefaultAdminSource indicates where admin comes from
                       (auto/crd)

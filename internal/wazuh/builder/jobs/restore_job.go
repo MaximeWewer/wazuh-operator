@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,20 +26,20 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // RestoreJobBuilder builds Job resources for Wazuh Manager restore operations
 type RestoreJobBuilder struct {
-	restore     *wazuhv1alpha1.WazuhRestore
+	restore     *wazuhv1.WazuhRestore
 	clusterName string
 	namespace   string
 	labels      map[string]string
 }
 
 // NewRestoreJobBuilder creates a new RestoreJobBuilder
-func NewRestoreJobBuilder(restore *wazuhv1alpha1.WazuhRestore) *RestoreJobBuilder {
+func NewRestoreJobBuilder(restore *wazuhv1.WazuhRestore) *RestoreJobBuilder {
 	return &RestoreJobBuilder{
 		restore:     restore,
 		clusterName: restore.Spec.ClusterRef.Name,
@@ -89,7 +89,7 @@ func (b *RestoreJobBuilder) buildRestorePaths() []string {
 	// Default to all components if not specified
 	components := b.restore.Spec.Components
 	if components == nil {
-		components = &wazuhv1alpha1.RestoreComponents{
+		components = &wazuhv1.RestoreComponents{
 			AgentKeys:     true,
 			FIMDatabase:   true,
 			AgentDatabase: true,
@@ -118,7 +118,7 @@ func (b *RestoreJobBuilder) buildRestorePaths() []string {
 }
 
 // getS3Source returns the S3 source configuration
-func (b *RestoreJobBuilder) getS3Source() *wazuhv1alpha1.S3RestoreSource {
+func (b *RestoreJobBuilder) getS3Source() *wazuhv1.S3RestoreSource {
 	return b.restore.Spec.Source.S3
 }
 
@@ -400,6 +400,14 @@ func (b *RestoreJobBuilder) BuildJob() *batchv1.Job {
 				Spec: corev1.PodSpec{
 					ServiceAccountName: b.serviceAccountName(),
 					RestartPolicy:      corev1.RestartPolicyNever,
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot: func() *bool { b := true; return &b }(),
+						RunAsUser:    func() *int64 { u := int64(1000); return &u }(),
+						FSGroup:      func() *int64 { g := int64(1000); return &g }(),
+						SeccompProfile: &corev1.SeccompProfile{
+							Type: corev1.SeccompProfileTypeRuntimeDefault,
+						},
+					},
 					Containers: []corev1.Container{
 						{
 							Name:            "restore",
@@ -409,6 +417,13 @@ func (b *RestoreJobBuilder) BuildJob() *batchv1.Job {
 							Args:            []string{script},
 							Env:             b.buildEnvVars(),
 							Resources:       b.getResources(),
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: func() *bool { b := false; return &b }(),
+								ReadOnlyRootFilesystem:   func() *bool { b := false; return &b }(),
+								Capabilities: &corev1.Capabilities{
+									Drop: []corev1.Capability{"ALL"},
+								},
+							},
 						},
 					},
 				},

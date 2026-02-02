@@ -29,7 +29,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         description: OpenSearchRole is the Schema for the opensearchroles API
@@ -76,6 +76,7 @@ spec:
                 type: object
               description:
                 description: Description is a human-readable description of the role
+                maxLength: 1024
                 type: string
               indexPermissions:
                 description: IndexPermissions define index-level permissions
@@ -86,6 +87,7 @@ spec:
                       description: AllowedActions are the permitted actions
                       items:
                         type: string
+                      minItems: 1
                       type: array
                     dls:
                       description: DLS is the document-level security query
@@ -99,6 +101,7 @@ spec:
                       description: IndexPatterns are index name patterns (e.g., "logs-*")
                       items:
                         type: string
+                      minItems: 1
                       type: array
                     maskedFields:
                       description: MaskedFields are fields to be masked
@@ -120,11 +123,13 @@ spec:
                         "kibana_all_read", "kibana_all_write")
                       items:
                         type: string
+                      minItems: 1
                       type: array
                     tenantPatterns:
                       description: TenantPatterns are tenant name patterns
                       items:
                         type: string
+                      minItems: 1
                       type: array
                   required:
                   - allowedActions

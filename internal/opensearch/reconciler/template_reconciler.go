@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 )
 
@@ -52,7 +52,7 @@ func (r *TemplateReconciler) WithAPIClient(apiClient *api.Client) *TemplateRecon
 }
 
 // Reconcile reconciles an OpenSearch index template
-func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1alpha1.OpenSearchIndexTemplate) error {
+func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.OpenSearchIndexTemplate) error {
 	log := logf.FromContext(ctx)
 
 	if r.APIClient == nil {
@@ -95,7 +95,7 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1alp
 }
 
 // buildIndexTemplate converts the CRD spec to an index template
-func (r *TemplateReconciler) buildIndexTemplate(template *wazuhv1alpha1.OpenSearchIndexTemplate) api.IndexTemplate {
+func (r *TemplateReconciler) buildIndexTemplate(template *wazuhv1.OpenSearchIndexTemplate) api.IndexTemplate {
 	indexTemplate := api.IndexTemplate{
 		IndexPatterns: template.Spec.IndexPatterns,
 		Priority:      int(template.Spec.Priority),
@@ -105,16 +105,16 @@ func (r *TemplateReconciler) buildIndexTemplate(template *wazuhv1alpha1.OpenSear
 	if template.Spec.Template != nil {
 		indexTemplate.Template = &api.TemplateSpec{}
 
-		// Convert RawExtension to map[string]interface{}
+		// Convert RawExtension to map[string]any
 		if template.Spec.Template.Settings != nil && template.Spec.Template.Settings.Raw != nil {
-			var settings map[string]interface{}
+			var settings map[string]any
 			if err := json.Unmarshal(template.Spec.Template.Settings.Raw, &settings); err == nil {
 				indexTemplate.Template.Settings = settings
 			}
 		}
 
 		if template.Spec.Template.Mappings != nil && template.Spec.Template.Mappings.Raw != nil {
-			var mappings map[string]interface{}
+			var mappings map[string]any
 			if err := json.Unmarshal(template.Spec.Template.Mappings.Raw, &mappings); err == nil {
 				indexTemplate.Template.Mappings = mappings
 			}
@@ -130,7 +130,7 @@ func (r *TemplateReconciler) buildIndexTemplate(template *wazuhv1alpha1.OpenSear
 					IsWriteIndex:  alias.IsWriteIndex,
 				}
 				if alias.Filter != nil && alias.Filter.Raw != nil {
-					var filter map[string]interface{}
+					var filter map[string]any
 					if err := json.Unmarshal(alias.Filter.Raw, &filter); err == nil {
 						aliasSpec.Filter = filter
 					}
@@ -144,7 +144,7 @@ func (r *TemplateReconciler) buildIndexTemplate(template *wazuhv1alpha1.OpenSear
 }
 
 // updateStatus updates the template status
-func (r *TemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1alpha1.OpenSearchIndexTemplate, phase, message string) error {
+func (r *TemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1.OpenSearchIndexTemplate, phase, message string) error {
 	template.Status.Phase = phase
 	template.Status.Message = message
 	now := metav1.Now()
@@ -154,7 +154,7 @@ func (r *TemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1
 }
 
 // Delete handles cleanup when a template is deleted
-func (r *TemplateReconciler) Delete(ctx context.Context, template *wazuhv1alpha1.OpenSearchIndexTemplate) error {
+func (r *TemplateReconciler) Delete(ctx context.Context, template *wazuhv1.OpenSearchIndexTemplate) error {
 	log := logf.FromContext(ctx)
 
 	if r.APIClient == nil {

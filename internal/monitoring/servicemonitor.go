@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,13 +24,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // NewManagerServiceMonitor creates a ServiceMonitor for Wazuh Manager metrics
 // Returns nil if monitoring is not enabled
-func NewManagerServiceMonitor(cluster *wazuhv1alpha1.WazuhCluster) *monitoringv1.ServiceMonitor {
+func NewManagerServiceMonitor(cluster *wazuhv1.WazuhCluster) *monitoringv1.ServiceMonitor {
 	// Check if monitoring is enabled
 	if !isWazuhExporterEnabled(cluster) {
 		return nil
@@ -89,7 +89,7 @@ func NewManagerServiceMonitor(cluster *wazuhv1alpha1.WazuhCluster) *monitoringv1
 
 // NewIndexerServiceMonitor creates a ServiceMonitor for OpenSearch Indexer metrics
 // Returns nil if monitoring is not enabled
-func NewIndexerServiceMonitor(cluster *wazuhv1alpha1.WazuhCluster) *monitoringv1.ServiceMonitor {
+func NewIndexerServiceMonitor(cluster *wazuhv1.WazuhCluster) *monitoringv1.ServiceMonitor {
 	// Check if monitoring is enabled
 	if !isIndexerExporterEnabled(cluster) {
 		return nil
@@ -166,7 +166,7 @@ func NewIndexerServiceMonitor(cluster *wazuhv1alpha1.WazuhCluster) *monitoringv1
 }
 
 // isWazuhExporterEnabled checks if Wazuh Prometheus exporter is enabled
-func isWazuhExporterEnabled(cluster *wazuhv1alpha1.WazuhCluster) bool {
+func isWazuhExporterEnabled(cluster *wazuhv1.WazuhCluster) bool {
 	if cluster.Spec.Monitoring == nil || !cluster.Spec.Monitoring.Enabled {
 		return false
 	}
@@ -177,7 +177,7 @@ func isWazuhExporterEnabled(cluster *wazuhv1alpha1.WazuhCluster) bool {
 }
 
 // isIndexerExporterEnabled checks if OpenSearch Indexer Prometheus exporter is enabled
-func isIndexerExporterEnabled(cluster *wazuhv1alpha1.WazuhCluster) bool {
+func isIndexerExporterEnabled(cluster *wazuhv1.WazuhCluster) bool {
 	if cluster.Spec.Monitoring == nil || !cluster.Spec.Monitoring.Enabled {
 		return false
 	}

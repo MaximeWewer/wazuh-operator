@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -36,20 +36,20 @@ func TestFormatDN(t *testing.T) {
 			commonName: "admin",
 			ou:         "Wazuh",
 			org:        "Wazuh",
-			locality:   "California",
-			state:      "California",
-			country:    "US",
-			expected:   "CN=admin,OU=Wazuh,O=Wazuh,L=California,ST=California,C=US",
+			locality:   "Strasbourg",
+			state:      "Alsace",
+			country:    "FR",
+			expected:   "CN=admin,OU=Wazuh,O=Wazuh,L=Strasbourg,ST=Alsace,C=FR",
 		},
 		{
 			name:       "wildcard CN",
 			commonName: "*",
 			ou:         "Wazuh",
 			org:        "Wazuh",
-			locality:   "California",
-			state:      "California",
-			country:    "US",
-			expected:   "CN=*,OU=Wazuh,O=Wazuh,L=California,ST=California,C=US",
+			locality:   "Strasbourg",
+			state:      "Alsace",
+			country:    "FR",
+			expected:   "CN=*,OU=Wazuh,O=Wazuh,L=Strasbourg,ST=Alsace,C=FR",
 		},
 		{
 			name:       "custom organization",
@@ -74,7 +74,7 @@ func TestFormatDN(t *testing.T) {
 }
 
 func TestDefaultAdminDN(t *testing.T) {
-	expected := "CN=admin,OU=Wazuh,O=Wazuh,L=California,ST=California,C=US"
+	expected := "CN=admin,OU=Wazuh,O=Wazuh,L=Strasbourg,ST=Alsace,C=FR"
 	result := DefaultAdminDN()
 
 	if result != expected {
@@ -83,7 +83,7 @@ func TestDefaultAdminDN(t *testing.T) {
 }
 
 func TestDefaultNodesDN(t *testing.T) {
-	expected := "CN=*,OU=Wazuh,O=Wazuh,L=California,ST=California,C=US"
+	expected := "CN=*,OU=Wazuh,O=Wazuh,L=Strasbourg,ST=Alsace,C=FR"
 	result := DefaultNodesDN()
 
 	if result != expected {
@@ -113,8 +113,9 @@ func TestDefaultCAConfig(t *testing.T) {
 	if config.Locality != DefaultLocality {
 		t.Errorf("Locality = %q, want %q", config.Locality, DefaultLocality)
 	}
-	if config.ValidityDays != DefaultCAValidityDays {
-		t.Errorf("ValidityDays = %d, want %d", config.ValidityDays, DefaultCAValidityDays)
+	expectedValidity := MustParseCertDuration(DefaultCAValidityStr)
+	if config.Validity != expectedValidity {
+		t.Errorf("Validity = %v, want %v", config.Validity, expectedValidity)
 	}
 	if config.KeySize != DefaultKeySize {
 		t.Errorf("KeySize = %d, want %d", config.KeySize, DefaultKeySize)

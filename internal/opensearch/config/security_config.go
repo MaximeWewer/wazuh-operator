@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ type HTTPAuthenticator struct {
 	// Challenge enables WWW-Authenticate challenge
 	Challenge bool
 	// Config holds additional configuration
-	Config map[string]interface{}
+	Config map[string]any
 }
 
 // AuthenticationBackend defines the authentication backend
@@ -53,7 +53,7 @@ type AuthenticationBackend struct {
 	// Type is the backend type (e.g., "internal", "ldap", "noop")
 	Type string
 	// Config holds additional configuration
-	Config map[string]interface{}
+	Config map[string]any
 }
 
 // SecurityPluginConfig holds the configuration for config.yml (security plugin)

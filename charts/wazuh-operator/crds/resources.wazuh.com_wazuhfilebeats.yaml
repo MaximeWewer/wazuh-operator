@@ -32,7 +32,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         description: WazuhFilebeat is the Schema for the wazuhfilebeats API
@@ -119,16 +119,81 @@ spec:
                     description: CredentialsSecretRef references a Secret containing
                       credentials
                     properties:
+                      externalSecretRef:
+                        description: |-
+                          ExternalSecretRef references an ExternalSecret from ESO
+                          When specified, the operator will read credentials from the K8s Secret
+                          created by the ExternalSecret controller
+                        properties:
+                          name:
+                            description: |-
+                              Name of the ExternalSecret resource that will be created/referenced
+                              The ExternalSecret will sync the secret from the external provider to a K8s Secret
+                            type: string
+                          namespace:
+                            description: Namespace of the ExternalSecret (defaults
+                              to same namespace as the parent resource)
+                            type: string
+                          refreshInterval:
+                            default: 1h
+                            description: RefreshInterval is how often to sync the
+                              secret (e.g., "1h", "30m")
+                            type: string
+                          remoteRef:
+                            description: RemoteRef specifies the remote secret location
+                              in the external provider
+                            properties:
+                              key:
+                                description: |-
+                                  Key is the key/path in the external secret provider
+                                  For Vault: "secret/data/myapp/config"
+                                  For AWS SM: "myapp/database-credentials"
+                                type: string
+                              property:
+                                description: |-
+                                  Property is the specific property within the secret to extract
+                                  If not specified, the entire secret is used
+                                type: string
+                              version:
+                                description: Version is the version of the secret
+                                  to fetch (provider-specific)
+                                type: string
+                            required:
+                            - key
+                            type: object
+                          secretStoreRef:
+                            description: SecretStoreRef references the SecretStore
+                              or ClusterSecretStore to use
+                            properties:
+                              kind:
+                                default: SecretStore
+                                description: Kind is the kind of secret store (SecretStore
+                                  or ClusterSecretStore)
+                                enum:
+                                - SecretStore
+                                - ClusterSecretStore
+                                type: string
+                              name:
+                                description: Name of the SecretStore or ClusterSecretStore
+                                type: string
+                            required:
+                            - name
+                            type: object
+                        required:
+                        - name
+                        type: object
                       passwordKey:
                         default: password
-                        description: Password key in secret
+                        description: PasswordKey is the key in the secret containing
+                          the password
                         type: string
                       secretName:
-                        description: Secret name
+                        description: SecretName references a native Kubernetes Secret
                         type: string
                       usernameKey:
                         default: username
-                        description: Username key in secret
+                        description: UsernameKey is the key in the secret containing
+                          the username
                         type: string
                     type: object
                   hosts:

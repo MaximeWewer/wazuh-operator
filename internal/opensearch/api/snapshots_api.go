@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,8 +26,8 @@ import (
 
 // Repository represents a snapshot repository
 type Repository struct {
-	Type     string                 `json:"type"`
-	Settings map[string]interface{} `json:"settings,omitempty"`
+	Type     string         `json:"type"`
+	Settings map[string]any `json:"settings,omitempty"`
 }
 
 // Snapshot represents a snapshot
@@ -280,7 +280,7 @@ type RestoreOptions struct {
 	RenameReplacement string `json:"rename_replacement,omitempty"`
 
 	// IndexSettings are settings to override during restore
-	IndexSettings map[string]interface{} `json:"index_settings,omitempty"`
+	IndexSettings map[string]any `json:"index_settings,omitempty"`
 
 	// IgnoreIndexSettings are settings to ignore during restore
 	IgnoreIndexSettings []string `json:"ignore_index_settings,omitempty"`

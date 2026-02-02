@@ -13,6 +13,13 @@ The Wazuh Operator manages TLS certificates for secure communication between clu
 - **Filebeat Certificates**: TLS certificates for Filebeat log shipping
 - **Admin Certificates**: Admin certificates for OpenSearch security management
 
+## Supported Key Algorithms
+
+The operator supports both RSA and ECDSA key algorithms:
+
+- **RSA** (default): 2048-bit keys, widely compatible
+- **ECDSA**: Elliptic curve cryptography with P-256 or P-384 curves, smaller keys with equivalent security
+
 ## Reconciliation Flow
 
 ```
@@ -28,12 +35,12 @@ The Wazuh Operator manages TLS certificates for secure communication between clu
 │                                                                                 │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌────────────┐     │
 │  │  CA Cert     │──▶ │ Indexer Cert │──▶ │ Manager Cert │──▶ │ Dashboard  │     │
-│  │  (10 min*)   │    │  (5 min*)    │    │  (5 min*)    │    │ (5 min*)   │     │
+│  │  (10 yrs)    │    │  (1 year)    │    │  (1 year)    │    │ (1 year)   │     │
 │  └──────────────┘    └──────────────┘    └──────────────┘    └────────────┘     │
 │         │                   │                   │                   │           │
 │         ▼                   ▼                   ▼                   ▼           │
 │    Check Expiry        Check Expiry        Check Expiry        Check Expiry     │
-│    Renew if < 2min*    Renew if < 2min*    Renew if < 2min*    Renew if < 2min* │
+│    Renew if needed     Renew if needed     Renew if needed     Renew if needed  │
 │                                                                                 │
 │  Returns: CertHashResult { IndexerCertHash, ManagerMasterCertHash, ... }        │
 └─────────────────────────────────────────────────────────────────────────────────┘
@@ -45,28 +52,25 @@ The Wazuh Operator manages TLS certificates for secure communication between clu
 │     ┌──────────────────────────────────────────────────────────────────────┐    │
 │     │ IndexerReconciler.ReconcileWithCertHash(cluster, indexerCertHash)    │    │
 │     │   - Updates StatefulSet with cert-hash annotation                    │    │
-│     │   - BLOCKS waiting for rollout (current issue)                       │    │
+│     │   - Triggers rolling update if hash changed                          │    │
 │     └──────────────────────────────────────────────────────────────────────┘    │
 │                                      │                                          │
 │                                      ▼                                          │
 │     ┌──────────────────────────────────────────────────────────────────────────┐│
 │     │ ClusterReconciler.ReconcileManagerWithCertHashes(cluster, master, worker)││
 │     │   - Updates Master StatefulSet with cert-hash annotation                 ││
-│     │   - BLOCKS waiting for master rollout                                    ││
 │     │   - Updates Worker StatefulSet with cert-hash annotation                 ││
-│     │   - BLOCKS waiting for worker rollout                                    ││
 │     └──────────────────────────────────────────────────────────────────────────┘│
 │                                      │                                          │
 │                                      ▼                                          │
 │     ┌──────────────────────────────────────────────────────────────────────┐    │
 │     │ DashboardReconciler.ReconcileWithCertHash(cluster, dashboardCertHash)│    │
 │     │   - Updates Deployment with cert-hash annotation                     │    │
-│     │   - BLOCKS waiting for rollout                                       │    │
+│     │   - Triggers rolling update if hash changed                          │    │
 │     └──────────────────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────────┘
 
-* In test mode (--cert-test-mode): 10 min CA, 5 min node certs, 2 min renewal threshold
-  In production: 1825 days CA (5 years), 365 days node certs, 30 days renewal threshold
+Default settings: 3650 days CA (10 years), 365 days node certs, 30 days renewal threshold
 ```
 
 ## Key Components
@@ -95,10 +99,10 @@ Key methods:
 
 **Location**: `internal/utils/k8s_rollout.go`
 
-Provides blocking wait functions for pod rollouts:
+Provides wait functions for pod rollouts:
 
-- `WaitForDeploymentReady()`: Blocks until Deployment is ready
-- `WaitForStatefulSetReady()`: Blocks until StatefulSet is ready
+- `WaitForDeploymentReady()`: Waits until Deployment is ready
+- `WaitForStatefulSetReady()`: Waits until StatefulSet is ready
 - `IsDeploymentReady()`: Non-blocking readiness check
 - `IsStatefulSetReady()`: Non-blocking readiness check
 
@@ -131,51 +135,14 @@ metadata:
 
 The hash is computed from the certificate secret data. When this annotation changes, Kubernetes performs a rolling update of the pods.
 
-## Current Issues
-
-### 1. Blocking Waits During Reconciliation
-
-**Problem**: The component reconcilers use `RolloutWaiter` to wait for pod rollouts to complete. This blocks the entire reconciliation loop, preventing other certificates from being renewed.
-
-**Impact**: In test mode with 5-minute certificates:
-
-- If indexer rollout takes 2+ minutes, manager certificates may expire before renewal
-- If manager master rollout takes long, worker certificates may expire
-- Serial blocking creates a cascade of timing issues
-
-**Solution Needed**: Non-blocking rollout tracking that allows certificate renewal to continue for all components in parallel.
-
-### 2. Optimistic Locking Conflicts
-
-**Problem**: Multiple concurrent reconciliations (triggered by various events) can cause "object has been modified" errors when updating resources.
-
-**Impact**: Reconciliation failures that require retry, adding delay to certificate renewal.
-
-**Solution Needed**: Retry logic with exponential backoff for k8s API updates.
-
-### 3. Requeue Interval in Test Mode
-
-**Problem**: The default 30-second requeue interval may be too slow for 5-minute certificates with 2-minute renewal threshold.
-
-**Impact**: Certificates may not be checked frequently enough to renew in time.
-
-**Solution Needed**: Configurable, shorter requeue intervals in test mode.
-
 ## Configuration
 
-### Test Mode (`--cert-test-mode`)
+### Default Configuration
 
-When enabled via the operator flag:
-
-- CA validity: 10 minutes
-- Node certificate validity: 5 minutes
-- Renewal threshold: 2 minutes before expiry
-
-### Production Mode (default)
-
-- CA validity: 1825 days (5 years)
+- CA validity: 3650 days (10 years)
 - Node certificate validity: 365 days (1 year)
 - Renewal threshold: 30 days before expiry
+- Key algorithm: RSA 2048-bit
 
 ### Custom Configuration via CRD
 
@@ -188,8 +155,12 @@ spec:
     certConfig:
       organization: "My Org"
       country: "US"
-      validityDays: 365
-      renewalThresholdDays: 30
+      caValidity: "3650d"        # Duration format: "365d", "24h", "30m"
+      validity: "365d"           # Node certificate validity
+      renewalThreshold: "30d"    # Renewal threshold
+      caRenewalThreshold: "60d"  # CA renewal threshold
+      keyAlgorithm: RSA          # or ECDSA
+      ecdsaCurve: P256           # P256 or P384 (only for ECDSA)
 ```
 
 ## Secrets Created
@@ -214,10 +185,24 @@ spec:
 | CARenewing               | Normal  | CARenewing               | Before CA renewal starts   |
 | CARenewed                | Normal  | CARenewed                | After CA renewal completes |
 
+## Key Algorithm Support
+
+### RSA (Default)
+
+- 2048-bit key size
+- Widely compatible with all systems
+- Suitable for most deployments
+
+### ECDSA
+
+- Supports P-256 (secp256r1), P-384 (secp384r1), and P-521 (secp521r1) curves
+- Security levels: P-256 (~128 bits), P-384 (~192 bits), P-521 (~256 bits)
+- Smaller key sizes with equivalent security compared to RSA
+- Better performance for key operations
+- OpenSearch supports ECDHE_ECDSA cipher suites
+
 ## Future Improvements
 
-1. **Non-Blocking Rollouts**: Track rollout status without blocking reconciliation
-2. **Retry Logic**: Automatic retry for transient API errors
-3. **Test Mode Optimization**: Faster reconciliation interval when testing
-4. **Certificate Monitoring**: Dedicated certificate expiry monitoring goroutine
-5. **Metrics**: Prometheus metrics for certificate status and renewal operations
+1. **Certificate Monitoring**: Dedicated certificate expiry monitoring goroutine
+2. **Metrics**: Prometheus metrics for certificate status and renewal operations (implemented)
+3. **ECDSA via CRD**: Expose key algorithm configuration in WazuhCluster CRD

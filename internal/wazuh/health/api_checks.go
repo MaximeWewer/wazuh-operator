@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -106,7 +106,7 @@ func (c *APIHealthChecker) Check(ctx context.Context) (*APIHealthStatus, error) 
 
 	// Check API availability (unauthenticated endpoint)
 	rootURL := fmt.Sprintf("https://%s:%d/", c.host, c.port)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rootURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rootURL, http.NoBody)
 	if err != nil {
 		status.Error = fmt.Sprintf("failed to create request: %v", err)
 		return status, nil
@@ -152,7 +152,7 @@ func (c *APIHealthChecker) Check(ctx context.Context) (*APIHealthStatus, error) 
 // checkAuth verifies authentication credentials
 func (c *APIHealthChecker) checkAuth(ctx context.Context) (bool, error) {
 	authURL := fmt.Sprintf("https://%s:%d/security/user/authenticate", c.host, c.port)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, authURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, authURL, http.NoBody)
 	if err != nil {
 		return false, err
 	}

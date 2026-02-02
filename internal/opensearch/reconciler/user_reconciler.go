@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,10 +24,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
 )
 
@@ -35,31 +36,35 @@ import (
 type UserReconciler struct {
 	client.Client
 	Scheme         *runtime.Scheme
+	Recorder       record.EventRecorder
 	OpenSearchAddr string
 	OpenSearchUser string
 	OpenSearchPass string
 }
 
 // NewUserReconciler creates a new UserReconciler
-func NewUserReconciler(c client.Client, scheme *runtime.Scheme) *UserReconciler {
+func NewUserReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *UserReconciler {
 	return &UserReconciler{
-		Client: c,
-		Scheme: scheme,
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: recorder,
 	}
 }
 
 // Reconcile reconciles an OpenSearch user
-func (r *UserReconciler) Reconcile(ctx context.Context, user *wazuhv1alpha1.OpenSearchUser) error {
+func (r *UserReconciler) Reconcile(ctx context.Context, user *wazuhv1.OpenSearchUser) error {
 	log := logf.FromContext(ctx)
 
 	// Get password from secret
 	password, err := r.getPassword(ctx, user)
 	if err != nil {
+		r.recordEvent(user, corev1.EventTypeWarning, "PasswordError", fmt.Sprintf("Failed to get password: %v", err))
 		return fmt.Errorf("failed to get password: %w", err)
 	}
 
 	osClient, err := r.getOpenSearchClient(ctx, user.Namespace)
 	if err != nil {
+		r.recordEvent(user, corev1.EventTypeWarning, "ConnectionError", fmt.Sprintf("Failed to connect to OpenSearch: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
@@ -74,8 +79,11 @@ func (r *UserReconciler) Reconcile(ctx context.Context, user *wazuhv1alpha1.Open
 	}
 
 	if err := osClient.CreateUser(ctx, username, osUser); err != nil {
+		r.recordEvent(user, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to sync user to OpenSearch: %v", err))
 		return fmt.Errorf("failed to create/update user: %w", err)
 	}
+
+	r.recordEvent(user, corev1.EventTypeNormal, "Synced", "User successfully synchronized to OpenSearch")
 
 	// Update status
 	if err := r.updateStatus(ctx, user, "Ready", "User reconciled successfully"); err != nil {
@@ -86,8 +94,15 @@ func (r *UserReconciler) Reconcile(ctx context.Context, user *wazuhv1alpha1.Open
 	return nil
 }
 
+// recordEvent emits an event if the recorder is available
+func (r *UserReconciler) recordEvent(user *wazuhv1.OpenSearchUser, eventType, reason, message string) {
+	if r.Recorder != nil {
+		r.Recorder.Event(user, eventType, reason, message)
+	}
+}
+
 // getPassword retrieves the password from the referenced secret
-func (r *UserReconciler) getPassword(ctx context.Context, user *wazuhv1alpha1.OpenSearchUser) (string, error) {
+func (r *UserReconciler) getPassword(ctx context.Context, user *wazuhv1.OpenSearchUser) (string, error) {
 	// Check if hash is provided directly
 	if user.Spec.Hash != "" {
 		return user.Spec.Hash, nil
@@ -121,7 +136,7 @@ func (r *UserReconciler) getPassword(ctx context.Context, user *wazuhv1alpha1.Op
 }
 
 // getOpenSearchClient gets an OpenSearch HTTP adapter
-func (r *UserReconciler) getOpenSearchClient(ctx context.Context, namespace string) (*adapters.OpenSearchHTTPAdapter, error) {
+func (r *UserReconciler) getOpenSearchClient(_ context.Context, _ string) (*adapters.OpenSearchHTTPAdapter, error) {
 	config := adapters.OpenSearchConfig{
 		BaseURL:  r.OpenSearchAddr,
 		Username: r.OpenSearchUser,
@@ -133,7 +148,7 @@ func (r *UserReconciler) getOpenSearchClient(ctx context.Context, namespace stri
 }
 
 // updateStatus updates the user status
-func (r *UserReconciler) updateStatus(ctx context.Context, user *wazuhv1alpha1.OpenSearchUser, phase, message string) error {
+func (r *UserReconciler) updateStatus(ctx context.Context, user *wazuhv1.OpenSearchUser, phase, message string) error {
 	user.Status.Phase = phase
 	user.Status.Message = message
 	now := metav1.Now()
@@ -143,20 +158,23 @@ func (r *UserReconciler) updateStatus(ctx context.Context, user *wazuhv1alpha1.O
 }
 
 // Delete handles cleanup when a user is deleted
-func (r *UserReconciler) Delete(ctx context.Context, user *wazuhv1alpha1.OpenSearchUser) error {
+func (r *UserReconciler) Delete(ctx context.Context, user *wazuhv1.OpenSearchUser) error {
 	log := logf.FromContext(ctx)
 
 	osClient, err := r.getOpenSearchClient(ctx, user.Namespace)
 	if err != nil {
+		r.recordEvent(user, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to connect to OpenSearch for deletion: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
 	// Use CR name as username
 	username := user.Name
 	if err := osClient.DeleteUser(ctx, username); err != nil {
+		r.recordEvent(user, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete user from OpenSearch: %v", err))
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
 
+	r.recordEvent(user, corev1.EventTypeNormal, "Deleted", "User deleted from OpenSearch")
 	log.Info("Deleted OpenSearch user", "username", username)
 	return nil
 }

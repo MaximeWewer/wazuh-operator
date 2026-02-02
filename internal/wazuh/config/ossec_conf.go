@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,8 +22,9 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
+	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
 
 const (
@@ -439,7 +440,7 @@ func (b *OSSECConfigBuilder) SetAuthdPassword(password string) *OSSECConfigBuild
 }
 
 // BuildMasterConfig builds ossec.conf for a master node
-func BuildMasterConfig(clusterName, namespace, nodeName, clusterKey string, extraConfig string) (string, error) {
+func BuildMasterConfig(clusterName, namespace, nodeName, clusterKey, extraConfig string) (string, error) {
 	config := &OSSECConfig{
 		NodeType:          NodeTypeMaster,
 		NodeName:          nodeName,
@@ -490,14 +491,14 @@ func BuildWorkerConfig(clusterName, namespace, nodeName, clusterKey string, mast
 	return NewOSSECConfigBuilder(config).Build()
 }
 
-// GenerateMasterServiceName generates the master service name
+// GenerateMasterServiceName generates the master service FQDN
 func GenerateMasterServiceName(clusterName, namespace string) string {
-	return fmt.Sprintf("%s-manager-master.%s.svc.cluster.local", clusterName, namespace)
+	return dns.ServiceFQDN(clusterName+"-manager-master", namespace)
 }
 
-// GenerateWorkerServiceName generates the worker service name
+// GenerateWorkerServiceName generates the worker service FQDN
 func GenerateWorkerServiceName(clusterName, namespace string) string {
-	return fmt.Sprintf("%s-manager-workers.%s.svc.cluster.local", clusterName, namespace)
+	return dns.ServiceFQDN(clusterName+"-manager-workers", namespace)
 }
 
 // MergeConfigs merges extra configuration with the base template
@@ -512,14 +513,6 @@ func MergeConfigs(baseConfig, extraConfig string) string {
 		return baseConfig[:idx] + "\n" + strings.TrimSpace(extraConfig) + "\n" + closingTag
 	}
 	return baseConfig + "\n" + extraConfig
-}
-
-// boolToYesNo converts a boolean to "yes" or "no" string
-func boolToYesNo(b bool) string {
-	if b {
-		return "yes"
-	}
-	return "no"
 }
 
 // ossecConfTemplate is the template for generating ossec.conf
@@ -611,7 +604,7 @@ const ossecConfTemplate = `<!--
 
 // GlobalConfigFromSpec converts OSSECGlobalSpec to GlobalConfig
 // Returns default config if spec is nil
-func GlobalConfigFromSpec(spec *v1alpha1.OSSECGlobalSpec) *GlobalConfig {
+func GlobalConfigFromSpec(spec *v1.OSSECGlobalSpec) *GlobalConfig {
 	defaults := DefaultGlobalConfig()
 	if spec == nil {
 		return defaults
@@ -675,7 +668,7 @@ func GlobalConfigFromSpec(spec *v1alpha1.OSSECGlobalSpec) *GlobalConfig {
 
 // AlertsConfigFromSpec converts OSSECAlertsSpec to AlertsConfig
 // Returns default config if spec is nil
-func AlertsConfigFromSpec(spec *v1alpha1.OSSECAlertsSpec) *AlertsConfig {
+func AlertsConfigFromSpec(spec *v1.OSSECAlertsSpec) *AlertsConfig {
 	defaults := DefaultAlertsConfig()
 	if spec == nil {
 		return defaults
@@ -698,7 +691,7 @@ func AlertsConfigFromSpec(spec *v1alpha1.OSSECAlertsSpec) *AlertsConfig {
 
 // LoggingConfigFromSpec converts OSSECLoggingSpec to LoggingConfig
 // Returns default config if spec is nil
-func LoggingConfigFromSpec(spec *v1alpha1.OSSECLoggingSpec) *LoggingConfig {
+func LoggingConfigFromSpec(spec *v1.OSSECLoggingSpec) *LoggingConfig {
 	defaults := DefaultLoggingConfig()
 	if spec == nil {
 		return defaults
@@ -717,7 +710,7 @@ func LoggingConfigFromSpec(spec *v1alpha1.OSSECLoggingSpec) *LoggingConfig {
 
 // RemoteConfigFromSpec converts OSSECRemoteSpec to RemoteConfig
 // Returns default config if spec is nil
-func RemoteConfigFromSpec(spec *v1alpha1.OSSECRemoteSpec) *RemoteConfig {
+func RemoteConfigFromSpec(spec *v1.OSSECRemoteSpec) *RemoteConfig {
 	defaults := DefaultRemoteConfig()
 	if spec == nil {
 		return defaults
@@ -749,7 +742,7 @@ func RemoteConfigFromSpec(spec *v1alpha1.OSSECRemoteSpec) *RemoteConfig {
 // AuthConfigFromSpec converts OSSECAuthSpec to AuthConfig
 // Returns default config if spec is nil
 // Note: PasswordSecretRef is converted but the actual password must be resolved by the reconciler
-func AuthConfigFromSpec(spec *v1alpha1.OSSECAuthSpec) *AuthConfig {
+func AuthConfigFromSpec(spec *v1.OSSECAuthSpec) *AuthConfig {
 	defaults := DefaultAuthConfig()
 	if spec == nil {
 		return defaults
@@ -815,7 +808,7 @@ func AuthConfigFromSpec(spec *v1alpha1.OSSECAuthSpec) *AuthConfig {
 
 // WazuhConfigFromSpec converts WazuhConfigSpec to all config structs
 // This is a convenience function that converts all config sections at once
-func WazuhConfigFromSpec(spec *v1alpha1.WazuhConfigSpec) (global *GlobalConfig, alerts *AlertsConfig, logging *LoggingConfig, remote *RemoteConfig, auth *AuthConfig) {
+func WazuhConfigFromSpec(spec *v1.WazuhConfigSpec) (global *GlobalConfig, alerts *AlertsConfig, logging *LoggingConfig, remote *RemoteConfig, auth *AuthConfig) {
 	if spec == nil {
 		return DefaultGlobalConfig(), DefaultAlertsConfig(), DefaultLoggingConfig(), DefaultRemoteConfig(), DefaultAuthConfig()
 	}

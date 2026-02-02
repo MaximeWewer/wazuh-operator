@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -138,7 +138,7 @@ func (c *IndexerHealthChecker) Check(ctx context.Context) (*IndexerHealthStatus,
 
 	// Get cluster health
 	healthURL := fmt.Sprintf("https://%s:%d/_cluster/health", c.host, c.port)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
 	if err != nil {
 		status.Error = fmt.Sprintf("failed to create request: %v", err)
 		return status, err

@@ -23,10 +23,10 @@ The Wazuh Operator is a Kubernetes operator built with Kubebuilder v4 that manag
 │           │                    │                    │                   │
 │           ▼                    ▼                    ▼                   │
 │  ┌─────────────────────────────────────────────────────────────┐        │
-│  │                    Reconciliation Engine                     │       │
-│  │  - Certificate Management                                    │       │
-│  │  - Resource Building                                         │       │
-│  │  - Status Updates                                            │       │
+│  │                    Reconciliation Engine                    │        │
+│  │  - Certificate Management                                   │        │
+│  │  - Resource Building                                        │        │
+│  │  - Status Updates                                           │        │
 │  └─────────────────────────────────────────────────────────────┘        │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -126,7 +126,7 @@ conditions.SetCondition(&cluster.Status.Conditions, metav1.Condition{
 
 ## API Groups
 
-**Primary Group**: `resources.wazuh.com/v1alpha1`
+**Primary Group**: `resources.wazuh.com/v1`
 
 All CRDs use this single API group for consistency.
 

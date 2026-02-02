@@ -18,11 +18,13 @@ The Wazuh Operator follows a **secure-by-default** approach for credential manag
 When deploying a WazuhCluster, the operator automatically generates a **24-character random password** for the OpenSearch admin user.
 
 **Secret location:**
+
 ```bash
 kubectl get secret -n <namespace> <cluster-name>-indexer-credentials -o yaml
 ```
 
 **Retrieve password:**
+
 ```bash
 # Get admin password
 kubectl get secret -n wazuh wazuh-indexer-credentials \
@@ -38,16 +40,19 @@ kubectl get secret -n wazuh wazuh-indexer-credentials \
 When monitoring with Wazuh exporter is enabled, the operator generates a **20-character random password** with special characters for the Wazuh API.
 
 **Password requirements:**
+
 - Minimum 20 characters
 - Contains alphanumeric characters
 - Contains at least one special character from: `. * + ? -`
 
 **Secret location:**
+
 ```bash
 kubectl get secret -n <namespace> <cluster-name>-api-credentials -o yaml
 ```
 
 **Retrieve password:**
+
 ```bash
 # Get API password
 kubectl get secret -n wazuh wazuh-api-credentials \
@@ -63,11 +68,13 @@ kubectl get secret -n wazuh wazuh-api-credentials \
 The operator generates a **32-character hex key** (equivalent to `openssl rand -hex 16`) for cluster node communication.
 
 **Secret location:**
+
 ```bash
 kubectl get secret -n <namespace> <cluster-name>-cluster-key -o yaml
 ```
 
 **Retrieve key:**
+
 ```bash
 kubectl get secret -n wazuh wazuh-cluster-key \
   -o jsonpath='{.data.cluster-key}' | base64 -d
@@ -107,7 +114,7 @@ helm install wazuh-cluster oci://ghcr.io/maximewewer/charts/wazuh-cluster \
 Reference pre-existing Kubernetes secrets:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhCluster
 metadata:
   name: wazuh
@@ -151,6 +158,7 @@ secrets/
 ### 2. Use External Secret Managers
 
 For production, consider using:
+
 - **HashiCorp Vault** with External Secrets Operator
 - **AWS Secrets Manager**
 - **Azure Key Vault**
@@ -212,40 +220,17 @@ rules:
 
 ## Troubleshooting
 
-### Password Not Working
+For credential-related issues, see [Common Issues](../troubleshooting/common-issues.md).
+
+**Quick checks:**
 
 ```bash
 # Verify secret exists
 kubectl get secret -n wazuh wazuh-indexer-credentials
 
-# Check secret data
-kubectl get secret -n wazuh wazuh-indexer-credentials -o yaml
-
-# Verify password format (should be base64 encoded)
+# Get password
 kubectl get secret -n wazuh wazuh-indexer-credentials \
   -o jsonpath='{.data.admin-password}' | base64 -d && echo
-```
-
-### Secret Not Being Created
-
-```bash
-# Check operator logs
-kubectl logs -n wazuh-operator deployment/wazuh-operator-controller-manager
-
-# Check WazuhCluster status
-kubectl describe wazuhcluster wazuh -n wazuh
-```
-
-### Dashboard Can't Connect to API
-
-```bash
-# Verify API credentials match
-kubectl get secret -n wazuh wazuh-api-credentials \
-  -o jsonpath='{.data.password}' | base64 -d
-
-# Check wazuh.yml in dashboard pod
-kubectl exec -n wazuh deploy/wazuh-dashboard -- \
-  cat /usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml
 ```
 
 ## See Also

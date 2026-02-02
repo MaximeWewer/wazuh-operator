@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -54,7 +54,23 @@ type ManagerStatefulSetBuilder struct {
 	volumes          []corev1.Volume
 	volumeMounts     []corev1.VolumeMount
 	// Monitoring configuration
-	cluster *wazuhv1alpha1.WazuhCluster
+	cluster *wazuhv1.WazuhCluster
+	// Rule ConfigMaps to mount
+	ruleConfigMaps []RuleConfigMapRef
+	// Decoder ConfigMaps to mount
+	decoderConfigMaps []DecoderConfigMapRef
+}
+
+// RuleConfigMapRef holds information about a rule ConfigMap to mount
+type RuleConfigMapRef struct {
+	Name     string // ConfigMap name
+	FileName string // Filename for the rule (e.g., "my_rule.xml")
+}
+
+// DecoderConfigMapRef holds information about a decoder ConfigMap to mount
+type DecoderConfigMapRef struct {
+	Name     string // ConfigMap name
+	FileName string // Filename for the decoder (e.g., "my_decoder.xml")
 }
 
 // NewManagerStatefulSetBuilder creates a new ManagerStatefulSetBuilder
@@ -208,8 +224,48 @@ func (b *ManagerStatefulSetBuilder) WithConfigHash(hash string) *ManagerStateful
 
 // WithCluster sets the WazuhCluster reference for monitoring configuration
 // This is required for adding the Prometheus exporter sidecar to master nodes
-func (b *ManagerStatefulSetBuilder) WithCluster(cluster *wazuhv1alpha1.WazuhCluster) *ManagerStatefulSetBuilder {
+func (b *ManagerStatefulSetBuilder) WithCluster(cluster *wazuhv1.WazuhCluster) *ManagerStatefulSetBuilder {
 	b.cluster = cluster
+	return b
+}
+
+// WithRuleConfigMaps sets the rule ConfigMaps to mount
+// Each rule ConfigMap contains custom Wazuh detection rules that will be mounted
+// to /var/ossec/etc/rules/{filename}.xml
+func (b *ManagerStatefulSetBuilder) WithRuleConfigMaps(refs []RuleConfigMapRef) *ManagerStatefulSetBuilder {
+	b.ruleConfigMaps = refs
+	return b
+}
+
+// WithRuleHash sets the rule hash annotation on pods
+// This triggers pod restart when rule content changes
+func (b *ManagerStatefulSetBuilder) WithRuleHash(hash string) *ManagerStatefulSetBuilder {
+	if hash != "" {
+		if b.podAnnotations == nil {
+			b.podAnnotations = make(map[string]string)
+		}
+		b.podAnnotations[constants.AnnotationRuleHash] = hash
+	}
+	return b
+}
+
+// WithDecoderConfigMaps sets the decoder ConfigMaps to mount
+// Each decoder ConfigMap contains custom Wazuh log decoders that will be mounted
+// to /var/ossec/etc/decoders/{filename}.xml
+func (b *ManagerStatefulSetBuilder) WithDecoderConfigMaps(refs []DecoderConfigMapRef) *ManagerStatefulSetBuilder {
+	b.decoderConfigMaps = refs
+	return b
+}
+
+// WithDecoderHash sets the decoder hash annotation on pods
+// This triggers pod restart when decoder content changes
+func (b *ManagerStatefulSetBuilder) WithDecoderHash(hash string) *ManagerStatefulSetBuilder {
+	if hash != "" {
+		if b.podAnnotations == nil {
+			b.podAnnotations = make(map[string]string)
+		}
+		b.podAnnotations[constants.AnnotationDecoderHash] = hash
+	}
 	return b
 }
 
@@ -327,8 +383,11 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &b.replicas,
 			ServiceName: b.name,
-			// Parallel allows all pods to start simultaneously
-			// This is the recommended policy for Wazuh manager as per official Wazuh Kubernetes deployment
+			// MinReadySeconds ensures pod is stable before considered available
+			// This prevents premature progression during rolling updates
+			MinReadySeconds: 30,
+			// Parallel allows all pods to start simultaneously during initial deployment
+			// RollingUpdate strategy still ensures one-at-a-time updates for version changes
 			PodManagementPolicy: appsv1.ParallelPodManagement,
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 				Type: appsv1.RollingUpdateStatefulSetStrategyType,
@@ -462,6 +521,34 @@ func (b *ManagerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 	// Add custom volumes
 	volumes = append(volumes, b.volumes...)
 
+	// Add rule ConfigMap volumes
+	for _, ref := range b.ruleConfigMaps {
+		volumes = append(volumes, corev1.Volume{
+			Name: fmt.Sprintf("wazuh-rule-%s", ref.Name),
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: ref.Name,
+					},
+				},
+			},
+		})
+	}
+
+	// Add decoder ConfigMap volumes
+	for _, ref := range b.decoderConfigMaps {
+		volumes = append(volumes, corev1.Volume{
+			Name: fmt.Sprintf("wazuh-decoder-%s", ref.Name),
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: ref.Name,
+					},
+				},
+			},
+		})
+	}
+
 	return volumes
 }
 
@@ -498,6 +585,26 @@ func (b *ManagerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 
 	// Add custom volume mounts
 	mounts = append(mounts, b.volumeMounts...)
+
+	// Add rule ConfigMap mounts at /var/ossec/etc/rules/
+	for _, ref := range b.ruleConfigMaps {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      fmt.Sprintf("wazuh-rule-%s", ref.Name),
+			MountPath: fmt.Sprintf("/var/ossec/etc/rules/%s", ref.FileName),
+			SubPath:   ref.FileName,
+			ReadOnly:  true,
+		})
+	}
+
+	// Add decoder ConfigMap mounts at /var/ossec/etc/decoders/
+	for _, ref := range b.decoderConfigMaps {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      fmt.Sprintf("wazuh-decoder-%s", ref.Name),
+			MountPath: fmt.Sprintf("/var/ossec/etc/decoders/%s", ref.FileName),
+			SubPath:   ref.FileName,
+			ReadOnly:  true,
+		})
+	}
 
 	return mounts
 }
@@ -546,6 +653,12 @@ if [ -f /config-source/filebeat.yml ]; then
     cp /config-source/filebeat.yml /etc/filebeat/filebeat.yml
     chmod 644 /etc/filebeat/filebeat.yml
     echo "Copied filebeat.yml"
+fi
+# Copy wazuh-template.json if it exists
+if [ -f /config-source/wazuh-template.json ]; then
+    cp /config-source/wazuh-template.json /etc/filebeat/wazuh-template.json
+    chmod 644 /etc/filebeat/wazuh-template.json
+    echo "Copied wazuh-template.json"
 fi
 echo "Configuration copy complete"
 ls -la /wazuh-config-mount/etc/ 2>/dev/null || true

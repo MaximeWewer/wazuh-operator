@@ -1,0 +1,104 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "wazuh-operator.fullname" . }}
+  namespace: {{ include "wazuh-operator.namespace" . }}
+  labels:
+    {{- include "wazuh-operator.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "wazuh-operator.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow metrics scraping from Prometheus
+    {{- if .Values.operator.metrics.enabled }}
+    - from:
+        {{- if .Values.networkPolicy.prometheus.namespaceSelector }}
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.prometheus.namespaceSelector | nindent 12 }}
+        {{- else }}
+        - namespaceSelector: {}
+        {{- end }}
+          {{- if .Values.networkPolicy.prometheus.podSelector }}
+          podSelector:
+            {{- toYaml .Values.networkPolicy.prometheus.podSelector | nindent 12 }}
+          {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.operator.metrics.port }}
+    {{- end }}
+    # Allow health probes
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.operator.healthProbe.port }}
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow communication with Kubernetes API server
+    - to:
+        - ipBlock:
+            cidr: {{ .Values.networkPolicy.apiServer.cidr | default "0.0.0.0/0" }}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 6443
+    # Allow communication with managed namespaces (Wazuh clusters)
+    {{- if .Values.networkPolicy.managedNamespaces }}
+    {{- range .Values.networkPolicy.managedNamespaces }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ . }}
+      ports:
+        - protocol: TCP
+          port: 9200  # OpenSearch
+        - protocol: TCP
+          port: 9300  # OpenSearch transport
+        - protocol: TCP
+          port: 1514  # Wazuh agent
+        - protocol: TCP
+          port: 1515  # Wazuh agent enrollment
+        - protocol: TCP
+          port: 1516  # Wazuh cluster
+        - protocol: TCP
+          port: 55000 # Wazuh API
+        - protocol: TCP
+          port: 5601  # Dashboard
+    {{- end }}
+    {{- else }}
+    # Allow all egress to managed workloads (default: all namespaces)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 9200
+        - protocol: TCP
+          port: 9300
+        - protocol: TCP
+          port: 1514
+        - protocol: TCP
+          port: 1515
+        - protocol: TCP
+          port: 1516
+        - protocol: TCP
+          port: 55000
+        - protocol: TCP
+          port: 5601
+    {{- end }}
+{{- end }}

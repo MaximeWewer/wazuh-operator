@@ -1,47 +1,33 @@
-# Wazuh Operator Helm Chart
+# wazuh-operator
 
-This Helm chart deploys the Wazuh Kubernetes Operator for managing Wazuh clusters.
+![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v1.0.0](https://img.shields.io/badge/AppVersion-v1.0.0-informational?style=flat-square)
 
-## Documentation
+A Helm chart for Wazuh Kubernetes Operator
 
-For complete documentation, examples, and guides, see:
-
-- **[User Documentation](../../docs/usage/README.md)** - Full usage guide
-- **[Getting Started](../../docs/usage/getting-started/)** - Installation and quick start
-- **[CRD Reference](../../docs/usage/CRD-REFERENCE.md)** - Complete API documentation
-
-## Table of Contents
-
-- [Features](#features)
-- [Prerequisites](#prerequisites)
-- [Quick Start](#quick-start)
-- [Deployment Modes](#deployment-modes)
-- [Values](#values)
-- [Upgrading](#upgrading)
-- [Uninstalling](#uninstalling)
-- [Troubleshooting](#troubleshooting)
-
-## Features
-
-- **Flexible Deployment Modes**: Deploy CRDs only, operator only, or both
-- **Simple Architecture**: One operator manages one WazuhCluster per namespace
-- **Metrics & Monitoring**: Prometheus metrics with ServiceMonitor support
-- **Security**: Pod security contexts, RBAC, and security best practices
-- **Customizable**: Extensive configuration options via values.yaml
+**Homepage:** <https://github.com/MaximeWewer/wazuh-operator>
 
 ## Prerequisites
 
 - Kubernetes 1.24+
 - Helm 3.10+
 - (Optional) Prometheus Operator for ServiceMonitor support
+- (Optional) cert-manager v1.0+ for webhook TLS
 
-## Quick Start
+## Documentation
 
-### Install with Default Settings (CRDs + Operator)
+| Resource                                             | Description                  |
+| ---------------------------------------------------- | ---------------------------- |
+| [User Documentation](../../docs/usage/README.md)     | Full usage guide             |
+| [Getting Started](../../docs/usage/getting-started/) | Installation and quick start |
+| [CRD Reference](../../docs/usage/CRD-REFERENCE.md)   | Complete API documentation   |
+
+## Installation
+
+### Quick Start (CRDs + Operator)
 
 ```bash
 helm install wazuh-operator ./charts/wazuh-operator \
-  --namespace wazuh-operator \
+  --namespace wazuh-system \
   --create-namespace
 ```
 
@@ -54,272 +40,437 @@ helm install wazuh-crds ./charts/wazuh-operator \
   --create-namespace
 ```
 
-### Install Operator Only (CRDs already exist)
+### Install Operator Only
 
 ```bash
 helm install wazuh-operator ./charts/wazuh-operator \
   --set deploymentMode=operator \
   --set crds.install=false \
-  --namespace wazuh-operator \
+  --namespace wazuh-system \
   --create-namespace
 ```
 
-## Deployment Modes
-
-The chart supports three deployment modes via the `deploymentMode` value.
-
-### Mode 1: `all` (Default)
-
-Deploys both CRDs and the operator.
-
-```yaml
-deploymentMode: "all"
-crds:
-  install: true
-operator:
-  enabled: true
-```
-
-**Use when:**
-
-- First time installation
-- Single deployment for everything
-
-### Mode 2: `crds`
-
-Deploys only CRDs (no operator).
-
-```yaml
-deploymentMode: "crds"
-crds:
-  install: true
-operator:
-  enabled: false
-```
-
-**Use when:**
-
-- Centralized CRD management
-- You want to manage CRDs separately from the operator
-
-### Mode 3: `operator`
-
-Deploys only the operator (assumes CRDs already exist).
-
-```yaml
-deploymentMode: "operator"
-crds:
-  install: false
-operator:
-  enabled: true
-```
-
-**Use when:**
-
-- CRDs are already installed
-- You want to manage the operator independently
-
-## Values
-
-### Deployment Mode
-
-| Parameter        | Description                                   | Default |
-| ---------------- | --------------------------------------------- | ------- |
-| `deploymentMode` | Deployment mode: `all`, `crds`, or `operator` | `"all"` |
-
-### CRD Configuration
-
-| Parameter          | Description            | Default |
-| ------------------ | ---------------------- | ------- |
-| `crds.install`     | Install CRDs           | `true`  |
-| `crds.keep`        | Keep CRDs on uninstall | `true`  |
-| `crds.annotations` | Annotations for CRDs   | `{}`    |
-
-### Operator Configuration
-
-| Parameter                   | Description                | Default                |
-| --------------------------- | -------------------------- | ---------------------- |
-| `operator.enabled`          | Enable operator deployment | `true`                 |
-| `operator.image.repository` | Operator image repository  | `wazuh/wazuh-operator` |
-| `operator.image.tag`        | Operator image tag         | `""` (uses appVersion) |
-| `operator.image.pullPolicy` | Image pull policy          | `IfNotPresent`         |
-| `operator.name`             | Operator name              | `"wazuh-operator"`     |
-
-**Note**: Operator replicas is hardcoded to `1` in the deployment template. The operator is designed to manage one WazuhCluster per instance.
-
-### Resources
-
-| Parameter                            | Description    | Default |
-| ------------------------------------ | -------------- | ------- |
-| `operator.resources.limits.cpu`      | CPU limit      | `500m`  |
-| `operator.resources.limits.memory`   | Memory limit   | `512Mi` |
-| `operator.resources.requests.cpu`    | CPU request    | `100m`  |
-| `operator.resources.requests.memory` | Memory request | `128Mi` |
-
-### Metrics
-
-| Parameter                       | Description          | Default     |
-| ------------------------------- | -------------------- | ----------- |
-| `operator.metrics.enabled`      | Enable metrics       | `true`      |
-| `operator.metrics.bindAddress`  | Metrics bind address | `":8080"`   |
-| `operator.metrics.service.type` | Metrics service type | `ClusterIP` |
-| `operator.metrics.service.port` | Metrics service port | `8080`      |
-
-### ServiceMonitor
-
-| Parameter                               | Description           | Default |
-| --------------------------------------- | --------------------- | ------- |
-| `operator.serviceMonitor.enabled`       | Enable ServiceMonitor | `false` |
-| `operator.serviceMonitor.labels`        | ServiceMonitor labels | `{}`    |
-| `operator.serviceMonitor.interval`      | Scrape interval       | `30s`   |
-| `operator.serviceMonitor.scrapeTimeout` | Scrape timeout        | `10s`   |
-
-### RBAC
-
-| Parameter         | Description           | Default               |
-| ----------------- | --------------------- | --------------------- |
-| `rbac.create`     | Create RBAC resources | `true`                |
-| `rbac.roleName`   | Role name             | `""` (auto-generated) |
-| `rbac.extraRules` | Additional RBAC rules | `[]`                  |
-
-### Service Account
-
-| Parameter                             | Description                 | Default               |
-| ------------------------------------- | --------------------------- | --------------------- |
-| `operator.serviceAccount.create`      | Create service account      | `true`                |
-| `operator.serviceAccount.name`        | Service account name        | `""` (auto-generated) |
-| `operator.serviceAccount.annotations` | Service account annotations | `{}`                  |
-
 ## Upgrading
-
-### Upgrade with Helm
 
 ```bash
 helm upgrade wazuh-operator ./charts/wazuh-operator \
-  --namespace wazuh-operator
+  --namespace wazuh-system
 ```
 
 ### Upgrade CRDs
 
-CRDs are not automatically upgraded by Helm. To upgrade CRDs:
+CRDs are not automatically upgraded by Helm. To upgrade:
 
 ```bash
 # Method 1: Using Helm template
 helm template wazuh-operator ./charts/wazuh-operator \
-  --set deploymentMode=crds \
-  --namespace wazuh-system | kubectl apply -f -
+  --set deploymentMode=crds | kubectl apply -f -
 
 # Method 2: Using kubectl
 kubectl apply -f charts/wazuh-operator/crds/
 ```
 
-## Uninstalling
-
-### Uninstall Operator
+## Uninstallation
 
 ```bash
-helm uninstall wazuh-operator --namespace wazuh-operator
+helm uninstall wazuh-operator --namespace wazuh-system
 ```
 
-### Uninstall CRDs (if installed separately)
+> **Warning:** If `crds.keep=true` (default), CRDs will not be deleted automatically.
 
-```bash
-helm uninstall wazuh-crds --namespace wazuh-system
+## Values
+
+### Name Overrides
+
+| Key              | Type   | Default | Description                           |
+| ---------------- | ------ | ------- | ------------------------------------- |
+| fullnameOverride | string | `""`    | Override the full name of the release |
+| nameOverride     | string | `""`    | Override the name of the chart        |
+
+### Deployment Mode
+
+| Key            | Type   | Default | Description                                                                              |
+| -------------- | ------ | ------- | ---------------------------------------------------------------------------------------- |
+| deploymentMode | string | `"all"` | Deployment mode: "all" (CRDs + operator), "crds" (CRDs only), "operator" (operator only) |
+
+### CRD Configuration
+
+| Key          | Type | Default | Description                                                                     |
+| ------------ | ---- | ------- | ------------------------------------------------------------------------------- |
+| crds.install | bool | `true`  | Install CRDs as part of the chart. Set to false if CRDs are managed separately. |
+
+### Operator Configuration
+
+| Key                                                          | Type   | Default                                | Description                                                                                          |
+| ------------------------------------------------------------ | ------ | -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| operator.affinity                                            | object | `{}`                                   | Affinity for operator pod                                                                            |
+| operator.clusterDomain                                       | string | `"cluster.local"`                      | Kubernetes cluster DNS domain. Change if using custom CoreDNS configuration.                         |
+| operator.enabled                                             | bool   | `true`                                 | Enable operator deployment. Set to false for CRD-only deployment.                                    |
+| operator.env                                                 | list   | `[]`                                   | Environment variables for operator container                                                         |
+| operator.extraVolumeMounts                                   | list   | `[]`                                   | Extra volume mounts                                                                                  |
+| operator.extraVolumes                                        | list   | `[]`                                   | Extra volumes                                                                                        |
+| operator.healthProbe.initialDelaySeconds                     | int    | `15`                                   | Initial delay before probing                                                                         |
+| operator.healthProbe.periodSeconds                           | int    | `20`                                   | Probe interval                                                                                       |
+| operator.healthProbe.port                                    | int    | `8081`                                 | Health probe port                                                                                    |
+| operator.image.pullPolicy                                    | string | `"IfNotPresent"`                       | Image pull policy                                                                                    |
+| operator.image.repository                                    | string | `"ghcr.io/maximewewer/wazuh-operator"` | Operator image repository                                                                            |
+| operator.image.tag                                           | string | `""`                                   | Image tag (defaults to chart appVersion)                                                             |
+| operator.imagePullSecrets                                    | list   | `[]`                                   | Image pull secrets for private registries                                                            |
+| operator.logging.format                                      | string | `"json"`                               | Log format: "json" (production) or "console" (human-readable)                                        |
+| operator.logging.level                                       | string | `"info"`                               | Log level: "debug", "info", "warn", "error"                                                          |
+| operator.metrics.enabled                                     | bool   | `true`                                 | Enable Prometheus metrics                                                                            |
+| operator.metrics.port                                        | int    | `8080`                                 | Metrics port                                                                                         |
+| operator.metrics.service.annotations                         | object | `{}`                                   | Metrics service annotations                                                                          |
+| operator.metrics.service.type                                | string | `"ClusterIP"`                          | Metrics service type                                                                                 |
+| operator.name                                                | string | `"wazuh-operator"`                     | Operator name                                                                                        |
+| operator.nodeSelector                                        | object | `{}`                                   | Node selector for operator pod                                                                       |
+| operator.podAnnotations                                      | object | `{}`                                   | Pod annotations                                                                                      |
+| operator.podSecurityContext.runAsNonRoot                     | bool   | `true`                                 | Run as non-root user                                                                                 |
+| operator.podSecurityContext.seccompProfile.type              | string | `"RuntimeDefault"`                     | Seccomp profile type                                                                                 |
+| operator.prometheusRules.alerts.certExpired.for              | string | `"5m"`                                 |                                                                                                      |
+| operator.prometheusRules.alerts.certExpired.severity         | string | `"critical"`                           |                                                                                                      |
+| operator.prometheusRules.alerts.certExpiringSoon.for         | string | `"1h"`                                 |                                                                                                      |
+| operator.prometheusRules.alerts.certExpiringSoon.severity    | string | `"warning"`                            |                                                                                                      |
+| operator.prometheusRules.alerts.certExpiringSoon.threshold   | int    | `30`                                   |                                                                                                      |
+| operator.prometheusRules.alerts.certExpiryCritical.for       | string | `"1h"`                                 |                                                                                                      |
+| operator.prometheusRules.alerts.certExpiryCritical.severity  | string | `"critical"`                           |                                                                                                      |
+| operator.prometheusRules.alerts.certExpiryCritical.threshold | int    | `7`                                    |                                                                                                      |
+| operator.prometheusRules.alerts.clusterCritical.for          | string | `"2m"`                                 |                                                                                                      |
+| operator.prometheusRules.alerts.clusterCritical.labels       | object | `{}`                                   |                                                                                                      |
+| operator.prometheusRules.alerts.clusterCritical.runbookUrl   | string | `""`                                   |                                                                                                      |
+| operator.prometheusRules.alerts.clusterCritical.severity     | string | `"critical"`                           |                                                                                                      |
+| operator.prometheusRules.alerts.clusterUnhealthy.for         | string | `"5m"`                                 |                                                                                                      |
+| operator.prometheusRules.alerts.clusterUnhealthy.labels      | object | `{}`                                   |                                                                                                      |
+| operator.prometheusRules.alerts.clusterUnhealthy.runbookUrl  | string | `""`                                   |                                                                                                      |
+| operator.prometheusRules.alerts.clusterUnhealthy.severity    | string | `"warning"`                            |                                                                                                      |
+| operator.prometheusRules.alerts.componentUnhealthy.for       | string | `"5m"`                                 |                                                                                                      |
+| operator.prometheusRules.alerts.componentUnhealthy.severity  | string | `"warning"`                            |                                                                                                      |
+| operator.prometheusRules.alerts.operatorDown.for             | string | `"5m"`                                 |                                                                                                      |
+| operator.prometheusRules.alerts.operatorDown.severity        | string | `"critical"`                           |                                                                                                      |
+| operator.prometheusRules.alerts.reconcileDuration.for        | string | `"15m"`                                |                                                                                                      |
+| operator.prometheusRules.alerts.reconcileDuration.severity   | string | `"warning"`                            |                                                                                                      |
+| operator.prometheusRules.alerts.reconcileDuration.threshold  | int    | `60`                                   |                                                                                                      |
+| operator.prometheusRules.alerts.reconcileErrors.for          | string | `"10m"`                                |                                                                                                      |
+| operator.prometheusRules.alerts.reconcileErrors.severity     | string | `"warning"`                            |                                                                                                      |
+| operator.prometheusRules.alerts.reconcileErrors.threshold    | float  | `0.1`                                  |                                                                                                      |
+| operator.prometheusRules.alerts.replicasMismatch.for         | string | `"10m"`                                |                                                                                                      |
+| operator.prometheusRules.alerts.replicasMismatch.severity    | string | `"warning"`                            |                                                                                                      |
+| operator.prometheusRules.enabled                             | bool   | `false`                                | Enable PrometheusRule resource                                                                       |
+| operator.prometheusRules.labels                              | object | `{}`                                   | Additional labels for PrometheusRule                                                                 |
+| operator.rateLimiting.baseDelay                              | string | `"5ms"`                                | Base delay for exponential backoff on failures                                                       |
+| operator.rateLimiting.burst                                  | int    | `100`                                  | Burst size for rate limiter bucket                                                                   |
+| operator.rateLimiting.enabled                                | bool   | `true`                                 | Enable rate limiting                                                                                 |
+| operator.rateLimiting.maxConcurrentReconciles                | int    | `3`                                    | Maximum concurrent reconciliations per controller                                                    |
+| operator.rateLimiting.maxDelay                               | string | `"1000s"`                              | Maximum delay for exponential backoff                                                                |
+| operator.rateLimiting.qps                                    | int    | `10`                                   | Queries per second limit                                                                             |
+| operator.resources.limits.cpu                                | string | `"500m"`                               | CPU limit                                                                                            |
+| operator.resources.limits.memory                             | string | `"512Mi"`                              | Memory limit                                                                                         |
+| operator.resources.requests.cpu                              | string | `"100m"`                               | CPU request                                                                                          |
+| operator.resources.requests.memory                           | string | `"128Mi"`                              | Memory request                                                                                       |
+| operator.securityContext.allowPrivilegeEscalation            | bool   | `false`                                | Prevent privilege escalation                                                                         |
+| operator.securityContext.capabilities.drop                   | list   | `["ALL"]`                              | Drop all capabilities                                                                                |
+| operator.securityContext.readOnlyRootFilesystem              | bool   | `true`                                 | Read-only root filesystem                                                                            |
+| operator.serviceAccount.annotations                          | object | `{}`                                   | Service account annotations                                                                          |
+| operator.serviceAccount.create                               | bool   | `true`                                 | Create service account                                                                               |
+| operator.serviceAccount.name                                 | string | `""`                                   | Service account name (auto-generated if empty)                                                       |
+| operator.serviceMonitor.enabled                              | bool   | `false`                                | Enable ServiceMonitor for Prometheus Operator                                                        |
+| operator.serviceMonitor.interval                             | string | `"30s"`                                | Scrape interval                                                                                      |
+| operator.serviceMonitor.labels                               | object | `{}`                                   | Additional labels for ServiceMonitor                                                                 |
+| operator.serviceMonitor.scrapeTimeout                        | string | `"10s"`                                | Scrape timeout                                                                                       |
+| operator.tolerations                                         | list   | `[]`                                   | Tolerations for operator pod                                                                         |
+| operator.vmMaxMapCount                                       | int    | `262144`                               | vm.max_map_count kernel parameter for OpenSearch. Init container sets this if system value is lower. |
+
+### RBAC Configuration
+
+| Key                             | Type   | Default | Description                                                                    |
+| ------------------------------- | ------ | ------- | ------------------------------------------------------------------------------ |
+| rbac.create                     | bool   | `true`  | Create RBAC resources                                                          |
+| rbac.extraRules                 | list   | `[]`    | Additional rules for the operator role                                         |
+| rbac.namespaceScoped.enabled    | bool   | `false` | Enable namespace-scoped RBAC (creates Role/RoleBinding per namespace)          |
+| rbac.namespaceScoped.namespaces | list   | `[]`    | List of namespaces the operator should manage (empty = release namespace only) |
+| rbac.roleName                   | string | `""`    | Role name (auto-generated if empty)                                            |
+
+### Namespace Configuration
+
+| Key                   | Type   | Default | Description                                    |
+| --------------------- | ------ | ------- | ---------------------------------------------- |
+| namespace.annotations | object | `{}`    | Namespace annotations                          |
+| namespace.create      | bool   | `false` | Create namespace for operator                  |
+| namespace.labels      | object | `{}`    | Namespace labels                               |
+| namespace.name        | string | `""`    | Namespace name (defaults to Release.Namespace) |
+
+### Common Labels & Annotations
+
+| Key               | Type   | Default | Description                                    |
+| ----------------- | ------ | ------- | ---------------------------------------------- |
+| commonAnnotations | object | `{}`    | Additional annotations to add to all resources |
+| commonLabels      | object | `{}`    | Additional labels to add to all resources      |
+
+### OpenTelemetry Configuration
+
+| Key                      | Type   | Default            | Description                                                                                                      |
+| ------------------------ | ------ | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| telemetry.enabled        | bool   | `false`            | Enable OpenTelemetry distributed tracing                                                                         |
+| telemetry.endpoint       | string | `""`               | OTLP exporter endpoint (gRPC). Examples: "jaeger-collector.observability:4317", "otel-collector.monitoring:4317" |
+| telemetry.insecure       | bool   | `true`             | Use insecure connection (no TLS). Set to true for local development or service mesh.                             |
+| telemetry.serviceName    | string | `"wazuh-operator"` | Service name reported in traces                                                                                  |
+| telemetry.serviceVersion | string | `""`               | Service version reported in traces (defaults to chart appVersion)                                                |
+
+### Gateway API Configuration
+
+| Key                | Type | Default | Description                                                                                         |
+| ------------------ | ---- | ------- | --------------------------------------------------------------------------------------------------- |
+| gatewayAPI.enabled | bool | `false` | Enable Gateway API support. When enabled, operator watches HTTPRoute, TCPRoute, UDPRoute resources. |
+
+### Advanced Configuration
+
+| Key                           | Type | Default | Description                                                    |
+| ----------------------------- | ---- | ------- | -------------------------------------------------------------- |
+| extraArgs                     | list | `[]`    |                                                                |
+| nonBlockingRollouts           | bool | `true`  | Enable non-blocking rollouts for parallel certificate renewals |
+| terminationGracePeriodSeconds | int  | `10`    | Termination grace period in seconds                            |
+
+### High Availability Configuration
+
+| Key                    | Type   | Default                   | Description                                                             |
+| ---------------------- | ------ | ------------------------- | ----------------------------------------------------------------------- |
+| leaderElection.enabled | bool   | `false`                   | Enable leader election (REQUIRED when replicaCount > 1)                 |
+| leaderElection.id      | string | `"wazuh-operator-leader"` | Leader election lease name                                              |
+| replicaCount           | int    | `1`                       | Number of operator replicas. For HA, set > 1 AND enable leaderElection. |
+
+### Update Strategy Configuration
+
+| Key                                         | Type   | Default           | Description                        |
+| ------------------------------------------- | ------ | ----------------- | ---------------------------------- |
+| updateStrategy.rollingUpdate.maxSurge       | int    | `1`               | Max extra pods during update       |
+| updateStrategy.rollingUpdate.maxUnavailable | int    | `0`               | Max unavailable pods during update |
+| updateStrategy.type                         | string | `"RollingUpdate"` | Update strategy type               |
+
+### Network Policy Configuration
+
+| Key                                        | Type   | Default       | Description                                                                               |
+| ------------------------------------------ | ------ | ------------- | ----------------------------------------------------------------------------------------- |
+| networkPolicy.apiServer.cidr               | string | `"0.0.0.0/0"` | CIDR for API server access                                                                |
+| networkPolicy.enabled                      | bool   | `false`       | Enable NetworkPolicy for operator namespace                                               |
+| networkPolicy.managedNamespaces            | list   | `[]`          | Managed namespaces (where Wazuh clusters run). If empty, allows egress to all namespaces. |
+| networkPolicy.prometheus.namespaceSelector | object | `{}`          | Namespace selector for Prometheus pods                                                    |
+| networkPolicy.prometheus.podSelector       | object | `{}`          | Pod selector for Prometheus pods                                                          |
+
+### Resource Quota Configuration
+
+| Key                                            | Type   | Default   | Description                                                |
+| ---------------------------------------------- | ------ | --------- | ---------------------------------------------------------- |
+| resourceQuota.configmaps                       | string | `"20"`    | Maximum ConfigMaps in namespace                            |
+| resourceQuota.enabled                          | bool   | `false`   | Enable ResourceQuota and LimitRange for operator namespace |
+| resourceQuota.limitRange.default.cpu           | string | `"500m"`  | Default CPU limit                                          |
+| resourceQuota.limitRange.default.memory        | string | `"512Mi"` | Default memory limit                                       |
+| resourceQuota.limitRange.defaultRequest.cpu    | string | `"100m"`  | Default CPU request                                        |
+| resourceQuota.limitRange.defaultRequest.memory | string | `"128Mi"` | Default memory request                                     |
+| resourceQuota.limitRange.max.cpu               | string | `"2"`     | Maximum CPU per container                                  |
+| resourceQuota.limitRange.max.memory            | string | `"4Gi"`   | Maximum memory per container                               |
+| resourceQuota.limitRange.min.cpu               | string | `"50m"`   | Minimum CPU per container                                  |
+| resourceQuota.limitRange.min.memory            | string | `"64Mi"`  | Minimum memory per container                               |
+| resourceQuota.limits.cpu                       | string | `"4"`     | Total CPU limits                                           |
+| resourceQuota.limits.memory                    | string | `"8Gi"`   | Total memory limits                                        |
+| resourceQuota.pods                             | string | `"10"`    | Maximum number of pods in namespace                        |
+| resourceQuota.requests.cpu                     | string | `"2"`     | Total CPU requests limit                                   |
+| resourceQuota.requests.memory                  | string | `"4Gi"`   | Total memory requests limit                                |
+| resourceQuota.secrets                          | string | `"20"`    | Maximum Secrets in namespace                               |
+| resourceQuota.services                         | string | `"10"`    | Maximum Services in namespace                              |
+
+### Admission Webhook Configuration
+
+| Key                       | Type   | Default  | Description                                              |
+| ------------------------- | ------ | -------- | -------------------------------------------------------- |
+| webhook.caBundle          | string | `""`     | CA bundle for webhook TLS (not needed with cert-manager) |
+| webhook.enabled           | bool   | `false`  | Enable admission webhooks for CR validation              |
+| webhook.failurePolicy     | string | `"Fail"` | Failure policy: Fail or Ignore                           |
+| webhook.namespaceSelector | object | `{}`     | Namespace selector to limit webhook scope                |
+
+### cert-manager Integration
+
+| Key                             | Type   | Default    | Description                                        |
+| ------------------------------- | ------ | ---------- | -------------------------------------------------- |
+| certManager.ca.duration         | string | `"87600h"` | CA certificate duration (default: 10 years)        |
+| certManager.ca.renewBefore      | string | `"2160h"`  | Renew before expiration (default: 90 days)         |
+| certManager.enabled             | bool   | `false`    | Enable cert-manager for TLS certificate management |
+| certManager.metrics.duration    | string | `"8760h"`  | Certificate duration (default: 1 year)             |
+| certManager.metrics.enabled     | bool   | `false`    | Enable metrics certificate for secure scraping     |
+| certManager.metrics.renewBefore | string | `"720h"`   | Renew before expiration (default: 30 days)         |
+| certManager.webhook.duration    | string | `"8760h"`  | Certificate duration (default: 1 year)             |
+| certManager.webhook.enabled     | bool   | `true`     | Enable webhook certificate                         |
+| certManager.webhook.renewBefore | string | `"720h"`   | Renew before expiration (default: 30 days)         |
+
+## Examples
+
+### High Availability Deployment
+
+```yaml
+replicaCount: 3
+
+leaderElection:
+  enabled: true
+  id: "wazuh-operator-leader"
+
+operator:
+  resources:
+    limits:
+      cpu: 1
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 256Mi
 ```
 
-**Warning**: If `crds.keep=true` (default), CRDs will not be deleted automatically. To manually delete:
+### With Prometheus Monitoring
 
-```bash
-# Wazuh Core CRDs
-kubectl delete crd wazuhclusters.resources.wazuh.com
-kubectl delete crd wazuhmanagers.resources.wazuh.com
-kubectl delete crd wazuhindexers.resources.wazuh.com
-kubectl delete crd wazuhdashboards.resources.wazuh.com
-kubectl delete crd wazuhcertificates.resources.wazuh.com
-kubectl delete crd wazuhdecoders.resources.wazuh.com
-kubectl delete crd wazuhrules.resources.wazuh.com
+```yaml
+operator:
+  metrics:
+    enabled: true
+    port: 8080
 
-# OpenSearch CRDs
-kubectl delete crd opensearchusers.resources.wazuh.com
-kubectl delete crd opensearchroles.resources.wazuh.com
-kubectl delete crd opensearchrolemappings.resources.wazuh.com
-kubectl delete crd opensearchactiongroups.resources.wazuh.com
-kubectl delete crd opensearchtenants.resources.wazuh.com
-kubectl delete crd opensearchindextemplates.resources.wazuh.com
-kubectl delete crd opensearchcomponenttemplates.resources.wazuh.com
-kubectl delete crd opensearchismpolicies.resources.wazuh.com
-kubectl delete crd opensearchindices.resources.wazuh.com
-kubectl delete crd opensearchsnapshotpolicies.resources.wazuh.com
+  serviceMonitor:
+    enabled: true
+    labels:
+      prometheus: kube-prometheus
+    interval: "30s"
+
+  prometheusRules:
+    enabled: true
+    alerts:
+      clusterUnhealthy:
+        for: "5m"
+        severity: warning
+      operatorDown:
+        for: "5m"
+        severity: critical
 ```
 
-## Troubleshooting
+### With Gateway API Support
 
-### 1. CRDs Not Found
-
-**Error**: CRDs are not installed
-
-**Solution**:
-
-```bash
-# Verify CRDs are installed
-kubectl get crds | grep resources.wazuh.com
-
-# If missing, install CRDs
-helm upgrade wazuh-operator ./charts/wazuh-operator --set crds.install=true --force
+```yaml
+gatewayAPI:
+  enabled: true
 ```
 
-### 2. Operator Not Starting
+> **Note:** Requires Gateway API CRDs to be installed:
+>
+> ```bash
+> kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/latest/download/standard-install.yaml
+> kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/latest/download/experimental-install.yaml
+> ```
 
-**Error**: Operator pod is not starting
+### With OpenTelemetry Tracing
 
-**Solution**:
-
-```bash
-# Check operator logs
-kubectl logs -n wazuh-operator deployment/wazuh-operator-controller-manager
-
-# Check pod events
-kubectl describe pod -n wazuh-operator -l app.kubernetes.io/name=wazuh-operator
-
-# Verify RBAC permissions
-kubectl auth can-i create wazuhclusters.resources.wazuh.com --as=system:serviceaccount:wazuh-operator:wazuh-operator
+```yaml
+telemetry:
+  enabled: true
+  endpoint: "jaeger-collector.observability:4317"
+  insecure: true
+  serviceName: "wazuh-operator"
 ```
 
-### 3. Metrics Not Available
+### With Network Policy
 
-**Error**: Metrics endpoint not accessible
-
-**Solution**:
-
-```bash
-# Verify metrics are enabled
-helm get values wazuh-operator -n wazuh-operator
-
-# Check metrics service
-kubectl get svc -n wazuh-operator
-
-# Test metrics endpoint
-kubectl port-forward -n wazuh-operator svc/wazuh-operator-metrics 8080:8080
-curl http://localhost:8080/metrics
+```yaml
+networkPolicy:
+  enabled: true
+  prometheus:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: monitoring
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: prometheus
+  managedNamespaces:
+    - wazuh
+    - wazuh-prod
 ```
+
+### With cert-manager for Webhooks
+
+```yaml
+webhook:
+  enabled: true
+  failurePolicy: Fail
+
+certManager:
+  enabled: true
+  ca:
+    duration: "87600h"
+    renewBefore: "2160h"
+  webhook:
+    enabled: true
+    duration: "8760h"
+    renewBefore: "720h"
+```
+
+### Namespace-Scoped RBAC (Multi-Tenant)
+
+```yaml
+rbac:
+  namespaceScoped:
+    enabled: true
+    namespaces:
+      - wazuh-prod
+      - wazuh-staging
+      - wazuh-dev
+```
+
+## Deployment Modes
+
+| Mode       | Description            | Use Case                                     |
+| ---------- | ---------------------- | -------------------------------------------- |
+| `all`      | Deploy CRDs + Operator | First-time installation, single deployment   |
+| `crds`     | Deploy CRDs only       | Centralized CRD management, GitOps workflows |
+| `operator` | Deploy Operator only   | CRDs already exist, operator-only updates    |
 
 ## Architecture
 
-The operator follows a simple architecture:
+- **One Operator** per namespace manages **One WazuhCluster**
+- **High Availability** via `replicaCount > 1` + `leaderElection.enabled`
+- **Leader Election** ensures only one active replica (others standby)
+- **Automatic Namespace Detection** from WazuhCluster resource location
 
-- **One Operator** → **One WazuhCluster** per namespace
-- **No High Availability** (single replica, hardcoded)
-- **No Leader Election** (disabled in code)
-- **Automatic Namespace Detection** (from WazuhCluster resource location)
+## Troubleshooting
 
-For managing multiple Wazuh clusters, deploy separate operator instances in different namespaces.
+### CRDs Not Found
 
-## License
+```bash
+# Verify CRDs
+kubectl get crds | grep resources.wazuh.com
 
-Apache 2.0
+# Install if missing
+helm upgrade wazuh-operator ./charts/wazuh-operator --set crds.install=true --force
+```
 
-## Links
+### Operator Not Starting
 
-- [Wazuh Documentation](https://documentation.wazuh.com/)
-- [Wazuh GitHub](https://github.com/wazuh/wazuh-kubernetes)
-- [Support Forum](https://groups.google.com/g/wazuh)
+```bash
+# Check logs
+kubectl logs -n wazuh-system deployment/wazuh-operator-controller-manager
+
+# Check events
+kubectl describe pod -n wazuh-system -l app.kubernetes.io/name=wazuh-operator
+
+# Verify RBAC
+kubectl auth can-i create wazuhclusters.resources.wazuh.com \
+  --as=system:serviceaccount:wazuh-system:wazuh-operator
+```
+
+### Metrics Not Available
+
+```bash
+# Verify metrics enabled
+helm get values wazuh-operator -n wazuh-system
+
+# Test endpoint
+kubectl port-forward -n wazuh-system svc/wazuh-operator-metrics 8080:8080
+curl http://localhost:8080/metrics
+```
+
+## Support
+
+- GitHub Issues: https://github.com/MaximeWewer/wazuh-operator/issues
+- Documentation: https://documentation.wazuh.com/

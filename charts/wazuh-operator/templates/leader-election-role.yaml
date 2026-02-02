@@ -1,0 +1,44 @@
+{{- if and (include "wazuh-operator.installOperator" .) .Values.rbac.create .Values.leaderElection.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "wazuh-operator.fullname" . }}-leader-election
+  namespace: {{ include "wazuh-operator.namespace" . }}
+  labels:
+    {{- include "wazuh-operator.labels" . | nindent 4 }}
+rules:
+# Leader election requires access to leases in the operator namespace
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+# ConfigMaps can be used as leader election backend (fallback)
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+# Events for leader election status
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+{{- end }}

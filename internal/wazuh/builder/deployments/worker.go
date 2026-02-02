@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -50,6 +50,10 @@ type WorkerStatefulSetBuilder struct {
 	volumes          []corev1.Volume
 	volumeMounts     []corev1.VolumeMount
 	masterAddress    string
+	// Rule ConfigMaps to mount
+	ruleConfigMaps []RuleConfigMapRef
+	// Decoder ConfigMaps to mount
+	decoderConfigMaps []DecoderConfigMapRef
 }
 
 // NewWorkerStatefulSetBuilder creates a new WorkerStatefulSetBuilder
@@ -208,6 +212,46 @@ func (b *WorkerStatefulSetBuilder) WithConfigHash(hash string) *WorkerStatefulSe
 	return b
 }
 
+// WithRuleConfigMaps sets the rule ConfigMaps to mount
+// Each rule ConfigMap contains custom Wazuh detection rules that will be mounted
+// to /var/ossec/etc/rules/{filename}.xml
+func (b *WorkerStatefulSetBuilder) WithRuleConfigMaps(refs []RuleConfigMapRef) *WorkerStatefulSetBuilder {
+	b.ruleConfigMaps = refs
+	return b
+}
+
+// WithRuleHash sets the rule hash annotation on pods
+// This triggers pod restart when rule content changes
+func (b *WorkerStatefulSetBuilder) WithRuleHash(hash string) *WorkerStatefulSetBuilder {
+	if hash != "" {
+		if b.podAnnotations == nil {
+			b.podAnnotations = make(map[string]string)
+		}
+		b.podAnnotations[constants.AnnotationRuleHash] = hash
+	}
+	return b
+}
+
+// WithDecoderConfigMaps sets the decoder ConfigMaps to mount
+// Each decoder ConfigMap contains custom Wazuh log decoders that will be mounted
+// to /var/ossec/etc/decoders/{filename}.xml
+func (b *WorkerStatefulSetBuilder) WithDecoderConfigMaps(refs []DecoderConfigMapRef) *WorkerStatefulSetBuilder {
+	b.decoderConfigMaps = refs
+	return b
+}
+
+// WithDecoderHash sets the decoder hash annotation on pods
+// This triggers pod restart when decoder content changes
+func (b *WorkerStatefulSetBuilder) WithDecoderHash(hash string) *WorkerStatefulSetBuilder {
+	if hash != "" {
+		if b.podAnnotations == nil {
+			b.podAnnotations = make(map[string]string)
+		}
+		b.podAnnotations[constants.AnnotationDecoderHash] = hash
+	}
+	return b
+}
+
 // Build creates the StatefulSet
 func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	labels := b.buildLabels()
@@ -265,8 +309,11 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &b.replicas,
 			ServiceName: b.name,
-			// Parallel allows all pods to start simultaneously
-			// This is the recommended policy for Wazuh manager as per official Wazuh Kubernetes deployment
+			// MinReadySeconds ensures pod is stable before considered available
+			// This prevents premature progression during rolling updates
+			MinReadySeconds: 30,
+			// Parallel allows all pods to start simultaneously during initial deployment
+			// RollingUpdate strategy still ensures one-at-a-time updates for version changes
 			PodManagementPolicy: appsv1.ParallelPodManagement,
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
 				Type: appsv1.RollingUpdateStatefulSetStrategyType,
@@ -448,6 +495,34 @@ func (b *WorkerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 	// Add custom volumes
 	volumes = append(volumes, b.volumes...)
 
+	// Add rule ConfigMap volumes
+	for _, ref := range b.ruleConfigMaps {
+		volumes = append(volumes, corev1.Volume{
+			Name: fmt.Sprintf("wazuh-rule-%s", ref.Name),
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: ref.Name,
+					},
+				},
+			},
+		})
+	}
+
+	// Add decoder ConfigMap volumes
+	for _, ref := range b.decoderConfigMaps {
+		volumes = append(volumes, corev1.Volume{
+			Name: fmt.Sprintf("wazuh-decoder-%s", ref.Name),
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: ref.Name,
+					},
+				},
+			},
+		})
+	}
+
 	return volumes
 }
 
@@ -484,6 +559,26 @@ func (b *WorkerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 
 	// Add custom volume mounts
 	mounts = append(mounts, b.volumeMounts...)
+
+	// Add rule ConfigMap mounts at /var/ossec/etc/rules/
+	for _, ref := range b.ruleConfigMaps {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      fmt.Sprintf("wazuh-rule-%s", ref.Name),
+			MountPath: fmt.Sprintf("/var/ossec/etc/rules/%s", ref.FileName),
+			SubPath:   ref.FileName,
+			ReadOnly:  true,
+		})
+	}
+
+	// Add decoder ConfigMap mounts at /var/ossec/etc/decoders/
+	for _, ref := range b.decoderConfigMaps {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      fmt.Sprintf("wazuh-decoder-%s", ref.Name),
+			MountPath: fmt.Sprintf("/var/ossec/etc/decoders/%s", ref.FileName),
+			SubPath:   ref.FileName,
+			ReadOnly:  true,
+		})
+	}
 
 	return mounts
 }
@@ -532,6 +627,12 @@ if [ -f /config-source/filebeat.yml ]; then
     cp /config-source/filebeat.yml /etc/filebeat/filebeat.yml
     chmod 644 /etc/filebeat/filebeat.yml
     echo "Copied filebeat.yml"
+fi
+# Copy wazuh-template.json if it exists
+if [ -f /config-source/wazuh-template.json ]; then
+    cp /config-source/wazuh-template.json /etc/filebeat/wazuh-template.json
+    chmod 644 /etc/filebeat/wazuh-template.json
+    echo "Copied wazuh-template.json"
 fi
 echo "Configuration copy complete"
 ls -la /wazuh-config-mount/etc/ 2>/dev/null || true

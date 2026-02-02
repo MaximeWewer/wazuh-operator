@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -44,7 +44,7 @@ func NewOpenSearchClientFactory(k8sClient client.Client) *OpenSearchClientFactor
 // GetClient returns an authenticated OpenSearch client for a cluster by reference
 func (f *OpenSearchClientFactory) GetClient(ctx context.Context, clusterRef types.NamespacedName) (*api.Client, error) {
 	// Get the WazuhCluster
-	var cluster wazuhv1alpha1.WazuhCluster
+	var cluster wazuhv1.WazuhCluster
 	if err := f.k8sClient.Get(ctx, clusterRef, &cluster); err != nil {
 		return nil, fmt.Errorf("failed to get WazuhCluster %s: %w", clusterRef, err)
 	}
@@ -53,7 +53,7 @@ func (f *OpenSearchClientFactory) GetClient(ctx context.Context, clusterRef type
 }
 
 // GetClientForCluster returns an authenticated OpenSearch client using cluster object directly
-func (f *OpenSearchClientFactory) GetClientForCluster(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*api.Client, error) {
+func (f *OpenSearchClientFactory) GetClientForCluster(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*api.Client, error) {
 	// Get credentials from secret
 	username, password, err := f.getCredentials(ctx, cluster)
 	if err != nil {
@@ -82,7 +82,7 @@ func (f *OpenSearchClientFactory) GetClientForCluster(ctx context.Context, clust
 }
 
 // getCredentials retrieves admin credentials from the indexer-credentials secret
-func (f *OpenSearchClientFactory) getCredentials(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (username, password string, err error) {
+func (f *OpenSearchClientFactory) getCredentials(ctx context.Context, cluster *wazuhv1.WazuhCluster) (username, password string, err error) {
 	secretName := constants.IndexerCredentialsName(cluster.Name)
 	secretKey := types.NamespacedName{
 		Name:      secretName,
@@ -108,7 +108,7 @@ func (f *OpenSearchClientFactory) getCredentials(ctx context.Context, cluster *w
 }
 
 // getCACertificate retrieves the CA certificate from the indexer-certs secret
-func (f *OpenSearchClientFactory) getCACertificate(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) ([]byte, error) {
+func (f *OpenSearchClientFactory) getCACertificate(ctx context.Context, cluster *wazuhv1.WazuhCluster) ([]byte, error) {
 	secretName := constants.IndexerCertsName(cluster.Name)
 	secretKey := types.NamespacedName{
 		Name:      secretName,
@@ -129,7 +129,7 @@ func (f *OpenSearchClientFactory) getCACertificate(ctx context.Context, cluster 
 }
 
 // buildServiceURL builds the internal service URL for the indexer
-func (f *OpenSearchClientFactory) buildServiceURL(cluster *wazuhv1alpha1.WazuhCluster) string {
+func (f *OpenSearchClientFactory) buildServiceURL(cluster *wazuhv1.WazuhCluster) string {
 	// Format: https://{cluster-name}-indexer.{namespace}.svc.cluster.local:9200
 	return fmt.Sprintf("https://%s:%d",
 		constants.IndexerServiceFQDN(cluster.Name, cluster.Namespace),
@@ -138,7 +138,7 @@ func (f *OpenSearchClientFactory) buildServiceURL(cluster *wazuhv1alpha1.WazuhCl
 }
 
 // GetClientWithCustomCredentials creates a client with specific credentials (for testing specific users)
-func (f *OpenSearchClientFactory) GetClientWithCustomCredentials(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, username, password string) (*api.Client, error) {
+func (f *OpenSearchClientFactory) GetClientWithCustomCredentials(ctx context.Context, cluster *wazuhv1.WazuhCluster, username, password string) (*api.Client, error) {
 	// Get CA certificate from secret
 	caCert, err := f.getCACertificate(ctx, cluster)
 	if err != nil {

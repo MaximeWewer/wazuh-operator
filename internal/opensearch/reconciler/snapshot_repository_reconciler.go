@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -61,7 +61,7 @@ func (r *SnapshotRepositoryReconciler) WithAPIClient(apiClient *api.Client) *Sna
 }
 
 // Reconcile reconciles an OpenSearch snapshot repository
-func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazuhv1alpha1.OpenSearchSnapshotRepository) error {
+func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazuhv1.OpenSearchSnapshotRepository) error {
 	log := logf.FromContext(ctx)
 
 	// Handle finalizer
@@ -185,7 +185,7 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 }
 
 // handleDeletion handles repository cleanup on deletion
-func (r *SnapshotRepositoryReconciler) handleDeletion(ctx context.Context, repo *wazuhv1alpha1.OpenSearchSnapshotRepository) error {
+func (r *SnapshotRepositoryReconciler) handleDeletion(ctx context.Context, repo *wazuhv1.OpenSearchSnapshotRepository) error {
 	log := logf.FromContext(ctx)
 
 	if r.APIClient != nil {
@@ -215,8 +215,8 @@ func (r *SnapshotRepositoryReconciler) handleDeletion(ctx context.Context, repo 
 }
 
 // buildRepositorySettings builds the OpenSearch repository settings from the CRD spec
-func (r *SnapshotRepositoryReconciler) buildRepositorySettings(ctx context.Context, repo *wazuhv1alpha1.OpenSearchSnapshotRepository) (map[string]interface{}, error) {
-	settings := make(map[string]interface{})
+func (r *SnapshotRepositoryReconciler) buildRepositorySettings(ctx context.Context, repo *wazuhv1.OpenSearchSnapshotRepository) (map[string]any, error) {
+	settings := make(map[string]any)
 
 	spec := repo.Spec.Settings
 
@@ -298,7 +298,7 @@ func (r *SnapshotRepositoryReconciler) buildRepositorySettings(ctx context.Conte
 }
 
 // loadCredentials loads credentials from a Kubernetes Secret
-func (r *SnapshotRepositoryReconciler) loadCredentials(ctx context.Context, namespace string, ref *wazuhv1alpha1.RepositoryCredentialsRef) (string, string, error) {
+func (r *SnapshotRepositoryReconciler) loadCredentials(ctx context.Context, namespace string, ref *wazuhv1.RepositoryCredentialsRef) (string, string, error) {
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: namespace}, secret); err != nil {
 		return "", "", fmt.Errorf("failed to get credentials secret %s: %w", ref.Name, err)
@@ -327,7 +327,9 @@ func (r *SnapshotRepositoryReconciler) loadCredentials(ctx context.Context, name
 }
 
 // updateStatus updates the repository status
-func (r *SnapshotRepositoryReconciler) updateStatus(ctx context.Context, repo *wazuhv1alpha1.OpenSearchSnapshotRepository, phase, message string, verified bool) error {
+//
+//nolint:unparam // verified param kept for when repository verification is implemented
+func (r *SnapshotRepositoryReconciler) updateStatus(ctx context.Context, repo *wazuhv1.OpenSearchSnapshotRepository, phase, message string, verified bool) error {
 	repo.Status.Phase = phase
 	repo.Status.Message = message
 	repo.Status.Verified = verified
@@ -338,6 +340,6 @@ func (r *SnapshotRepositoryReconciler) updateStatus(ctx context.Context, repo *w
 }
 
 // Delete handles cleanup when a snapshot repository is deleted (called by controller)
-func (r *SnapshotRepositoryReconciler) Delete(ctx context.Context, repo *wazuhv1alpha1.OpenSearchSnapshotRepository) error {
+func (r *SnapshotRepositoryReconciler) Delete(ctx context.Context, repo *wazuhv1.OpenSearchSnapshotRepository) error {
 	return r.handleDeletion(ctx, repo)
 }

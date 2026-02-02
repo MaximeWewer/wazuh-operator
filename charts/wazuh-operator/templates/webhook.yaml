@@ -1,0 +1,96 @@
+{{- if .Values.webhook.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "wazuh-operator.fullname" . }}-webhook-service
+  namespace: {{ include "wazuh-operator.namespace" . }}
+  labels:
+    {{- include "wazuh-operator.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: 443
+      protocol: TCP
+      targetPort: 9443
+  selector:
+    {{- include "wazuh-operator.selectorLabels" . | nindent 4 }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "wazuh-operator.fullname" . }}-mutating-webhook
+  labels:
+    {{- include "wazuh-operator.labels" . | nindent 4 }}
+  {{- if .Values.certManager.enabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ include "wazuh-operator.namespace" . }}/{{ include "wazuh-operator.fullname" . }}-webhook-cert
+  {{- end }}
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      {{- if not .Values.certManager.enabled }}
+      caBundle: {{ .Values.webhook.caBundle | default "" | quote }}
+      {{- end }}
+      service:
+        name: {{ include "wazuh-operator.fullname" . }}-webhook-service
+        namespace: {{ include "wazuh-operator.namespace" . }}
+        path: /mutate-resources-wazuh-com-v1-wazuhcluster
+    failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+    name: mwazuhcluster.kb.io
+    rules:
+      - apiGroups:
+          - resources.wazuh.com
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - wazuhclusters
+    sideEffects: None
+    {{- if .Values.webhook.namespaceSelector }}
+    namespaceSelector:
+      {{- toYaml .Values.webhook.namespaceSelector | nindent 6 }}
+    {{- end }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: {{ include "wazuh-operator.fullname" . }}-validating-webhook
+  labels:
+    {{- include "wazuh-operator.labels" . | nindent 4 }}
+  {{- if .Values.certManager.enabled }}
+  annotations:
+    cert-manager.io/inject-ca-from: {{ include "wazuh-operator.namespace" . }}/{{ include "wazuh-operator.fullname" . }}-webhook-cert
+  {{- end }}
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      {{- if not .Values.certManager.enabled }}
+      caBundle: {{ .Values.webhook.caBundle | default "" | quote }}
+      {{- end }}
+      service:
+        name: {{ include "wazuh-operator.fullname" . }}-webhook-service
+        namespace: {{ include "wazuh-operator.namespace" . }}
+        path: /validate-resources-wazuh-com-v1-wazuhcluster
+    failurePolicy: {{ .Values.webhook.failurePolicy | default "Fail" }}
+    name: vwazuhcluster.kb.io
+    rules:
+      - apiGroups:
+          - resources.wazuh.com
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        resources:
+          - wazuhclusters
+    sideEffects: None
+    {{- if .Values.webhook.namespaceSelector }}
+    namespaceSelector:
+      {{- toYaml .Values.webhook.namespaceSelector | nindent 6 }}
+    {{- end }}
+{{- end }}

@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -44,7 +44,7 @@ type IndexerConfigMapBuilder struct {
 	actionGroups   string
 	tenants        string
 	// Auth config from CRD
-	authConfig      *v1alpha1.OpenSearchAuthConfigSpec
+	authConfig      *v1.OpenSearchAuthConfigSpec
 	resolvedSecrets map[string]string
 }
 
@@ -85,50 +85,50 @@ func (b *IndexerConfigMapBuilder) WithAnnotations(annotations map[string]string)
 }
 
 // WithOpenSearchYML sets the opensearch.yml content
-func (b *IndexerConfigMapBuilder) WithOpenSearchYML(config string) *IndexerConfigMapBuilder {
-	b.opensearchYML = config
+func (b *IndexerConfigMapBuilder) WithOpenSearchYML(content string) *IndexerConfigMapBuilder {
+	b.opensearchYML = content
 	return b
 }
 
 // WithSecurityConfig sets the security config content
-func (b *IndexerConfigMapBuilder) WithSecurityConfig(config string) *IndexerConfigMapBuilder {
-	b.securityConfig = config
+func (b *IndexerConfigMapBuilder) WithSecurityConfig(content string) *IndexerConfigMapBuilder {
+	b.securityConfig = content
 	return b
 }
 
 // WithInternalUsers sets the internal_users.yml content
-func (b *IndexerConfigMapBuilder) WithInternalUsers(config string) *IndexerConfigMapBuilder {
-	b.internalUsers = config
+func (b *IndexerConfigMapBuilder) WithInternalUsers(content string) *IndexerConfigMapBuilder {
+	b.internalUsers = content
 	return b
 }
 
 // WithRoles sets the roles.yml content
-func (b *IndexerConfigMapBuilder) WithRoles(config string) *IndexerConfigMapBuilder {
-	b.roles = config
+func (b *IndexerConfigMapBuilder) WithRoles(content string) *IndexerConfigMapBuilder {
+	b.roles = content
 	return b
 }
 
 // WithRolesMapping sets the roles_mapping.yml content
-func (b *IndexerConfigMapBuilder) WithRolesMapping(config string) *IndexerConfigMapBuilder {
-	b.rolesMapping = config
+func (b *IndexerConfigMapBuilder) WithRolesMapping(content string) *IndexerConfigMapBuilder {
+	b.rolesMapping = content
 	return b
 }
 
 // WithActionGroups sets the action_groups.yml content
-func (b *IndexerConfigMapBuilder) WithActionGroups(config string) *IndexerConfigMapBuilder {
-	b.actionGroups = config
+func (b *IndexerConfigMapBuilder) WithActionGroups(content string) *IndexerConfigMapBuilder {
+	b.actionGroups = content
 	return b
 }
 
 // WithTenants sets the tenants.yml content
-func (b *IndexerConfigMapBuilder) WithTenants(config string) *IndexerConfigMapBuilder {
-	b.tenants = config
+func (b *IndexerConfigMapBuilder) WithTenants(content string) *IndexerConfigMapBuilder {
+	b.tenants = content
 	return b
 }
 
 // WithAuthConfig sets the authentication configuration from CRD
 // This will be used to generate the security config.yml
-func (b *IndexerConfigMapBuilder) WithAuthConfig(authConfig *v1alpha1.OpenSearchAuthConfigSpec) *IndexerConfigMapBuilder {
+func (b *IndexerConfigMapBuilder) WithAuthConfig(authConfig *v1.OpenSearchAuthConfigSpec) *IndexerConfigMapBuilder {
 	b.authConfig = authConfig
 	return b
 }

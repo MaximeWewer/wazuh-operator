@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -262,7 +262,7 @@ func (a *K8sAdapter) CreateEvent(ctx context.Context, obj client.Object, eventTy
 }
 
 // EmitEvent is a helper to emit events with standard formatting
-func (a *K8sAdapter) EmitEvent(ctx context.Context, obj client.Object, eventType, reason string, messageFmt string, args ...interface{}) error {
+func (a *K8sAdapter) EmitEvent(ctx context.Context, obj client.Object, eventType, reason, messageFmt string, args ...any) error {
 	message := fmt.Sprintf(messageFmt, args...)
 	return a.CreateEvent(ctx, obj, eventType, reason, message)
 }

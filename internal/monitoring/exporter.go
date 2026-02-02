@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -54,7 +54,7 @@ type WazuhExporterConfig struct {
 }
 
 // NewWazuhExporterConfig creates a new WazuhExporterConfig from the cluster spec
-func NewWazuhExporterConfig(cluster *wazuhv1alpha1.WazuhCluster) *WazuhExporterConfig {
+func NewWazuhExporterConfig(cluster *wazuhv1.WazuhCluster) *WazuhExporterConfig {
 	if !isWazuhExporterEnabled(cluster) {
 		return nil
 	}
@@ -257,7 +257,7 @@ func (c *WazuhExporterConfig) GetMetricsPort() int32 {
 
 // BuildExporterSidecar is a convenience function to build the exporter sidecar container
 // from a WazuhCluster spec. Returns nil if exporter is not enabled.
-func BuildExporterSidecar(cluster *wazuhv1alpha1.WazuhCluster) *corev1.Container {
+func BuildExporterSidecar(cluster *wazuhv1.WazuhCluster) *corev1.Container {
 	config := NewWazuhExporterConfig(cluster)
 	if config == nil {
 		return nil
@@ -268,7 +268,7 @@ func BuildExporterSidecar(cluster *wazuhv1alpha1.WazuhCluster) *corev1.Container
 
 // GetExporterMetricsPort returns the metrics port from the cluster spec
 // Returns 0 if exporter is not enabled
-func GetExporterMetricsPort(cluster *wazuhv1alpha1.WazuhCluster) int32 {
+func GetExporterMetricsPort(cluster *wazuhv1.WazuhCluster) int32 {
 	if !isWazuhExporterEnabled(cluster) {
 		return 0
 	}

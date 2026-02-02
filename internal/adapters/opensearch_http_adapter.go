@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -66,6 +67,9 @@ func NewOpenSearchHTTPAdapter(config OpenSearchConfig) (*OpenSearchHTTPAdapter, 
 		TLSClientConfig: tlsConfig,
 	}
 
+	// Wrap transport with OpenTelemetry instrumentation
+	instrumentedTransport := telemetry.WrapTransport(transport, "opensearch-http")
+
 	timeout := config.Timeout
 	if timeout == 0 {
 		timeout = constants.TimeoutOpenSearchRequest
@@ -76,14 +80,14 @@ func NewOpenSearchHTTPAdapter(config OpenSearchConfig) (*OpenSearchHTTPAdapter, 
 		username: config.Username,
 		password: config.Password,
 		httpClient: &http.Client{
-			Transport: transport,
+			Transport: instrumentedTransport,
 			Timeout:   timeout,
 		},
 	}, nil
 }
 
 // doRequest performs an authenticated request
-func (a *OpenSearchHTTPAdapter) doRequest(ctx context.Context, method, path string, body interface{}) (*http.Response, error) {
+func (a *OpenSearchHTTPAdapter) doRequest(ctx context.Context, method, path string, body any) (*http.Response, error) {
 	var bodyReader io.Reader
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
@@ -280,7 +284,7 @@ func (a *OpenSearchHTTPAdapter) DeleteRole(ctx context.Context, roleName string)
 }
 
 // CreateIndex creates an index
-func (a *OpenSearchHTTPAdapter) CreateIndex(ctx context.Context, indexName string, settings map[string]interface{}) error {
+func (a *OpenSearchHTTPAdapter) CreateIndex(ctx context.Context, indexName string, settings map[string]any) error {
 	resp, err := a.doRequest(ctx, "PUT", "/"+indexName, settings)
 	if err != nil {
 		return err

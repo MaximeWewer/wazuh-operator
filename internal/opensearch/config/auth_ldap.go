@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
 // ============================================================================
@@ -28,8 +28,8 @@ import (
 // ============================================================================
 
 // buildLDAPAuthDomain creates the LDAP authentication domain configuration
-func (b *AuthConfigBuilder) buildLDAPAuthDomain(spec *v1alpha1.LDAPAuthSpec) AuthDomainConfig {
-	config := make(map[string]interface{})
+func (b *AuthConfigBuilder) buildLDAPAuthDomain(spec *v1.LDAPAuthSpec) AuthDomainConfig {
+	config := make(map[string]any)
 
 	// Enable LDAP
 	config["enable_ssl"] = false
@@ -84,8 +84,8 @@ func (b *AuthConfigBuilder) buildLDAPAuthDomain(spec *v1alpha1.LDAPAuthSpec) Aut
 }
 
 // buildLDAPAuthzDomain creates the LDAP authorization domain configuration
-func (b *AuthConfigBuilder) buildLDAPAuthzDomain(spec *v1alpha1.LDAPAuthSpec) AuthDomainConfig {
-	config := make(map[string]interface{})
+func (b *AuthConfigBuilder) buildLDAPAuthzDomain(spec *v1.LDAPAuthSpec) AuthDomainConfig {
+	config := make(map[string]any)
 
 	// TLS configuration (same as auth)
 	if spec.TLS != nil {
@@ -142,12 +142,12 @@ func (b *AuthConfigBuilder) buildLDAPAuthzDomain(spec *v1alpha1.LDAPAuthSpec) Au
 
 // LDAPConfigBuilder builds LDAP-specific configuration
 type LDAPConfigBuilder struct {
-	spec            *v1alpha1.LDAPAuthSpec
+	spec            *v1.LDAPAuthSpec
 	resolvedSecrets map[string]string
 }
 
 // NewLDAPConfigBuilder creates a new LDAPConfigBuilder
-func NewLDAPConfigBuilder(spec *v1alpha1.LDAPAuthSpec) *LDAPConfigBuilder {
+func NewLDAPConfigBuilder(spec *v1.LDAPAuthSpec) *LDAPConfigBuilder {
 	return &LDAPConfigBuilder{
 		spec:            spec,
 		resolvedSecrets: make(map[string]string),
@@ -161,8 +161,8 @@ func (b *LDAPConfigBuilder) WithBindPassword(password string) *LDAPConfigBuilder
 }
 
 // BuildAuthBackendConfig returns the LDAP authentication backend configuration
-func (b *LDAPConfigBuilder) BuildAuthBackendConfig() map[string]interface{} {
-	config := make(map[string]interface{})
+func (b *LDAPConfigBuilder) BuildAuthBackendConfig() map[string]any {
+	config := make(map[string]any)
 
 	// TLS settings
 	if b.spec.TLS != nil {
@@ -195,12 +195,12 @@ func (b *LDAPConfigBuilder) BuildAuthBackendConfig() map[string]interface{} {
 }
 
 // BuildAuthzBackendConfig returns the LDAP authorization backend configuration
-func (b *LDAPConfigBuilder) BuildAuthzBackendConfig() map[string]interface{} {
+func (b *LDAPConfigBuilder) BuildAuthzBackendConfig() map[string]any {
 	if b.spec.Authorization == nil {
 		return nil
 	}
 
-	config := make(map[string]interface{})
+	config := make(map[string]any)
 
 	// TLS settings (same as auth)
 	if b.spec.TLS != nil {

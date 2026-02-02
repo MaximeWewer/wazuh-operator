@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 )
 
@@ -51,7 +51,7 @@ func (r *PolicyReconciler) WithAPIClient(apiClient *api.Client) *PolicyReconcile
 }
 
 // Reconcile reconciles an OpenSearch ISM policy
-func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1alpha1.OpenSearchISMPolicy) error {
+func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSearchISMPolicy) error {
 	log := logf.FromContext(ctx)
 
 	if r.APIClient == nil {
@@ -94,7 +94,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1alpha1.
 }
 
 // buildISMPolicy converts the CRD spec to an ISM policy
-func (r *PolicyReconciler) buildISMPolicy(policy *wazuhv1alpha1.OpenSearchISMPolicy) api.ISMPolicy {
+func (r *PolicyReconciler) buildISMPolicy(policy *wazuhv1.OpenSearchISMPolicy) api.ISMPolicy {
 	ismPolicy := api.ISMPolicy{
 		Policy: api.ISMPolicySpec{
 			Description:  policy.Spec.Description,
@@ -150,7 +150,7 @@ func (r *PolicyReconciler) buildISMPolicy(policy *wazuhv1alpha1.OpenSearchISMPol
 }
 
 // updateStatus updates the policy status
-func (r *PolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1alpha1.OpenSearchISMPolicy, phase, message string) error {
+func (r *PolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.OpenSearchISMPolicy, phase, message string) error {
 	policy.Status.Phase = phase
 	policy.Status.Message = message
 	now := metav1.Now()
@@ -160,7 +160,7 @@ func (r *PolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1alph
 }
 
 // Delete handles cleanup when a policy is deleted
-func (r *PolicyReconciler) Delete(ctx context.Context, policy *wazuhv1alpha1.OpenSearchISMPolicy) error {
+func (r *PolicyReconciler) Delete(ctx context.Context, policy *wazuhv1.OpenSearchISMPolicy) error {
 	log := logf.FromContext(ctx)
 
 	if r.APIClient == nil {

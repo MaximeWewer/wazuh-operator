@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -100,7 +100,7 @@ type ManagerWorkersSpec struct {
 
 // ComputeSpecHash computes a SHA256 hash of spec fields for change detection
 // The spec must be a struct with JSON tags for deterministic serialization
-func ComputeSpecHash(spec interface{}) (string, error) {
+func ComputeSpecHash(spec any) (string, error) {
 	data, err := json.Marshal(spec)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal spec for hashing: %w", err)
@@ -179,22 +179,7 @@ func ComputeIndexerSpecHash(replicas int32, version string, resources *corev1.Re
 
 // ComputeIndexerSpecHashFull computes the spec hash with all fields
 func ComputeIndexerSpecHashFull(input IndexerSpecInput) (string, error) {
-	spec := IndexerSpec{
-		Replicas:          input.Replicas,
-		Version:           input.Version,
-		Resources:         input.Resources,
-		StorageSize:       input.StorageSize,
-		JavaOpts:          input.JavaOpts,
-		Image:             input.Image,
-		NodeSelector:      input.NodeSelector,
-		Tolerations:       input.Tolerations,
-		Affinity:          input.Affinity,
-		Env:               input.Env,
-		EnvFrom:           input.EnvFrom,
-		Labels:            input.Labels,
-		Annotations:       input.Annotations,
-		MonitoringEnabled: input.MonitoringEnabled,
-	}
+	spec := IndexerSpec(input)
 	return ComputeSpecHash(spec)
 }
 
@@ -225,19 +210,7 @@ func ComputeDashboardSpecHash(replicas int32, version string, resources *corev1.
 
 // ComputeDashboardSpecHashFull computes the spec hash with all fields
 func ComputeDashboardSpecHashFull(input DashboardSpecInput) (string, error) {
-	spec := DashboardSpec{
-		Replicas:     input.Replicas,
-		Version:      input.Version,
-		Resources:    input.Resources,
-		Image:        input.Image,
-		NodeSelector: input.NodeSelector,
-		Tolerations:  input.Tolerations,
-		Affinity:     input.Affinity,
-		Env:          input.Env,
-		EnvFrom:      input.EnvFrom,
-		Labels:       input.Labels,
-		Annotations:  input.Annotations,
-	}
+	spec := DashboardSpec(input)
 	return ComputeSpecHash(spec)
 }
 
@@ -272,20 +245,7 @@ func ComputeManagerMasterSpecHash(version string, resources *corev1.ResourceRequ
 
 // ComputeManagerMasterSpecHashFull computes the spec hash with all fields
 func ComputeManagerMasterSpecHashFull(input ManagerMasterSpecInput) (string, error) {
-	spec := ManagerMasterSpec{
-		Version:           input.Version,
-		Resources:         input.Resources,
-		StorageSize:       input.StorageSize,
-		Image:             input.Image,
-		NodeSelector:      input.NodeSelector,
-		Tolerations:       input.Tolerations,
-		Affinity:          input.Affinity,
-		Env:               input.Env,
-		EnvFrom:           input.EnvFrom,
-		Labels:            input.Labels,
-		Annotations:       input.Annotations,
-		MonitoringEnabled: input.MonitoringEnabled,
-	}
+	spec := ManagerMasterSpec(input)
 	return ComputeSpecHash(spec)
 }
 
@@ -321,20 +281,7 @@ func ComputeManagerWorkersSpecHash(replicas int32, version string, resources *co
 
 // ComputeManagerWorkersSpecHashFull computes the spec hash with all fields
 func ComputeManagerWorkersSpecHashFull(input ManagerWorkersSpecInput) (string, error) {
-	spec := ManagerWorkersSpec{
-		Replicas:     input.Replicas,
-		Version:      input.Version,
-		Resources:    input.Resources,
-		StorageSize:  input.StorageSize,
-		Image:        input.Image,
-		NodeSelector: input.NodeSelector,
-		Tolerations:  input.Tolerations,
-		Affinity:     input.Affinity,
-		Env:          input.Env,
-		EnvFrom:      input.EnvFrom,
-		Labels:       input.Labels,
-		Annotations:  input.Annotations,
-	}
+	spec := ManagerWorkersSpec(input)
 	return ComputeSpecHash(spec)
 }
 

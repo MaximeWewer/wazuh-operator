@@ -15,7 +15,7 @@ Monitoring can be enabled for both Wazuh Manager and OpenSearch Indexer componen
 Enable monitoring in the WazuhCluster spec:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhCluster
 metadata:
   name: wazuh
@@ -172,35 +172,21 @@ In the Prometheus UI, navigate to Status > Targets to verify the Wazuh targets a
 
 ## Troubleshooting
 
-### Exporter Not Starting
+For monitoring issues, see [Common Issues](../troubleshooting/common-issues.md).
 
-1. Check pod logs:
+**Quick checks:**
 
-   ```bash
-   kubectl logs -n wazuh <manager-pod> -c wazuh-exporter
-   ```
+```bash
+# Check exporter logs
+kubectl logs -n wazuh <manager-pod> -c wazuh-exporter
 
-2. Verify API credentials are correct
+# Verify ServiceMonitor
+kubectl get servicemonitor -n wazuh
 
-### ServiceMonitor Not Discovered
+# Test metrics endpoint
+kubectl exec -n wazuh <manager-pod> -c wazuh-exporter -- wget -qO- http://localhost:9090/metrics
+```
 
-1. Verify labels match Prometheus selector:
+## Related Documentation
 
-   ```bash
-   kubectl get prometheus -o yaml | grep serviceMonitorSelector
-   ```
-
-2. Check ServiceMonitor in correct namespace:
-   ```bash
-   kubectl get servicemonitor -n wazuh
-   ```
-
-### Metrics Not Available
-
-1. Check exporter is running:
-
-   ```bash
-   kubectl exec -n wazuh <manager-pod> -c wazuh-exporter -- wget -qO- http://localhost:9090/metrics
-   ```
-
-2. Verify network connectivity between Prometheus and pods
+- [OpenTelemetry](./opentelemetry.md) - Distributed tracing for debugging reconciliation loops and API calls

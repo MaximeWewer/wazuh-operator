@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -148,7 +148,7 @@ func SetOpenSearchConflictCondition(conditions *[]metav1.Condition, hasConflict 
 }
 
 // SetOpenSearchClusterHealthyCondition sets the ClusterHealthy condition
-func SetOpenSearchClusterHealthyCondition(conditions *[]metav1.Condition, health string, message string) {
+func SetOpenSearchClusterHealthyCondition(conditions *[]metav1.Condition, health, message string) {
 	var status metav1.ConditionStatus
 	var reason string
 

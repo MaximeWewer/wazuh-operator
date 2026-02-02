@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -83,6 +83,14 @@ const (
 
 	// AnnotationConfigHash stores the hash of ConfigMap/Secret content for pod restart detection
 	AnnotationConfigHash = "wazuh.com/config-hash"
+
+	// AnnotationRuleHash stores the hash of WazuhRule content for pod restart detection
+	// This triggers rolling update when custom detection rules are added, modified, or deleted
+	AnnotationRuleHash = "wazuh.com/rule-hash"
+
+	// AnnotationDecoderHash stores the hash of WazuhDecoder content for pod restart detection
+	// This triggers rolling update when custom log decoders are added, modified, or deleted
+	AnnotationDecoderHash = "wazuh.com/decoder-hash"
 
 	// NOTE: AnnotationCertHash is defined in labels.go as "wazuh.com/cert-hash"
 )

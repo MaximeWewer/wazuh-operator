@@ -11,7 +11,7 @@ When enabled, the operator creates a CronJob that periodically executes a cleanu
 Log rotation is configured in the `manager.logRotation` section of the WazuhCluster spec:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhCluster
 metadata:
   name: wazuh

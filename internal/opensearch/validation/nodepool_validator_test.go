@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,39 +19,39 @@ package validation
 import (
 	"testing"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
 func TestValidateNodePools_ModeExclusivity(t *testing.T) {
 	tests := []struct {
 		name        string
-		spec        *v1alpha1.WazuhIndexerClusterSpec
+		spec        *v1.WazuhIndexerClusterSpec
 		expectValid bool
 		errorField  string
 	}{
 		{
 			name: "simple mode - replicas only",
-			spec: &v1alpha1.WazuhIndexerClusterSpec{
+			spec: &v1.WazuhIndexerClusterSpec{
 				Replicas: 3,
 			},
 			expectValid: true,
 		},
 		{
 			name: "advanced mode - nodePools only",
-			spec: &v1alpha1.WazuhIndexerClusterSpec{
-				NodePools: []v1alpha1.IndexerNodePoolSpec{
-					{Name: "masters", Replicas: 3, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager}},
-					{Name: "data", Replicas: 3, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleData}},
+			spec: &v1.WazuhIndexerClusterSpec{
+				NodePools: []v1.IndexerNodePoolSpec{
+					{Name: "masters", Replicas: 3, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager}},
+					{Name: "data", Replicas: 3, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleData}},
 				},
 			},
 			expectValid: true,
 		},
 		{
 			name: "invalid - both replicas and nodePools",
-			spec: &v1alpha1.WazuhIndexerClusterSpec{
+			spec: &v1.WazuhIndexerClusterSpec{
 				Replicas: 3,
-				NodePools: []v1alpha1.IndexerNodePoolSpec{
-					{Name: "masters", Replicas: 3, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager}},
+				NodePools: []v1.IndexerNodePoolSpec{
+					{Name: "masters", Replicas: 3, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager}},
 				},
 			},
 			expectValid: false,
@@ -84,57 +84,57 @@ func TestValidateNodePools_ModeExclusivity(t *testing.T) {
 func TestValidateNodePools_ClusterManagerQuorum(t *testing.T) {
 	tests := []struct {
 		name        string
-		spec        *v1alpha1.WazuhIndexerClusterSpec
+		spec        *v1.WazuhIndexerClusterSpec
 		expectValid bool
 	}{
 		{
 			name: "valid - 3 cluster_manager nodes",
-			spec: &v1alpha1.WazuhIndexerClusterSpec{
-				NodePools: []v1alpha1.IndexerNodePoolSpec{
-					{Name: "masters", Replicas: 3, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager}},
-					{Name: "data", Replicas: 5, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleData}},
+			spec: &v1.WazuhIndexerClusterSpec{
+				NodePools: []v1.IndexerNodePoolSpec{
+					{Name: "masters", Replicas: 3, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager}},
+					{Name: "data", Replicas: 5, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleData}},
 				},
 			},
 			expectValid: true,
 		},
 		{
 			name: "valid - 5 cluster_manager nodes",
-			spec: &v1alpha1.WazuhIndexerClusterSpec{
-				NodePools: []v1alpha1.IndexerNodePoolSpec{
-					{Name: "masters", Replicas: 5, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager}},
-					{Name: "data", Replicas: 3, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleData}},
+			spec: &v1.WazuhIndexerClusterSpec{
+				NodePools: []v1.IndexerNodePoolSpec{
+					{Name: "masters", Replicas: 5, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager}},
+					{Name: "data", Replicas: 3, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleData}},
 				},
 			},
 			expectValid: true,
 		},
 		{
 			name: "valid - split across pools",
-			spec: &v1alpha1.WazuhIndexerClusterSpec{
-				NodePools: []v1alpha1.IndexerNodePoolSpec{
-					{Name: "masters-a", Replicas: 1, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager}},
-					{Name: "masters-b", Replicas: 1, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager}},
-					{Name: "masters-c", Replicas: 1, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager}},
-					{Name: "data", Replicas: 5, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleData}},
+			spec: &v1.WazuhIndexerClusterSpec{
+				NodePools: []v1.IndexerNodePoolSpec{
+					{Name: "masters-a", Replicas: 1, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager}},
+					{Name: "masters-b", Replicas: 1, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager}},
+					{Name: "masters-c", Replicas: 1, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager}},
+					{Name: "data", Replicas: 5, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleData}},
 				},
 			},
 			expectValid: true,
 		},
 		{
 			name: "invalid - only 1 cluster_manager node",
-			spec: &v1alpha1.WazuhIndexerClusterSpec{
-				NodePools: []v1alpha1.IndexerNodePoolSpec{
-					{Name: "masters", Replicas: 1, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager}},
-					{Name: "data", Replicas: 5, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleData}},
+			spec: &v1.WazuhIndexerClusterSpec{
+				NodePools: []v1.IndexerNodePoolSpec{
+					{Name: "masters", Replicas: 1, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager}},
+					{Name: "data", Replicas: 5, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleData}},
 				},
 			},
 			expectValid: false,
 		},
 		{
 			name: "invalid - 2 cluster_manager nodes",
-			spec: &v1alpha1.WazuhIndexerClusterSpec{
-				NodePools: []v1alpha1.IndexerNodePoolSpec{
-					{Name: "masters", Replicas: 2, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager}},
-					{Name: "data", Replicas: 5, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleData}},
+			spec: &v1.WazuhIndexerClusterSpec{
+				NodePools: []v1.IndexerNodePoolSpec{
+					{Name: "masters", Replicas: 2, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager}},
+					{Name: "data", Replicas: 5, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleData}},
 				},
 			},
 			expectValid: false,
@@ -154,25 +154,25 @@ func TestValidateNodePools_ClusterManagerQuorum(t *testing.T) {
 func TestValidateNodePools_DataNodeMinimum(t *testing.T) {
 	tests := []struct {
 		name        string
-		spec        *v1alpha1.WazuhIndexerClusterSpec
+		spec        *v1.WazuhIndexerClusterSpec
 		expectValid bool
 	}{
 		{
 			name: "valid - has data nodes",
-			spec: &v1alpha1.WazuhIndexerClusterSpec{
-				NodePools: []v1alpha1.IndexerNodePoolSpec{
-					{Name: "masters", Replicas: 3, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager}},
-					{Name: "data", Replicas: 1, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleData}},
+			spec: &v1.WazuhIndexerClusterSpec{
+				NodePools: []v1.IndexerNodePoolSpec{
+					{Name: "masters", Replicas: 3, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager}},
+					{Name: "data", Replicas: 1, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleData}},
 				},
 			},
 			expectValid: true,
 		},
 		{
 			name: "invalid - no data nodes (0 replicas)",
-			spec: &v1alpha1.WazuhIndexerClusterSpec{
-				NodePools: []v1alpha1.IndexerNodePoolSpec{
-					{Name: "masters", Replicas: 3, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager}},
-					{Name: "data", Replicas: 0, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleData}},
+			spec: &v1.WazuhIndexerClusterSpec{
+				NodePools: []v1.IndexerNodePoolSpec{
+					{Name: "masters", Replicas: 3, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager}},
+					{Name: "data", Replicas: 0, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleData}},
 				},
 			},
 			expectValid: false,
@@ -192,27 +192,27 @@ func TestValidateNodePools_DataNodeMinimum(t *testing.T) {
 func TestValidateNodePools_UniqueNames(t *testing.T) {
 	tests := []struct {
 		name        string
-		spec        *v1alpha1.WazuhIndexerClusterSpec
+		spec        *v1.WazuhIndexerClusterSpec
 		expectValid bool
 	}{
 		{
 			name: "valid - unique names",
-			spec: &v1alpha1.WazuhIndexerClusterSpec{
-				NodePools: []v1alpha1.IndexerNodePoolSpec{
-					{Name: "masters", Replicas: 3, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager}},
-					{Name: "data-hot", Replicas: 3, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleData}},
-					{Name: "data-warm", Replicas: 2, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleData}},
+			spec: &v1.WazuhIndexerClusterSpec{
+				NodePools: []v1.IndexerNodePoolSpec{
+					{Name: "masters", Replicas: 3, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager}},
+					{Name: "data-hot", Replicas: 3, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleData}},
+					{Name: "data-warm", Replicas: 2, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleData}},
 				},
 			},
 			expectValid: true,
 		},
 		{
 			name: "invalid - duplicate names",
-			spec: &v1alpha1.WazuhIndexerClusterSpec{
-				NodePools: []v1alpha1.IndexerNodePoolSpec{
-					{Name: "masters", Replicas: 3, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager}},
-					{Name: "data", Replicas: 3, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleData}},
-					{Name: "data", Replicas: 2, Roles: []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleData}}, // duplicate
+			spec: &v1.WazuhIndexerClusterSpec{
+				NodePools: []v1.IndexerNodePoolSpec{
+					{Name: "masters", Replicas: 3, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager}},
+					{Name: "data", Replicas: 3, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleData}},
+					{Name: "data", Replicas: 2, Roles: []v1.IndexerNodeRole{v1.IndexerNodeRoleData}}, // duplicate
 				},
 			},
 			expectValid: false,
@@ -232,52 +232,52 @@ func TestValidateNodePools_UniqueNames(t *testing.T) {
 func TestValidateNodePoolSpec_NameFormat(t *testing.T) {
 	tests := []struct {
 		name        string
-		pool        *v1alpha1.IndexerNodePoolSpec
+		pool        *v1.IndexerNodePoolSpec
 		expectValid bool
 	}{
 		{
 			name:        "valid - lowercase alphanumeric",
-			pool:        &v1alpha1.IndexerNodePoolSpec{Name: "masters", Replicas: 3},
+			pool:        &v1.IndexerNodePoolSpec{Name: "masters", Replicas: 3},
 			expectValid: true,
 		},
 		{
 			name:        "valid - with hyphens",
-			pool:        &v1alpha1.IndexerNodePoolSpec{Name: "data-hot", Replicas: 3},
+			pool:        &v1.IndexerNodePoolSpec{Name: "data-hot", Replicas: 3},
 			expectValid: true,
 		},
 		{
 			name:        "valid - numbers",
-			pool:        &v1alpha1.IndexerNodePoolSpec{Name: "data1", Replicas: 3},
+			pool:        &v1.IndexerNodePoolSpec{Name: "data1", Replicas: 3},
 			expectValid: true,
 		},
 		{
 			name:        "invalid - uppercase",
-			pool:        &v1alpha1.IndexerNodePoolSpec{Name: "MASTERS", Replicas: 3},
+			pool:        &v1.IndexerNodePoolSpec{Name: "MASTERS", Replicas: 3},
 			expectValid: false,
 		},
 		{
 			name:        "invalid - starts with hyphen",
-			pool:        &v1alpha1.IndexerNodePoolSpec{Name: "-data", Replicas: 3},
+			pool:        &v1.IndexerNodePoolSpec{Name: "-data", Replicas: 3},
 			expectValid: false,
 		},
 		{
 			name:        "invalid - ends with hyphen",
-			pool:        &v1alpha1.IndexerNodePoolSpec{Name: "data-", Replicas: 3},
+			pool:        &v1.IndexerNodePoolSpec{Name: "data-", Replicas: 3},
 			expectValid: false,
 		},
 		{
 			name:        "invalid - contains underscore",
-			pool:        &v1alpha1.IndexerNodePoolSpec{Name: "data_hot", Replicas: 3},
+			pool:        &v1.IndexerNodePoolSpec{Name: "data_hot", Replicas: 3},
 			expectValid: false,
 		},
 		{
 			name:        "invalid - empty name",
-			pool:        &v1alpha1.IndexerNodePoolSpec{Name: "", Replicas: 3},
+			pool:        &v1.IndexerNodePoolSpec{Name: "", Replicas: 3},
 			expectValid: false,
 		},
 		{
 			name:        "invalid - too long (>15 chars)",
-			pool:        &v1alpha1.IndexerNodePoolSpec{Name: "thisnameistoolong", Replicas: 3},
+			pool:        &v1.IndexerNodePoolSpec{Name: "thisnameistoolong", Replicas: 3},
 			expectValid: false,
 		},
 	}
@@ -295,42 +295,42 @@ func TestValidateNodePoolSpec_NameFormat(t *testing.T) {
 func TestValidateNodePoolSpec_Roles(t *testing.T) {
 	tests := []struct {
 		name        string
-		pool        *v1alpha1.IndexerNodePoolSpec
+		pool        *v1.IndexerNodePoolSpec
 		expectValid bool
 	}{
 		{
 			name: "valid - cluster_manager role",
-			pool: &v1alpha1.IndexerNodePoolSpec{
+			pool: &v1.IndexerNodePoolSpec{
 				Name:     "masters",
 				Replicas: 3,
-				Roles:    []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager},
+				Roles:    []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager},
 			},
 			expectValid: true,
 		},
 		{
 			name: "valid - multiple roles",
-			pool: &v1alpha1.IndexerNodePoolSpec{
+			pool: &v1.IndexerNodePoolSpec{
 				Name:     "data",
 				Replicas: 3,
-				Roles:    []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleData, v1alpha1.IndexerNodeRoleIngest},
+				Roles:    []v1.IndexerNodeRole{v1.IndexerNodeRoleData, v1.IndexerNodeRoleIngest},
 			},
 			expectValid: true,
 		},
 		{
 			name: "valid - empty roles (coordinating only)",
-			pool: &v1alpha1.IndexerNodePoolSpec{
+			pool: &v1.IndexerNodePoolSpec{
 				Name:     "coord",
 				Replicas: 2,
-				Roles:    []v1alpha1.IndexerNodeRole{},
+				Roles:    []v1.IndexerNodeRole{},
 			},
 			expectValid: true,
 		},
 		{
 			name: "valid - coordinating_only explicit",
-			pool: &v1alpha1.IndexerNodePoolSpec{
+			pool: &v1.IndexerNodePoolSpec{
 				Name:     "coord",
 				Replicas: 2,
-				Roles:    []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleCoordinatingOnly},
+				Roles:    []v1.IndexerNodeRole{v1.IndexerNodeRoleCoordinatingOnly},
 			},
 			expectValid: true,
 		},
@@ -404,7 +404,7 @@ func TestValidateModeTransition(t *testing.T) {
 func TestValidateScaleDown_QuorumProtection(t *testing.T) {
 	tests := []struct {
 		name                 string
-		pool                 *v1alpha1.IndexerNodePoolSpec
+		pool                 *v1.IndexerNodePoolSpec
 		currentReplicas      int32
 		desiredReplicas      int32
 		totalClusterManagers int32
@@ -412,10 +412,10 @@ func TestValidateScaleDown_QuorumProtection(t *testing.T) {
 	}{
 		{
 			name: "valid - scale down data nodes",
-			pool: &v1alpha1.IndexerNodePoolSpec{
+			pool: &v1.IndexerNodePoolSpec{
 				Name:     "data",
 				Replicas: 5,
-				Roles:    []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleData},
+				Roles:    []v1.IndexerNodeRole{v1.IndexerNodeRoleData},
 			},
 			currentReplicas:      5,
 			desiredReplicas:      3,
@@ -424,10 +424,10 @@ func TestValidateScaleDown_QuorumProtection(t *testing.T) {
 		},
 		{
 			name: "valid - scale down cluster_manager but keep quorum",
-			pool: &v1alpha1.IndexerNodePoolSpec{
+			pool: &v1.IndexerNodePoolSpec{
 				Name:     "masters",
 				Replicas: 5,
-				Roles:    []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager},
+				Roles:    []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager},
 			},
 			currentReplicas:      5,
 			desiredReplicas:      3,
@@ -436,10 +436,10 @@ func TestValidateScaleDown_QuorumProtection(t *testing.T) {
 		},
 		{
 			name: "invalid - scale down would break quorum",
-			pool: &v1alpha1.IndexerNodePoolSpec{
+			pool: &v1.IndexerNodePoolSpec{
 				Name:     "masters",
 				Replicas: 3,
-				Roles:    []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager},
+				Roles:    []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager},
 			},
 			currentReplicas:      3,
 			desiredReplicas:      1,
@@ -448,10 +448,10 @@ func TestValidateScaleDown_QuorumProtection(t *testing.T) {
 		},
 		{
 			name: "not a scale-down",
-			pool: &v1alpha1.IndexerNodePoolSpec{
+			pool: &v1.IndexerNodePoolSpec{
 				Name:     "masters",
 				Replicas: 3,
-				Roles:    []v1alpha1.IndexerNodeRole{v1alpha1.IndexerNodeRoleClusterManager},
+				Roles:    []v1.IndexerNodeRole{v1.IndexerNodeRoleClusterManager},
 			},
 			currentReplicas:      3,
 			desiredReplicas:      5,

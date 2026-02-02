@@ -1,0 +1,81 @@
+# ArgoCD Application for Wazuh Operator
+#
+# This Application deploys the Wazuh Operator using Helm.
+#
+# Prerequisites:
+#   - ArgoCD installed
+#   - Wazuh Operator Helm chart available
+#
+# Usage:
+#   kubectl apply -f operator-application.yaml
+#
+apiVersion: argoproj.io/v1
+kind: Application
+metadata:
+  name: wazuh-operator
+  namespace: argocd
+  # Finalizer ensures cleanup when Application is deleted
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default  # Or use 'wazuh' AppProject
+
+  source:
+    # Option 1: OCI Helm chart (recommended for production)
+    # repoURL: oci://ghcr.io/maximewewer/charts
+    # chart: wazuh-operator
+    # targetRevision: 1.0.0
+
+    # Option 2: Git repository with Helm chart
+    repoURL: https://github.com/MaximeWewer/wazuh-operator.git
+    path: charts/wazuh-operator
+    targetRevision: main  # Or specific tag: v1.0.0
+
+    helm:
+      releaseName: wazuh-operator
+      values: |
+        # Operator configuration
+        operator:
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+
+          # Enable ServiceMonitor for Prometheus
+          serviceMonitor:
+            enabled: true
+            labels:
+              prometheus: kube-prometheus
+
+        # Enable leader election for HA
+        leaderElection:
+          enabled: true
+
+        # Network policies (optional)
+        networkPolicy:
+          enabled: false
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: wazuh-system
+
+  # Sync policy
+  syncPolicy:
+    # Manual sync (recommended for operators)
+    # Uncomment below for automated sync
+    # automated:
+    #   prune: true
+    #   selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true  # Required for CRDs
+
+  # Ignore differences in generated fields
+  ignoreDifferences:
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      jsonPointers:
+        - /status

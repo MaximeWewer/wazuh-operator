@@ -137,7 +137,7 @@ ReconcileWithHashes()
 Each component follows the same pattern:
 
 ```go
-func (r *Reconciler) reconcileComponent(ctx context.Context, cluster *v1alpha1.WazuhCluster) error {
+func (r *Reconciler) reconcileComponent(ctx context.Context, cluster *v1.WazuhCluster) error {
     // 1. Build desired state
     desired := builder.NewComponentBuilder(cluster).Build()
 
@@ -195,8 +195,8 @@ Changes to any watched resource trigger reconciliation.
 Status is updated at the end of each reconciliation:
 
 ```go
-cluster.Status.Phase = v1alpha1.ClusterPhaseRunning
-cluster.Status.Manager = &v1alpha1.ComponentStatus{
+cluster.Status.Phase = v1.ClusterPhaseRunning
+cluster.Status.Manager = &v1.ComponentStatus{
     Phase:         "Running",
     ReadyReplicas: 3,
     Replicas:      3,
@@ -217,7 +217,7 @@ if isTransient(err) {
 }
 
 // Permanent error - update status and don't requeue
-cluster.Status.Phase = v1alpha1.ClusterPhaseFailed
+cluster.Status.Phase = v1.ClusterPhaseFailed
 cluster.Status.Conditions = append(cluster.Status.Conditions, metav1.Condition{
     Type:    "Ready",
     Status:  metav1.ConditionFalse,

@@ -49,7 +49,7 @@ Create and manage individual indices.
 #### Basic Index
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchIndex
 metadata:
   name: custom-logs
@@ -66,7 +66,7 @@ spec:
 #### Index with Mappings
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchIndex
 metadata:
   name: application-events
@@ -96,7 +96,7 @@ spec:
 #### Index with Aliases
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchIndex
 metadata:
   name: logs-2024-01
@@ -152,7 +152,7 @@ Define templates for automatic index creation.
 #### Basic Template
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchIndexTemplate
 metadata:
   name: logs-template
@@ -179,7 +179,7 @@ spec:
 #### Template with Component Templates
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchIndexTemplate
 metadata:
   name: wazuh-custom-template
@@ -203,7 +203,7 @@ spec:
 #### Data Stream Template
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchIndexTemplate
 metadata:
   name: metrics-stream
@@ -241,7 +241,7 @@ Create reusable template components.
 #### Settings Component
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchComponentTemplate
 metadata:
   name: base-settings
@@ -260,7 +260,7 @@ spec:
 #### Mappings Component
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchComponentTemplate
 metadata:
   name: wazuh-mappings
@@ -342,7 +342,7 @@ Index State Management policies for lifecycle management.
 #### Basic Retention Policy
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchISMPolicy
 metadata:
   name: wazuh-retention-30d
@@ -371,7 +371,7 @@ spec:
 #### Hot-Warm-Cold Policy
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchISMPolicy
 metadata:
   name: wazuh-tiered-storage
@@ -430,7 +430,7 @@ spec:
 #### Force Merge Policy
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchISMPolicy
 metadata:
   name: optimize-indices
@@ -500,7 +500,7 @@ Automated backup policies.
 ### Example
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchSnapshotPolicy
 metadata:
   name: daily-backup
@@ -525,6 +525,51 @@ spec:
     minCount: 7
     maxCount: 30
 ```
+
+## Events
+
+The operator emits Kubernetes events for OpenSearch index CRDs, visible via `kubectl describe`:
+
+| Event Type | Reason            | Description                          |
+| ---------- | ----------------- | ------------------------------------ |
+| Normal     | `Created`         | Index/template created in OpenSearch |
+| Normal     | `Synced`          | Resource successfully synchronized   |
+| Normal     | `Deleted`         | Resource deleted from OpenSearch     |
+| Warning    | `SyncFailed`      | Failed to sync to OpenSearch         |
+| Warning    | `ConnectionError` | Failed to connect to OpenSearch      |
+| Warning    | `DeleteFailed`    | Failed to delete from OpenSearch     |
+
+### View Events
+
+```bash
+# View events for a specific index
+kubectl describe osidx custom-logs -n wazuh
+
+# View all index-related events
+kubectl get events -n wazuh --field-selector involvedObject.kind=OpenSearchIndex
+```
+
+## Validation Constraints
+
+OpenSearch index CRDs enforce validation rules:
+
+| CRD                | Field                  | Constraint                                           |
+| ------------------ | ---------------------- | ---------------------------------------------------- |
+| `OpenSearchIndex`  | `aliases[].name`       | Min 1 char, max 255 chars                            |
+| `OpenSearchIndex`  | `aliases[].name`       | Pattern: lowercase letters, numbers, hyphens, dots   |
+| `OpenSearchIndex`  | `settings.numberOfShards`   | Minimum 1                                       |
+| `OpenSearchIndex`  | `settings.numberOfReplicas` | Minimum 0                                       |
+
+### Alias Name Rules
+
+Alias names must follow OpenSearch naming conventions:
+
+- Start with a lowercase letter or number
+- Contain only lowercase letters, numbers, hyphens (`-`), and dots (`.`)
+- Maximum 255 characters
+
+**Valid examples:** `logs-current`, `wazuh.alerts`, `2024-01-logs`
+**Invalid examples:** `Logs_Current` (uppercase/underscore), `-invalid` (starts with hyphen)
 
 ## Common Operations
 

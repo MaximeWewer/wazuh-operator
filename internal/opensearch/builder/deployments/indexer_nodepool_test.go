@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -344,7 +344,7 @@ func TestNodePoolStatefulSetBuilder_InitContainers(t *testing.T) {
 	// Check for required init containers
 	foundInitConfig := false
 	foundVolumeMountHack := false
-	foundVmMaxMapCount := false
+	foundVMMaxMapCount := false
 
 	for _, c := range initContainers {
 		switch c.Name {
@@ -353,7 +353,7 @@ func TestNodePoolStatefulSetBuilder_InitContainers(t *testing.T) {
 		case "volume-mount-hack":
 			foundVolumeMountHack = true
 		case "increase-the-vm-max-map-count":
-			foundVmMaxMapCount = true
+			foundVMMaxMapCount = true
 		}
 	}
 
@@ -363,7 +363,7 @@ func TestNodePoolStatefulSetBuilder_InitContainers(t *testing.T) {
 	if !foundVolumeMountHack {
 		t.Error("volume-mount-hack init container not found")
 	}
-	if !foundVmMaxMapCount {
+	if !foundVMMaxMapCount {
 		t.Error("increase-the-vm-max-map-count init container not found")
 	}
 }

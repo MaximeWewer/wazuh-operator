@@ -1,1 +1,302 @@
-# TODO
+# golangci-lint configuration for wazuh-operator
+# https://golangci-lint.run/docs/configuration/
+version: "2"
+
+run:
+  timeout: 10m
+  build-tags:
+    - integration
+  tests: true
+
+output:
+  formats:
+    text:
+      path: stdout
+  sort-order:
+    - linter
+    - file
+
+linters:
+  default: none
+  enable:
+    # Default linters
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+    # Code quality
+    - misspell
+    - unconvert
+    - unparam
+    - nakedret
+    # - prealloc  # Disabled: micro-optimizations with marginal value
+    - whitespace
+
+    # Security
+    - gosec
+    - bodyclose
+
+    # Error handling
+    - nilerr
+    - errorlint
+
+    # Performance
+    - gocritic
+
+    # Style
+    - revive
+
+    # Complexity
+    - gocyclo
+    - gocognit
+    - nestif
+
+    # Bugs
+    - durationcheck
+    - noctx
+    - rowserrcheck
+    - sqlclosecheck
+    - wastedassign
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: false
+      exclude-functions:
+        - io.Copy
+        - io.WriteTo
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (net/http.ResponseWriter).Write
+
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        - shadow
+
+    staticcheck:
+      checks:
+        - all
+        - -SA1019
+
+    misspell:
+      locale: US
+
+    nakedret:
+      max-func-lines: 30
+
+    prealloc:
+      simple: true
+      for-loops: true
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
+        - appendAssign
+        - commentedOutCode
+        - ifElseChain
+        - sprintfQuotedString  # Intentional for YAML config generation with explicit quotes
+        - unnamedResult        # Named return values are optional; code is clear without them
+
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+          disabled: true
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
+        - name: package-comments
+          disabled: true
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+
+    gocyclo:
+      min-complexity: 20
+
+    gocognit:
+      min-complexity: 30
+
+    nestif:
+      min-complexity: 6
+
+    gosec:
+      excludes:
+        - G101  # Potential hardcoded credentials (many false positives)
+        - G104  # Unhandled errors (covered by errcheck)
+        - G115  # Integer overflow conversion (safe in K8s context)
+        - G304  # File path from tainted input (required for config loading)
+        - G402  # TLS InsecureSkipVerify (intentional for self-signed certs)
+
+    errorlint:
+      errorf: true
+      asserts: true
+      comparison: true
+
+    unparam:
+      check-exported: false
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      # Exclude generated files
+      - path: "zz_generated.*\\.go$"
+        linters:
+          - all
+
+      # Exclude deep copy files
+      - path: "deepcopy\\.go$"
+        linters:
+          - all
+
+      # Test files can be more relaxed
+      - path: "_test\\.go$"
+        linters:
+          - errcheck
+          - gosec
+          - gocritic
+          - gocyclo
+          - gocognit
+          - nestif
+          - unparam
+          - govet
+
+      # Test utilities need to run subprocess commands
+      - path: "test/.*\\.go$"
+        linters:
+          - gosec
+          - noctx
+
+      # Allow dot imports in test files (Ginkgo/Gomega)
+      - path: "_test\\.go$"
+        text: "should not use dot imports"
+
+      # Main function can be complex
+      - path: "cmd/.*/main\\.go$"
+        linters:
+          - gocyclo
+          - gocognit
+
+      # Controllers often have complex reconcile functions
+      - path: "controllers/.*\\.go$"
+        linters:
+          - gocyclo
+          - gocognit
+          - nestif
+
+      # Reconcilers can have complex logic
+      - path: "internal/.*/reconciler/.*\\.go$"
+        linters:
+          - gocyclo
+          - gocognit
+          - nestif
+
+      # Config builders generate complex YAML and naturally have high complexity
+      - path: "internal/.*/config/.*\\.go$"
+        linters:
+          - gocyclo
+          - gocognit
+          - nestif
+
+      # Builder files for K8s resources have complex construction logic
+      - path: "internal/.*/builder/.*\\.go$"
+        linters:
+          - gocyclo
+          - gocognit
+          - nestif
+
+      # API clients have complex response parsing
+      - path: "internal/.*/api/.*\\.go$"
+        linters:
+          - gocyclo
+          - gocognit
+          - nestif
+
+      # Drain logic is inherently complex
+      - path: "internal/.*/drain/.*\\.go$"
+        linters:
+          - gocyclo
+          - gocognit
+          - nestif
+
+      # Monitoring reconciler has complex service discovery
+      - path: "internal/monitoring/.*\\.go$"
+        linters:
+          - nestif
+
+      # Allow shadowing err in common patterns
+      - text: 'shadow: declaration of "err"'
+        linters:
+          - govet
+
+      # Allow context.Background() in main
+      - path: "cmd/.*/main\\.go$"
+        text: "context.Background()"
+        linters:
+          - noctx
+
+      # Exclude some revive rules for API types
+      - path: "api/.*_types\\.go$"
+        linters:
+          - revive
+        text: "exported:"
+
+      # Exclude deprecated usage warnings
+      - text: "SA1019:"
+        linters:
+          - staticcheck
+
+      # errcheck: ignore Close() errors
+      - text: "Error return value of .((os\\.)?std(out|err)\\..*|.*Close|.*Flush|os\\.Remove(All)?|.*print(f|ln)?|os\\.(Un)?Setenv). is not checked"
+        linters:
+          - errcheck
+
+      # govet: false positive with K8s types
+      - text: "composite literal uses unkeyed fields"
+        linters:
+          - govet
+
+    paths:
+      - vendor
+      - bin
+      - testbin
+      - third_party
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/MaximeWewer/wazuh-operator
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

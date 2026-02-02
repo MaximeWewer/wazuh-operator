@@ -17,7 +17,7 @@ The Wazuh Dashboard can connect to multiple Wazuh Manager APIs simultaneously. T
 For simple deployments, use `defaultApiEndpoint` to automatically configure the dashboard to connect to the manager API:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhCluster
 metadata:
   name: wazuh
@@ -41,7 +41,7 @@ The operator automatically generates the API URL based on the manager service na
 For advanced deployments with multiple API endpoints:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhCluster
 metadata:
   name: wazuh
@@ -153,7 +153,7 @@ stringData:
   password: MySecurePassword.123
 ---
 # Reference in WazuhCluster
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhCluster
 metadata:
   name: wazuh

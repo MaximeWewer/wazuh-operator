@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
@@ -48,7 +48,7 @@ func NewAuthConfigReconciler(c client.Client, scheme *runtime.Scheme) *AuthConfi
 }
 
 // Reconcile reconciles an OpenSearchAuthConfig
-func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv1alpha1.OpenSearchAuthConfig) error {
+func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv1.OpenSearchAuthConfig) error {
 	log := logf.FromContext(ctx)
 
 	// Resolve secrets
@@ -84,7 +84,7 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 }
 
 // resolveSecrets resolves all secret references in the auth config
-func (r *AuthConfigReconciler) resolveSecrets(ctx context.Context, authConfig *wazuhv1alpha1.OpenSearchAuthConfig) (map[string]string, error) {
+func (r *AuthConfigReconciler) resolveSecrets(ctx context.Context, authConfig *wazuhv1.OpenSearchAuthConfig) (map[string]string, error) {
 	secrets := make(map[string]string)
 	namespace := authConfig.Namespace
 
@@ -129,7 +129,7 @@ func (r *AuthConfigReconciler) resolveSecrets(ctx context.Context, authConfig *w
 }
 
 // getSecretValue retrieves a value from a Kubernetes secret
-func (r *AuthConfigReconciler) getSecretValue(ctx context.Context, namespace string, ref *wazuhv1alpha1.SecretKeyRef) (string, error) {
+func (r *AuthConfigReconciler) getSecretValue(ctx context.Context, namespace string, ref *wazuhv1.SecretKeyRef) (string, error) {
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: namespace}, secret); err != nil {
 		return "", err
@@ -149,7 +149,7 @@ func (r *AuthConfigReconciler) getSecretValue(ctx context.Context, namespace str
 }
 
 // validateConfig validates the auth configuration
-func (r *AuthConfigReconciler) validateConfig(authConfig *wazuhv1alpha1.OpenSearchAuthConfig, secrets map[string]string) error {
+func (r *AuthConfigReconciler) validateConfig(authConfig *wazuhv1.OpenSearchAuthConfig, secrets map[string]string) error {
 	builder := config.NewAuthConfigBuilder(&authConfig.Spec)
 	for key, value := range secrets {
 		builder.WithSecret(key, value)
@@ -190,7 +190,7 @@ func (r *AuthConfigReconciler) validateConfig(authConfig *wazuhv1alpha1.OpenSear
 // reconcileIndexerSecurityConfig creates/updates the security config for the indexer
 func (r *AuthConfigReconciler) reconcileIndexerSecurityConfig(
 	ctx context.Context,
-	authConfig *wazuhv1alpha1.OpenSearchAuthConfig,
+	authConfig *wazuhv1.OpenSearchAuthConfig,
 	clusterName, namespace string,
 	secrets map[string]string,
 ) error {
@@ -248,7 +248,7 @@ func (r *AuthConfigReconciler) reconcileIndexerSecurityConfig(
 // reconcileDashboardConfig creates/updates the dashboard config for SSO
 func (r *AuthConfigReconciler) reconcileDashboardConfig(
 	ctx context.Context,
-	authConfig *wazuhv1alpha1.OpenSearchAuthConfig,
+	authConfig *wazuhv1.OpenSearchAuthConfig,
 	clusterName, namespace string,
 	secrets map[string]string,
 ) error {
@@ -313,7 +313,7 @@ func (r *AuthConfigReconciler) reconcileDashboardConfig(
 }
 
 // getActiveAuthDomains returns the list of enabled auth methods
-func (r *AuthConfigReconciler) getActiveAuthDomains(authConfig *wazuhv1alpha1.OpenSearchAuthConfig) []string {
+func (r *AuthConfigReconciler) getActiveAuthDomains(authConfig *wazuhv1.OpenSearchAuthConfig) []string {
 	var domains []string
 
 	if authConfig.Spec.BasicAuth != nil && authConfig.Spec.BasicAuth.Enabled {
@@ -333,7 +333,7 @@ func (r *AuthConfigReconciler) getActiveAuthDomains(authConfig *wazuhv1alpha1.Op
 }
 
 // updateStatus updates the status of the OpenSearchAuthConfig
-func (r *AuthConfigReconciler) updateStatus(ctx context.Context, authConfig *wazuhv1alpha1.OpenSearchAuthConfig, phase, message string) error {
+func (r *AuthConfigReconciler) updateStatus(ctx context.Context, authConfig *wazuhv1.OpenSearchAuthConfig, phase, message string) error {
 	authConfig.Status.Phase = phase
 	authConfig.Status.Message = message
 	authConfig.Status.ObservedGeneration = authConfig.Generation

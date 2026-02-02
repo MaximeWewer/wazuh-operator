@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +17,14 @@ limitations under the License.
 package controllers
 
 import (
+	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+
 	"context"
+
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -27,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
 )
 
@@ -48,10 +55,26 @@ type OpenSearchAuthConfigReconciler struct {
 
 // Reconcile is the main reconciliation loop for OpenSearchAuthConfig
 func (r *OpenSearchAuthConfigReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// Start tracing span
+	ctx, span := telemetry.Tracer().Start(ctx, "OpenSearchAuthConfig.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("namespace", req.Namespace),
+			attribute.String("name", req.Name),
+		))
+	defer span.End()
+
+	// Track reconciliation metrics
+	startTime := time.Now()
+	var reconcileResult = "success"
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		metrics.RecordReconciliation("OpenSearchAuthConfig", req.Namespace, reconcileResult, duration)
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Fetch the OpenSearchAuthConfig instance
-	authConfig := &wazuhv1alpha1.OpenSearchAuthConfig{}
+	authConfig := &wazuhv1.OpenSearchAuthConfig{}
 	if err := r.Get(ctx, req.NamespacedName, authConfig); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("OpenSearchAuthConfig resource not found, ignoring since object must be deleted")
@@ -74,7 +97,7 @@ func (r *OpenSearchAuthConfigReconciler) Reconcile(ctx context.Context, req ctrl
 // SetupWithManager sets up the controller with the Manager
 func (r *OpenSearchAuthConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1alpha1.OpenSearchAuthConfig{}).
+		For(&wazuhv1.OpenSearchAuthConfig{}).
 		// Watch secrets for secret references (client secret, exchange key, etc.)
 		Watches(
 			&corev1.Secret{},
@@ -87,9 +110,12 @@ func (r *OpenSearchAuthConfigReconciler) SetupWithManager(mgr ctrl.Manager) erro
 // findAuthConfigsForSecret finds all AuthConfigs that reference the given secret
 func (r *OpenSearchAuthConfigReconciler) findAuthConfigsForSecret(ctx context.Context, obj client.Object) []ctrl.Request {
 	log := logf.FromContext(ctx)
-	secret := obj.(*corev1.Secret)
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		return nil
+	}
 
-	authConfigs := &wazuhv1alpha1.OpenSearchAuthConfigList{}
+	authConfigs := &wazuhv1.OpenSearchAuthConfigList{}
 	if err := r.List(ctx, authConfigs, client.InNamespace(secret.Namespace)); err != nil {
 		log.Error(err, "Failed to list OpenSearchAuthConfigs")
 		return nil
@@ -109,7 +135,7 @@ func (r *OpenSearchAuthConfigReconciler) findAuthConfigsForSecret(ctx context.Co
 }
 
 // authConfigReferencesSecret checks if the auth config references the given secret
-func (r *OpenSearchAuthConfigReconciler) authConfigReferencesSecret(authConfig *wazuhv1alpha1.OpenSearchAuthConfig, secretName string) bool {
+func (r *OpenSearchAuthConfigReconciler) authConfigReferencesSecret(authConfig *wazuhv1.OpenSearchAuthConfig, secretName string) bool {
 	// Check OIDC client secret
 	if authConfig.Spec.OIDC != nil && authConfig.Spec.OIDC.ClientSecretRef != nil {
 		if authConfig.Spec.OIDC.ClientSecretRef.Name == secretName {

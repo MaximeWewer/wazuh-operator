@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,17 +32,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/storage"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/deployments"
+	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/hpa"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/config"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
+	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
 
 // WorkerReconciler handles reconciliation of Wazuh Worker nodes
@@ -71,7 +74,7 @@ func (r *WorkerReconciler) WithRecorder(recorder record.EventRecorder) *WorkerRe
 }
 
 // Reconcile reconciles the Wazuh Worker nodes
-func (r *WorkerReconciler) Reconcile(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *WorkerReconciler) Reconcile(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Skip if no workers configured
@@ -100,17 +103,22 @@ func (r *WorkerReconciler) Reconcile(ctx context.Context, cluster *wazuhv1alpha1
 		return fmt.Errorf("failed to reconcile worker volume expansion: %w", err)
 	}
 
+	// Reconcile HPA for workers (if enabled)
+	if err := r.reconcileHPA(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to reconcile worker HPA: %w", err)
+	}
+
 	log.Info("Worker reconciliation completed")
 	return nil
 }
 
 // reconcileConfigMap reconciles the worker ConfigMap
-func (r *WorkerReconciler) reconcileConfigMap(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *WorkerReconciler) reconcileConfigMap(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "worker")
 
 	// Convert CRD config spec to internal config structs
-	var configSpec *wazuhv1alpha1.WazuhConfigSpec
+	var configSpec *wazuhv1.WazuhConfigSpec
 	if cluster.Spec.Manager != nil {
 		configSpec = cluster.Spec.Manager.Config
 	}
@@ -207,6 +215,14 @@ func (r *WorkerReconciler) reconcileConfigMap(ctx context.Context, cluster *wazu
 	}
 	configBuilder.WithFilebeatConfig(filebeatConf)
 
+	// Generate wazuh-template.json for filebeat index template
+	templateBuilder := config.NewFilebeatTemplateBuilder()
+	filebeatTemplate, err := templateBuilder.Build()
+	if err != nil {
+		return fmt.Errorf("failed to build wazuh-template.json: %w", err)
+	}
+	configBuilder.WithFilebeatTemplate(filebeatTemplate)
+
 	// Generate per-pod configs for workers with overrides
 	if cluster.Spec.Manager != nil && len(cluster.Spec.Manager.Workers.Overrides) > 0 {
 		for _, override := range cluster.Spec.Manager.Workers.Overrides {
@@ -283,7 +299,7 @@ func (r *WorkerReconciler) getConfigHash(ctx context.Context, clusterName, names
 }
 
 // reconcileServices reconciles worker services
-func (r *WorkerReconciler) reconcileServices(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *WorkerReconciler) reconcileServices(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	serviceBuilder := services.NewWorkerServiceBuilder(cluster.Name, cluster.Namespace)
@@ -311,7 +327,7 @@ func (r *WorkerReconciler) reconcileServices(ctx context.Context, cluster *wazuh
 }
 
 // reconcileStatefulSet reconciles the worker StatefulSet
-func (r *WorkerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *WorkerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Extract spec values for hash computation
@@ -417,7 +433,7 @@ func (r *WorkerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wa
 		if updateReason == "" {
 			updateReason = "config-change"
 		} else {
-			updateReason = updateReason + ",config-change"
+			updateReason += ",config-change"
 		}
 
 		// Emit event for config change detection
@@ -444,7 +460,7 @@ func (r *WorkerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wa
 }
 
 // GetStatus returns the worker status
-func (r *WorkerReconciler) GetStatus(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*wazuhv1alpha1.ComponentStatus, error) {
+func (r *WorkerReconciler) GetStatus(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*wazuhv1.ComponentStatus, error) {
 	sts := &appsv1.StatefulSet{}
 	name := fmt.Sprintf("%s-manager-worker", cluster.Name)
 
@@ -455,7 +471,7 @@ func (r *WorkerReconciler) GetStatus(ctx context.Context, cluster *wazuhv1alpha1
 		return nil, err
 	}
 
-	return &wazuhv1alpha1.ComponentStatus{
+	return &wazuhv1.ComponentStatus{
 		Replicas:      sts.Status.Replicas,
 		ReadyReplicas: sts.Status.ReadyReplicas,
 		Phase:         getStatefulSetPhase(sts),
@@ -463,7 +479,7 @@ func (r *WorkerReconciler) GetStatus(ctx context.Context, cluster *wazuhv1alpha1
 }
 
 // ReconcileStandalone reconciles a standalone WazuhWorker resource
-func (r *WorkerReconciler) ReconcileStandalone(ctx context.Context, worker *wazuhv1alpha1.WazuhWorker) error {
+func (r *WorkerReconciler) ReconcileStandalone(ctx context.Context, worker *wazuhv1.WazuhWorker) error {
 	log := logf.FromContext(ctx)
 
 	// Skip if no replicas configured
@@ -492,7 +508,7 @@ func (r *WorkerReconciler) ReconcileStandalone(ctx context.Context, worker *wazu
 }
 
 // reconcileStandaloneConfigMap reconciles a ConfigMap for standalone worker
-func (r *WorkerReconciler) reconcileStandaloneConfigMap(ctx context.Context, worker *wazuhv1alpha1.WazuhWorker) error {
+func (r *WorkerReconciler) reconcileStandaloneConfigMap(ctx context.Context, worker *wazuhv1.WazuhWorker) error {
 	configBuilder := configmaps.NewManagerConfigMapBuilder(worker.Name, worker.Namespace, "worker")
 
 	// Build configuration based on manager reference
@@ -523,6 +539,14 @@ func (r *WorkerReconciler) reconcileStandaloneConfigMap(ctx context.Context, wor
 	}
 	configBuilder.WithFilebeatConfig(filebeatConf)
 
+	// Generate wazuh-template.json for filebeat index template
+	templateBuilder := config.NewFilebeatTemplateBuilder()
+	filebeatTemplate, err := templateBuilder.Build()
+	if err != nil {
+		return fmt.Errorf("failed to build wazuh-template.json: %w", err)
+	}
+	configBuilder.WithFilebeatTemplate(filebeatTemplate)
+
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(worker, configMap, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference: %w", err)
@@ -532,7 +556,7 @@ func (r *WorkerReconciler) reconcileStandaloneConfigMap(ctx context.Context, wor
 }
 
 // reconcileStandaloneServices reconciles services for standalone worker
-func (r *WorkerReconciler) reconcileStandaloneServices(ctx context.Context, worker *wazuhv1alpha1.WazuhWorker) error {
+func (r *WorkerReconciler) reconcileStandaloneServices(ctx context.Context, worker *wazuhv1.WazuhWorker) error {
 	serviceBuilder := services.NewWorkerServiceBuilder(worker.Name, worker.Namespace)
 
 	// Regular ClusterIP service
@@ -557,7 +581,7 @@ func (r *WorkerReconciler) reconcileStandaloneServices(ctx context.Context, work
 }
 
 // reconcileStandaloneStatefulSet reconciles a StatefulSet for standalone worker
-func (r *WorkerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, worker *wazuhv1alpha1.WazuhWorker) error {
+func (r *WorkerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, worker *wazuhv1.WazuhWorker) error {
 	log := logf.FromContext(ctx)
 
 	stsBuilder := deployments.NewWorkerStatefulSetBuilder(worker.Name, worker.Namespace)
@@ -607,7 +631,7 @@ func (r *WorkerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, w
 }
 
 // reconcileVolumeExpansion handles volume expansion for worker PVCs
-func (r *WorkerReconciler) reconcileVolumeExpansion(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *WorkerReconciler) reconcileVolumeExpansion(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Get requested storage size from spec
@@ -746,7 +770,7 @@ func (r *WorkerReconciler) reconcileVolumeExpansion(ctx context.Context, cluster
 }
 
 // getManagerWorkerPVCs returns all PVCs associated with the manager worker StatefulSet
-func (r *WorkerReconciler) getManagerWorkerPVCs(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*corev1.PersistentVolumeClaimList, error) {
+func (r *WorkerReconciler) getManagerWorkerPVCs(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*corev1.PersistentVolumeClaimList, error) {
 	pvcList := &corev1.PersistentVolumeClaimList{}
 
 	// List PVCs with labels matching worker StatefulSet
@@ -766,11 +790,11 @@ func (r *WorkerReconciler) getManagerWorkerPVCs(ctx context.Context, cluster *wa
 }
 
 // updateManagerWorkersExpansionStatus updates the manager workers expansion status in the cluster
-func (r *WorkerReconciler) updateManagerWorkersExpansionStatus(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, update *storage.ExpansionStatusUpdate) {
+func (r *WorkerReconciler) updateManagerWorkersExpansionStatus(ctx context.Context, cluster *wazuhv1.WazuhCluster, update *storage.ExpansionStatusUpdate) {
 	log := logf.FromContext(ctx)
 
 	if cluster.Status.VolumeExpansion == nil {
-		cluster.Status.VolumeExpansion = &wazuhv1alpha1.VolumeExpansionStatus{}
+		cluster.Status.VolumeExpansion = &wazuhv1.VolumeExpansionStatus{}
 	}
 
 	if update == nil {
@@ -803,7 +827,10 @@ func (r *WorkerReconciler) createOrUpdate(ctx context.Context, obj client.Object
 			Namespace: obj.GetNamespace(),
 		}
 
-		existing := obj.DeepCopyObject().(client.Object)
+		existing, ok := obj.DeepCopyObject().(client.Object)
+		if !ok {
+			return fmt.Errorf("failed to deep copy object")
+		}
 
 		err := r.Get(ctx, key, existing)
 		if err != nil && errors.IsNotFound(err) {
@@ -819,9 +846,10 @@ func (r *WorkerReconciler) createOrUpdate(ctx context.Context, obj client.Object
 
 		// Preserve immutable fields for Services
 		if svc, ok := obj.(*corev1.Service); ok {
-			existingSvc := existing.(*corev1.Service)
-			svc.Spec.ClusterIP = existingSvc.Spec.ClusterIP
-			svc.Spec.ClusterIPs = existingSvc.Spec.ClusterIPs
+			if existingSvc, ok := existing.(*corev1.Service); ok {
+				svc.Spec.ClusterIP = existingSvc.Spec.ClusterIP
+				svc.Spec.ClusterIPs = existingSvc.Spec.ClusterIPs
+			}
 		}
 
 		log.V(1).Info("Updating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
@@ -848,7 +876,7 @@ type ManagerDrainCheckResult struct {
 
 // CheckScaleDownDrain checks if a manager worker scale-down requires drain and handles it
 // Returns a result indicating drain status and whether scale-down should proceed
-func (r *WorkerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, desiredReplicas int32) (*ManagerDrainCheckResult, error) {
+func (r *WorkerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *wazuhv1.WazuhCluster, desiredReplicas int32) (*ManagerDrainCheckResult, error) {
 	log := logf.FromContext(ctx)
 	result := &ManagerDrainCheckResult{}
 
@@ -891,7 +919,7 @@ func (r *WorkerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *waz
 
 	// Check current drain phase
 	switch drainStatus.Phase {
-	case wazuhv1alpha1.DrainPhaseIdle, "":
+	case wazuhv1.DrainPhaseIdle, "":
 		// Start new drain
 		log.Info("Starting manager drain for scale-down", "targetPod", scaleInfo.TargetPodName)
 		if err := r.startDrain(ctx, cluster, scaleInfo, drainStatus); err != nil {
@@ -901,23 +929,23 @@ func (r *WorkerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *waz
 		result.DrainInProgress = true
 		return result, nil
 
-	case wazuhv1alpha1.DrainPhasePending, wazuhv1alpha1.DrainPhaseDraining:
+	case wazuhv1.DrainPhasePending, wazuhv1.DrainPhaseDraining:
 		// Drain in progress, check status
 		result.DrainInProgress = true
 		progress, err := r.monitorDrainProgress(ctx, cluster, scaleInfo.TargetPodName, drainStatus)
 		if err != nil {
 			result.Error = err
-			return result, nil // Continue reconciliation, don't fail
+			return result, nil //nolint:nilerr // Error stored in result.Error for caller to handle
 		}
 		result.Progress = progress
 		return result, nil
 
-	case wazuhv1alpha1.DrainPhaseVerifying:
+	case wazuhv1.DrainPhaseVerifying:
 		// Verify completion
 		complete, err := r.verifyDrainComplete(ctx, cluster, scaleInfo.TargetPodName, drainStatus)
 		if err != nil {
 			result.Error = err
-			return result, nil
+			return result, nil //nolint:nilerr // Error stored in result.Error for caller to handle
 		}
 		if complete {
 			result.DrainComplete = true
@@ -927,13 +955,13 @@ func (r *WorkerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *waz
 		}
 		return result, nil
 
-	case wazuhv1alpha1.DrainPhaseComplete:
+	case wazuhv1.DrainPhaseComplete:
 		// Drain complete, proceed with scale-down
 		log.Info("Manager drain complete, proceeding with scale-down")
 		result.DrainComplete = true
 		return result, nil
 
-	case wazuhv1alpha1.DrainPhaseFailed:
+	case wazuhv1.DrainPhaseFailed:
 		// Drain failed - check if we should retry or skip
 		log.Info("Previous drain failed", "message", drainStatus.Message)
 		result.Error = fmt.Errorf("drain failed: %s", drainStatus.Message)
@@ -946,20 +974,20 @@ func (r *WorkerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *waz
 }
 
 // getOrInitDrainStatus returns the current drain status or initializes a new one
-func (r *WorkerReconciler) getOrInitDrainStatus(cluster *wazuhv1alpha1.WazuhCluster) *wazuhv1alpha1.ComponentDrainStatus {
+func (r *WorkerReconciler) getOrInitDrainStatus(cluster *wazuhv1.WazuhCluster) *wazuhv1.ComponentDrainStatus {
 	if cluster.Status.Drain == nil {
-		cluster.Status.Drain = &wazuhv1alpha1.DrainStatus{}
+		cluster.Status.Drain = &wazuhv1.DrainStatus{}
 	}
 	if cluster.Status.Drain.Manager == nil {
-		cluster.Status.Drain.Manager = &wazuhv1alpha1.ComponentDrainStatus{
-			Phase: wazuhv1alpha1.DrainPhaseIdle,
+		cluster.Status.Drain.Manager = &wazuhv1.ComponentDrainStatus{
+			Phase: wazuhv1.DrainPhaseIdle,
 		}
 	}
 	return cluster.Status.Drain.Manager
 }
 
 // startDrain initiates the drain process for a manager worker node
-func (r *WorkerReconciler) startDrain(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, scaleInfo drain.ScaleDownInfo, status *wazuhv1alpha1.ComponentDrainStatus) error {
+func (r *WorkerReconciler) startDrain(ctx context.Context, cluster *wazuhv1.WazuhCluster, scaleInfo drain.ScaleDownInfo, status *wazuhv1.ComponentDrainStatus) error {
 	log := logf.FromContext(ctx)
 
 	// Initialize Wazuh client if needed
@@ -968,7 +996,7 @@ func (r *WorkerReconciler) startDrain(ctx context.Context, cluster *wazuhv1alpha
 	}
 
 	// Get drain configuration
-	var drainConfig *wazuhv1alpha1.ManagerDrainConfig
+	var drainConfig *wazuhv1.ManagerDrainConfig
 	if cluster.Spec.Drain != nil {
 		drainConfig = cluster.Spec.Drain.Manager
 	}
@@ -995,7 +1023,7 @@ func (r *WorkerReconciler) startDrain(ctx context.Context, cluster *wazuhv1alpha
 	// Start the actual drain
 	if err := r.drainer.StartDrain(ctx, nodeName); err != nil {
 		// Mark as failed
-		drain.MarkFailed(status, fmt.Sprintf("Failed to start drain: %v", err))
+		_ = drain.MarkFailed(status, fmt.Sprintf("Failed to start drain: %v", err))
 		if r.Recorder != nil {
 			r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.DrainEventReasonFailed,
 				fmt.Sprintf("Failed to start manager drain: %v", err))
@@ -1004,7 +1032,7 @@ func (r *WorkerReconciler) startDrain(ctx context.Context, cluster *wazuhv1alpha
 	}
 
 	// Transition to draining phase
-	if err := drain.TransitionTo(status, wazuhv1alpha1.DrainPhaseDraining, "Draining event queue on worker"); err != nil {
+	if err := drain.TransitionTo(status, wazuhv1.DrainPhaseDraining, "Draining event queue on worker"); err != nil {
 		log.Error(err, "Failed to transition to draining phase")
 	}
 
@@ -1013,7 +1041,9 @@ func (r *WorkerReconciler) startDrain(ctx context.Context, cluster *wazuhv1alpha
 }
 
 // monitorDrainProgress checks the current drain progress
-func (r *WorkerReconciler) monitorDrainProgress(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, nodeName string, status *wazuhv1alpha1.ComponentDrainStatus) (*drain.ManagerDrainProgress, error) {
+//
+//nolint:unparam // cluster param kept for consistency with other reconcilers
+func (r *WorkerReconciler) monitorDrainProgress(ctx context.Context, _ *wazuhv1.WazuhCluster, nodeName string, status *wazuhv1.ComponentDrainStatus) (*drain.ManagerDrainProgress, error) {
 	log := logf.FromContext(ctx)
 
 	if r.drainer == nil {
@@ -1038,7 +1068,7 @@ func (r *WorkerReconciler) monitorDrainProgress(ctx context.Context, cluster *wa
 
 	// Check for completion
 	if progress.IsComplete {
-		if err := drain.TransitionTo(status, wazuhv1alpha1.DrainPhaseVerifying, "Verifying queue drain completion"); err != nil {
+		if err := drain.TransitionTo(status, wazuhv1.DrainPhaseVerifying, "Verifying queue drain completion"); err != nil {
 			log.Error(err, "Failed to transition to verifying phase")
 		}
 	}
@@ -1047,7 +1077,7 @@ func (r *WorkerReconciler) monitorDrainProgress(ctx context.Context, cluster *wa
 }
 
 // verifyDrainComplete verifies that drain is fully complete
-func (r *WorkerReconciler) verifyDrainComplete(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, nodeName string, status *wazuhv1alpha1.ComponentDrainStatus) (bool, error) {
+func (r *WorkerReconciler) verifyDrainComplete(ctx context.Context, cluster *wazuhv1.WazuhCluster, nodeName string, status *wazuhv1.ComponentDrainStatus) (bool, error) {
 	log := logf.FromContext(ctx)
 
 	if r.drainer == nil {
@@ -1085,16 +1115,16 @@ func (r *WorkerReconciler) verifyDrainComplete(ctx context.Context, cluster *waz
 }
 
 // ensureWazuhClient creates or reuses a Wazuh API client
-func (r *WorkerReconciler) ensureWazuhClient(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *WorkerReconciler) ensureWazuhClient(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	if r.wazuhClient != nil {
 		return nil
 	}
 
 	// Build the Wazuh API URL from the cluster name
 	// The master service is typically named {cluster-name}-manager-master
-	masterServiceName := fmt.Sprintf("%s-manager-master", cluster.Name)
-	baseURL := fmt.Sprintf("https://%s.%s.svc.cluster.local:%d",
-		masterServiceName, cluster.Namespace, constants.PortManagerAPI)
+	masterServiceName := cluster.Name + "-manager-master"
+	baseURL := fmt.Sprintf("https://%s:%d",
+		dns.ServiceFQDN(masterServiceName, cluster.Namespace), constants.PortManagerAPI)
 
 	// Get API credentials from secret
 	username, password, err := r.getWazuhAPICredentials(ctx, cluster)
@@ -1113,7 +1143,7 @@ func (r *WorkerReconciler) ensureWazuhClient(ctx context.Context, cluster *wazuh
 }
 
 // getWazuhAPICredentials retrieves the Wazuh API credentials from the cluster
-func (r *WorkerReconciler) getWazuhAPICredentials(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (string, string, error) {
+func (r *WorkerReconciler) getWazuhAPICredentials(ctx context.Context, cluster *wazuhv1.WazuhCluster) (string, string, error) {
 	// Check if credentials are specified in the cluster spec
 	if cluster.Spec.Manager != nil && cluster.Spec.Manager.APICredentials != nil {
 		secretName := cluster.Spec.Manager.APICredentials.SecretName
@@ -1153,7 +1183,7 @@ func (r *WorkerReconciler) getWazuhAPICredentials(ctx context.Context, cluster *
 }
 
 // ResetDrainState resets the drain state after a successful scale-down
-func (r *WorkerReconciler) ResetDrainState(cluster *wazuhv1alpha1.WazuhCluster) {
+func (r *WorkerReconciler) ResetDrainState(cluster *wazuhv1.WazuhCluster) {
 	if cluster.Status.Drain != nil && cluster.Status.Drain.Manager != nil {
 		drain.Reset(cluster.Status.Drain.Manager)
 	}
@@ -1162,10 +1192,10 @@ func (r *WorkerReconciler) ResetDrainState(cluster *wazuhv1alpha1.WazuhCluster) 
 }
 
 // EvaluateDrainFeasibility evaluates if drain is feasible (for dry-run mode)
-func (r *WorkerReconciler) EvaluateDrainFeasibility(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, nodeName string) (*wazuhv1alpha1.DryRunResult, error) {
+func (r *WorkerReconciler) EvaluateDrainFeasibility(ctx context.Context, cluster *wazuhv1.WazuhCluster, nodeName string) (*wazuhv1.DryRunResult, error) {
 	// Initialize Wazuh client if needed
 	if err := r.ensureWazuhClient(ctx, cluster); err != nil {
-		return &wazuhv1alpha1.DryRunResult{
+		return &wazuhv1.DryRunResult{
 			Feasible:    false,
 			EvaluatedAt: metav1.Now(),
 			Component:   constants.DrainComponentManager,
@@ -1174,7 +1204,7 @@ func (r *WorkerReconciler) EvaluateDrainFeasibility(ctx context.Context, cluster
 	}
 
 	// Get drain configuration
-	var drainConfig *wazuhv1alpha1.ManagerDrainConfig
+	var drainConfig *wazuhv1.ManagerDrainConfig
 	if cluster.Spec.Drain != nil {
 		drainConfig = cluster.Spec.Drain.Manager
 	}
@@ -1182,4 +1212,68 @@ func (r *WorkerReconciler) EvaluateDrainFeasibility(ctx context.Context, cluster
 	// Create drainer for evaluation
 	drainer := drain.NewManagerDrainer(r.wazuhClient, logf.FromContext(ctx), drainConfig)
 	return drainer.EvaluateFeasibility(ctx, nodeName)
+}
+
+// reconcileHPA reconciles the HorizontalPodAutoscaler for workers
+func (r *WorkerReconciler) reconcileHPA(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	hpaName := cluster.Name + "-manager-worker"
+
+	// Check if HPA should be enabled
+	hpaEnabled := cluster.Spec.Manager != nil &&
+		cluster.Spec.Manager.Workers.HPA != nil &&
+		cluster.Spec.Manager.Workers.HPA.Enabled
+
+	if !hpaEnabled {
+		// If HPA should not exist, delete it if it does
+		existing := &autoscalingv2.HorizontalPodAutoscaler{}
+		err := r.Get(ctx, types.NamespacedName{Name: hpaName, Namespace: cluster.Namespace}, existing)
+		if err == nil {
+			log.Info("Deleting Worker HPA (no longer needed)", "name", hpaName)
+			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+				return fmt.Errorf("failed to delete worker HPA: %w", err)
+			}
+		} else if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get worker HPA: %w", err)
+		}
+		return nil
+	}
+
+	// Build the HPA
+	builder := hpa.NewWorkerHPABuilder(cluster.Name, cluster.Namespace).
+		WithSpec(cluster.Spec.Manager.Workers.HPA)
+
+	workerHPA := builder.Build()
+	if workerHPA == nil {
+		return nil
+	}
+
+	if err := controllerutil.SetControllerReference(cluster, workerHPA, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for worker HPA: %w", err)
+	}
+
+	// Check if HPA exists
+	existing := &autoscalingv2.HorizontalPodAutoscaler{}
+	err := r.Get(ctx, types.NamespacedName{Name: hpaName, Namespace: cluster.Namespace}, existing)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating Worker HPA", "name", hpaName,
+			"minReplicas", *workerHPA.Spec.MinReplicas,
+			"maxReplicas", workerHPA.Spec.MaxReplicas)
+		if err := r.Create(ctx, workerHPA); err != nil {
+			return fmt.Errorf("failed to create worker HPA: %w", err)
+		}
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("failed to get worker HPA: %w", err)
+	}
+
+	// Update HPA if needed
+	workerHPA.SetResourceVersion(existing.GetResourceVersion())
+	log.V(1).Info("Updating Worker HPA", "name", hpaName)
+	if err := r.Update(ctx, workerHPA); err != nil {
+		return fmt.Errorf("failed to update worker HPA: %w", err)
+	}
+
+	return nil
 }

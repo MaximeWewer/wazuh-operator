@@ -1,0 +1,125 @@
+{{- if and .Values.operator.metrics.enabled .Values.operator.prometheusRules.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "wazuh-operator.fullname" . }}-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "wazuh-operator.labels" . | nindent 4 }}
+    {{- with .Values.operator.prometheusRules.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: wazuh-operator-cluster
+      rules:
+        # Cluster Health Alerts
+        - alert: WazuhClusterUnhealthy
+          expr: wazuh_cluster_health < 3
+          for: {{ .Values.operator.prometheusRules.alerts.clusterUnhealthy.for | default "5m" }}
+          labels:
+            severity: {{ .Values.operator.prometheusRules.alerts.clusterUnhealthy.severity | default "warning" }}
+            {{- with .Values.operator.prometheusRules.alerts.clusterUnhealthy.labels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: "Wazuh cluster {{ "{{" }} $labels.cluster {{ "}}" }} is unhealthy"
+            description: "Wazuh cluster {{ "{{" }} $labels.cluster {{ "}}" }} in namespace {{ "{{" }} $labels.namespace {{ "}}" }} has health status {{ "{{" }} $value {{ "}}" }} (0=unknown, 1=red, 2=yellow, 3=green)"
+            runbook_url: {{ .Values.operator.prometheusRules.alerts.clusterUnhealthy.runbookUrl | default "" | quote }}
+
+        - alert: WazuhClusterCritical
+          expr: wazuh_cluster_health == 1
+          for: {{ .Values.operator.prometheusRules.alerts.clusterCritical.for | default "2m" }}
+          labels:
+            severity: {{ .Values.operator.prometheusRules.alerts.clusterCritical.severity | default "critical" }}
+            {{- with .Values.operator.prometheusRules.alerts.clusterCritical.labels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          annotations:
+            summary: "Wazuh cluster {{ "{{" }} $labels.cluster {{ "}}" }} is in critical state"
+            description: "Wazuh cluster {{ "{{" }} $labels.cluster {{ "}}" }} in namespace {{ "{{" }} $labels.namespace {{ "}}" }} is RED (critical). Immediate attention required."
+            runbook_url: {{ .Values.operator.prometheusRules.alerts.clusterCritical.runbookUrl | default "" | quote }}
+
+        # Component Health Alerts
+        - alert: WazuhComponentUnhealthy
+          expr: wazuh_cluster_component_health < 3
+          for: {{ .Values.operator.prometheusRules.alerts.componentUnhealthy.for | default "5m" }}
+          labels:
+            severity: {{ .Values.operator.prometheusRules.alerts.componentUnhealthy.severity | default "warning" }}
+          annotations:
+            summary: "Wazuh component {{ "{{" }} $labels.component {{ "}}" }} is unhealthy"
+            description: "Component {{ "{{" }} $labels.component {{ "}}" }} in cluster {{ "{{" }} $labels.cluster {{ "}}" }} (namespace {{ "{{" }} $labels.namespace {{ "}}" }}) has health status {{ "{{" }} $value {{ "}}" }}"
+
+        # Replica Alerts
+        - alert: WazuhReplicasMismatch
+          expr: wazuh_cluster_ready_replicas != wazuh_cluster_desired_replicas
+          for: {{ .Values.operator.prometheusRules.alerts.replicasMismatch.for | default "10m" }}
+          labels:
+            severity: {{ .Values.operator.prometheusRules.alerts.replicasMismatch.severity | default "warning" }}
+          annotations:
+            summary: "Wazuh {{ "{{" }} $labels.component {{ "}}" }} replicas mismatch"
+            description: "Component {{ "{{" }} $labels.component {{ "}}" }} in cluster {{ "{{" }} $labels.cluster {{ "}}" }} has {{ "{{" }} $value {{ "}}" }} ready replicas but desires more"
+
+    - name: wazuh-operator-certificates
+      rules:
+        # Certificate Expiry Alerts
+        - alert: WazuhCertificateExpiringSoon
+          expr: wazuh_certificate_expiry_days < {{ .Values.operator.prometheusRules.alerts.certExpiringSoon.threshold | default 30 }}
+          for: {{ .Values.operator.prometheusRules.alerts.certExpiringSoon.for | default "1h" }}
+          labels:
+            severity: {{ .Values.operator.prometheusRules.alerts.certExpiringSoon.severity | default "warning" }}
+          annotations:
+            summary: "Wazuh certificate {{ "{{" }} $labels.secret_name {{ "}}" }} expires in {{ "{{" }} $value {{ "}}" }} days"
+            description: "Certificate {{ "{{" }} $labels.certificate_type {{ "}}" }} (secret {{ "{{" }} $labels.secret_name {{ "}}" }}) in cluster {{ "{{" }} $labels.cluster {{ "}}" }} will expire in {{ "{{" }} $value {{ "}}" }} days"
+
+        - alert: WazuhCertificateExpiryCritical
+          expr: wazuh_certificate_expiry_days < {{ .Values.operator.prometheusRules.alerts.certExpiryCritical.threshold | default 7 }}
+          for: {{ .Values.operator.prometheusRules.alerts.certExpiryCritical.for | default "1h" }}
+          labels:
+            severity: {{ .Values.operator.prometheusRules.alerts.certExpiryCritical.severity | default "critical" }}
+          annotations:
+            summary: "Wazuh certificate {{ "{{" }} $labels.secret_name {{ "}}" }} expires in {{ "{{" }} $value {{ "}}" }} days - CRITICAL"
+            description: "Certificate {{ "{{" }} $labels.certificate_type {{ "}}" }} (secret {{ "{{" }} $labels.secret_name {{ "}}" }}) in cluster {{ "{{" }} $labels.cluster {{ "}}" }} will expire in {{ "{{" }} $value {{ "}}" }} days. Immediate renewal required!"
+
+        - alert: WazuhCertificateExpired
+          expr: wazuh_certificate_expiry_days < 0
+          for: {{ .Values.operator.prometheusRules.alerts.certExpired.for | default "5m" }}
+          labels:
+            severity: {{ .Values.operator.prometheusRules.alerts.certExpired.severity | default "critical" }}
+          annotations:
+            summary: "Wazuh certificate {{ "{{" }} $labels.secret_name {{ "}}" }} has EXPIRED"
+            description: "Certificate {{ "{{" }} $labels.certificate_type {{ "}}" }} (secret {{ "{{" }} $labels.secret_name {{ "}}" }}) in cluster {{ "{{" }} $labels.cluster {{ "}}" }} has expired {{ "{{" }} $value | printf \"%.0f\" {{ "}}" }} days ago"
+
+    - name: wazuh-operator-reconciler
+      rules:
+        # Reconciliation Error Alerts
+        - alert: WazuhReconcileErrorsHigh
+          expr: rate(wazuh_reconciler_errors_total[5m]) > {{ .Values.operator.prometheusRules.alerts.reconcileErrors.threshold | default 0.1 }}
+          for: {{ .Values.operator.prometheusRules.alerts.reconcileErrors.for | default "10m" }}
+          labels:
+            severity: {{ .Values.operator.prometheusRules.alerts.reconcileErrors.severity | default "warning" }}
+          annotations:
+            summary: "High reconciliation error rate for {{ "{{" }} $labels.crd {{ "}}" }}"
+            description: "CRD {{ "{{" }} $labels.crd {{ "}}" }} in namespace {{ "{{" }} $labels.namespace {{ "}}" }} has error rate of {{ "{{" }} $value | printf \"%.2f\" {{ "}}" }}/s (threshold: {{ .Values.operator.prometheusRules.alerts.reconcileErrors.threshold | default 0.1 }})"
+
+        - alert: WazuhReconcileDurationHigh
+          expr: histogram_quantile(0.99, rate(wazuh_reconciler_reconciliation_duration_seconds_bucket[5m])) > {{ .Values.operator.prometheusRules.alerts.reconcileDuration.threshold | default 60 }}
+          for: {{ .Values.operator.prometheusRules.alerts.reconcileDuration.for | default "15m" }}
+          labels:
+            severity: {{ .Values.operator.prometheusRules.alerts.reconcileDuration.severity | default "warning" }}
+          annotations:
+            summary: "Slow reconciliation for {{ "{{" }} $labels.crd {{ "}}" }}"
+            description: "P99 reconciliation duration for {{ "{{" }} $labels.crd {{ "}}" }} is {{ "{{" }} $value | printf \"%.1f\" {{ "}}" }}s (threshold: {{ .Values.operator.prometheusRules.alerts.reconcileDuration.threshold | default 60 }}s)"
+
+    - name: wazuh-operator-operator
+      rules:
+        # Operator Health Alerts
+        - alert: WazuhOperatorDown
+          expr: up{job=~".*wazuh-operator.*"} == 0
+          for: {{ .Values.operator.prometheusRules.alerts.operatorDown.for | default "5m" }}
+          labels:
+            severity: {{ .Values.operator.prometheusRules.alerts.operatorDown.severity | default "critical" }}
+          annotations:
+            summary: "Wazuh Operator is down"
+            description: "The Wazuh Operator in namespace {{ .Release.Namespace }} is not responding"
+{{- end }}

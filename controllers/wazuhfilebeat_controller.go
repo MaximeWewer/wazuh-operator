@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 	"context"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -29,7 +30,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
 )
 
@@ -52,10 +55,26 @@ type WazuhFilebeatReconciler struct {
 
 // Reconcile is the main reconciliation loop for WazuhFilebeat
 func (r *WazuhFilebeatReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// Start tracing span
+	ctx, span := telemetry.Tracer().Start(ctx, "WazuhFilebeat.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("namespace", req.Namespace),
+			attribute.String("name", req.Name),
+		))
+	defer span.End()
+
+	// Track reconciliation metrics
+	startTime := time.Now()
+	var reconcileResult = "success"
+	defer func() {
+		duration := time.Since(startTime).Seconds()
+		metrics.RecordReconciliation("WazuhFilebeat", req.Namespace, reconcileResult, duration)
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Fetch the WazuhFilebeat instance
-	filebeat := &wazuhv1alpha1.WazuhFilebeat{}
+	filebeat := &wazuhv1.WazuhFilebeat{}
 	if err := r.Get(ctx, req.NamespacedName, filebeat); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("WazuhFilebeat resource not found, ignoring since object must be deleted")
@@ -79,11 +98,11 @@ func (r *WazuhFilebeatReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 // SetupWithManager sets up the controller with the Manager
 func (r *WazuhFilebeatReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1alpha1.WazuhFilebeat{}).
+		For(&wazuhv1.WazuhFilebeat{}).
 		Owns(&corev1.ConfigMap{}).
 		// Watch for changes in WazuhCluster that this filebeat references
 		Watches(
-			&wazuhv1alpha1.WazuhCluster{},
+			&wazuhv1.WazuhCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.findFilebeatForCluster),
 		).
 		Named("wazuhfilebeat").
@@ -94,13 +113,13 @@ func (r *WazuhFilebeatReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // that reference the changed WazuhCluster
 func (r *WazuhFilebeatReconciler) findFilebeatForCluster(ctx context.Context, obj client.Object) []ctrl.Request {
 	log := logf.FromContext(ctx)
-	cluster, ok := obj.(*wazuhv1alpha1.WazuhCluster)
+	cluster, ok := obj.(*wazuhv1.WazuhCluster)
 	if !ok {
 		return nil
 	}
 
 	// Find all WazuhFilebeat resources that reference this cluster
-	filebeatList := &wazuhv1alpha1.WazuhFilebeatList{}
+	filebeatList := &wazuhv1.WazuhFilebeatList{}
 	if err := r.List(ctx, filebeatList); err != nil {
 		log.Error(err, "Failed to list WazuhFilebeat resources")
 		return nil

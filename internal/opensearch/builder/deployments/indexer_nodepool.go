@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -55,7 +55,7 @@ type NodePoolStatefulSetBuilder struct {
 	volumeMounts     []corev1.VolumeMount
 	javaOpts         string
 	// Monitoring configuration
-	cluster *wazuhv1alpha1.WazuhCluster
+	cluster *wazuhv1.WazuhCluster
 }
 
 // NewNodePoolStatefulSetBuilder creates a new NodePoolStatefulSetBuilder
@@ -216,7 +216,7 @@ func (b *NodePoolStatefulSetBuilder) WithConfigHash(hash string) *NodePoolStatef
 }
 
 // WithCluster sets the WazuhCluster reference for monitoring configuration
-func (b *NodePoolStatefulSetBuilder) WithCluster(cluster *wazuhv1alpha1.WazuhCluster) *NodePoolStatefulSetBuilder {
+func (b *NodePoolStatefulSetBuilder) WithCluster(cluster *wazuhv1.WazuhCluster) *NodePoolStatefulSetBuilder {
 	b.cluster = cluster
 	return b
 }
@@ -277,6 +277,9 @@ func (b *NodePoolStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &b.replicas,
 			ServiceName: headlessServiceName,
+			// MinReadySeconds ensures pod is stable before considered available
+			// This prevents premature progression during rolling updates
+			MinReadySeconds: 30,
 			// Parallel allows all pods to start simultaneously for cluster formation
 			PodManagementPolicy: appsv1.ParallelPodManagement,
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
@@ -300,6 +303,12 @@ func (b *NodePoolStatefulSetBuilder) Build() *appsv1.StatefulSet {
 					SecurityContext: &corev1.PodSecurityContext{
 						FSGroup:   &fsGroup,
 						RunAsUser: &runAsUser,
+						// Note: RunAsNonRoot is not set at pod level because the
+						// volume-mount-hack init container needs to run as root.
+						// The main container has its own security context with runAsNonRoot.
+						SeccompProfile: &corev1.SeccompProfile{
+							Type: corev1.SeccompProfileTypeRuntimeDefault,
+						},
 					},
 					InitContainers: b.buildInitContainers(image, configMapName),
 					Containers: []corev1.Container{
@@ -308,6 +317,12 @@ func (b *NodePoolStatefulSetBuilder) Build() *appsv1.StatefulSet {
 							Image:           image,
 							ImagePullPolicy: corev1.PullIfNotPresent,
 							Resources:       *resources,
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: boolPtr(false),
+								Capabilities: &corev1.Capabilities{
+									Drop: []corev1.Capability{"ALL"},
+								},
+							},
 							Ports: []corev1.ContainerPort{
 								{Name: constants.PortNameIndexerREST, ContainerPort: constants.PortIndexerREST, Protocol: corev1.ProtocolTCP},
 								{Name: constants.PortNameIndexerTransport, ContainerPort: constants.PortIndexerTransport, Protocol: corev1.ProtocolTCP},
@@ -539,12 +554,19 @@ func (b *NodePoolStatefulSetBuilder) buildEnvVars() []corev1.EnvVar {
 }
 
 // buildInitContainers creates the init containers for the StatefulSet
-func (b *NodePoolStatefulSetBuilder) buildInitContainers(image, configMapName string) []corev1.Container {
+func (b *NodePoolStatefulSetBuilder) buildInitContainers(_, _ string) []corev1.Container {
 	initContainers := []corev1.Container{
 		{
 			Name:    "init-config",
 			Image:   constants.ImageBusyboxStable,
 			Command: []string{"sh", "-c"},
+			SecurityContext: &corev1.SecurityContext{
+				AllowPrivilegeEscalation: boolPtr(false),
+				ReadOnlyRootFilesystem:   boolPtr(false), // Needs to write to /tmp/config
+				Capabilities: &corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+				},
+			},
 			Args: []string{`
 set -e
 echo "Substituting environment variables in opensearch.yml..."

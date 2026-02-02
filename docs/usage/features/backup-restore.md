@@ -41,7 +41,7 @@ A repository defines where snapshots are stored. You must create a repository be
 **MinIO Example:**
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchSnapshotRepository
 metadata:
   name: minio-backups
@@ -66,7 +66,7 @@ spec:
 **AWS S3 Example:**
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchSnapshotRepository
 metadata:
   name: aws-backups
@@ -96,7 +96,7 @@ spec:
 Trigger snapshots on-demand before maintenance, upgrades, or as ad-hoc backups:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchSnapshot
 metadata:
   name: pre-upgrade
@@ -131,7 +131,7 @@ kubectl get opensearchsnapshot pre-upgrade -o yaml
 For automated backups, use OpenSearchSnapshotPolicy with cron schedules:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchSnapshotPolicy
 metadata:
   name: daily-snapshots
@@ -165,7 +165,7 @@ spec:
 Use OpenSearchRestore to restore indices from a snapshot:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchRestore
 metadata:
   name: restore-alerts
@@ -215,7 +215,7 @@ Wazuh Manager backups create tar archives of critical data including agent keys,
 Create a CronJob that backs up Wazuh Manager data on a schedule:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhBackup
 metadata:
   name: daily-backup
@@ -261,7 +261,7 @@ spec:
 For manual backups (without schedule), omit the `schedule` field:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhBackup
 metadata:
   name: pre-migration-backup
@@ -289,7 +289,7 @@ spec:
 Restore from an S3 backup archive:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhRestore
 metadata:
   name: restore-from-backup
@@ -325,7 +325,7 @@ spec:
 Or reference an existing WazuhBackup resource:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhRestore
 metadata:
   name: restore-from-wazuhbackup

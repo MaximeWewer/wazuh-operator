@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,17 +21,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // DashboardPDBBuilder builds PodDisruptionBudget resources for Dashboard
 type DashboardPDBBuilder struct {
-	cluster *v1alpha1.WazuhCluster
+	cluster *v1.WazuhCluster
 }
 
 // NewDashboardPDBBuilder creates a new DashboardPDBBuilder
-func NewDashboardPDBBuilder(cluster *v1alpha1.WazuhCluster) *DashboardPDBBuilder {
+func NewDashboardPDBBuilder(cluster *v1.WazuhCluster) *DashboardPDBBuilder {
 	return &DashboardPDBBuilder{
 		cluster: cluster,
 	}
@@ -120,7 +120,7 @@ func GetPDBName(clusterName string) string {
 }
 
 // ShouldCreatePDB determines if a PDB should be created for the dashboard
-func ShouldCreatePDB(cluster *v1alpha1.WazuhCluster) bool {
+func ShouldCreatePDB(cluster *v1.WazuhCluster) bool {
 	// Don't create PDB if dashboard is not configured
 	if cluster.Spec.Dashboard == nil {
 		return false

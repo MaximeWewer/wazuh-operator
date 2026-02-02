@@ -1,4 +1,4 @@
-{{- if and (include "wazuh-operator.installOperator" .) .Values.rbac.create }}
+{{- if and (include "wazuh-operator.installOperator" .) .Values.rbac.create (not .Values.rbac.namespaceScoped.enabled) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:

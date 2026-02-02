@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,8 +26,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
+	"github.com/MaximeWewer/wazuh-operator/pkg/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -54,7 +55,7 @@ type IndexerStatefulSetBuilder struct {
 	volumeMounts     []corev1.VolumeMount
 	javaOpts         string
 	// Monitoring configuration
-	cluster *wazuhv1alpha1.WazuhCluster
+	cluster *wazuhv1.WazuhCluster
 }
 
 // NewIndexerStatefulSetBuilder creates a new IndexerStatefulSetBuilder
@@ -214,7 +215,7 @@ func (b *IndexerStatefulSetBuilder) WithConfigHash(hash string) *IndexerStateful
 
 // WithCluster sets the WazuhCluster reference for monitoring configuration
 // This is required for adding the Prometheus exporter plugin
-func (b *IndexerStatefulSetBuilder) WithCluster(cluster *wazuhv1alpha1.WazuhCluster) *IndexerStatefulSetBuilder {
+func (b *IndexerStatefulSetBuilder) WithCluster(cluster *wazuhv1.WazuhCluster) *IndexerStatefulSetBuilder {
 	b.cluster = cluster
 	return b
 }
@@ -272,6 +273,9 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		Spec: appsv1.StatefulSetSpec{
 			Replicas:    &b.replicas,
 			ServiceName: constants.IndexerHeadlessName(b.clusterName),
+			// MinReadySeconds ensures pod is stable before considered available
+			// This prevents premature progression during rolling updates
+			MinReadySeconds: 30,
 			// Parallel allows all pods to start simultaneously, which is required for
 			// OpenSearch cluster formation - nodes need to discover each other at startup
 			PodManagementPolicy: appsv1.ParallelPodManagement,
@@ -296,6 +300,12 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 					SecurityContext: &corev1.PodSecurityContext{
 						FSGroup:   &fsGroup,
 						RunAsUser: &runAsUser,
+						// Note: RunAsNonRoot is not set at pod level because the
+						// volume-mount-hack init container needs to run as root.
+						// The main container has its own security context with runAsNonRoot.
+						SeccompProfile: &corev1.SeccompProfile{
+							Type: corev1.SeccompProfileTypeRuntimeDefault,
+						},
 					},
 					InitContainers: b.buildInitContainers(image),
 					Containers: []corev1.Container{
@@ -304,6 +314,13 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 							Image:           image,
 							ImagePullPolicy: corev1.PullIfNotPresent,
 							Resources:       *resources,
+							// SecurityContext: OpenSearch runs as non-root with minimal privileges
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: boolPtr(false),
+								Capabilities: &corev1.Capabilities{
+									Drop: []corev1.Capability{"ALL"},
+								},
+							},
 							Ports: []corev1.ContainerPort{
 								{Name: constants.PortNameIndexerREST, ContainerPort: constants.PortIndexerREST, Protocol: corev1.ProtocolTCP},
 								{Name: constants.PortNameIndexerTransport, ContainerPort: constants.PortIndexerTransport, Protocol: corev1.ProtocolTCP},
@@ -555,12 +572,19 @@ func (b *IndexerStatefulSetBuilder) buildInitialMasterNodes() string {
 }
 
 // buildInitContainers creates the init containers for the StatefulSet
-func (b *IndexerStatefulSetBuilder) buildInitContainers(image string) []corev1.Container {
+func (b *IndexerStatefulSetBuilder) buildInitContainers(_ string) []corev1.Container {
 	initContainers := []corev1.Container{
 		{
 			Name:    "init-config",
 			Image:   constants.ImageBusyboxStable,
 			Command: []string{"sh", "-c"},
+			SecurityContext: &corev1.SecurityContext{
+				AllowPrivilegeEscalation: boolPtr(false),
+				ReadOnlyRootFilesystem:   boolPtr(false), // Needs to write to /tmp/config
+				Capabilities: &corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+				},
+			},
 			Args: []string{`
 set -e
 echo "Substituting environment variables in opensearch.yml..."
@@ -620,14 +644,23 @@ ls -la /tmp/config/
 			},
 		},
 		{
-			Name:  "increase-the-vm-max-map-count",
-			Image: constants.ImageBusyboxStable,
+			Name:            "increase-the-vm-max-map-count",
+			Image:           constants.ImageBusyboxStable,
+			ImagePullPolicy: corev1.PullIfNotPresent,
 			Command: []string{
-				"sh", "-c",
-				"sysctl -w vm.max_map_count=262144 || echo 'sysctl failed - vm.max_map_count might need to be set on the host node'",
+				"/bin/sh", "-ec",
+				fmt.Sprintf(`CURRENT=$(sysctl -n vm.max_map_count)
+DESIRED="%d"
+if [ "$DESIRED" -gt "$CURRENT" ]; then
+  sysctl -w vm.max_map_count=$DESIRED
+fi`, config.VMMaxMapCount()),
 			},
 			SecurityContext: &corev1.SecurityContext{
 				Privileged: boolPtr(true),
+				// Override pod-level seccomp profile to allow sysctl syscall
+				SeccompProfile: &corev1.SeccompProfile{
+					Type: corev1.SeccompProfileTypeUnconfined,
+				},
 			},
 		},
 	}

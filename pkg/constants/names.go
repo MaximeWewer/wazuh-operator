@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,7 +16,11 @@ limitations under the License.
 
 package constants
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
+)
 
 // Resource name suffixes
 const (
@@ -126,18 +130,18 @@ func IndexerPodName(clusterName string, ordinal int) string {
 
 // IndexerServiceFQDN returns the fully qualified domain name for indexer service
 func IndexerServiceFQDN(clusterName, namespace string) string {
-	return fmt.Sprintf("%s%s.%s.svc.cluster.local", clusterName, SuffixIndexer, namespace)
+	return dns.ServiceFQDN(clusterName+SuffixIndexer, namespace)
 }
 
 // IndexerHeadlessServiceFQDN returns the FQDN for indexer headless service
 func IndexerHeadlessServiceFQDN(clusterName, namespace string) string {
-	return fmt.Sprintf("%s%s.%s.svc.cluster.local", clusterName, SuffixIndexerHeadless, namespace)
+	return dns.ServiceFQDN(clusterName+SuffixIndexerHeadless, namespace)
 }
 
 // IndexerPodFQDN returns the FQDN for a specific indexer pod
 func IndexerPodFQDN(clusterName, namespace string, ordinal int) string {
 	podName := IndexerPodName(clusterName, ordinal)
-	return fmt.Sprintf("%s.%s%s.%s.svc.cluster.local", podName, clusterName, SuffixIndexerHeadless, namespace)
+	return dns.PodFQDN(podName, clusterName+SuffixIndexerHeadless, namespace)
 }
 
 // Resource naming functions - Manager
@@ -169,24 +173,24 @@ func ManagerWorkerPodName(clusterName string, ordinal int) string {
 
 // ManagerMasterServiceFQDN returns the FQDN for manager master service
 func ManagerMasterServiceFQDN(clusterName, namespace string) string {
-	return fmt.Sprintf("%s%s.%s.svc.cluster.local", clusterName, SuffixManagerMaster, namespace)
+	return dns.ServiceFQDN(clusterName+SuffixManagerMaster, namespace)
 }
 
 // ManagerWorkersServiceFQDN returns the FQDN for manager workers service
 func ManagerWorkersServiceFQDN(clusterName, namespace string) string {
-	return fmt.Sprintf("%s%s.%s.svc.cluster.local", clusterName, SuffixManagerWorkers, namespace)
+	return dns.ServiceFQDN(clusterName+SuffixManagerWorkers, namespace)
 }
 
 // ManagerMasterPodFQDN returns the FQDN for a specific manager master pod
 func ManagerMasterPodFQDN(clusterName, namespace string, ordinal int) string {
 	podName := ManagerMasterPodName(clusterName, ordinal)
-	return fmt.Sprintf("%s.%s%s.%s.svc.cluster.local", podName, clusterName, SuffixManagerMaster, namespace)
+	return dns.PodFQDN(podName, clusterName+SuffixManagerMaster, namespace)
 }
 
 // ManagerWorkerPodFQDN returns the FQDN for a specific manager worker pod
 func ManagerWorkerPodFQDN(clusterName, namespace string, ordinal int) string {
 	podName := ManagerWorkerPodName(clusterName, ordinal)
-	return fmt.Sprintf("%s.%s%s.%s.svc.cluster.local", podName, clusterName, SuffixManagerWorkers, namespace)
+	return dns.PodFQDN(podName, clusterName+SuffixManagerWorkers, namespace)
 }
 
 // Resource naming functions - Dashboard
@@ -218,7 +222,7 @@ func DashboardAuthConfigName(clusterName string) string {
 
 // DashboardServiceFQDN returns the FQDN for dashboard service
 func DashboardServiceFQDN(clusterName, namespace string) string {
-	return fmt.Sprintf("%s%s.%s.svc.cluster.local", clusterName, SuffixDashboard, namespace)
+	return dns.ServiceFQDN(clusterName+SuffixDashboard, namespace)
 }
 
 // Additional resource name suffixes
@@ -341,12 +345,12 @@ func IndexerNodePoolPodName(clusterName, poolName string, ordinal int) string {
 
 // IndexerNodePoolHeadlessServiceFQDN returns the FQDN for a nodePool headless service
 func IndexerNodePoolHeadlessServiceFQDN(clusterName, poolName, namespace string) string {
-	return fmt.Sprintf("%s.%s.svc.cluster.local", IndexerNodePoolHeadlessName(clusterName, poolName), namespace)
+	return dns.ServiceFQDN(IndexerNodePoolHeadlessName(clusterName, poolName), namespace)
 }
 
 // IndexerNodePoolPodFQDN returns the FQDN for a specific pod in a nodePool
 func IndexerNodePoolPodFQDN(clusterName, poolName, namespace string, ordinal int) string {
 	podName := IndexerNodePoolPodName(clusterName, poolName, ordinal)
 	headlessService := IndexerNodePoolHeadlessName(clusterName, poolName)
-	return fmt.Sprintf("%s.%s.%s.svc.cluster.local", podName, headlessService, namespace)
+	return dns.PodFQDN(podName, headlessService, namespace)
 }

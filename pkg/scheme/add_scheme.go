@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,8 +22,9 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
 // NewScheme creates a new runtime scheme with all required types registered
@@ -36,7 +37,7 @@ func NewScheme() *runtime.Scheme {
 // AddToScheme adds all required types to the given scheme
 func AddToScheme(scheme *runtime.Scheme) {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(wazuhv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(wazuhv1.AddToScheme(scheme))
 	utilruntime.Must(monitoringv1.AddToScheme(scheme))
 }
 

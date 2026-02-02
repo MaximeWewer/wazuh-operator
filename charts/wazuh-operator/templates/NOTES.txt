@@ -5,37 +5,49 @@
 ===============================================
 
 The following CRDs have been installed:
+
+Wazuh Core:
   - WazuhCluster
+  - WazuhManager
+  - WazuhWorker
   - WazuhCertificate
   - WazuhDecoder
   - WazuhRule
-  - OpenSearchActionGroup
-  - OpenSearchComponentTemplate
-  - OpenSearchIndexTemplate
-  - OpenSearchInternalUser
-  - OpenSearchISMPolicy
+  - WazuhBackup
+  - WazuhRestore
+  - WazuhFilebeat
+
+OpenSearch:
+  - OpenSearchIndexer
+  - OpenSearchDashboard
+  - OpenSearchUser
   - OpenSearchRole
-  - OpenSearchRolesMapping
-  - OpenSearchSecurityConfig
+  - OpenSearchRoleMapping
+  - OpenSearchTenant
+  - OpenSearchActionGroup
+  - OpenSearchAuthConfig
+  - OpenSearchIndex
+  - OpenSearchIndexTemplate
+  - OpenSearchComponentTemplate
+  - OpenSearchISMPolicy
+  - OpenSearchSnapshotRepository
+  - OpenSearchSnapshotPolicy
+  - OpenSearchSnapshot
+  - OpenSearchRestore
 
 Next steps:
-1. Deploy an operator instance to manage Wazuh cluster:
+1. Deploy an operator instance to manage Wazuh clusters:
 
-   helm install wazuh-operator wazuh-operator/wazuh-operator \
+   helm install wazuh-operator ./charts/wazuh-operator \
      --set deploymentMode=operator \
      --set crds.install=false \
+     --namespace wazuh-system
+
+2. Deploy a Wazuh cluster using the wazuh-cluster chart:
+
+   helm install my-wazuh ./charts/wazuh-cluster \
+     --set sizing.profile=M \
      --namespace wazuh
-
-2. Create a WazuhCluster resource:
-
-   kubectl apply -f - <<EOF
-   apiVersion: wazuh.wazuh.com/v1alpha1
-   kind: WazuhCluster
-   metadata:
-     name: wazuh-cluster
-   spec:
-     version: "4.9.2"
-   EOF
 
 {{ else if eq .Values.deploymentMode "operator" }}
 ===============================================
@@ -44,13 +56,16 @@ Next steps:
 
 Operator Name: {{ include "wazuh-operator.operatorName" . }}
 Namespace: {{ include "wazuh-operator.namespace" . }}
-Replicas: 1 (hardcoded, manages one WazuhCluster)
+Replicas: {{ .Values.replicaCount | default 1 }}
+{{- if and (gt (.Values.replicaCount | default 1 | int) 1) .Values.leaderElection.enabled }}
+High Availability: Enabled (leader election active)
+{{- end }}
 
 The operator has been deployed successfully.
-The operator will automatically manage WazuhCluster resources in its namespace.
+The operator will automatically manage WazuhCluster resources.
 {{- if not .Values.crds.install }}
 
-⚠️  NOTE: CRDs were not installed (crds.install=false)
+    NOTE: CRDs were not installed (crds.install=false)
     Make sure CRDs are installed separately before creating WazuhCluster resources.
 {{- end }}
 
@@ -62,37 +77,29 @@ View operator logs:
 
   kubectl logs -f deployment/{{ include "wazuh-operator.fullname" . }}-controller-manager -n {{ include "wazuh-operator.namespace" . }}
 
-Create a WazuhCluster:
+Deploy a Wazuh cluster using the wazuh-cluster chart:
 
-  kubectl apply -f - <<EOF
-  apiVersion: wazuh.wazuh.com/v1alpha1
-  kind: WazuhCluster
-  metadata:
-    name: wazuh-cluster
-    namespace: default
-  spec:
-    version: "4.9.2"
-    indexer:
-      replicas: 3
-    manager:
-      master: {}
-      workers:
-        replicas: 2
-    dashboard:
-      replicas: 1
-  EOF
+  helm install my-wazuh ./charts/wazuh-cluster \
+    --set sizing.profile=M \
+    --namespace wazuh
 
 {{ else }}
 ===============================================
-  Wazuh Operator Installed
+  Wazuh Operator Installed (CRDs + Operator)
 ===============================================
 
 Operator Name: {{ include "wazuh-operator.operatorName" . }}
 Namespace: {{ include "wazuh-operator.namespace" . }}
-Replicas: 1 (hardcoded, manages one WazuhCluster)
+Replicas: {{ .Values.replicaCount | default 1 }}
+{{- if and (gt (.Values.replicaCount | default 1 | int) 1) .Values.leaderElection.enabled }}
+High Availability: Enabled (leader election active)
+{{- end }}
+{{- if .Values.gatewayAPI.enabled }}
+Gateway API: Enabled
+{{- end }}
 
 The Wazuh Operator has been successfully installed with CRDs.
-The operator will automatically manage WazuhCluster resources in its namespace.
+The operator will automatically manage WazuhCluster resources.
 
 Check the operator status:
 
@@ -104,18 +111,24 @@ View operator logs:
 
 View installed CRDs:
 
-  kubectl get crds | grep wazuh.wazuh.com
+  kubectl get crds | grep resources.wazuh.com
 
-Create your first WazuhCluster:
+Deploy a Wazuh cluster using the wazuh-cluster chart (recommended):
+
+  helm install my-wazuh ./charts/wazuh-cluster \
+    --set sizing.profile=M \
+    --namespace wazuh --create-namespace
+
+Or create a WazuhCluster resource directly:
 
   kubectl apply -f - <<EOF
-  apiVersion: wazuh.wazuh.com/v1alpha1
+  apiVersion: resources.wazuh.com/v1
   kind: WazuhCluster
   metadata:
     name: wazuh-cluster
-    namespace: default
+    namespace: wazuh
   spec:
-    version: "4.9.2"
+    version: "4.9.0"
     indexer:
       replicas: 3
       storageSize: 50Gi
@@ -132,10 +145,9 @@ Create your first WazuhCluster:
 Watch the cluster deployment:
 
   kubectl get wazuhcluster -A -w
-  kubectl get pods -n default -l app.kubernetes.io/name=wazuh -w
+  kubectl get pods -n wazuh -l app.kubernetes.io/name=wazuh -w
 
 {{ end }}
-
 {{- if .Values.operator.metrics.enabled }}
 
 Metrics:
@@ -144,8 +156,12 @@ Metrics:
   {{- if .Values.operator.serviceMonitor.enabled }}
   ServiceMonitor: Enabled
   {{- end }}
+  {{- if .Values.operator.prometheusRules.enabled }}
+  PrometheusRules: Enabled
+  {{- end }}
 {{- end }}
 
-Documentation: https://documentation.wazuh.com/
-Support: https://groups.google.com/g/wazuh
-GitHub: https://github.com/wazuh/wazuh-kubernetes
+Documentation:
+  - User Guide: https://github.com/MaximeWewer/wazuh-operator/tree/main/docs/usage
+  - Wazuh Docs: https://documentation.wazuh.com/
+  - Support: https://github.com/MaximeWewer/wazuh-operator/issues

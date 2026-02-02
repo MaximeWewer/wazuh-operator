@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -82,7 +82,7 @@ func DetectStatefulSetScaleDown(sts *appsv1.StatefulSet, desiredReplicas int32) 
 
 // GetNextTargetPod returns the next pod to be drained during a multi-pod scale-down
 // For example, if scaling from 5 to 2, pods 4, 3, and 2 need to be drained in order
-func GetNextTargetPod(stsName string, currentReplicas, targetReplicas int32, alreadyDrained int32) (string, int32, bool) {
+func GetNextTargetPod(stsName string, currentReplicas, targetReplicas, alreadyDrained int32) (string, int32, bool) {
 	if currentReplicas <= targetReplicas {
 		return "", 0, false
 	}

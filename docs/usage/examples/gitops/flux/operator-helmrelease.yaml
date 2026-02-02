@@ -1,0 +1,88 @@
+# Flux HelmRelease for Wazuh Operator
+#
+# This deploys the Wazuh Operator using Flux.
+#
+# Prerequisites:
+#   - Flux installed
+#   - HelmRepository or GitRepository created
+#
+# Usage:
+#   kubectl apply -f operator-helmrelease.yaml
+#
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: wazuh-operator
+  namespace: flux-system
+spec:
+  interval: 30m
+  releaseName: wazuh-operator
+  targetNamespace: wazuh-system
+
+  chart:
+    spec:
+      # Option 1: From OCI HelmRepository
+      # chart: wazuh-operator
+      # version: "1.0.0"
+      # sourceRef:
+      #   kind: HelmRepository
+      #   name: wazuh-operator
+      #   namespace: flux-system
+
+      # Option 2: From GitRepository
+      chart: charts/wazuh-operator
+      sourceRef:
+        kind: GitRepository
+        name: wazuh-operator
+        namespace: flux-system
+      interval: 5m
+
+  # Install configuration
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+
+  # Upgrade configuration
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+
+  # Helm values
+  values:
+    operator:
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 100m
+          memory: 128Mi
+
+      serviceMonitor:
+        enabled: true
+        labels:
+          prometheus: kube-prometheus
+
+    leaderElection:
+      enabled: true
+
+    networkPolicy:
+      enabled: false
+
+  # Drift detection
+  driftDetection:
+    mode: enabled
+
+  # Post-renderer for additional customization (optional)
+  # postRenderers:
+  #   - kustomize:
+  #       patches:
+  #         - target:
+  #             kind: Deployment
+  #             name: wazuh-operator-controller-manager
+  #           patch: |
+  #             - op: add
+  #               path: /spec/template/metadata/annotations/custom
+  #               value: annotation

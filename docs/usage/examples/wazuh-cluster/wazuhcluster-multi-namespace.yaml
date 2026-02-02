@@ -1,0 +1,206 @@
+# Multi-Namespace Deployment Example for Story 1.5
+# This example demonstrates deploying multiple independent Wazuh clusters
+# across different namespaces (dev, staging, prod) for team/environment isolation.
+
+---
+# Namespace: Development
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: wazuh-dev
+  labels:
+    environment: development
+    team: platform
+
+---
+# Namespace: Staging
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: wazuh-staging
+  labels:
+    environment: staging
+    team: platform
+
+---
+# Namespace: Production
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: wazuh-prod
+  labels:
+    environment: production
+    team: platform
+
+---
+# Dev Cluster - Minimal resources for development
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCluster
+metadata:
+  name: wazuh-dev
+  namespace: wazuh-dev
+  labels:
+    environment: development
+spec:
+  version: "4.9.2"
+
+  manager:
+    master:
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "512Mi"
+        limits:
+          cpu: "1000m"
+          memory: "1Gi"
+      storageSize: "10Gi"
+
+    workers:
+      replicas: 0  # No workers in dev
+
+  indexer:
+    replicas: 1  # Single indexer for dev
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "2Gi"
+      limits:
+        cpu: "2000m"
+        memory: "4Gi"
+    storageSize: "20Gi"
+
+  dashboard:
+    replicas: 1
+
+---
+# Staging Cluster - Medium resources for testing
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCluster
+metadata:
+  name: wazuh-staging
+  namespace: wazuh-staging
+  labels:
+    environment: staging
+spec:
+  version: "4.9.2"
+
+  manager:
+    master:
+      resources:
+        requests:
+          cpu: "1000m"
+          memory: "1Gi"
+        limits:
+          cpu: "2000m"
+          memory: "2Gi"
+      storageSize: "20Gi"
+
+    workers:
+      replicas: 1  # 1 worker for staging
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "512Mi"
+        limits:
+          cpu: "1000m"
+          memory: "1Gi"
+      storageSize: "10Gi"
+
+  indexer:
+    replicas: 2  # 2 indexers for staging
+    resources:
+      requests:
+        cpu: "1000m"
+        memory: "2Gi"
+      limits:
+        cpu: "2000m"
+        memory: "4Gi"
+    storageSize: "30Gi"
+
+  dashboard:
+    replicas: 1
+
+---
+# Production Cluster - Full resources for production workloads
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCluster
+metadata:
+  name: wazuh-prod
+  namespace: wazuh-prod
+  labels:
+    environment: production
+spec:
+  version: "4.9.2"
+
+  manager:
+    master:
+      replicas: 1
+      resources:
+        requests:
+          cpu: "2000m"
+          memory: "2Gi"
+        limits:
+          cpu: "4000m"
+          memory: "4Gi"
+      storageSize: "50Gi"
+
+    workers:
+      replicas: 3  # 3 workers for production
+      resources:
+        requests:
+          cpu: "1000m"
+          memory: "1Gi"
+        limits:
+          cpu: "2000m"
+          memory: "2Gi"
+      storageSize: "20Gi"
+
+  indexer:
+    replicas: 3  # 3 indexers for production (minimum for quorum)
+    resources:
+      requests:
+        cpu: "2000m"
+        memory: "4Gi"
+      limits:
+        cpu: "4000m"
+        memory: "8Gi"
+    storageSize: "100Gi"
+
+  dashboard:
+    replicas: 2  # 2 dashboards for production HA
+
+---
+# Usage Notes:
+#
+# 1. Apply all resources at once:
+#    kubectl apply -f wazuh_v1_wazuhcluster_multi_namespace.yaml
+#
+# 2. Verify cluster status in each namespace:
+#    kubectl get wazuhcluster -n wazuh-dev
+#    kubectl get wazuhcluster -n wazuh-staging
+#    kubectl get wazuhcluster -n wazuh-prod
+#
+# 3. View resources created by each cluster:
+#    kubectl get all -n wazuh-dev -l app.kubernetes.io/instance=wazuh-dev
+#    kubectl get all -n wazuh-staging -l app.kubernetes.io/instance=wazuh-staging
+#    kubectl get all -n wazuh-prod -l app.kubernetes.io/instance=wazuh-prod
+#
+# 4. Resource Isolation:
+#    - Each cluster's resources are isolated within its namespace
+#    - Resource names are prefixed with cluster name (e.g., wazuh-dev-manager-master)
+#    - DNS names are namespace-qualified (e.g., wazuh-dev-indexer.wazuh-dev.svc.cluster.local)
+#
+# 5. Delete a specific cluster without affecting others:
+#    kubectl delete wazuhcluster wazuh-dev -n wazuh-dev
+#    (This will NOT affect wazuh-staging or wazuh-prod clusters)
+#
+# 6. Scale resources independently:
+#    kubectl patch wazuhcluster wazuh-dev -n wazuh-dev --type=merge -p '{"spec":{"indexer":{"replicas":2}}}'
+#    (This will NOT affect other clusters)
+#
+# Architecture:
+# - Operator is cluster-scoped and watches all namespaces
+# - Each WazuhCluster CR is reconciled independently
+# - Resources are created in the same namespace as the WazuhCluster CR
+# - No cross-namespace resource references or interference
+# - Owner references ensure proper garbage collection per namespace

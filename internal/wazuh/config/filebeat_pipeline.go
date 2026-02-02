@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -79,12 +79,12 @@ func (b *FilebeatPipelineBuilder) WithTimestampFormat(format string) *FilebeatPi
 // Build generates the pipeline.json content as a string
 func (b *FilebeatPipelineBuilder) Build() (string, error) {
 	// Parse the default pipeline
-	var pipeline map[string]interface{}
+	var pipeline map[string]any
 	if err := json.Unmarshal([]byte(DefaultWazuhPipelineJSON), &pipeline); err != nil {
 		return "", fmt.Errorf("failed to parse default pipeline: %w", err)
 	}
 
-	processors, ok := pipeline["processors"].([]interface{})
+	processors, ok := pipeline["processors"].([]any)
 	if !ok {
 		return "", fmt.Errorf("invalid pipeline structure: processors not found")
 	}
@@ -115,10 +115,10 @@ func (b *FilebeatPipelineBuilder) Build() (string, error) {
 }
 
 // filterGeoIPProcessors removes all GeoIP processors from the pipeline
-func (b *FilebeatPipelineBuilder) filterGeoIPProcessors(processors []interface{}) []interface{} {
-	filtered := make([]interface{}, 0, len(processors))
+func (b *FilebeatPipelineBuilder) filterGeoIPProcessors(processors []any) []any {
+	filtered := make([]any, 0, len(processors))
 	for _, p := range processors {
-		proc, ok := p.(map[string]interface{})
+		proc, ok := p.(map[string]any)
 		if !ok {
 			filtered = append(filtered, p)
 			continue
@@ -133,13 +133,13 @@ func (b *FilebeatPipelineBuilder) filterGeoIPProcessors(processors []interface{}
 }
 
 // updateIndexPrefix updates the date_index_name processor with the custom index prefix
-func (b *FilebeatPipelineBuilder) updateIndexPrefix(processors []interface{}) []interface{} {
+func (b *FilebeatPipelineBuilder) updateIndexPrefix(processors []any) []any {
 	for _, p := range processors {
-		proc, ok := p.(map[string]interface{})
+		proc, ok := p.(map[string]any)
 		if !ok {
 			continue
 		}
-		if dateIndexName, ok := proc["date_index_name"].(map[string]interface{}); ok {
+		if dateIndexName, ok := proc["date_index_name"].(map[string]any); ok {
 			dateIndexName["index_name_prefix"] = b.indexPrefix + "-"
 		}
 	}
@@ -147,16 +147,16 @@ func (b *FilebeatPipelineBuilder) updateIndexPrefix(processors []interface{}) []
 }
 
 // updateTimestampFormat updates the date processor with the custom timestamp format
-func (b *FilebeatPipelineBuilder) updateTimestampFormat(processors []interface{}) []interface{} {
+func (b *FilebeatPipelineBuilder) updateTimestampFormat(processors []any) []any {
 	for _, p := range processors {
-		proc, ok := p.(map[string]interface{})
+		proc, ok := p.(map[string]any)
 		if !ok {
 			continue
 		}
-		if date, ok := proc["date"].(map[string]interface{}); ok {
+		if date, ok := proc["date"].(map[string]any); ok {
 			date["formats"] = []string{b.timestampFormat}
 		}
-		if dateIndexName, ok := proc["date_index_name"].(map[string]interface{}); ok {
+		if dateIndexName, ok := proc["date_index_name"].(map[string]any); ok {
 			dateIndexName["date_formats"] = []string{b.timestampFormat}
 		}
 	}
@@ -164,18 +164,18 @@ func (b *FilebeatPipelineBuilder) updateTimestampFormat(processors []interface{}
 }
 
 // updateRemoveFields adds additional fields to the remove processor
-func (b *FilebeatPipelineBuilder) updateRemoveFields(processors []interface{}) []interface{} {
+func (b *FilebeatPipelineBuilder) updateRemoveFields(processors []any) []any {
 	if len(b.additionalRemoveFields) == 0 {
 		return processors
 	}
 
 	for _, p := range processors {
-		proc, ok := p.(map[string]interface{})
+		proc, ok := p.(map[string]any)
 		if !ok {
 			continue
 		}
-		if remove, ok := proc["remove"].(map[string]interface{}); ok {
-			existingFields, _ := remove["field"].([]interface{})
+		if remove, ok := proc["remove"].(map[string]any); ok {
+			existingFields, _ := remove["field"].([]any)
 			// Convert to string slice and add new fields
 			fields := make([]string, 0, len(existingFields)+len(b.additionalRemoveFields))
 			for _, f := range existingFields {
@@ -207,7 +207,7 @@ func LoadCustomPipeline(ctx context.Context, c client.Client, namespace, configM
 	}
 
 	// Validate JSON
-	var pipeline map[string]interface{}
+	var pipeline map[string]any
 	if err := json.Unmarshal([]byte(content), &pipeline); err != nil {
 		return "", fmt.Errorf("invalid JSON in ConfigMap %s/%s key %q: %w", namespace, configMapName, key, err)
 	}

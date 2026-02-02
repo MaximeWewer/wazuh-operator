@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -105,17 +105,6 @@ var (
 		},
 		[]string{"cluster", "namespace", "component", "serial", "issuer"},
 	)
-
-	// CertificateTestMode indicates if test mode is enabled
-	CertificateTestMode = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: MetricsNamespace,
-			Subsystem: MetricsSubsystemCertificate,
-			Name:      "test_mode_enabled",
-			Help:      "Whether certificate test mode is enabled (1=enabled, 0=disabled)",
-		},
-		[]string{"cluster", "namespace"},
-	)
 )
 
 // RegisterCertificateMetrics registers certificate-specific metrics
@@ -128,7 +117,6 @@ func RegisterCertificateMetrics() {
 		CertificateRolloutsPending,
 		CertificateErrorsTotal,
 		CertificateInfo,
-		CertificateTestMode,
 	)
 }
 
@@ -163,15 +151,6 @@ func SetCertificateInfo(cluster, namespace, component, serial, issuer string) {
 	CertificateInfo.WithLabelValues(cluster, namespace, component, serial, issuer).Set(1)
 }
 
-// SetCertificateTestMode sets whether test mode is enabled
-func SetCertificateTestMode(cluster, namespace string, enabled bool) {
-	var value float64
-	if enabled {
-		value = 1
-	}
-	CertificateTestMode.WithLabelValues(cluster, namespace).Set(value)
-}
-
 // ClearCertificateMetrics clears all certificate metrics for a cluster
 // Call this when a cluster is deleted
 func ClearCertificateMetrics(cluster, namespace string) {
@@ -191,5 +170,4 @@ func ClearCertificateMetrics(cluster, namespace string) {
 	}
 
 	CertificateRolloutsPending.DeleteLabelValues(cluster, namespace)
-	CertificateTestMode.DeleteLabelValues(cluster, namespace)
 }

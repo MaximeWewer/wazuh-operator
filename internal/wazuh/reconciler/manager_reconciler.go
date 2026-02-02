@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/storage"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
@@ -63,7 +63,7 @@ func (r *ManagerReconciler) WithRecorder(recorder record.EventRecorder) *Manager
 }
 
 // Reconcile reconciles the Wazuh Manager (master node)
-func (r *ManagerReconciler) Reconcile(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *ManagerReconciler) Reconcile(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Reconcile ConfigMap
@@ -91,12 +91,12 @@ func (r *ManagerReconciler) Reconcile(ctx context.Context, cluster *wazuhv1alpha
 }
 
 // reconcileConfigMap reconciles the manager ConfigMap
-func (r *ManagerReconciler) reconcileConfigMap(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *ManagerReconciler) reconcileConfigMap(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "master")
 
 	// Convert CRD config spec to internal config structs
-	var configSpec *wazuhv1alpha1.WazuhConfigSpec
+	var configSpec *wazuhv1.WazuhConfigSpec
 	if cluster.Spec.Manager != nil {
 		configSpec = cluster.Spec.Manager.Config
 	}
@@ -190,6 +190,14 @@ func (r *ManagerReconciler) reconcileConfigMap(ctx context.Context, cluster *waz
 	}
 	configBuilder.WithFilebeatConfig(filebeatConf)
 
+	// Generate wazuh-template.json for filebeat index template
+	templateBuilder := config.NewFilebeatTemplateBuilder()
+	filebeatTemplate, err := templateBuilder.Build()
+	if err != nil {
+		return fmt.Errorf("failed to build wazuh-template.json: %w", err)
+	}
+	configBuilder.WithFilebeatTemplate(filebeatTemplate)
+
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference: %w", err)
@@ -223,7 +231,7 @@ func (r *ManagerReconciler) getConfigHash(ctx context.Context, clusterName, name
 }
 
 // reconcileServices reconciles manager services
-func (r *ManagerReconciler) reconcileServices(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *ManagerReconciler) reconcileServices(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
@@ -251,7 +259,7 @@ func (r *ManagerReconciler) reconcileServices(ctx context.Context, cluster *wazu
 }
 
 // reconcileStatefulSet reconciles the manager StatefulSet
-func (r *ManagerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *ManagerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Extract spec values for hash computation
@@ -356,7 +364,7 @@ func (r *ManagerReconciler) reconcileStatefulSet(ctx context.Context, cluster *w
 		if updateReason == "" {
 			updateReason = "config-change"
 		} else {
-			updateReason = updateReason + ",config-change"
+			updateReason += ",config-change"
 		}
 
 		// Emit event for config change detection
@@ -383,7 +391,7 @@ func (r *ManagerReconciler) reconcileStatefulSet(ctx context.Context, cluster *w
 }
 
 // GetStatus returns the manager status
-func (r *ManagerReconciler) GetStatus(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*wazuhv1alpha1.ComponentStatus, error) {
+func (r *ManagerReconciler) GetStatus(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*wazuhv1.ComponentStatus, error) {
 	sts := &appsv1.StatefulSet{}
 	name := fmt.Sprintf("%s-manager-master", cluster.Name)
 
@@ -394,7 +402,7 @@ func (r *ManagerReconciler) GetStatus(ctx context.Context, cluster *wazuhv1alpha
 		return nil, err
 	}
 
-	return &wazuhv1alpha1.ComponentStatus{
+	return &wazuhv1.ComponentStatus{
 		Replicas:      sts.Status.Replicas,
 		ReadyReplicas: sts.Status.ReadyReplicas,
 		Phase:         getStatefulSetPhase(sts),
@@ -402,7 +410,7 @@ func (r *ManagerReconciler) GetStatus(ctx context.Context, cluster *wazuhv1alpha
 }
 
 // ReconcileStandalone reconciles a standalone WazuhManager resource
-func (r *ManagerReconciler) ReconcileStandalone(ctx context.Context, manager *wazuhv1alpha1.WazuhManager) error {
+func (r *ManagerReconciler) ReconcileStandalone(ctx context.Context, manager *wazuhv1.WazuhManager) error {
 	log := logf.FromContext(ctx)
 
 	// Reconcile Master node ConfigMap
@@ -438,7 +446,7 @@ func (r *ManagerReconciler) ReconcileStandalone(ctx context.Context, manager *wa
 }
 
 // reconcileStandaloneConfigMap reconciles a ConfigMap for standalone manager
-func (r *ManagerReconciler) reconcileStandaloneConfigMap(ctx context.Context, manager *wazuhv1alpha1.WazuhManager, nodeType string) error {
+func (r *ManagerReconciler) reconcileStandaloneConfigMap(ctx context.Context, manager *wazuhv1.WazuhManager, nodeType string) error {
 	log := logf.FromContext(ctx)
 	configBuilder := configmaps.NewManagerConfigMapBuilder(manager.Name, manager.Namespace, nodeType)
 
@@ -513,6 +521,14 @@ func (r *ManagerReconciler) reconcileStandaloneConfigMap(ctx context.Context, ma
 	}
 	configBuilder.WithFilebeatConfig(filebeatConf)
 
+	// Generate wazuh-template.json for filebeat index template
+	templateBuilder := config.NewFilebeatTemplateBuilder()
+	filebeatTemplate, err := templateBuilder.Build()
+	if err != nil {
+		return fmt.Errorf("failed to build wazuh-template.json: %w", err)
+	}
+	configBuilder.WithFilebeatTemplate(filebeatTemplate)
+
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(manager, configMap, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference: %w", err)
@@ -522,7 +538,7 @@ func (r *ManagerReconciler) reconcileStandaloneConfigMap(ctx context.Context, ma
 }
 
 // reconcileStandaloneServices reconciles services for standalone manager
-func (r *ManagerReconciler) reconcileStandaloneServices(ctx context.Context, manager *wazuhv1alpha1.WazuhManager, nodeType string) error {
+func (r *ManagerReconciler) reconcileStandaloneServices(ctx context.Context, manager *wazuhv1.WazuhManager, nodeType string) error {
 	if nodeType == "master" {
 		serviceBuilder := services.NewManagerServiceBuilder(manager.Name, manager.Namespace, "master")
 
@@ -565,7 +581,7 @@ func (r *ManagerReconciler) reconcileStandaloneServices(ctx context.Context, man
 }
 
 // reconcileStandaloneStatefulSet reconciles a StatefulSet for standalone manager
-func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, manager *wazuhv1alpha1.WazuhManager, nodeType string) error {
+func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, manager *wazuhv1.WazuhManager, nodeType string) error {
 	log := logf.FromContext(ctx)
 
 	var sts *appsv1.StatefulSet
@@ -635,7 +651,10 @@ func (r *ManagerReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 			Namespace: obj.GetNamespace(),
 		}
 
-		existing := obj.DeepCopyObject().(client.Object)
+		existing, ok := obj.DeepCopyObject().(client.Object)
+		if !ok {
+			return fmt.Errorf("failed to deep copy object")
+		}
 
 		err := r.Get(ctx, key, existing)
 		if err != nil && errors.IsNotFound(err) {
@@ -651,9 +670,10 @@ func (r *ManagerReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 
 		// Preserve immutable fields for Services
 		if svc, ok := obj.(*corev1.Service); ok {
-			existingSvc := existing.(*corev1.Service)
-			svc.Spec.ClusterIP = existingSvc.Spec.ClusterIP
-			svc.Spec.ClusterIPs = existingSvc.Spec.ClusterIPs
+			if existingSvc, ok := existing.(*corev1.Service); ok {
+				svc.Spec.ClusterIP = existingSvc.Spec.ClusterIP
+				svc.Spec.ClusterIPs = existingSvc.Spec.ClusterIPs
+			}
 		}
 
 		log.V(1).Info("Updating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
@@ -663,7 +683,7 @@ func (r *ManagerReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 }
 
 // reconcileVolumeExpansion handles PVC volume expansion for manager master pod
-func (r *ManagerReconciler) reconcileVolumeExpansion(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *ManagerReconciler) reconcileVolumeExpansion(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Get requested storage size from spec
@@ -775,7 +795,7 @@ func (r *ManagerReconciler) reconcileVolumeExpansion(ctx context.Context, cluste
 }
 
 // getManagerMasterPVC gets the PVC for the manager master StatefulSet
-func (r *ManagerReconciler) getManagerMasterPVC(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*corev1.PersistentVolumeClaim, error) {
+func (r *ManagerReconciler) getManagerMasterPVC(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*corev1.PersistentVolumeClaim, error) {
 	pvcList := &corev1.PersistentVolumeClaimList{}
 
 	// Manager master PVCs are labeled with app.kubernetes.io/component=manager and wazuh.com/manager-node-type=master
@@ -801,12 +821,12 @@ func (r *ManagerReconciler) getManagerMasterPVC(ctx context.Context, cluster *wa
 }
 
 // updateManagerMasterExpansionStatus updates the manager master expansion status in the cluster status
-func (r *ManagerReconciler) updateManagerMasterExpansionStatus(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, requestedSize string, pvcsExpanded, pvcsPending []string, expansionError error) {
+func (r *ManagerReconciler) updateManagerMasterExpansionStatus(ctx context.Context, cluster *wazuhv1.WazuhCluster, requestedSize string, pvcsExpanded, pvcsPending []string, expansionError error) {
 	log := logf.FromContext(ctx)
 
 	// Initialize VolumeExpansion status if needed
 	if cluster.Status.VolumeExpansion == nil {
-		cluster.Status.VolumeExpansion = &wazuhv1alpha1.VolumeExpansionStatus{}
+		cluster.Status.VolumeExpansion = &wazuhv1.VolumeExpansionStatus{}
 	}
 
 	var update storage.ExpansionStatusUpdate

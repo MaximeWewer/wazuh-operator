@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,7 +27,9 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -37,11 +39,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/deployments"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/hpa"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/secrets"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/config"
@@ -52,6 +56,8 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	drainstate "github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
+	affinityutil "github.com/MaximeWewer/wazuh-operator/pkg/resources/affinity"
+	"github.com/MaximeWewer/wazuh-operator/pkg/resources/pdb"
 )
 
 // IndexerReconciler handles reconciliation of OpenSearch Indexer
@@ -81,7 +87,7 @@ func (r *IndexerReconciler) WithRecorder(recorder record.EventRecorder) *Indexer
 }
 
 // Reconcile reconciles the OpenSearch Indexer
-func (r *IndexerReconciler) Reconcile(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *IndexerReconciler) Reconcile(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Detect topology mode
@@ -95,7 +101,16 @@ func (r *IndexerReconciler) Reconcile(ctx context.Context, cluster *wazuhv1alpha
 	if isAdvancedMode {
 		// Advanced topology mode: reconcile nodePools
 		log.Info("Reconciling indexer in advanced topology mode", "nodePools", len(cluster.Spec.Indexer.NodePools))
-		return r.reconcileAdvancedMode(ctx, cluster)
+		if err := r.reconcileAdvancedMode(ctx, cluster); err != nil {
+			return err
+		}
+		// Reconcile PDB for advanced mode (covers all indexer pods across nodePools)
+		if err := r.reconcileIndexerPDB(ctx, cluster); err != nil {
+			return fmt.Errorf("failed to reconcile indexer PDB: %w", err)
+		}
+		// Collect OpenSearch metrics via API (non-blocking, best-effort)
+		r.CollectOpenSearchMetrics(ctx, cluster)
+		return nil
 	}
 
 	// Simple mode: original reconciliation logic
@@ -119,12 +134,37 @@ func (r *IndexerReconciler) Reconcile(ctx context.Context, cluster *wazuhv1alpha
 		return fmt.Errorf("failed to reconcile indexer volume expansion: %w", err)
 	}
 
+	// Reconcile Cluster Settings (after cluster is running)
+	if err := r.reconcileClusterSettings(ctx, cluster); err != nil {
+		// Log warning but don't fail reconciliation - settings will be retried
+		log.Error(err, "Failed to reconcile cluster settings, will retry")
+	}
+
+	// Reconcile PDB for simple mode
+	if err := r.reconcileIndexerPDB(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to reconcile indexer PDB: %w", err)
+	}
+
+	// Reconcile HPA for simple mode (if enabled)
+	if err := r.reconcileHPA(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to reconcile indexer HPA: %w", err)
+	}
+
+	// Reconcile Security Init Job (ensures internal users are synced)
+	if err := r.reconcileSecurityInitJob(ctx, cluster); err != nil {
+		// Log warning but don't fail - security init will be retried
+		log.Error(err, "Failed to reconcile security init job, will retry")
+	}
+
+	// Collect OpenSearch metrics via API (non-blocking, best-effort)
+	r.CollectOpenSearchMetrics(ctx, cluster)
+
 	log.Info("Indexer reconciliation completed")
 	return nil
 }
 
 // reconcileSecrets reconciles indexer secrets (certs, credentials, security config)
-func (r *IndexerReconciler) reconcileSecrets(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *IndexerReconciler) reconcileSecrets(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Check if certificates already exist
@@ -220,11 +260,9 @@ func (r *IndexerReconciler) reconcileSecrets(ctx context.Context, cluster *wazuh
 		}
 	} else if err != nil {
 		return fmt.Errorf("failed to get indexer credentials secret: %w", err)
-	} else {
+	} else if adminPassword == "" {
 		// Get existing password from credentials secret (but prefer external if specified)
-		if adminPassword == "" {
-			adminPassword = string(existingCreds.Data[constants.SecretKeyAdminPassword])
-		}
+		adminPassword = string(existingCreds.Data[constants.SecretKeyAdminPassword])
 	}
 
 	// Security config secret with default configurations
@@ -267,7 +305,7 @@ type indexerCertificates struct {
 }
 
 // generateIndexerCertificates generates all certificates needed for the indexer
-func (r *IndexerReconciler) generateIndexerCertificates(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*indexerCertificates, error) {
+func (r *IndexerReconciler) generateIndexerCertificates(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*indexerCertificates, error) {
 	log := logf.FromContext(ctx)
 
 	// Generate CA
@@ -313,7 +351,7 @@ func (r *IndexerReconciler) generateIndexerCertificates(ctx context.Context, clu
 }
 
 // reconcileConfigMap reconciles the indexer ConfigMap
-func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	// Determine replicas
 	replicas := int32(1)
 	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Replicas > 0 {
@@ -335,7 +373,7 @@ func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *waz
 }
 
 // getConfigHash retrieves the current config hash from the indexer ConfigMap
-func (r *IndexerReconciler) getConfigHash(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) string {
+func (r *IndexerReconciler) getConfigHash(ctx context.Context, cluster *wazuhv1.WazuhCluster) string {
 	configMapName := fmt.Sprintf("%s-indexer-config", cluster.Name)
 	configMap := &corev1.ConfigMap{}
 	err := r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: cluster.Namespace}, configMap)
@@ -346,7 +384,7 @@ func (r *IndexerReconciler) getConfigHash(ctx context.Context, cluster *wazuhv1a
 }
 
 // reconcileServices reconciles indexer services
-func (r *IndexerReconciler) reconcileServices(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *IndexerReconciler) reconcileServices(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	serviceBuilder := services.NewIndexerServiceBuilder(cluster.Name, cluster.Namespace)
 
 	// Regular service
@@ -369,13 +407,13 @@ func (r *IndexerReconciler) reconcileServices(ctx context.Context, cluster *wazu
 }
 
 // reconcileStatefulSet reconciles the indexer StatefulSet
-func (r *IndexerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *IndexerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	return r.reconcileStatefulSetWithCertHash(ctx, cluster, "")
 }
 
 // reconcileStatefulSetWithCertHash reconciles the indexer StatefulSet with an optional certificate hash
 // When the cert hash changes, the StatefulSet will be updated which triggers a pod rollout
-func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, certHash string) error {
+func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) error {
 	log := logf.FromContext(ctx)
 
 	stsBuilder := deployments.NewIndexerStatefulSetBuilder(cluster.Name, cluster.Namespace)
@@ -464,7 +502,7 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 		return nil
 	}
 
-	// Check if update is needed (cert hash changed)
+	// Check if update is needed (cert hash changed or replicas changed)
 	existingCertHash := ""
 	if found.Spec.Template.Annotations != nil {
 		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
@@ -472,6 +510,7 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 
 	// Update if cert hash changed (including from empty to non-empty)
 	needsUpdate := false
+	certHashChanged := false
 	if certHash != existingCertHash {
 		if certHash != "" {
 			log.Info("Updating Indexer StatefulSet due to certificate hash change",
@@ -479,7 +518,18 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 				"oldHash", utils.ShortHash(existingCertHash),
 				"newHash", utils.ShortHash(certHash))
 			needsUpdate = true
+			certHashChanged = true
 		}
+	}
+
+	// Check if replicas changed
+	desiredReplicas := cluster.Spec.Indexer.Replicas
+	if found.Spec.Replicas != nil && *found.Spec.Replicas != desiredReplicas {
+		log.Info("Updating Indexer StatefulSet due to replica count change",
+			"name", sts.Name,
+			"oldReplicas", *found.Spec.Replicas,
+			"newReplicas", desiredReplicas)
+		needsUpdate = true
 	}
 
 	if needsUpdate {
@@ -488,35 +538,38 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 			return fmt.Errorf("failed to update indexer statefulset: %w", err)
 		}
 
-		// Wait for the StatefulSet to be ready after update (graceful rollout)
-		// This ensures new pods are healthy before the reconcile completes
-		log.Info("Waiting for Indexer StatefulSet to be ready after certificate renewal",
-			"name", sts.Name,
-			"timeout", utils.DefaultRolloutTimeout)
-
-		waiter := utils.NewRolloutWaiter(r.Client)
-		result := waiter.WaitForStatefulSetReadyWithResult(ctx, sts.Namespace, sts.Name)
-		if result.TimedOut {
-			log.Error(result.Error, "Timeout waiting for Indexer StatefulSet to be ready",
+		// Only wait for rollout on cert hash changes (pod restart required)
+		// Replica changes don't need rollout wait - Kubernetes handles scaling
+		if certHashChanged {
+			log.Info("Waiting for Indexer StatefulSet to be ready after certificate renewal",
 				"name", sts.Name,
 				"timeout", utils.DefaultRolloutTimeout)
-			// Don't fail the reconcile on timeout - the StatefulSet strategy ensures
-			// OrderedReady, so old pods are kept until new ones are ready
-			return nil
-		}
-		if result.Error != nil {
-			return fmt.Errorf("error waiting for indexer statefulset to be ready: %w", result.Error)
-		}
 
-		log.Info("Indexer StatefulSet is ready after certificate renewal", "name", sts.Name)
+			waiter := utils.NewRolloutWaiter(r.Client)
+			result := waiter.WaitForStatefulSetReadyWithResult(ctx, sts.Namespace, sts.Name)
+			if result.TimedOut {
+				log.Error(result.Error, "Timeout waiting for Indexer StatefulSet to be ready",
+					"name", sts.Name,
+					"timeout", utils.DefaultRolloutTimeout)
+				// Don't fail the reconcile on timeout - the StatefulSet strategy ensures
+				// OrderedReady, so old pods are kept until new ones are ready
+				return nil
+			}
+			if result.Error != nil {
+				return fmt.Errorf("error waiting for indexer statefulset to be ready: %w", result.Error)
+			}
+
+			log.Info("Indexer StatefulSet is ready after certificate renewal", "name", sts.Name)
+		}
 	}
 
 	return nil
 }
 
-// ReconcileWithCertHash reconciles the OpenSearch Indexer with certificate hash for pod restart
-// DEPRECATED: Use ReconcileNonBlocking for non-blocking rollouts
-func (r *IndexerReconciler) ReconcileWithCertHash(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, certHash string) error {
+// ReconcileWithCertHash reconciles the OpenSearch Indexer with certificate hash for pod restart.
+//
+// Deprecated: Use ReconcileNonBlocking for non-blocking rollouts.
+func (r *IndexerReconciler) ReconcileWithCertHash(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) error {
 	log := logf.FromContext(ctx)
 
 	// Reconcile Secrets
@@ -553,7 +606,7 @@ type IndexerReconcileResult struct {
 
 // ReconcileNonBlocking reconciles the OpenSearch Indexer without blocking on rollouts
 // Returns a pending rollout that should be tracked and monitored by the caller
-func (r *IndexerReconciler) ReconcileNonBlocking(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, certHash string) IndexerReconcileResult {
+func (r *IndexerReconciler) ReconcileNonBlocking(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) IndexerReconcileResult {
 	log := logf.FromContext(ctx)
 
 	// Reconcile Secrets
@@ -577,18 +630,24 @@ func (r *IndexerReconciler) ReconcileNonBlocking(ctx context.Context, cluster *w
 		return IndexerReconcileResult{Error: fmt.Errorf("failed to reconcile indexer statefulset: %w", err)}
 	}
 
+	// Reconcile Security Init Job (ensures internal users are synced)
+	if err := r.reconcileSecurityInitJob(ctx, cluster); err != nil {
+		// Log warning but don't fail - security init will be retried
+		log.Error(err, "Failed to reconcile security init job, will retry")
+	}
+
 	log.Info("Indexer reconciliation completed (non-blocking)", "hasPendingRollout", pendingRollout != nil)
 	return IndexerReconcileResult{PendingRollout: pendingRollout}
 }
 
 // reconcileStatefulSetNonBlocking reconciles the indexer StatefulSet without blocking on rollout
 // Returns a PendingRollout if a rollout was initiated, nil otherwise
-func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, certHash string) (*utils.PendingRollout, error) {
+func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) (*utils.PendingRollout, error) {
 	log := logf.FromContext(ctx)
 
 	// Extract spec values for hash computation
 	var (
-		replicas     int32 = constants.DefaultIndexerReplicas
+		replicas     = constants.DefaultIndexerReplicas
 		resources    *corev1.ResourceRequirements
 		storageSize  = constants.DefaultIndexerStorageSize
 		javaOpts     = constants.DefaultIndexerJavaOpts
@@ -622,6 +681,12 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		env = cluster.Spec.Indexer.Env
 		envFrom = cluster.Spec.Indexer.EnvFrom
 		annotations = cluster.Spec.Indexer.Annotations
+
+		// Apply cluster-level anti-affinity if enabled
+		if affinityutil.ShouldApplyIndexerAntiAffinity(cluster) {
+			clusterAntiAffinity := affinityutil.BuildIndexerAntiAffinity(cluster.Name, cluster.Spec.Indexer.AntiAffinity)
+			affinity = affinityutil.MergeAntiAffinity(clusterAntiAffinity, affinity)
+		}
 	}
 
 	// Compute spec hash for change detection (includes all configurable fields)
@@ -802,7 +867,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		if updateReason == "" {
 			updateReason = "certificate-renewal"
 		} else {
-			updateReason = updateReason + ",certificate-renewal"
+			updateReason += ",certificate-renewal"
 		}
 	}
 
@@ -821,7 +886,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		if updateReason == "" {
 			updateReason = "config-change"
 		} else {
-			updateReason = updateReason + ",config-change"
+			updateReason += ",config-change"
 		}
 
 		// Emit event for config change detection
@@ -856,7 +921,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 }
 
 // GetStatus gets the indexer status
-func (r *IndexerReconciler) GetStatus(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*wazuhv1alpha1.ComponentStatus, error) {
+func (r *IndexerReconciler) GetStatus(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*wazuhv1.ComponentStatus, error) {
 	sts := &appsv1.StatefulSet{}
 	name := fmt.Sprintf("%s-indexer", cluster.Name)
 
@@ -867,10 +932,21 @@ func (r *IndexerReconciler) GetStatus(ctx context.Context, cluster *wazuhv1alpha
 		return nil, err
 	}
 
-	return &wazuhv1alpha1.ComponentStatus{
-		Replicas:      sts.Status.Replicas,
-		ReadyReplicas: sts.Status.ReadyReplicas,
-		Phase:         getStatefulSetPhase(sts),
+	// Get desired replicas from the spec
+	desiredReplicas := int32(0)
+	if cluster.Spec.Indexer != nil {
+		desiredReplicas = cluster.Spec.Indexer.Replicas
+	}
+
+	// Record OpenSearch node metrics
+	metrics.SetOpenSearchNodes(cluster.Name, cluster.Namespace, "ready", int(sts.Status.ReadyReplicas))
+	metrics.SetOpenSearchNodes(cluster.Name, cluster.Namespace, "total", int(sts.Status.Replicas))
+
+	return &wazuhv1.ComponentStatus{
+		Replicas:        sts.Status.Replicas,
+		ReadyReplicas:   sts.Status.ReadyReplicas,
+		DesiredReplicas: desiredReplicas,
+		Phase:           getStatefulSetPhase(sts),
 	}, nil
 }
 
@@ -892,7 +968,7 @@ type DrainCheckResult struct {
 
 // CheckScaleDownDrain checks if an indexer scale-down requires drain and handles it
 // Returns true if scale-down should proceed, false if waiting for drain
-func (r *IndexerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, desiredReplicas int32) (*DrainCheckResult, error) {
+func (r *IndexerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *wazuhv1.WazuhCluster, desiredReplicas int32) (*DrainCheckResult, error) {
 	log := logf.FromContext(ctx)
 	result := &DrainCheckResult{}
 
@@ -935,7 +1011,7 @@ func (r *IndexerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *wa
 
 	// Check current drain phase
 	switch drainStatus.Phase {
-	case wazuhv1alpha1.DrainPhaseIdle, "":
+	case wazuhv1.DrainPhaseIdle, "":
 		// Start new drain
 		log.Info("Starting indexer drain for scale-down", "targetPod", scaleInfo.TargetPodName)
 		if err := r.startDrain(ctx, cluster, scaleInfo, drainStatus); err != nil {
@@ -945,23 +1021,23 @@ func (r *IndexerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *wa
 		result.DrainInProgress = true
 		return result, nil
 
-	case wazuhv1alpha1.DrainPhasePending, wazuhv1alpha1.DrainPhaseDraining:
+	case wazuhv1.DrainPhasePending, wazuhv1.DrainPhaseDraining:
 		// Drain in progress, check status
 		result.DrainInProgress = true
 		progress, err := r.monitorDrainProgress(ctx, cluster, scaleInfo.TargetPodName, drainStatus)
 		if err != nil {
 			result.Error = err
-			return result, nil // Continue reconciliation, don't fail
+			return result, nil //nolint:nilerr // Error stored in result.Error for caller to handle
 		}
 		result.Progress = progress
 		return result, nil
 
-	case wazuhv1alpha1.DrainPhaseVerifying:
+	case wazuhv1.DrainPhaseVerifying:
 		// Verify completion
 		complete, err := r.verifyDrainComplete(ctx, cluster, scaleInfo.TargetPodName, drainStatus)
 		if err != nil {
 			result.Error = err
-			return result, nil
+			return result, nil //nolint:nilerr // Error stored in result.Error for caller to handle
 		}
 		if complete {
 			result.DrainComplete = true
@@ -971,13 +1047,13 @@ func (r *IndexerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *wa
 		}
 		return result, nil
 
-	case wazuhv1alpha1.DrainPhaseComplete:
+	case wazuhv1.DrainPhaseComplete:
 		// Drain complete, proceed with scale-down
 		log.Info("Indexer drain complete, proceeding with scale-down")
 		result.DrainComplete = true
 		return result, nil
 
-	case wazuhv1alpha1.DrainPhaseFailed:
+	case wazuhv1.DrainPhaseFailed:
 		// Drain failed - check if we should retry or skip
 		log.Info("Previous drain failed", "message", drainStatus.Message)
 		result.Error = fmt.Errorf("drain failed: %s", drainStatus.Message)
@@ -990,20 +1066,20 @@ func (r *IndexerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *wa
 }
 
 // getOrInitDrainStatus returns the current drain status or initializes a new one
-func (r *IndexerReconciler) getOrInitDrainStatus(cluster *wazuhv1alpha1.WazuhCluster) *wazuhv1alpha1.ComponentDrainStatus {
+func (r *IndexerReconciler) getOrInitDrainStatus(cluster *wazuhv1.WazuhCluster) *wazuhv1.ComponentDrainStatus {
 	if cluster.Status.Drain == nil {
-		cluster.Status.Drain = &wazuhv1alpha1.DrainStatus{}
+		cluster.Status.Drain = &wazuhv1.DrainStatus{}
 	}
 	if cluster.Status.Drain.Indexer == nil {
-		cluster.Status.Drain.Indexer = &wazuhv1alpha1.ComponentDrainStatus{
-			Phase: wazuhv1alpha1.DrainPhaseIdle,
+		cluster.Status.Drain.Indexer = &wazuhv1.ComponentDrainStatus{
+			Phase: wazuhv1.DrainPhaseIdle,
 		}
 	}
 	return cluster.Status.Drain.Indexer
 }
 
 // startDrain initiates the drain process for an indexer node
-func (r *IndexerReconciler) startDrain(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, scaleInfo drainstate.ScaleDownInfo, status *wazuhv1alpha1.ComponentDrainStatus) error {
+func (r *IndexerReconciler) startDrain(ctx context.Context, cluster *wazuhv1.WazuhCluster, scaleInfo drainstate.ScaleDownInfo, status *wazuhv1.ComponentDrainStatus) error {
 	log := logf.FromContext(ctx)
 
 	// Initialize OpenSearch client if needed
@@ -1012,7 +1088,7 @@ func (r *IndexerReconciler) startDrain(ctx context.Context, cluster *wazuhv1alph
 	}
 
 	// Get drain configuration
-	var drainConfig *wazuhv1alpha1.IndexerDrainConfig
+	var drainConfig *wazuhv1.IndexerDrainConfig
 	if cluster.Spec.Drain != nil {
 		drainConfig = cluster.Spec.Drain.Indexer
 	}
@@ -1040,7 +1116,7 @@ func (r *IndexerReconciler) startDrain(ctx context.Context, cluster *wazuhv1alph
 	// Start the actual drain
 	if err := r.drainer.StartDrain(ctx, nodeName); err != nil {
 		// Mark as failed
-		drainstate.MarkFailed(status, fmt.Sprintf("Failed to start drain: %v", err))
+		_ = drainstate.MarkFailed(status, fmt.Sprintf("Failed to start drain: %v", err))
 		if r.Recorder != nil {
 			r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.DrainEventReasonFailed,
 				fmt.Sprintf("Failed to start indexer drain: %v", err))
@@ -1049,7 +1125,7 @@ func (r *IndexerReconciler) startDrain(ctx context.Context, cluster *wazuhv1alph
 	}
 
 	// Transition to draining phase
-	if err := drainstate.TransitionTo(status, wazuhv1alpha1.DrainPhaseDraining, "Relocating shards from node"); err != nil {
+	if err := drainstate.TransitionTo(status, wazuhv1.DrainPhaseDraining, "Relocating shards from node"); err != nil {
 		log.Error(err, "Failed to transition to draining phase")
 	}
 
@@ -1058,7 +1134,9 @@ func (r *IndexerReconciler) startDrain(ctx context.Context, cluster *wazuhv1alph
 }
 
 // monitorDrainProgress checks the current drain progress
-func (r *IndexerReconciler) monitorDrainProgress(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, nodeName string, status *wazuhv1alpha1.ComponentDrainStatus) (*drain.DrainProgress, error) {
+//
+//nolint:unparam // cluster param kept for consistency with other reconcilers
+func (r *IndexerReconciler) monitorDrainProgress(ctx context.Context, _ *wazuhv1.WazuhCluster, nodeName string, status *wazuhv1.ComponentDrainStatus) (*drain.DrainProgress, error) {
 	log := logf.FromContext(ctx)
 
 	if r.drainer == nil {
@@ -1084,7 +1162,7 @@ func (r *IndexerReconciler) monitorDrainProgress(ctx context.Context, cluster *w
 
 	// Check for completion
 	if progress.IsComplete {
-		if err := drainstate.TransitionTo(status, wazuhv1alpha1.DrainPhaseVerifying, "Verifying drain completion"); err != nil {
+		if err := drainstate.TransitionTo(status, wazuhv1.DrainPhaseVerifying, "Verifying drain completion"); err != nil {
 			log.Error(err, "Failed to transition to verifying phase")
 		}
 	}
@@ -1093,7 +1171,7 @@ func (r *IndexerReconciler) monitorDrainProgress(ctx context.Context, cluster *w
 }
 
 // verifyDrainComplete verifies that drain is fully complete
-func (r *IndexerReconciler) verifyDrainComplete(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, nodeName string, status *wazuhv1alpha1.ComponentDrainStatus) (bool, error) {
+func (r *IndexerReconciler) verifyDrainComplete(ctx context.Context, cluster *wazuhv1.WazuhCluster, nodeName string, status *wazuhv1.ComponentDrainStatus) (bool, error) {
 	log := logf.FromContext(ctx)
 
 	if r.drainer == nil {
@@ -1131,23 +1209,23 @@ func (r *IndexerReconciler) verifyDrainComplete(ctx context.Context, cluster *wa
 }
 
 // ensureOpenSearchClient creates or reuses an OpenSearch client
-func (r *IndexerReconciler) ensureOpenSearchClient(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *IndexerReconciler) ensureOpenSearchClient(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	if r.osClient != nil {
 		return nil
 	}
 
 	clientFactory := security.NewOpenSearchClientFactory(r.Client)
-	client, err := clientFactory.GetClientForCluster(ctx, cluster)
+	newClient, err := clientFactory.GetClientForCluster(ctx, cluster)
 	if err != nil {
 		return err
 	}
 
-	r.osClient = client
+	r.osClient = newClient
 	return nil
 }
 
 // ResetDrainState resets the drain state after a successful scale-down
-func (r *IndexerReconciler) ResetDrainState(cluster *wazuhv1alpha1.WazuhCluster) {
+func (r *IndexerReconciler) ResetDrainState(cluster *wazuhv1.WazuhCluster) {
 	if cluster.Status.Drain != nil && cluster.Status.Drain.Indexer != nil {
 		drainstate.Reset(cluster.Status.Drain.Indexer)
 	}
@@ -1156,10 +1234,10 @@ func (r *IndexerReconciler) ResetDrainState(cluster *wazuhv1alpha1.WazuhCluster)
 }
 
 // EvaluateDrainFeasibility evaluates if drain is feasible (for dry-run mode)
-func (r *IndexerReconciler) EvaluateDrainFeasibility(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, nodeName string) (*wazuhv1alpha1.DryRunResult, error) {
+func (r *IndexerReconciler) EvaluateDrainFeasibility(ctx context.Context, cluster *wazuhv1.WazuhCluster, nodeName string) (*wazuhv1.DryRunResult, error) {
 	// Initialize OpenSearch client if needed
 	if err := r.ensureOpenSearchClient(ctx, cluster); err != nil {
-		return &wazuhv1alpha1.DryRunResult{
+		return &wazuhv1.DryRunResult{
 			Feasible:    false,
 			EvaluatedAt: metav1.Now(),
 			Component:   constants.DrainComponentIndexer,
@@ -1168,7 +1246,7 @@ func (r *IndexerReconciler) EvaluateDrainFeasibility(ctx context.Context, cluste
 	}
 
 	// Get drain configuration
-	var drainConfig *wazuhv1alpha1.IndexerDrainConfig
+	var drainConfig *wazuhv1.IndexerDrainConfig
 	if cluster.Spec.Drain != nil {
 		drainConfig = cluster.Spec.Drain.Indexer
 	}
@@ -1188,7 +1266,10 @@ func (r *IndexerReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 			Namespace: obj.GetNamespace(),
 		}
 
-		existing := obj.DeepCopyObject().(client.Object)
+		existing, ok := obj.DeepCopyObject().(client.Object)
+		if !ok {
+			return fmt.Errorf("failed to deep copy object")
+		}
 
 		err := r.Get(ctx, key, existing)
 		if err != nil && errors.IsNotFound(err) {
@@ -1205,9 +1286,10 @@ func (r *IndexerReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 
 		// Preserve immutable fields for Services
 		if svc, ok := obj.(*corev1.Service); ok {
-			existingSvc := existing.(*corev1.Service)
-			svc.Spec.ClusterIP = existingSvc.Spec.ClusterIP
-			svc.Spec.ClusterIPs = existingSvc.Spec.ClusterIPs
+			if existingSvc, ok := existing.(*corev1.Service); ok {
+				svc.Spec.ClusterIP = existingSvc.Spec.ClusterIP
+				svc.Spec.ClusterIPs = existingSvc.Spec.ClusterIPs
+			}
 		}
 
 		log.V(1).Info("Updating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
@@ -1231,7 +1313,7 @@ func getStatefulSetPhase(sts *appsv1.StatefulSet) string {
 }
 
 // ReconcileStandalone reconciles a standalone OpenSearchIndexer resource
-func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wazuhv1alpha1.OpenSearchIndexer) error {
+func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wazuhv1.OpenSearchIndexer) error {
 	log := logf.FromContext(ctx)
 
 	// Check if certificates exist, generate if needed
@@ -1333,7 +1415,7 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 }
 
 // generateStandaloneIndexerCertificates generates certificates for standalone indexer
-func (r *IndexerReconciler) generateStandaloneIndexerCertificates(ctx context.Context, indexer *wazuhv1alpha1.OpenSearchIndexer) (*indexerCertificates, error) {
+func (r *IndexerReconciler) generateStandaloneIndexerCertificates(ctx context.Context, indexer *wazuhv1.OpenSearchIndexer) (*indexerCertificates, error) {
 	log := logf.FromContext(ctx)
 
 	// Generate CA
@@ -1428,7 +1510,7 @@ all_access:
     - "admin"
   users:
     # Admin certificate DN - required for certificate hot reload API
-    - "CN=admin,OU=Wazuh,O=Wazuh,L=California,ST=California,C=US"
+    - "CN=admin,OU=Wazuh,O=Wazuh,L=Strasbourg,ST=Alsace,C=FR"
   description: "Maps admin to all_access"
 
 own_index:
@@ -1515,9 +1597,104 @@ config:
 `)
 }
 
+// reconcileSecurityInitJob ensures internal users (admin, kibanaserver) are synced
+// to the .opendistro_security index when credentials change.
+// This is a best-effort operation - if it fails due to auth issues on a new cluster,
+// the security plugin's auto-init from internal_users.yml will handle it.
+func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	// Check if indexer is ready first
+	status, err := r.GetStatus(ctx, cluster)
+	if err != nil {
+		return fmt.Errorf("failed to get indexer status: %w", err)
+	}
+	if status == nil || status.ReadyReplicas == 0 {
+		log.V(1).Info("Indexer not ready yet, skipping security sync")
+		return nil
+	}
+
+	// Get credentials from secret
+	credSecretName := constants.IndexerCredentialsName(cluster.Name)
+	credSecret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: credSecretName, Namespace: cluster.Namespace}, credSecret); err != nil {
+		if errors.IsNotFound(err) {
+			log.V(1).Info("Credentials secret not found, skipping security sync")
+			return nil
+		}
+		return fmt.Errorf("failed to get credentials secret: %w", err)
+	}
+
+	// Get the password from secret
+	password := string(credSecret.Data[constants.SecretKeyAdminPassword])
+	if password == "" {
+		log.V(1).Info("Admin password not found in credentials secret")
+		return nil
+	}
+
+	// Compute hash to check if we've already synced this config
+	configHash := patch.ComputeSecretHash(credSecret.Data)
+
+	// Check if we've already synced this configuration
+	if cluster.Status.Security != nil && cluster.Status.Security.CredentialsHash == configHash {
+		log.V(1).Info("Security credentials already synced", "hash", configHash)
+		return nil
+	}
+
+	// Try to create OpenSearch client and update users
+	clientFactory := security.NewOpenSearchClientFactory(r.Client)
+	osClient, err := clientFactory.GetClientForCluster(ctx, cluster)
+	if err != nil {
+		// Auth failed - this is expected on first startup before security auto-init
+		log.V(1).Info("Failed to create OpenSearch client for security sync (expected on first startup)", "error", err)
+		return nil
+	}
+
+	// Update admin user
+	log.Info("Syncing admin user to security index")
+	adminPayload := map[string]interface{}{
+		"password":      password,
+		"backend_roles": []string{"admin"},
+		"description":   "Admin user",
+	}
+	resp, err := osClient.PutJSON(ctx, "/_plugins/_security/api/internalusers/admin", adminPayload)
+	if err != nil {
+		log.V(1).Info("Failed to update admin user (may be expected on new cluster)", "error", err)
+		return nil
+	}
+	resp.Body.Close()
+
+	// Update kibanaserver user
+	log.Info("Syncing kibanaserver user to security index")
+	kibanaPayload := map[string]interface{}{
+		"password":    password,
+		"description": "Kibana server user",
+	}
+	resp, err = osClient.PutJSON(ctx, "/_plugins/_security/api/internalusers/kibanaserver", kibanaPayload)
+	if err != nil {
+		log.V(1).Info("Failed to update kibanaserver user", "error", err)
+		return nil
+	}
+	resp.Body.Close()
+
+	// Update status to track that we've synced this config
+	if cluster.Status.Security == nil {
+		cluster.Status.Security = &wazuhv1.SecurityStatus{}
+	}
+	cluster.Status.Security.CredentialsHash = configHash
+
+	log.Info("Security credentials synced successfully", "hash", configHash)
+	if r.Recorder != nil {
+		r.Recorder.Event(cluster, corev1.EventTypeNormal, "SecurityCredentialsSynced",
+			"Internal users synchronized to security index")
+	}
+
+	return nil
+}
+
 // CheckSecurityInitialization checks if OpenSearch security is initialized
 // and updates the cluster status accordingly
-func (r *IndexerReconciler) CheckSecurityInitialization(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (bool, error) {
+func (r *IndexerReconciler) CheckSecurityInitialization(ctx context.Context, cluster *wazuhv1.WazuhCluster) (bool, error) {
 	log := logf.FromContext(ctx)
 
 	// First check if the indexer is ready
@@ -1548,7 +1725,7 @@ func (r *IndexerReconciler) CheckSecurityInitialization(ctx context.Context, clu
 
 	// Update security status
 	if cluster.Status.Security == nil {
-		cluster.Status.Security = &wazuhv1alpha1.SecurityStatus{}
+		cluster.Status.Security = &wazuhv1.SecurityStatus{}
 	}
 
 	if initialized && !cluster.Status.Security.Initialized {
@@ -1570,7 +1747,7 @@ func (r *IndexerReconciler) CheckSecurityInitialization(ctx context.Context, clu
 }
 
 // SyncSecurityCRDs synchronizes all security-related CRDs to OpenSearch
-func (r *IndexerReconciler) SyncSecurityCRDs(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *IndexerReconciler) SyncSecurityCRDs(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Check if security is initialized
@@ -1613,11 +1790,15 @@ func (r *IndexerReconciler) SyncSecurityCRDs(ctx context.Context, cluster *wazuh
 			"actionGroups", cluster.Status.Security.SyncedActionGroups)
 	}
 
+	// Record OpenSearch security metrics
+	metrics.SetOpenSearchUsers(cluster.Name, cluster.Namespace, cluster.Status.Security.SyncedUsers)
+	metrics.SetOpenSearchRoles(cluster.Name, cluster.Namespace, cluster.Status.Security.SyncedRoles)
+
 	return nil
 }
 
 // DetectIndexerRestart checks if the indexer has restarted since last check
-func (r *IndexerReconciler) DetectIndexerRestart(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (bool, error) {
+func (r *IndexerReconciler) DetectIndexerRestart(ctx context.Context, cluster *wazuhv1.WazuhCluster) (bool, error) {
 	// Get current restart count from pods
 	podList := &corev1.PodList{}
 	listOpts := []client.ListOption{
@@ -1643,7 +1824,7 @@ func (r *IndexerReconciler) DetectIndexerRestart(ctx context.Context, cluster *w
 
 	// Compare with stored restart count
 	if cluster.Status.Security == nil {
-		cluster.Status.Security = &wazuhv1alpha1.SecurityStatus{}
+		cluster.Status.Security = &wazuhv1.SecurityStatus{}
 	}
 
 	storedRestarts := cluster.Status.Security.IndexerRestartCount
@@ -1655,8 +1836,53 @@ func (r *IndexerReconciler) DetectIndexerRestart(ctx context.Context, cluster *w
 	return false, nil
 }
 
+// CollectOpenSearchMetrics collects and records OpenSearch metrics via API
+// This includes cluster health, indices count, and ISM policies count
+func (r *IndexerReconciler) CollectOpenSearchMetrics(ctx context.Context, cluster *wazuhv1.WazuhCluster) {
+	log := logf.FromContext(ctx)
+
+	// Ensure we have an OpenSearch client
+	if err := r.ensureOpenSearchClient(ctx, cluster); err != nil {
+		log.V(1).Info("Cannot create OpenSearch client for metrics collection", "error", err)
+		return
+	}
+
+	// Collect cluster health
+	health, err := r.osClient.GetClusterHealth(ctx)
+	if err != nil {
+		log.V(1).Info("Failed to get cluster health for metrics", "error", err)
+	} else {
+		var healthStatus metrics.HealthStatus
+		switch health.Status {
+		case "green":
+			healthStatus = metrics.HealthGreen
+		case "yellow":
+			healthStatus = metrics.HealthYellow
+		default:
+			healthStatus = metrics.HealthRed
+		}
+		metrics.SetOpenSearchClusterHealth(cluster.Name, cluster.Namespace, healthStatus)
+	}
+
+	// Collect indices count
+	indicesCount, err := r.osClient.GetIndicesCount(ctx)
+	if err != nil {
+		log.V(1).Info("Failed to get indices count for metrics", "error", err)
+	} else {
+		metrics.SetOpenSearchIndices(cluster.Name, cluster.Namespace, indicesCount)
+	}
+
+	// Collect ISM policies count
+	ismPoliciesCount, err := r.osClient.GetISMPoliciesCount(ctx)
+	if err != nil {
+		log.V(1).Info("Failed to get ISM policies count for metrics", "error", err)
+	} else {
+		metrics.SetOpenSearchISMPolicies(cluster.Name, cluster.Namespace, ismPoliciesCount)
+	}
+}
+
 // ResolveAndSetDefaultAdmin resolves the default admin user and updates cluster status
-func (r *IndexerReconciler) ResolveAndSetDefaultAdmin(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *IndexerReconciler) ResolveAndSetDefaultAdmin(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	credManager := security.NewCredentialManager(r.Client, r.Recorder)
@@ -1667,7 +1893,7 @@ func (r *IndexerReconciler) ResolveAndSetDefaultAdmin(ctx context.Context, clust
 
 	// Update status
 	if cluster.Status.Security == nil {
-		cluster.Status.Security = &wazuhv1alpha1.SecurityStatus{}
+		cluster.Status.Security = &wazuhv1.SecurityStatus{}
 	}
 	cluster.Status.Security.DefaultAdminUser = creds.Username
 	cluster.Status.Security.DefaultAdminSource = creds.Source
@@ -1680,7 +1906,7 @@ func (r *IndexerReconciler) ResolveAndSetDefaultAdmin(ctx context.Context, clust
 }
 
 // reconcileVolumeExpansion handles PVC volume expansion for indexer pods
-func (r *IndexerReconciler) reconcileVolumeExpansion(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *IndexerReconciler) reconcileVolumeExpansion(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Get requested storage size from spec
@@ -1817,7 +2043,7 @@ func (r *IndexerReconciler) reconcileVolumeExpansion(ctx context.Context, cluste
 }
 
 // getIndexerPVCs lists all PVCs belonging to the indexer StatefulSet
-func (r *IndexerReconciler) getIndexerPVCs(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*corev1.PersistentVolumeClaimList, error) {
+func (r *IndexerReconciler) getIndexerPVCs(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*corev1.PersistentVolumeClaimList, error) {
 	pvcList := &corev1.PersistentVolumeClaimList{}
 
 	// Indexer PVCs are labeled with app.kubernetes.io/component=indexer
@@ -1837,12 +2063,12 @@ func (r *IndexerReconciler) getIndexerPVCs(ctx context.Context, cluster *wazuhv1
 }
 
 // updateIndexerExpansionStatus updates the indexer expansion status in the cluster status
-func (r *IndexerReconciler) updateIndexerExpansionStatus(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, requestedSize string, pvcsExpanded, pvcsPending []string, expansionError error) {
+func (r *IndexerReconciler) updateIndexerExpansionStatus(ctx context.Context, cluster *wazuhv1.WazuhCluster, requestedSize string, pvcsExpanded, pvcsPending []string, expansionError error) {
 	log := logf.FromContext(ctx)
 
 	// Initialize VolumeExpansion status if needed
 	if cluster.Status.VolumeExpansion == nil {
-		cluster.Status.VolumeExpansion = &wazuhv1alpha1.VolumeExpansionStatus{}
+		cluster.Status.VolumeExpansion = &wazuhv1.VolumeExpansionStatus{}
 	}
 
 	var update storage.ExpansionStatusUpdate
@@ -1892,12 +2118,12 @@ func (r *IndexerReconciler) updateIndexerExpansionStatus(ctx context.Context, cl
 
 // reconcileAdvancedMode reconciles the indexer in advanced topology mode
 // This creates separate StatefulSets, Services, and ConfigMaps for each nodePool
-func (r *IndexerReconciler) reconcileAdvancedMode(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *IndexerReconciler) reconcileAdvancedMode(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Initialize nodePool statuses if needed
 	if cluster.Status.Indexer.NodePoolStatuses == nil {
-		cluster.Status.Indexer.NodePoolStatuses = make(map[string]wazuhv1alpha1.NodePoolStatus)
+		cluster.Status.Indexer.NodePoolStatuses = make(map[string]wazuhv1.NodePoolStatus)
 	}
 
 	// Build discovery hosts and initial master nodes (pointing to cluster_manager pools)
@@ -1908,10 +2134,10 @@ func (r *IndexerReconciler) reconcileAdvancedMode(ctx context.Context, cluster *
 		log.V(1).Info("Reconciling nodePool", "pool", pool.Name, "replicas", pool.Replicas)
 
 		// Update status to indicate reconciliation in progress
-		r.updateNodePoolStatus(cluster, pool.Name, wazuhv1alpha1.NodePoolPhaseCreating, "Reconciling nodePool")
+		r.updateNodePoolStatus(cluster, pool.Name, wazuhv1.NodePoolPhaseCreating, "Reconciling nodePool")
 
 		if err := r.reconcileSingleNodePool(ctx, cluster, &pool, discoveryHosts, initialMasterNodes); err != nil {
-			r.updateNodePoolStatus(cluster, pool.Name, wazuhv1alpha1.NodePoolPhaseFailed, err.Error())
+			r.updateNodePoolStatus(cluster, pool.Name, wazuhv1.NodePoolPhaseFailed, err.Error())
 			if r.Recorder != nil {
 				r.Recorder.Event(cluster, corev1.EventTypeWarning, "NodePoolReconcileFailed",
 					fmt.Sprintf("Failed to reconcile nodePool %s: %v", pool.Name, err))
@@ -1945,8 +2171,8 @@ func (r *IndexerReconciler) reconcileAdvancedMode(ctx context.Context, cluster *
 // reconcileSingleNodePool reconciles a single nodePool's resources
 func (r *IndexerReconciler) reconcileSingleNodePool(
 	ctx context.Context,
-	cluster *wazuhv1alpha1.WazuhCluster,
-	pool *wazuhv1alpha1.IndexerNodePoolSpec,
+	cluster *wazuhv1.WazuhCluster,
+	pool *wazuhv1.IndexerNodePoolSpec,
 	discoveryHosts []string,
 	initialMasterNodes []string,
 ) error {
@@ -1974,8 +2200,8 @@ func (r *IndexerReconciler) reconcileSingleNodePool(
 // reconcileNodePoolConfigMap creates/updates the ConfigMap for a nodePool
 func (r *IndexerReconciler) reconcileNodePoolConfigMap(
 	ctx context.Context,
-	cluster *wazuhv1alpha1.WazuhCluster,
-	pool *wazuhv1alpha1.IndexerNodePoolSpec,
+	cluster *wazuhv1.WazuhCluster,
+	pool *wazuhv1.IndexerNodePoolSpec,
 	discoveryHosts []string,
 	initialMasterNodes []string,
 ) error {
@@ -2011,8 +2237,8 @@ func (r *IndexerReconciler) reconcileNodePoolConfigMap(
 // reconcileNodePoolService creates/updates the headless Service for a nodePool
 func (r *IndexerReconciler) reconcileNodePoolService(
 	ctx context.Context,
-	cluster *wazuhv1alpha1.WazuhCluster,
-	pool *wazuhv1alpha1.IndexerNodePoolSpec,
+	cluster *wazuhv1.WazuhCluster,
+	pool *wazuhv1.IndexerNodePoolSpec,
 ) error {
 	// Build headless service
 	serviceBuilder := services.NewNodePoolServiceBuilder(cluster.Name, cluster.Namespace, pool.Name)
@@ -2032,8 +2258,8 @@ func (r *IndexerReconciler) reconcileNodePoolService(
 // reconcileNodePoolStatefulSet creates/updates the StatefulSet for a nodePool
 func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 	ctx context.Context,
-	cluster *wazuhv1alpha1.WazuhCluster,
-	pool *wazuhv1alpha1.IndexerNodePoolSpec,
+	cluster *wazuhv1.WazuhCluster,
+	pool *wazuhv1.IndexerNodePoolSpec,
 ) error {
 	log := logf.FromContext(ctx)
 
@@ -2187,8 +2413,8 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 // Returns true if drain is in progress and scale-down should be deferred
 func (r *IndexerReconciler) checkNodePoolScaleDownDrain(
 	ctx context.Context,
-	cluster *wazuhv1alpha1.WazuhCluster,
-	pool *wazuhv1alpha1.IndexerNodePoolSpec,
+	cluster *wazuhv1.WazuhCluster,
+	pool *wazuhv1.IndexerNodePoolSpec,
 	currentReplicas int32,
 ) (bool, error) {
 	log := logf.FromContext(ctx)
@@ -2226,7 +2452,7 @@ func (r *IndexerReconciler) checkNodePoolScaleDownDrain(
 	}
 
 	if r.drainer == nil {
-		var drainConfig *wazuhv1alpha1.IndexerDrainConfig
+		var drainConfig *wazuhv1.IndexerDrainConfig
 		if cluster.Spec.Drain != nil {
 			drainConfig = cluster.Spec.Drain.Indexer
 		}
@@ -2263,19 +2489,19 @@ func (r *IndexerReconciler) checkNodePoolScaleDownDrain(
 	drainStatus := r.getOrInitNodePoolDrainStatus(cluster, pool.Name)
 
 	switch drainStatus.Phase {
-	case wazuhv1alpha1.DrainPhaseIdle, "":
+	case wazuhv1.DrainPhaseIdle, "":
 		// Start new drain
 		log.Info("Starting nodePool drain for scale-down",
 			"pool", pool.Name,
 			"targetPods", targetPods)
 
 		if err := r.drainer.StartNodePoolDrain(ctx, targetPods); err != nil {
-			drainStatus.Phase = wazuhv1alpha1.DrainPhaseFailed
+			drainStatus.Phase = wazuhv1.DrainPhaseFailed
 			drainStatus.Message = err.Error()
 			return false, fmt.Errorf("failed to start drain: %w", err)
 		}
 
-		drainStatus.Phase = wazuhv1alpha1.DrainPhaseDraining
+		drainStatus.Phase = wazuhv1.DrainPhaseDraining
 		drainStatus.Message = fmt.Sprintf("Draining %d pods", len(targetPods))
 		drainStatus.StartTime = &metav1.Time{Time: time.Now()}
 		drainStatus.LastTransitionTime = &metav1.Time{Time: time.Now()}
@@ -2286,7 +2512,7 @@ func (r *IndexerReconciler) checkNodePoolScaleDownDrain(
 		}
 		return true, nil
 
-	case wazuhv1alpha1.DrainPhaseDraining:
+	case wazuhv1.DrainPhaseDraining:
 		// Monitor progress
 		progress, err := r.drainer.MonitorNodePoolDrainProgress(ctx, targetPods)
 		if err != nil {
@@ -2298,12 +2524,12 @@ func (r *IndexerReconciler) checkNodePoolScaleDownDrain(
 		drainStatus.Message = progress.Message
 
 		if progress.IsComplete {
-			drainStatus.Phase = wazuhv1alpha1.DrainPhaseVerifying
+			drainStatus.Phase = wazuhv1.DrainPhaseVerifying
 			log.Info("NodePool drain appears complete, verifying", "pool", pool.Name)
 		}
 		return true, nil
 
-	case wazuhv1alpha1.DrainPhaseVerifying:
+	case wazuhv1.DrainPhaseVerifying:
 		// Verify completion
 		complete, err := r.drainer.VerifyNodePoolDrainComplete(ctx, targetPods)
 		if err != nil {
@@ -2312,7 +2538,7 @@ func (r *IndexerReconciler) checkNodePoolScaleDownDrain(
 		}
 
 		if complete {
-			drainStatus.Phase = wazuhv1alpha1.DrainPhaseComplete
+			drainStatus.Phase = wazuhv1.DrainPhaseComplete
 			drainStatus.LastTransitionTime = &metav1.Time{Time: time.Now()}
 			drainStatus.Message = "Drain complete, proceeding with scale-down"
 
@@ -2330,18 +2556,18 @@ func (r *IndexerReconciler) checkNodePoolScaleDownDrain(
 		}
 		return true, nil
 
-	case wazuhv1alpha1.DrainPhaseComplete:
+	case wazuhv1.DrainPhaseComplete:
 		// Already complete, proceed
 		log.Info("NodePool drain already complete, proceeding with scale-down", "pool", pool.Name)
 		// Reset status for next operation
-		drainStatus.Phase = wazuhv1alpha1.DrainPhaseIdle
+		drainStatus.Phase = wazuhv1.DrainPhaseIdle
 		return false, nil
 
-	case wazuhv1alpha1.DrainPhaseFailed:
+	case wazuhv1.DrainPhaseFailed:
 		// Failed - check if we should retry
 		log.Info("Previous nodePool drain failed", "pool", pool.Name, "message", drainStatus.Message)
 		// Reset and allow retry on next reconcile
-		drainStatus.Phase = wazuhv1alpha1.DrainPhaseIdle
+		drainStatus.Phase = wazuhv1.DrainPhaseIdle
 		return true, nil
 	}
 
@@ -2349,23 +2575,23 @@ func (r *IndexerReconciler) checkNodePoolScaleDownDrain(
 }
 
 // getOrInitNodePoolDrainStatus returns or initializes drain status for a nodePool
-func (r *IndexerReconciler) getOrInitNodePoolDrainStatus(cluster *wazuhv1alpha1.WazuhCluster, poolName string) *wazuhv1alpha1.ComponentDrainStatus {
+func (r *IndexerReconciler) getOrInitNodePoolDrainStatus(cluster *wazuhv1.WazuhCluster, _ string) *wazuhv1.ComponentDrainStatus {
 	if cluster.Status.Drain == nil {
-		cluster.Status.Drain = &wazuhv1alpha1.DrainStatus{}
+		cluster.Status.Drain = &wazuhv1.DrainStatus{}
 	}
 
 	// Use a map in NodePoolDrainStatuses (we'll need to check if this exists in the API)
 	// For now, use the single Indexer status with pool name in message
 	if cluster.Status.Drain.Indexer == nil {
-		cluster.Status.Drain.Indexer = &wazuhv1alpha1.ComponentDrainStatus{
-			Phase: wazuhv1alpha1.DrainPhaseIdle,
+		cluster.Status.Drain.Indexer = &wazuhv1.ComponentDrainStatus{
+			Phase: wazuhv1.DrainPhaseIdle,
 		}
 	}
 	return cluster.Status.Drain.Indexer
 }
 
 // getTotalClusterManagers returns the total number of cluster_manager nodes across all nodePools
-func (r *IndexerReconciler) getTotalClusterManagers(cluster *wazuhv1alpha1.WazuhCluster) int32 {
+func (r *IndexerReconciler) getTotalClusterManagers(cluster *wazuhv1.WazuhCluster) int32 {
 	var total int32
 	for _, pool := range cluster.Spec.Indexer.NodePools {
 		if pool.HasClusterManagerRole() {
@@ -2377,7 +2603,7 @@ func (r *IndexerReconciler) getTotalClusterManagers(cluster *wazuhv1alpha1.Wazuh
 
 // buildDiscoveryConfig builds discovery hosts and initial master nodes for advanced mode
 // Discovery hosts point to cluster_manager nodePool pods for all nodes to find the cluster
-func (r *IndexerReconciler) buildDiscoveryConfig(cluster *wazuhv1alpha1.WazuhCluster) ([]string, []string) {
+func (r *IndexerReconciler) buildDiscoveryConfig(cluster *wazuhv1.WazuhCluster) ([]string, []string) {
 	var clusterManagerPools []struct {
 		Name     string
 		Replicas int32
@@ -2417,7 +2643,7 @@ func (r *IndexerReconciler) buildDiscoveryConfig(cluster *wazuhv1alpha1.WazuhClu
 }
 
 // cleanupOrphanedNodePools removes resources from nodePools that no longer exist in spec
-func (r *IndexerReconciler) cleanupOrphanedNodePools(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *IndexerReconciler) cleanupOrphanedNodePools(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Build set of current nodePool names
@@ -2490,9 +2716,9 @@ func (r *IndexerReconciler) cleanupOrphanedNodePools(ctx context.Context, cluste
 }
 
 // updateNodePoolStatus updates the status for a specific nodePool
-func (r *IndexerReconciler) updateNodePoolStatus(cluster *wazuhv1alpha1.WazuhCluster, poolName, phase, message string) {
+func (r *IndexerReconciler) updateNodePoolStatus(cluster *wazuhv1.WazuhCluster, poolName, phase, message string) {
 	if cluster.Status.Indexer.NodePoolStatuses == nil {
-		cluster.Status.Indexer.NodePoolStatuses = make(map[string]wazuhv1alpha1.NodePoolStatus)
+		cluster.Status.Indexer.NodePoolStatuses = make(map[string]wazuhv1.NodePoolStatus)
 	}
 
 	status := cluster.Status.Indexer.NodePoolStatuses[poolName]
@@ -2507,9 +2733,9 @@ func (r *IndexerReconciler) updateNodePoolStatus(cluster *wazuhv1alpha1.WazuhClu
 }
 
 // updateNodePoolStatusFromSts updates nodePool status from StatefulSet state
-func (r *IndexerReconciler) updateNodePoolStatusFromSts(cluster *wazuhv1alpha1.WazuhCluster, poolName string, sts *appsv1.StatefulSet, phase string) {
+func (r *IndexerReconciler) updateNodePoolStatusFromSts(cluster *wazuhv1.WazuhCluster, poolName string, sts *appsv1.StatefulSet, phase string) {
 	if cluster.Status.Indexer.NodePoolStatuses == nil {
-		cluster.Status.Indexer.NodePoolStatuses = make(map[string]wazuhv1alpha1.NodePoolStatus)
+		cluster.Status.Indexer.NodePoolStatuses = make(map[string]wazuhv1.NodePoolStatus)
 	}
 
 	status := cluster.Status.Indexer.NodePoolStatuses[poolName]
@@ -2534,19 +2760,19 @@ func (r *IndexerReconciler) updateNodePoolStatusFromSts(cluster *wazuhv1alpha1.W
 // getNodePoolPhase determines the phase of a nodePool from its StatefulSet
 func (r *IndexerReconciler) getNodePoolPhase(sts *appsv1.StatefulSet) string {
 	if sts.Status.ReadyReplicas == 0 {
-		return wazuhv1alpha1.NodePoolPhaseCreating
+		return wazuhv1.NodePoolPhaseCreating
 	}
 	if sts.Status.ReadyReplicas < *sts.Spec.Replicas {
-		return wazuhv1alpha1.NodePoolPhaseScaling
+		return wazuhv1.NodePoolPhaseScaling
 	}
 	if sts.Status.UpdatedReplicas < *sts.Spec.Replicas {
-		return wazuhv1alpha1.NodePoolPhaseScaling
+		return wazuhv1.NodePoolPhaseScaling
 	}
-	return wazuhv1alpha1.NodePoolPhaseRunning
+	return wazuhv1.NodePoolPhaseRunning
 }
 
 // updateIndexerStatusFromNodePools aggregates nodePool statuses into overall indexer status
-func (r *IndexerReconciler) updateIndexerStatusFromNodePools(cluster *wazuhv1alpha1.WazuhCluster) {
+func (r *IndexerReconciler) updateIndexerStatusFromNodePools(cluster *wazuhv1.WazuhCluster) {
 	var totalReplicas int32
 	var totalReady int32
 	allRunning := true
@@ -2555,7 +2781,7 @@ func (r *IndexerReconciler) updateIndexerStatusFromNodePools(cluster *wazuhv1alp
 	for _, status := range cluster.Status.Indexer.NodePoolStatuses {
 		totalReplicas += status.Replicas
 		totalReady += status.ReadyReplicas
-		if status.Phase != wazuhv1alpha1.NodePoolPhaseRunning {
+		if status.Phase != wazuhv1.NodePoolPhaseRunning {
 			allRunning = false
 		}
 		phases = append(phases, fmt.Sprintf("%s:%s", status.Name, status.Phase))
@@ -2578,4 +2804,243 @@ func (r *IndexerReconciler) updateIndexerStatusFromNodePools(cluster *wazuhv1alp
 
 	// Sort phases for consistent output
 	sort.Strings(phases)
+}
+
+// reconcileClusterSettings applies cluster-level settings via the OpenSearch Cluster Settings API
+// This is called after the cluster is healthy to ensure settings can be applied
+func (r *IndexerReconciler) reconcileClusterSettings(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	// Check if cluster settings are defined
+	if cluster.Spec.Indexer == nil || cluster.Spec.Indexer.ClusterSettings == nil {
+		log.V(1).Info("No cluster settings defined, skipping")
+		return nil
+	}
+
+	settings := cluster.Spec.Indexer.ClusterSettings
+
+	// Skip if no settings are specified
+	if len(settings.Persistent) == 0 && len(settings.Transient) == 0 {
+		log.V(1).Info("Cluster settings are empty, skipping")
+		return nil
+	}
+
+	// Compute hash of desired settings for change detection
+	desiredHash := computeClusterSettingsHash(settings)
+
+	// Compare with applied settings hash
+	if cluster.Status.Indexer != nil && cluster.Status.Indexer.AppliedSettingsHash == desiredHash {
+		log.V(1).Info("Cluster settings unchanged, skipping", "hash", utils.ShortHash(desiredHash))
+		return nil
+	}
+
+	previousHash := ""
+	if cluster.Status.Indexer != nil {
+		previousHash = cluster.Status.Indexer.AppliedSettingsHash
+	}
+	log.Info("Cluster settings changed, applying",
+		"previousHash", utils.ShortHash(previousHash),
+		"newHash", utils.ShortHash(desiredHash))
+
+	// Ensure OpenSearch client is available
+	if err := r.ensureOpenSearchClient(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to create OpenSearch client: %w", err)
+	}
+
+	// Check cluster health before applying settings
+	health, err := r.osClient.GetClusterHealth(ctx)
+	if err != nil {
+		log.V(1).Info("Cannot get cluster health, deferring settings application", "error", err)
+		return nil // Don't fail the reconciliation, retry later
+	}
+
+	if health.Status == "red" {
+		log.Info("Cluster health is red, deferring settings application until healthy")
+		return nil
+	}
+
+	// Apply settings via the API
+	_, err = r.osClient.PutClusterSettingsFromMap(ctx, settings.Persistent, settings.Transient)
+	if err != nil {
+		// Emit warning event but don't fail reconciliation
+		if r.Recorder != nil {
+			r.Recorder.Event(cluster, corev1.EventTypeWarning, "ClusterSettingsFailed",
+				fmt.Sprintf("Failed to apply cluster settings: %v", err))
+		}
+		return fmt.Errorf("failed to apply cluster settings: %w", err)
+	}
+
+	// Update status with applied settings hash
+	if cluster.Status.Indexer == nil {
+		cluster.Status.Indexer = &wazuhv1.ComponentStatus{}
+	}
+	cluster.Status.Indexer.AppliedSettingsHash = desiredHash
+
+	// Emit success event
+	if r.Recorder != nil {
+		settingsCount := len(settings.Persistent) + len(settings.Transient)
+		r.Recorder.Event(cluster, corev1.EventTypeNormal, "ClusterSettingsApplied",
+			fmt.Sprintf("Successfully applied %d cluster settings", settingsCount))
+	}
+
+	log.Info("Cluster settings applied successfully",
+		"persistent", len(settings.Persistent),
+		"transient", len(settings.Transient))
+
+	return nil
+}
+
+// computeClusterSettingsHash computes a deterministic hash of cluster settings
+func computeClusterSettingsHash(settings *wazuhv1.ClusterSettingsSpec) string {
+	if settings == nil {
+		return ""
+	}
+
+	// Build a map combining both persistent and transient for hashing
+	// Use map[string]string for patch.ComputeConfigHash compatibility
+	combined := make(map[string]string)
+
+	// Add persistent settings with "p:" prefix to distinguish from transient
+	for k, v := range settings.Persistent {
+		combined["p:"+k] = v
+	}
+
+	// Add transient settings with "t:" prefix
+	for k, v := range settings.Transient {
+		combined["t:"+k] = v
+	}
+
+	return patch.ComputeConfigHash(combined)
+}
+
+// reconcileIndexerPDB reconciles the PodDisruptionBudget for indexer pods
+func (r *IndexerReconciler) reconcileIndexerPDB(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	pdbName := pdb.GetIndexerPDBName(cluster.Name)
+
+	// Check if PDB should exist
+	if !pdb.ShouldCreateIndexerPDB(cluster) {
+		// If PDB should not exist, delete it if it does
+		existing := &policyv1.PodDisruptionBudget{}
+		err := r.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: cluster.Namespace}, existing)
+		if err == nil {
+			log.Info("Deleting Indexer PDB (no longer needed)", "name", pdbName)
+			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+				return fmt.Errorf("failed to delete indexer PDB: %w", err)
+			}
+		} else if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get indexer PDB: %w", err)
+		}
+		return nil
+	}
+
+	// Build the PDB
+	builder := pdb.NewIndexerPDBBuilder(cluster)
+	indexerPDB := builder.Build()
+
+	// Warn if minAvailable >= total replicas (will block all disruptions)
+	totalReplicas := cluster.Spec.Indexer.GetTotalReplicas()
+	if indexerPDB.Spec.MinAvailable != nil && indexerPDB.Spec.MinAvailable.IntVal >= totalReplicas {
+		log.Info("WARNING: Indexer PDB minAvailable >= total replicas - all voluntary disruptions will be blocked",
+			"minAvailable", indexerPDB.Spec.MinAvailable.IntVal,
+			"totalReplicas", totalReplicas,
+			"pdbName", pdbName)
+	}
+
+	if err := controllerutil.SetControllerReference(cluster, indexerPDB, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for indexer PDB: %w", err)
+	}
+
+	// Check if PDB exists
+	existing := &policyv1.PodDisruptionBudget{}
+	err := r.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: cluster.Namespace}, existing)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating Indexer PDB", "name", pdbName)
+		if err := r.Create(ctx, indexerPDB); err != nil {
+			return fmt.Errorf("failed to create indexer PDB: %w", err)
+		}
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("failed to get indexer PDB: %w", err)
+	}
+
+	// Update PDB if needed
+	indexerPDB.SetResourceVersion(existing.GetResourceVersion())
+	log.Info("Updating Indexer PDB", "name", pdbName)
+	if err := r.Update(ctx, indexerPDB); err != nil {
+		return fmt.Errorf("failed to update indexer PDB: %w", err)
+	}
+
+	return nil
+}
+
+// reconcileHPA reconciles the HorizontalPodAutoscaler for indexer
+// Note: HPA for StatefulSet requires careful consideration as OpenSearch
+// needs shard rebalancing after scaling
+func (r *IndexerReconciler) reconcileHPA(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	hpaName := cluster.Name + "-indexer"
+
+	// Check if HPA should be enabled
+	hpaEnabled := cluster.Spec.Indexer != nil &&
+		cluster.Spec.Indexer.HPA != nil &&
+		cluster.Spec.Indexer.HPA.Enabled
+
+	if !hpaEnabled {
+		// If HPA should not exist, delete it if it does
+		existing := &autoscalingv2.HorizontalPodAutoscaler{}
+		err := r.Get(ctx, types.NamespacedName{Name: hpaName, Namespace: cluster.Namespace}, existing)
+		if err == nil {
+			log.Info("Deleting Indexer HPA (no longer needed)", "name", hpaName)
+			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+				return fmt.Errorf("failed to delete indexer HPA: %w", err)
+			}
+		} else if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get indexer HPA: %w", err)
+		}
+		return nil
+	}
+
+	// Build the HPA
+	builder := hpa.NewIndexerHPABuilder(cluster.Name, cluster.Namespace).
+		WithSpec(cluster.Spec.Indexer.HPA)
+
+	indexerHPA := builder.Build()
+	if indexerHPA == nil {
+		return nil
+	}
+
+	if err := controllerutil.SetControllerReference(cluster, indexerHPA, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for indexer HPA: %w", err)
+	}
+
+	// Warn about StatefulSet HPA
+	log.Info("WARNING: Enabling HPA for Indexer StatefulSet - ensure you have a shard rebalancing strategy",
+		"name", hpaName,
+		"minReplicas", *indexerHPA.Spec.MinReplicas,
+		"maxReplicas", indexerHPA.Spec.MaxReplicas)
+
+	// Check if HPA exists
+	existing := &autoscalingv2.HorizontalPodAutoscaler{}
+	err := r.Get(ctx, types.NamespacedName{Name: hpaName, Namespace: cluster.Namespace}, existing)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating Indexer HPA", "name", hpaName)
+		if err := r.Create(ctx, indexerHPA); err != nil {
+			return fmt.Errorf("failed to create indexer HPA: %w", err)
+		}
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("failed to get indexer HPA: %w", err)
+	}
+
+	// Update HPA if needed
+	indexerHPA.SetResourceVersion(existing.GetResourceVersion())
+	log.V(1).Info("Updating Indexer HPA", "name", hpaName)
+	if err := r.Update(ctx, indexerHPA); err != nil {
+		return fmt.Errorf("failed to update indexer HPA: %w", err)
+	}
+
+	return nil
 }

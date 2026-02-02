@@ -1,0 +1,77 @@
+{{- if .Values.resourceQuota.enabled }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ .Values.cluster.name }}-quota
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "wazuh-cluster.labels" . | nindent 4 }}
+spec:
+  hard:
+    {{- if .Values.resourceQuota.pods }}
+    pods: {{ .Values.resourceQuota.pods | quote }}
+    {{- end }}
+    {{- if .Values.resourceQuota.requests }}
+    {{- if .Values.resourceQuota.requests.cpu }}
+    requests.cpu: {{ .Values.resourceQuota.requests.cpu | quote }}
+    {{- end }}
+    {{- if .Values.resourceQuota.requests.memory }}
+    requests.memory: {{ .Values.resourceQuota.requests.memory | quote }}
+    {{- end }}
+    {{- if .Values.resourceQuota.requests.storage }}
+    requests.storage: {{ .Values.resourceQuota.requests.storage | quote }}
+    {{- end }}
+    {{- end }}
+    {{- if .Values.resourceQuota.limits }}
+    {{- if .Values.resourceQuota.limits.cpu }}
+    limits.cpu: {{ .Values.resourceQuota.limits.cpu | quote }}
+    {{- end }}
+    {{- if .Values.resourceQuota.limits.memory }}
+    limits.memory: {{ .Values.resourceQuota.limits.memory | quote }}
+    {{- end }}
+    {{- end }}
+    {{- if .Values.resourceQuota.persistentvolumeclaims }}
+    persistentvolumeclaims: {{ .Values.resourceQuota.persistentvolumeclaims | quote }}
+    {{- end }}
+    {{- if .Values.resourceQuota.configmaps }}
+    configmaps: {{ .Values.resourceQuota.configmaps | quote }}
+    {{- end }}
+    {{- if .Values.resourceQuota.secrets }}
+    secrets: {{ .Values.resourceQuota.secrets | quote }}
+    {{- end }}
+    {{- if .Values.resourceQuota.services }}
+    services: {{ .Values.resourceQuota.services | quote }}
+    {{- end }}
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: {{ .Values.cluster.name }}-limits
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "wazuh-cluster.labels" . | nindent 4 }}
+spec:
+  limits:
+    - type: Container
+      {{- if .Values.resourceQuota.limitRange.defaultRequest }}
+      defaultRequest:
+        {{- toYaml .Values.resourceQuota.limitRange.defaultRequest | nindent 8 }}
+      {{- end }}
+      {{- if .Values.resourceQuota.limitRange.default }}
+      default:
+        {{- toYaml .Values.resourceQuota.limitRange.default | nindent 8 }}
+      {{- end }}
+      {{- if .Values.resourceQuota.limitRange.max }}
+      max:
+        {{- toYaml .Values.resourceQuota.limitRange.max | nindent 8 }}
+      {{- end }}
+    - type: PersistentVolumeClaim
+      {{- if .Values.resourceQuota.limitRange.pvcMax }}
+      max:
+        storage: {{ .Values.resourceQuota.limitRange.pvcMax }}
+      {{- end }}
+      {{- if .Values.resourceQuota.limitRange.pvcMin }}
+      min:
+        storage: {{ .Values.resourceQuota.limitRange.pvcMin }}
+      {{- end }}
+{{- end }}

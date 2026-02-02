@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,12 +20,14 @@ import (
 	"context"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
 )
 
@@ -33,26 +35,29 @@ import (
 type IndexReconciler struct {
 	client.Client
 	Scheme         *runtime.Scheme
+	Recorder       record.EventRecorder
 	OpenSearchAddr string
 	OpenSearchUser string
 	OpenSearchPass string
 }
 
 // NewIndexReconciler creates a new IndexReconciler
-func NewIndexReconciler(c client.Client, scheme *runtime.Scheme) *IndexReconciler {
+func NewIndexReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *IndexReconciler {
 	return &IndexReconciler{
-		Client: c,
-		Scheme: scheme,
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: recorder,
 	}
 }
 
 // Reconcile reconciles an OpenSearch index
-func (r *IndexReconciler) Reconcile(ctx context.Context, index *wazuhv1alpha1.OpenSearchIndex) error {
+func (r *IndexReconciler) Reconcile(ctx context.Context, index *wazuhv1.OpenSearchIndex) error {
 	log := logf.FromContext(ctx)
 
 	// Get OpenSearch client
 	osClient, err := r.getOpenSearchClient(ctx, index.Namespace)
 	if err != nil {
+		r.recordEvent(index, corev1.EventTypeWarning, "ConnectionError", fmt.Sprintf("Failed to connect to OpenSearch: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
@@ -62,6 +67,7 @@ func (r *IndexReconciler) Reconcile(ctx context.Context, index *wazuhv1alpha1.Op
 	// Check if index exists
 	exists, err := osClient.IndexExists(ctx, indexName)
 	if err != nil {
+		r.recordEvent(index, corev1.EventTypeWarning, "CheckFailed", fmt.Sprintf("Failed to check if index exists: %v", err))
 		return fmt.Errorf("failed to check if index exists: %w", err)
 	}
 
@@ -69,9 +75,13 @@ func (r *IndexReconciler) Reconcile(ctx context.Context, index *wazuhv1alpha1.Op
 		// Create the index
 		settings := r.buildIndexSettings(index)
 		if err := osClient.CreateIndex(ctx, indexName, settings); err != nil {
+			r.recordEvent(index, corev1.EventTypeWarning, "CreateFailed", fmt.Sprintf("Failed to create index: %v", err))
 			return fmt.Errorf("failed to create index: %w", err)
 		}
+		r.recordEvent(index, corev1.EventTypeNormal, "Created", "Index successfully created in OpenSearch")
 		log.Info("Created OpenSearch index", "name", indexName)
+	} else {
+		r.recordEvent(index, corev1.EventTypeNormal, "Synced", "Index already exists in OpenSearch")
 	}
 
 	// Update status
@@ -83,10 +93,17 @@ func (r *IndexReconciler) Reconcile(ctx context.Context, index *wazuhv1alpha1.Op
 	return nil
 }
 
+// recordEvent emits an event if the recorder is available
+func (r *IndexReconciler) recordEvent(index *wazuhv1.OpenSearchIndex, eventType, reason, message string) {
+	if r.Recorder != nil {
+		r.Recorder.Event(index, eventType, reason, message)
+	}
+}
+
 // buildIndexSettings builds index settings from spec
-func (r *IndexReconciler) buildIndexSettings(index *wazuhv1alpha1.OpenSearchIndex) map[string]interface{} {
-	settings := make(map[string]interface{})
-	indexSettings := make(map[string]interface{})
+func (r *IndexReconciler) buildIndexSettings(index *wazuhv1.OpenSearchIndex) map[string]any {
+	settings := make(map[string]any)
+	indexSettings := make(map[string]any)
 
 	if index.Spec.Settings != nil {
 		if index.Spec.Settings.NumberOfShards != nil {
@@ -98,7 +115,7 @@ func (r *IndexReconciler) buildIndexSettings(index *wazuhv1alpha1.OpenSearchInde
 	}
 
 	if len(indexSettings) > 0 {
-		settings["settings"] = map[string]interface{}{
+		settings["settings"] = map[string]any{
 			"index": indexSettings,
 		}
 	}
@@ -107,7 +124,7 @@ func (r *IndexReconciler) buildIndexSettings(index *wazuhv1alpha1.OpenSearchInde
 }
 
 // getOpenSearchClient gets an OpenSearch HTTP adapter
-func (r *IndexReconciler) getOpenSearchClient(ctx context.Context, namespace string) (*adapters.OpenSearchHTTPAdapter, error) {
+func (r *IndexReconciler) getOpenSearchClient(_ context.Context, _ string) (*adapters.OpenSearchHTTPAdapter, error) {
 	// In a real implementation, this would read credentials from secrets
 	config := adapters.OpenSearchConfig{
 		BaseURL:  r.OpenSearchAddr,
@@ -120,7 +137,7 @@ func (r *IndexReconciler) getOpenSearchClient(ctx context.Context, namespace str
 }
 
 // updateStatus updates the index status
-func (r *IndexReconciler) updateStatus(ctx context.Context, index *wazuhv1alpha1.OpenSearchIndex, phase, message string) error {
+func (r *IndexReconciler) updateStatus(ctx context.Context, index *wazuhv1.OpenSearchIndex, phase, message string) error {
 	index.Status.Phase = phase
 	index.Status.Message = message
 	now := metav1.Now()
@@ -130,19 +147,22 @@ func (r *IndexReconciler) updateStatus(ctx context.Context, index *wazuhv1alpha1
 }
 
 // Delete handles cleanup when an index is deleted
-func (r *IndexReconciler) Delete(ctx context.Context, index *wazuhv1alpha1.OpenSearchIndex) error {
+func (r *IndexReconciler) Delete(ctx context.Context, index *wazuhv1.OpenSearchIndex) error {
 	log := logf.FromContext(ctx)
 
 	osClient, err := r.getOpenSearchClient(ctx, index.Namespace)
 	if err != nil {
+		r.recordEvent(index, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to connect to OpenSearch for deletion: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
 	indexName := index.Name
 	if err := osClient.DeleteIndex(ctx, indexName); err != nil {
+		r.recordEvent(index, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete index from OpenSearch: %v", err))
 		return fmt.Errorf("failed to delete index: %w", err)
 	}
 
+	r.recordEvent(index, corev1.EventTypeNormal, "Deleted", "Index deleted from OpenSearch")
 	log.Info("Deleted OpenSearch index", "name", indexName)
 	return nil
 }

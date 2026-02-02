@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,10 +24,12 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
+	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
 
-// GenerateRandomPassword generates a secure random password
-// Deprecated: Use utils.GenerateRandomPassword instead
+// GenerateRandomPassword generates a secure random password.
+//
+// Deprecated: Use utils.GenerateRandomPassword instead.
 func GenerateRandomPassword(length int) string {
 	return utils.GenerateRandomPassword(length)
 }
@@ -146,11 +148,11 @@ func (c *OpenSearchConfig) generateDiscoveryHosts() {
 	c.DiscoverySeedHosts = make([]string, 0, c.Replicas)
 	c.InitialMasterNodes = make([]string, 0, c.Replicas)
 
-	headlessService := fmt.Sprintf("%s-indexer-headless.%s.svc.cluster.local", c.ClusterName, c.Namespace)
+	headlessService := c.ClusterName + "-indexer-headless"
 
 	for i := int32(0); i < c.Replicas; i++ {
 		podName := fmt.Sprintf("%s-indexer-%d", c.ClusterName, i)
-		host := fmt.Sprintf("%s.%s", podName, headlessService)
+		host := dns.PodFQDN(podName, headlessService, c.Namespace)
 		c.DiscoverySeedHosts = append(c.DiscoverySeedHosts, host)
 		c.InitialMasterNodes = append(c.InitialMasterNodes, podName)
 	}

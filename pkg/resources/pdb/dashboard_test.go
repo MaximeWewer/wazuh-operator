@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,19 +21,19 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 func TestDashboardPDBBuilder_Build(t *testing.T) {
-	cluster := &v1alpha1.WazuhCluster{
+	cluster := &v1.WazuhCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "default",
 		},
-		Spec: v1alpha1.WazuhClusterSpec{
+		Spec: v1.WazuhClusterSpec{
 			Version: "4.9.0",
-			Dashboard: &v1alpha1.WazuhDashboardClusterSpec{
+			Dashboard: &v1.WazuhDashboardClusterSpec{
 				Replicas: 2,
 			},
 		},
@@ -68,16 +68,16 @@ func TestDashboardPDBBuilder_Build(t *testing.T) {
 
 func TestDashboardPDBBuilder_Build_CustomMinAvailable(t *testing.T) {
 	minAvailable := int32(2)
-	cluster := &v1alpha1.WazuhCluster{
+	cluster := &v1.WazuhCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "default",
 		},
-		Spec: v1alpha1.WazuhClusterSpec{
+		Spec: v1.WazuhClusterSpec{
 			Version: "4.9.0",
-			Dashboard: &v1alpha1.WazuhDashboardClusterSpec{
+			Dashboard: &v1.WazuhDashboardClusterSpec{
 				Replicas: 3,
-				PodDisruptionBudget: &v1alpha1.PodDisruptionBudgetSpec{
+				PodDisruptionBudget: &v1.PodDisruptionBudgetSpec{
 					Enabled:      true,
 					MinAvailable: &minAvailable,
 				},
@@ -94,14 +94,14 @@ func TestDashboardPDBBuilder_Build_CustomMinAvailable(t *testing.T) {
 }
 
 func TestDashboardPDBBuilder_BuildWithMaxUnavailable(t *testing.T) {
-	cluster := &v1alpha1.WazuhCluster{
+	cluster := &v1.WazuhCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "default",
 		},
-		Spec: v1alpha1.WazuhClusterSpec{
+		Spec: v1.WazuhClusterSpec{
 			Version: "4.9.0",
-			Dashboard: &v1alpha1.WazuhDashboardClusterSpec{
+			Dashboard: &v1.WazuhDashboardClusterSpec{
 				Replicas: 3,
 			},
 		},
@@ -134,14 +134,14 @@ func TestGetPDBName(t *testing.T) {
 func TestShouldCreatePDB(t *testing.T) {
 	tests := []struct {
 		name           string
-		cluster        *v1alpha1.WazuhCluster
+		cluster        *v1.WazuhCluster
 		expectedCreate bool
 	}{
 		{
 			name: "dashboard configured",
-			cluster: &v1alpha1.WazuhCluster{
-				Spec: v1alpha1.WazuhClusterSpec{
-					Dashboard: &v1alpha1.WazuhDashboardClusterSpec{
+			cluster: &v1.WazuhCluster{
+				Spec: v1.WazuhClusterSpec{
+					Dashboard: &v1.WazuhDashboardClusterSpec{
 						Replicas: 1,
 					},
 				},
@@ -150,18 +150,18 @@ func TestShouldCreatePDB(t *testing.T) {
 		},
 		{
 			name: "dashboard not configured",
-			cluster: &v1alpha1.WazuhCluster{
-				Spec: v1alpha1.WazuhClusterSpec{},
+			cluster: &v1.WazuhCluster{
+				Spec: v1.WazuhClusterSpec{},
 			},
 			expectedCreate: false,
 		},
 		{
 			name: "dashboard PDB explicitly disabled",
-			cluster: &v1alpha1.WazuhCluster{
-				Spec: v1alpha1.WazuhClusterSpec{
-					Dashboard: &v1alpha1.WazuhDashboardClusterSpec{
+			cluster: &v1.WazuhCluster{
+				Spec: v1.WazuhClusterSpec{
+					Dashboard: &v1.WazuhDashboardClusterSpec{
 						Replicas: 2,
-						PodDisruptionBudget: &v1alpha1.PodDisruptionBudgetSpec{
+						PodDisruptionBudget: &v1.PodDisruptionBudgetSpec{
 							Enabled: false,
 						},
 					},
@@ -171,11 +171,11 @@ func TestShouldCreatePDB(t *testing.T) {
 		},
 		{
 			name: "dashboard PDB explicitly enabled",
-			cluster: &v1alpha1.WazuhCluster{
-				Spec: v1alpha1.WazuhClusterSpec{
-					Dashboard: &v1alpha1.WazuhDashboardClusterSpec{
+			cluster: &v1.WazuhCluster{
+				Spec: v1.WazuhClusterSpec{
+					Dashboard: &v1.WazuhDashboardClusterSpec{
 						Replicas: 2,
-						PodDisruptionBudget: &v1alpha1.PodDisruptionBudgetSpec{
+						PodDisruptionBudget: &v1.PodDisruptionBudgetSpec{
 							Enabled: true,
 						},
 					},
@@ -185,9 +185,9 @@ func TestShouldCreatePDB(t *testing.T) {
 		},
 		{
 			name: "dashboard with default replicas (0 means 1)",
-			cluster: &v1alpha1.WazuhCluster{
-				Spec: v1alpha1.WazuhClusterSpec{
-					Dashboard: &v1alpha1.WazuhDashboardClusterSpec{
+			cluster: &v1.WazuhCluster{
+				Spec: v1.WazuhClusterSpec{
+					Dashboard: &v1.WazuhDashboardClusterSpec{
 						Replicas: 0, // Should default to 1
 					},
 				},
@@ -207,14 +207,14 @@ func TestShouldCreatePDB(t *testing.T) {
 }
 
 func TestDashboardPDBBuilder_Labels(t *testing.T) {
-	cluster := &v1alpha1.WazuhCluster{
+	cluster := &v1.WazuhCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
 			Namespace: "default",
 		},
-		Spec: v1alpha1.WazuhClusterSpec{
+		Spec: v1.WazuhClusterSpec{
 			Version: "4.9.0",
-			Dashboard: &v1alpha1.WazuhDashboardClusterSpec{
+			Dashboard: &v1.WazuhDashboardClusterSpec{
 				Replicas: 1,
 			},
 		},

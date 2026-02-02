@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -273,6 +273,15 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 					NodeSelector: b.nodeSelector,
 					Tolerations:  b.tolerations,
 					Affinity:     b.affinity,
+					// SecurityContext at pod level - dashboard runs as non-root user
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsNonRoot: func() *bool { b := true; return &b }(),
+						RunAsUser:    func() *int64 { u := int64(1000); return &u }(),
+						FSGroup:      func() *int64 { g := int64(1000); return &g }(),
+						SeccompProfile: &corev1.SeccompProfile{
+							Type: corev1.SeccompProfileTypeRuntimeDefault,
+						},
+					},
 					InitContainers: []corev1.Container{
 						{
 							Name:  "config-processor",
@@ -283,6 +292,13 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 								`sed "s/\${INDEXER_USERNAME}/$INDEXER_USERNAME/g; s/\${INDEXER_PASSWORD}/$INDEXER_PASSWORD/g" /config-template/opensearch_dashboards.yml > /config-processed/opensearch_dashboards.yml`,
 							},
 							Env: env,
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: func() *bool { b := false; return &b }(),
+								ReadOnlyRootFilesystem:   func() *bool { b := true; return &b }(),
+								Capabilities: &corev1.Capabilities{
+									Drop: []corev1.Capability{"ALL"},
+								},
+							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
 									Name:      constants.VolumeNameDashboardConfig,
@@ -302,6 +318,10 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 							Image:           image,
 							ImagePullPolicy: corev1.PullIfNotPresent,
 							Resources:       *resources,
+							// SecurityContext: Dashboard needs SETUID/SETGID for node execution
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: func() *bool { b := true; return &b }(),
+							},
 							Ports: []corev1.ContainerPort{
 								{Name: constants.PortNameDashboardHTTP, ContainerPort: constants.PortDashboardHTTP, Protocol: corev1.ProtocolTCP},
 							},
@@ -362,7 +382,7 @@ func (b *DashboardDeploymentBuilder) buildSelectorLabels() map[string]string {
 // buildVolumes builds the volume list
 func (b *DashboardDeploymentBuilder) buildVolumes() []corev1.Volume {
 	// Default mode for script to be executable
-	scriptMode := int32(0755)
+	scriptMode := int32(0o755)
 
 	volumes := []corev1.Volume{
 		{
@@ -570,33 +590,35 @@ func (b *DashboardDeploymentBuilder) buildEnvVars() []corev1.EnvVar {
 	if b.wazuhPlugin {
 		// Use manager master service FQDN but without port (port specified separately in wazuh.yml)
 		wazuhAPIURL := fmt.Sprintf("https://%s", constants.ManagerMasterServiceFQDN(b.clusterName, b.namespace))
-		env = append(env, corev1.EnvVar{
-			Name:  "WAZUH_API_URL",
-			Value: wazuhAPIURL,
-		})
 		// API_USERNAME and API_PASSWORD are used by wazuh_app_config.sh to configure wazuh.yml
-		env = append(env, corev1.EnvVar{
-			Name: "API_USERNAME",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: constants.APICredentialsName(b.clusterName),
+		env = append(env,
+			corev1.EnvVar{
+				Name:  "WAZUH_API_URL",
+				Value: wazuhAPIURL,
+			},
+			corev1.EnvVar{
+				Name: "API_USERNAME",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: constants.APICredentialsName(b.clusterName),
+						},
+						Key: constants.SecretKeyAPIUsername,
 					},
-					Key: constants.SecretKeyAPIUsername,
 				},
 			},
-		})
-		env = append(env, corev1.EnvVar{
-			Name: "API_PASSWORD",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: constants.APICredentialsName(b.clusterName),
+			corev1.EnvVar{
+				Name: "API_PASSWORD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: constants.APICredentialsName(b.clusterName),
+						},
+						Key: constants.SecretKeyAPIPassword,
 					},
-					Key: constants.SecretKeyAPIPassword,
 				},
 			},
-		})
+		)
 	}
 
 	// Add custom env vars

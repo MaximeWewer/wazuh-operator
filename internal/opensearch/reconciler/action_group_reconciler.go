@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 )
 
@@ -51,7 +51,7 @@ func (r *ActionGroupReconciler) WithAPIClient(apiClient *api.Client) *ActionGrou
 }
 
 // Reconcile reconciles an OpenSearch action group
-func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1alpha1.OpenSearchActionGroup) error {
+func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup) error {
 	log := logf.FromContext(ctx)
 
 	if r.APIClient == nil {
@@ -94,7 +94,7 @@ func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1alpha1
 }
 
 // buildActionGroup converts the CRD spec to an action group
-func (r *ActionGroupReconciler) buildActionGroup(ag *wazuhv1alpha1.OpenSearchActionGroup) api.ActionGroup {
+func (r *ActionGroupReconciler) buildActionGroup(ag *wazuhv1.OpenSearchActionGroup) api.ActionGroup {
 	return api.ActionGroup{
 		AllowedActions: ag.Spec.AllowedActions,
 		Description:    ag.Spec.Description,
@@ -103,7 +103,7 @@ func (r *ActionGroupReconciler) buildActionGroup(ag *wazuhv1alpha1.OpenSearchAct
 }
 
 // updateStatus updates the action group status
-func (r *ActionGroupReconciler) updateStatus(ctx context.Context, ag *wazuhv1alpha1.OpenSearchActionGroup, phase, message string) error {
+func (r *ActionGroupReconciler) updateStatus(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup, phase, message string) error {
 	ag.Status.Phase = phase
 	ag.Status.Message = message
 	now := metav1.Now()
@@ -113,7 +113,7 @@ func (r *ActionGroupReconciler) updateStatus(ctx context.Context, ag *wazuhv1alp
 }
 
 // Delete handles cleanup when an action group is deleted
-func (r *ActionGroupReconciler) Delete(ctx context.Context, ag *wazuhv1alpha1.OpenSearchActionGroup) error {
+func (r *ActionGroupReconciler) Delete(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup) error {
 	log := logf.FromContext(ctx)
 
 	if r.APIClient == nil {

@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 )
 
@@ -51,7 +51,7 @@ func (r *RoleMappingReconciler) WithAPIClient(apiClient *api.Client) *RoleMappin
 }
 
 // Reconcile reconciles an OpenSearch role mapping
-func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1alpha1.OpenSearchRoleMapping) error {
+func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping) error {
 	log := logf.FromContext(ctx)
 
 	if r.APIClient == nil {
@@ -94,7 +94,7 @@ func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1a
 }
 
 // buildRoleMapping converts the CRD spec to a role mapping
-func (r *RoleMappingReconciler) buildRoleMapping(mapping *wazuhv1alpha1.OpenSearchRoleMapping) api.RoleMapping {
+func (r *RoleMappingReconciler) buildRoleMapping(mapping *wazuhv1.OpenSearchRoleMapping) api.RoleMapping {
 	return api.RoleMapping{
 		Description:     mapping.Spec.Description,
 		BackendRoles:    mapping.Spec.BackendRoles,
@@ -105,7 +105,7 @@ func (r *RoleMappingReconciler) buildRoleMapping(mapping *wazuhv1alpha1.OpenSear
 }
 
 // updateStatus updates the role mapping status
-func (r *RoleMappingReconciler) updateStatus(ctx context.Context, mapping *wazuhv1alpha1.OpenSearchRoleMapping, phase, message string) error {
+func (r *RoleMappingReconciler) updateStatus(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping, phase, message string) error {
 	mapping.Status.Phase = phase
 	mapping.Status.Message = message
 	now := metav1.Now()
@@ -115,7 +115,7 @@ func (r *RoleMappingReconciler) updateStatus(ctx context.Context, mapping *wazuh
 }
 
 // Delete handles cleanup when a role mapping is deleted
-func (r *RoleMappingReconciler) Delete(ctx context.Context, mapping *wazuhv1alpha1.OpenSearchRoleMapping) error {
+func (r *RoleMappingReconciler) Delete(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping) error {
 	log := logf.FromContext(ctx)
 
 	if r.APIClient == nil {

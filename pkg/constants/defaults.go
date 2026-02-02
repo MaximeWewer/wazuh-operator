@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ const (
 	// DefaultWazuhVersion is the default Wazuh version
 	// This is the single source of truth for version defaults
 	// All other version defaults (OpenSearch, plugins) are derived from this
-	DefaultWazuhVersion = "4.9.0"
+	DefaultWazuhVersion = "4.14.0"
 )
 
 // GetDefaultOpenSearchVersion returns the default OpenSearch version
@@ -36,7 +36,7 @@ func GetDefaultOpenSearchVersion() string {
 	version, err := utils.GetOpenSearchVersionFromWazuh(DefaultWazuhVersion)
 	if err != nil {
 		// Fallback for safety - should never happen with valid DefaultWazuhVersion
-		return "2.13.0"
+		return "2.19.1"
 	}
 	return version
 }
@@ -47,7 +47,7 @@ func GetDefaultPrometheusExporterPluginVersion() string {
 	version, err := utils.GetPrometheusExporterPluginVersion(DefaultWazuhVersion)
 	if err != nil {
 		// Fallback for safety - should never happen with valid DefaultWazuhVersion
-		return "2.13.0.0"
+		return "2.19.1.0"
 	}
 	return version
 }
@@ -296,6 +296,15 @@ const (
 
 	// ProtocolHTTP is the HTTP protocol
 	ProtocolHTTP = "http"
+)
+
+// System tuning defaults
+const (
+	// DefaultVMMaxMapCount is the minimum vm.max_map_count value required by OpenSearch.
+	// OpenSearch uses memory-mapped files extensively for performance.
+	// The default Linux value (65530) is insufficient; OpenSearch requires at least 262144.
+	// This value is set via the increase-the-vm-max-map-count init container.
+	DefaultVMMaxMapCount = 262144
 )
 
 // DefaultLogRotationPaths are the paths to clean during log rotation

@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ package config
 import (
 	"fmt"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
 // ============================================================================
@@ -27,8 +27,8 @@ import (
 // ============================================================================
 
 // buildSAMLAuthDomain creates the SAML auth domain configuration
-func (b *AuthConfigBuilder) buildSAMLAuthDomain(spec *v1alpha1.SAMLAuthSpec) AuthDomainConfig {
-	config := make(map[string]interface{})
+func (b *AuthConfigBuilder) buildSAMLAuthDomain(spec *v1.SAMLAuthSpec) AuthDomainConfig {
+	config := make(map[string]any)
 
 	// IdP metadata configuration
 	if spec.IdpMetadataURL != "" {
@@ -72,12 +72,12 @@ func (b *AuthConfigBuilder) buildSAMLAuthDomain(spec *v1alpha1.SAMLAuthSpec) Aut
 
 // SAMLConfigBuilder builds SAML-specific configuration
 type SAMLConfigBuilder struct {
-	spec            *v1alpha1.SAMLAuthSpec
+	spec            *v1.SAMLAuthSpec
 	resolvedSecrets map[string]string
 }
 
 // NewSAMLConfigBuilder creates a new SAMLConfigBuilder
-func NewSAMLConfigBuilder(spec *v1alpha1.SAMLAuthSpec) *SAMLConfigBuilder {
+func NewSAMLConfigBuilder(spec *v1.SAMLAuthSpec) *SAMLConfigBuilder {
 	return &SAMLConfigBuilder{
 		spec:            spec,
 		resolvedSecrets: make(map[string]string),
@@ -91,8 +91,8 @@ func (b *SAMLConfigBuilder) WithExchangeKey(key string) *SAMLConfigBuilder {
 }
 
 // BuildAuthenticatorConfig returns the SAML authenticator configuration map
-func (b *SAMLConfigBuilder) BuildAuthenticatorConfig() map[string]interface{} {
-	config := make(map[string]interface{})
+func (b *SAMLConfigBuilder) BuildAuthenticatorConfig() map[string]any {
+	config := make(map[string]any)
 
 	// IdP metadata
 	if b.spec.IdpMetadataURL != "" {

@@ -1,0 +1,258 @@
+# WazuhCluster with Gateway API Example
+#
+# This example demonstrates Kubernetes GATEWAY API configuration for exposing
+# Wazuh services. Gateway API is the successor to Ingress with improved routing
+# capabilities, including support for TCP and UDP protocols.
+#
+# GATEWAY API vs INGRESS:
+# =======================
+# Gateway API (this example):
+#   - HTTPRoute for HTTP/HTTPS traffic (Dashboard, Manager API)
+#   - TCPRoute for TCP traffic (Agent enrollment, Agent events)
+#   - UDPRoute for UDP traffic (Syslog ingestion)
+#   - Multi-protocol support in a single Gateway
+#   - Better standardization across implementations
+#   - Supports L4 and L7 routing
+#
+# Ingress (legacy):
+#   - HTTP/HTTPS only
+#   - No native TCP/UDP support
+#   - Implementation-specific annotations
+#   - Use for simple HTTP routing
+#
+# PREREQUISITES:
+# ==============
+# 1. A Gateway API compatible controller installed (e.g., Cilium, Envoy Gateway, Istio)
+# 2. A Gateway resource created with appropriate listeners
+# 3. If using cross-namespace routing, ReferenceGrant resources may be required
+#
+# EXAMPLE GATEWAY RESOURCE:
+# =========================
+# apiVersion: gateway.networking.k8s.io/v1
+# kind: Gateway
+# metadata:
+#   name: main-gateway
+#   namespace: gateway-system
+# spec:
+#   gatewayClassName: cilium
+#   listeners:
+#     - name: https
+#       protocol: HTTPS
+#       port: 443
+#     - name: agent-enrollment
+#       protocol: TCP
+#       port: 1515
+#     - name: agent-events
+#       protocol: TCP
+#       port: 1514
+#     - name: syslog-udp
+#       protocol: UDP
+#       port: 514
+#
+# DEPLOYMENT:
+# ===========
+# kubectl create namespace wazuh
+# kubectl apply -f wazuh_v1_wazuhcluster_gatewayapi.yaml
+#
+# VERIFICATION:
+# =============
+# kubectl get httproutes,tcproutes,udproutes -n wazuh
+# kubectl get wazuhcluster -n wazuh
+
+---
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCluster
+metadata:
+  name: wazuh-gateway
+  namespace: wazuh
+  labels:
+    environment: production
+    app: wazuh
+spec:
+  version: "4.9.2"
+
+  # ====================
+  # MANAGER CONFIGURATION
+  # ====================
+  manager:
+    # Master node with Gateway API
+    master:
+      resources:
+        requests:
+          cpu: "1000m"
+          memory: "2Gi"
+        limits:
+          cpu: "2000m"
+          memory: "4Gi"
+      storageSize: "50Gi"
+
+      # Gateway API configuration for master node
+      gatewayAPI:
+        enabled: true
+        # Reference to existing Gateway resource
+        gatewayRef:
+          name: main-gateway
+          namespace: gateway-system
+          # Optional: Section name for specific listener
+          # sectionName: https
+        # Hostnames for HTTP routes
+        hostnames:
+          - "wazuh-api.example.com"
+        # HTTP configuration for Manager API (port 55000)
+        http:
+          pathPrefix: "/"
+          annotations:
+            # Controller-specific annotations if needed
+            # gateway.networking.k8s.io/some-annotation: "value"
+        # TCP configuration for agent services
+        tcp:
+          enabled: true
+          # Enable agent enrollment (port 1515)
+          enrollmentEnabled: true
+          # Enable agent events (port 1514)
+          eventsEnabled: true
+          # Enable cluster communication (port 1516)
+          clusterEnabled: false
+          annotations: {}
+        # UDP configuration for syslog
+        udp:
+          enabled: true
+          # Custom syslog port (default: 514)
+          syslogPort: 514
+          annotations: {}
+
+    # Worker nodes with Gateway API
+    workers:
+      replicas: 2
+      resources:
+        requests:
+          cpu: "1000m"
+          memory: "2Gi"
+        limits:
+          cpu: "2000m"
+          memory: "4Gi"
+      storageSize: "50Gi"
+
+      # Gateway API configuration for workers
+      gatewayAPI:
+        enabled: true
+        gatewayRef:
+          name: main-gateway
+          namespace: gateway-system
+        hostnames:
+          - "wazuh-worker-api.example.com"
+        tcp:
+          enabled: true
+          # Workers typically handle agent events
+          enrollmentEnabled: false
+          eventsEnabled: true
+          clusterEnabled: false
+        udp:
+          enabled: true
+          syslogPort: 514
+
+  # ====================
+  # INDEXER CONFIGURATION
+  # ====================
+  indexer:
+    replicas: 3
+    resources:
+      requests:
+        cpu: "2000m"
+        memory: "4Gi"
+      limits:
+        cpu: "4000m"
+        memory: "8Gi"
+    storageSize: "100Gi"
+    javaOpts: "-Xms2g -Xmx2g"
+
+    # Gateway API configuration for OpenSearch REST API
+    gatewayAPI:
+      enabled: true
+      gatewayRef:
+        name: main-gateway
+        namespace: gateway-system
+      hostnames:
+        - "opensearch.example.com"
+      http:
+        pathPrefix: "/"
+        annotations: {}
+
+  # ====================
+  # DASHBOARD CONFIGURATION
+  # ====================
+  dashboard:
+    replicas: 2
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "1000m"
+        memory: "2Gi"
+
+    # Gateway API configuration for Dashboard (port 5601)
+    gatewayAPI:
+      enabled: true
+      gatewayRef:
+        name: main-gateway
+        namespace: gateway-system
+      hostnames:
+        - "wazuh.example.com"
+      http:
+        pathPrefix: "/"
+        annotations:
+          # Example: Configure timeouts
+          # gateway.networking.k8s.io/timeout: "60s"
+
+  # ====================
+  # TLS CONFIGURATION
+  # ====================
+  tls:
+    enabled: true
+    certConfig:
+      organization: "Wazuh Gateway API Demo"
+      organizationalUnit: "Security"
+
+---
+# NOTES:
+# ======
+# Gateway API Resources Created:
+# ==============================
+# - HTTPRoute for Dashboard (port 5601)
+# - HTTPRoute for Manager API (port 55000)
+# - HTTPRoute for Indexer API (port 9200)
+# - TCPRoute for Agent Enrollment (port 1515)
+# - TCPRoute for Agent Events (port 1514)
+# - UDPRoute for Syslog (port 514)
+#
+# MUTUAL EXCLUSION:
+# =================
+# GatewayAPI and Ingress cannot both be enabled for the same component.
+# The webhook validation will reject configurations where both are enabled.
+#
+# CROSS-NAMESPACE ROUTING:
+# ========================
+# If your Gateway is in a different namespace, you may need to create
+# a ReferenceGrant to allow the routes to reference the Gateway:
+#
+# apiVersion: gateway.networking.k8s.io/v1beta1
+# kind: ReferenceGrant
+# metadata:
+#   name: allow-wazuh-routes
+#   namespace: gateway-system
+# spec:
+#   from:
+#     - group: gateway.networking.k8s.io
+#       kind: HTTPRoute
+#       namespace: wazuh
+#     - group: gateway.networking.k8s.io
+#       kind: TCPRoute
+#       namespace: wazuh
+#     - group: gateway.networking.k8s.io
+#       kind: UDPRoute
+#       namespace: wazuh
+#   to:
+#     - group: gateway.networking.k8s.io
+#       kind: Gateway
+#       name: main-gateway

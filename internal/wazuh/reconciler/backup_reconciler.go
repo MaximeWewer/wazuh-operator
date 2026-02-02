@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/jobs"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -57,7 +57,7 @@ func NewBackupReconciler(c client.Client, scheme *runtime.Scheme) *BackupReconci
 }
 
 // Reconcile reconciles a WazuhBackup resource
-func (r *BackupReconciler) Reconcile(ctx context.Context, backup *wazuhv1alpha1.WazuhBackup) error {
+func (r *BackupReconciler) Reconcile(ctx context.Context, backup *wazuhv1.WazuhBackup) error {
 	log := logf.FromContext(ctx)
 
 	// Handle finalizer
@@ -74,7 +74,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, backup *wazuhv1alpha1.
 	}
 
 	// Validate the referenced WazuhCluster exists
-	cluster := &wazuhv1alpha1.WazuhCluster{}
+	cluster := &wazuhv1.WazuhCluster{}
 	clusterKey := types.NamespacedName{
 		Name:      backup.Spec.ClusterRef.Name,
 		Namespace: backup.Namespace,
@@ -134,7 +134,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, backup *wazuhv1alpha1.
 }
 
 // reconcileRBAC ensures ServiceAccount, Role, and RoleBinding exist
-func (r *BackupReconciler) reconcileRBAC(ctx context.Context, backup *wazuhv1alpha1.WazuhBackup, builder *jobs.BackupJobBuilder) error {
+func (r *BackupReconciler) reconcileRBAC(ctx context.Context, backup *wazuhv1.WazuhBackup, builder *jobs.BackupJobBuilder) error {
 	log := logf.FromContext(ctx)
 
 	// Reconcile ServiceAccount
@@ -171,7 +171,7 @@ func (r *BackupReconciler) reconcileRBAC(ctx context.Context, backup *wazuhv1alp
 }
 
 // reconcileCronJob creates or updates the CronJob for scheduled backups
-func (r *BackupReconciler) reconcileCronJob(ctx context.Context, backup *wazuhv1alpha1.WazuhBackup, builder *jobs.BackupJobBuilder) error {
+func (r *BackupReconciler) reconcileCronJob(ctx context.Context, backup *wazuhv1.WazuhBackup, builder *jobs.BackupJobBuilder) error {
 	log := logf.FromContext(ctx)
 
 	cronJob := builder.BuildCronJob()
@@ -208,7 +208,7 @@ func (r *BackupReconciler) reconcileCronJob(ctx context.Context, backup *wazuhv1
 }
 
 // reconcileJob creates the one-shot Job for immediate backup
-func (r *BackupReconciler) reconcileJob(ctx context.Context, backup *wazuhv1alpha1.WazuhBackup, builder *jobs.BackupJobBuilder) error {
+func (r *BackupReconciler) reconcileJob(ctx context.Context, backup *wazuhv1.WazuhBackup, builder *jobs.BackupJobBuilder) error {
 	log := logf.FromContext(ctx)
 
 	job := builder.BuildJob()
@@ -239,7 +239,7 @@ func (r *BackupReconciler) reconcileJob(ctx context.Context, backup *wazuhv1alph
 	if existing.Status.Succeeded > 0 {
 		// Job completed successfully
 		now := metav1.Now()
-		backup.Status.LastBackup = &wazuhv1alpha1.BackupInfo{
+		backup.Status.LastBackup = &wazuhv1.BackupInfo{
 			Time:    now,
 			Status:  constants.BackupStatusSuccess,
 			Message: "Backup completed successfully",
@@ -247,7 +247,7 @@ func (r *BackupReconciler) reconcileJob(ctx context.Context, backup *wazuhv1alph
 	} else if existing.Status.Failed > 0 {
 		// Job failed
 		now := metav1.Now()
-		backup.Status.LastBackup = &wazuhv1alpha1.BackupInfo{
+		backup.Status.LastBackup = &wazuhv1.BackupInfo{
 			Time:    now,
 			Status:  constants.BackupStatusFailed,
 			Message: "Backup job failed",
@@ -259,7 +259,10 @@ func (r *BackupReconciler) reconcileJob(ctx context.Context, backup *wazuhv1alph
 
 // createOrUpdate creates or updates a resource
 func (r *BackupReconciler) createOrUpdate(ctx context.Context, obj client.Object) error {
-	existing := obj.DeepCopyObject().(client.Object)
+	existing, ok := obj.DeepCopyObject().(client.Object)
+	if !ok {
+		return fmt.Errorf("failed to deep copy object")
+	}
 	err := r.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, existing)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -271,27 +274,30 @@ func (r *BackupReconciler) createOrUpdate(ctx context.Context, obj client.Object
 	// Update based on type
 	switch o := obj.(type) {
 	case *corev1.ServiceAccount:
-		e := existing.(*corev1.ServiceAccount)
-		e.Labels = o.Labels
-		return r.Update(ctx, e)
+		if e, ok := existing.(*corev1.ServiceAccount); ok {
+			e.Labels = o.Labels
+			return r.Update(ctx, e)
+		}
 	case *rbacv1.Role:
-		e := existing.(*rbacv1.Role)
-		e.Labels = o.Labels
-		e.Rules = o.Rules
-		return r.Update(ctx, e)
+		if e, ok := existing.(*rbacv1.Role); ok {
+			e.Labels = o.Labels
+			e.Rules = o.Rules
+			return r.Update(ctx, e)
+		}
 	case *rbacv1.RoleBinding:
-		e := existing.(*rbacv1.RoleBinding)
-		e.Labels = o.Labels
-		e.RoleRef = o.RoleRef
-		e.Subjects = o.Subjects
-		return r.Update(ctx, e)
+		if e, ok := existing.(*rbacv1.RoleBinding); ok {
+			e.Labels = o.Labels
+			e.RoleRef = o.RoleRef
+			e.Subjects = o.Subjects
+			return r.Update(ctx, e)
+		}
 	}
 
 	return nil
 }
 
 // handleDeletion handles cleanup when the WazuhBackup is deleted
-func (r *BackupReconciler) handleDeletion(ctx context.Context, backup *wazuhv1alpha1.WazuhBackup) error {
+func (r *BackupReconciler) handleDeletion(ctx context.Context, backup *wazuhv1.WazuhBackup) error {
 	log := logf.FromContext(ctx)
 
 	log.Info("Handling deletion of WazuhBackup", "name", backup.Name)
@@ -308,7 +314,7 @@ func (r *BackupReconciler) handleDeletion(ctx context.Context, backup *wazuhv1al
 }
 
 // updateStatus updates the WazuhBackup status
-func (r *BackupReconciler) updateStatus(ctx context.Context, backup *wazuhv1alpha1.WazuhBackup, phase, message string) error {
+func (r *BackupReconciler) updateStatus(ctx context.Context, backup *wazuhv1.WazuhBackup, phase, message string) error {
 	backup.Status.Phase = phase
 	backup.Status.Message = message
 	backup.Status.ObservedGeneration = backup.Generation
@@ -316,13 +322,14 @@ func (r *BackupReconciler) updateStatus(ctx context.Context, backup *wazuhv1alph
 	// Set condition
 	conditionStatus := metav1.ConditionTrue
 	reason := "BackupReady"
-	if phase == constants.WazuhBackupPhaseFailed {
+	switch phase {
+	case constants.WazuhBackupPhaseFailed:
 		conditionStatus = metav1.ConditionFalse
 		reason = "BackupFailed"
-	} else if phase == constants.WazuhBackupPhaseSuspended {
+	case constants.WazuhBackupPhaseSuspended:
 		conditionStatus = metav1.ConditionFalse
 		reason = "BackupSuspended"
-	} else if phase == constants.WazuhBackupPhasePending {
+	case constants.WazuhBackupPhasePending:
 		conditionStatus = metav1.ConditionFalse
 		reason = "BackupPending"
 	}
@@ -339,6 +346,6 @@ func (r *BackupReconciler) updateStatus(ctx context.Context, backup *wazuhv1alph
 }
 
 // Delete handles cleanup when a WazuhBackup CRD is deleted (called by controller)
-func (r *BackupReconciler) Delete(ctx context.Context, backup *wazuhv1alpha1.WazuhBackup) error {
+func (r *BackupReconciler) Delete(ctx context.Context, backup *wazuhv1.WazuhBackup) error {
 	return r.handleDeletion(ctx, backup)
 }

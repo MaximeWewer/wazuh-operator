@@ -132,7 +132,7 @@ Configure Filebeat for shipping Wazuh alerts and archives to OpenSearch.
 Minimal configuration with default settings:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhFilebeat
 metadata:
   name: wazuh-filebeat
@@ -157,7 +157,7 @@ spec:
 Configuration with custom template and pipeline settings:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhFilebeat
 metadata:
   name: wazuh-filebeat-advanced
@@ -194,7 +194,7 @@ spec:
 Using a fully custom template and pipeline from ConfigMaps:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhFilebeat
 metadata:
   name: wazuh-filebeat-custom

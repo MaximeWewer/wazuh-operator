@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,15 +18,15 @@ package configmaps
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
+	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
 
 // DashboardConfigMapBuilder builds ConfigMaps for OpenSearch Dashboard configuration
@@ -39,14 +39,14 @@ type DashboardConfigMapBuilder struct {
 	serverPort   int32
 	customConfig string
 	// Wazuh plugin configuration
-	wazuhPlugin *wazuhv1alpha1.WazuhPluginConfig
+	wazuhPlugin *wazuhv1.WazuhPluginConfig
 	// Manager API URL for default endpoint
 	managerAPIURL string
 	// Resolved credentials per endpoint ID (from secretRefs)
 	// Key format: "endpointID:username" and "endpointID:password"
 	resolvedCredentials map[string]string
 	// Auth config from CRD for SSO settings
-	authConfig  *wazuhv1alpha1.OpenSearchAuthConfigSpec
+	authConfig  *wazuhv1.OpenSearchAuthConfigSpec
 	authSecrets map[string]string
 }
 
@@ -86,14 +86,14 @@ func (b *DashboardConfigMapBuilder) WithServerPort(port int32) *DashboardConfigM
 }
 
 // WithCustomConfig sets custom configuration content
-func (b *DashboardConfigMapBuilder) WithCustomConfig(config string) *DashboardConfigMapBuilder {
-	b.customConfig = config
+func (b *DashboardConfigMapBuilder) WithCustomConfig(content string) *DashboardConfigMapBuilder {
+	b.customConfig = content
 	return b
 }
 
 // WithWazuhPlugin sets the Wazuh plugin configuration
-func (b *DashboardConfigMapBuilder) WithWazuhPlugin(config *wazuhv1alpha1.WazuhPluginConfig) *DashboardConfigMapBuilder {
-	b.wazuhPlugin = config
+func (b *DashboardConfigMapBuilder) WithWazuhPlugin(pluginConfig *wazuhv1.WazuhPluginConfig) *DashboardConfigMapBuilder {
+	b.wazuhPlugin = pluginConfig
 	return b
 }
 
@@ -112,7 +112,7 @@ func (b *DashboardConfigMapBuilder) WithResolvedCredentials(credentials map[stri
 
 // WithAuthConfig sets the authentication configuration from CRD
 // This will be used to generate SSO settings in opensearch_dashboards.yml
-func (b *DashboardConfigMapBuilder) WithAuthConfig(authConfig *wazuhv1alpha1.OpenSearchAuthConfigSpec) *DashboardConfigMapBuilder {
+func (b *DashboardConfigMapBuilder) WithAuthConfig(authConfig *wazuhv1.OpenSearchAuthConfigSpec) *DashboardConfigMapBuilder {
 	b.authConfig = authConfig
 	return b
 }
@@ -143,7 +143,7 @@ func (b *DashboardConfigMapBuilder) Build() *corev1.ConfigMap {
 	}
 
 	// Build opensearch_dashboards.yml configuration
-	config := b.buildDashboardConfig(indexerHost)
+	dashboardConfig := b.buildDashboardConfig(indexerHost)
 
 	// Build wazuh.yml configuration
 	wazuhConfig := b.buildWazuhConfig()
@@ -158,7 +158,7 @@ func (b *DashboardConfigMapBuilder) Build() *corev1.ConfigMap {
 			Labels:    labels,
 		},
 		Data: map[string]string{
-			"opensearch_dashboards.yml": config,
+			"opensearch_dashboards.yml": dashboardConfig,
 			"wazuh.yml":                 wazuhConfig,
 			"wazuh_app_config.sh":       wazuhAppConfigScript,
 		},
@@ -225,6 +225,9 @@ opensearch_security.auth.type: "basicauth"
 }
 
 // buildWazuhConfig generates the wazuh.yml configuration for the Wazuh plugin
+// TODO(security): Credentials are written to ConfigMap which is not encrypted at rest by default.
+// Consider migrating wazuh.yml to a Secret or using init script with env vars from Secrets.
+// See: https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/
 func (b *DashboardConfigMapBuilder) buildWazuhConfig() string {
 	var sb strings.Builder
 
@@ -281,7 +284,7 @@ func (b *DashboardConfigMapBuilder) buildWazuhConfig() string {
 		if b.managerAPIURL != "" {
 			sb.WriteString(fmt.Sprintf("      url: %s\n", b.managerAPIURL))
 		} else {
-			sb.WriteString(fmt.Sprintf("      url: https://%s-manager-master.%s.svc.cluster.local\n", b.clusterName, b.namespace))
+			sb.WriteString(fmt.Sprintf("      url: https://%s\n", dns.ServiceFQDN(b.clusterName+"-manager-master", b.namespace)))
 		}
 
 		// Port configuration
@@ -481,12 +484,4 @@ EOF
 
 echo "Wazuh APP configured with default host"
 `
-}
-
-// boolToString converts a boolean pointer to string
-func boolToString(b *bool, defaultVal bool) string {
-	if b == nil {
-		return strconv.FormatBool(defaultVal)
-	}
-	return strconv.FormatBool(*b)
 }

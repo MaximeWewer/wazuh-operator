@@ -1,6 +1,10 @@
-# Wazuh Cluster Helm Chart
+# wazuh-cluster
 
-This Helm chart deploys Wazuh cluster instances via the Wazuh Operator.
+![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v1.0.0](https://img.shields.io/badge/AppVersion-v1.0.0-informational?style=flat-square)
+
+Helm chart for deploying Wazuh clusters via the Wazuh Operator
+
+**Homepage:** <https://github.com/MaximeWewer/wazuh-operator>
 
 ## Prerequisites
 
@@ -10,13 +14,13 @@ This Helm chart deploys Wazuh cluster instances via the Wazuh Operator.
 
 ## Documentation
 
-For complete documentation, examples, and guides, see:
-
-- **[User Documentation](../../docs/usage/README.md)** - Full usage guide
-- **[Quick Start Examples](../../docs/usage/examples/quick-start/)** - Minimal deployment examples
-- **[Production Examples](../../docs/usage/examples/production/)** - Production-ready configurations
-- **[Sizing Profiles](../../docs/usage/features/sizing.md)** - Cluster sizing guide
-- **[CRD Reference](../../docs/usage/CRD-REFERENCE.md)** - Complete API documentation
+| Resource                                                       | Description                     |
+| -------------------------------------------------------------- | ------------------------------- |
+| [User Documentation](../../docs/usage/README.md)               | Full usage guide                |
+| [Quick Start Examples](../../docs/usage/examples/quick-start/) | Minimal deployment examples     |
+| [Production Examples](../../docs/usage/examples/production/)   | Production-ready configurations |
+| [Sizing Profiles](../../docs/usage/features/sizing.md)         | Cluster sizing guide            |
+| [CRD Reference](../../docs/usage/CRD-REFERENCE.md)             | Complete API documentation      |
 
 ## Installation
 
@@ -36,52 +40,7 @@ helm install my-wazuh-cluster ./charts/wazuh-cluster \
   --namespace wazuh --create-namespace
 ```
 
-## Configuration
-
-### Secrets
-
-The chart creates the following secrets required by Wazuh clusters:
-
-| Secret Name                 | Description                              | Keys                               |
-| --------------------------- | ---------------------------------------- | ---------------------------------- |
-| `wazuh-api-credentials`     | API credentials for Wazuh                | `username`, `password`             |
-| `indexer-admin-credentials` | Admin credentials for OpenSearch indexer | `admin-username`, `admin-password` |
-| `wazuh-authd-pass`          | Password for agent enrollment            | `authd.pass`                       |
-
-### Cluster Configuration
-
-Define your Wazuh cluster in your values file. The chart deploys ONE WazuhCluster per Helm release.
-
-Example:
-
-```yaml
-cluster:
-  enabled: true
-  name: wazuh-production
-  spec:
-    version: "4.9.0"
-    indexer:
-      replicas: 3
-      storageSize: 100Gi
-    manager:
-      master:
-        storageSize: 50Gi
-      workers:
-        replicas: 2
-    dashboard:
-      replicas: 1
-```
-
-## Examples
-
-See the [documentation examples](../../docs/usage/examples/) for complete configuration examples:
-
-- [Quick Start](../../docs/usage/examples/quick-start/) - Minimal deployment for development
-- [Production](../../docs/usage/examples/production/) - Production-ready configuration with high availability
-
 ## Upgrading
-
-To upgrade an existing installation:
 
 ```bash
 helm upgrade my-wazuh-cluster ./charts/wazuh-cluster -f my-values.yaml
@@ -93,152 +52,238 @@ helm upgrade my-wazuh-cluster ./charts/wazuh-cluster -f my-values.yaml
 helm uninstall my-wazuh-cluster
 ```
 
-**Note:** This will delete all WazuhCluster resources and secrets. The operator will clean up all associated Kubernetes resources.
+> **Note:** This will delete all WazuhCluster resources and secrets. The operator will clean up all associated Kubernetes resources.
 
-## Parameters
+## Values
 
 ### Global Parameters
 
-| Parameter         | Description                          | Default |
-| ----------------- | ------------------------------------ | ------- |
-| `namespace`       | Namespace for Wazuh clusters         | `wazuh` |
-| `createNamespace` | Create namespace if it doesn't exist | `true`  |
-
-### Secrets Parameters
-
-| Parameter                       | Description                  | Default                          |
-| ------------------------------- | ---------------------------- | -------------------------------- |
-| `secrets.wazuhApi.username`     | API username                 | `wazuh-api`                      |
-| `secrets.wazuhApi.password`     | API password                 | `CHANGE_ME_STRONG_PASSWORD_HERE` |
-| `secrets.indexerAdmin.username` | Indexer admin username       | `admin`                          |
-| `secrets.indexerAdmin.password` | Indexer admin password       | `CHANGE_ME_STRONG_PASSWORD_HERE` |
-| `secrets.wazuhAuthd.enabled`    | Create authd password secret | `true`                           |
-| `secrets.wazuhAuthd.password`   | Agent enrollment password    | `CHANGE_ME_STRONG_PASSWORD_HERE` |
-
-**Note:** The secrets are automatically created if `username` and `password` are provided. The `enabled` flag is only used for `wazuhAuthd`.
-
-### Cluster Parameters
-
-| Parameter         | Description                       | Default         |
-| ----------------- | --------------------------------- | --------------- |
-| `cluster.enabled` | Enable cluster deployment         | `true`          |
-| `cluster.name`    | Name of the WazuhCluster resource | `wazuh-cluster` |
-| `cluster.spec`    | WazuhCluster CRD specification    | See values.yaml |
+| Key             | Type   | Default   | Description                                        |
+| --------------- | ------ | --------- | -------------------------------------------------- |
+| createNamespace | bool   | `true`    | Create namespace if it doesn't exist               |
+| namespace       | string | `"wazuh"` | Namespace where the Wazuh cluster will be deployed |
 
 ### Sizing Profiles
 
-The chart supports predefined sizing profiles for quick deployment. See **[Sizing Guide](../../docs/usage/features/sizing.md)** for full details.
+| Key                     | Type   | Default | Description                                                                                                    |
+| ----------------------- | ------ | ------- | -------------------------------------------------------------------------------------------------------------- |
+| sizing.profile          | string | `"M"`   | Sizing profile: XS (testing), S (dev), M (small prod), L (prod), XL (enterprise). Set to "" for custom config. |
+| sizing.storageClassName | string | `""`    | Custom storage class (applies to all profiles). Leave empty for cluster default.                               |
 
-| Parameter                 | Description                        | Default |
-| ------------------------- | ---------------------------------- | ------- |
-| `sizing.profile`          | Sizing profile: XS, S, M, L, or XL | `""`    |
-| `sizing.storageClassName` | Custom storage class               | `""`    |
+### Inline Secrets
 
-**Available Profiles:**
+| Key                           | Type   | Default                            | Description                                      |
+| ----------------------------- | ------ | ---------------------------------- | ------------------------------------------------ |
+| secrets.indexerAdmin.password | string | `"CHANGE_ME_STRONG_PASSWORD_HERE"` | Indexer admin password (CHANGE IN PRODUCTION)    |
+| secrets.indexerAdmin.username | string | `"admin"`                          | Indexer admin username                           |
+| secrets.wazuhApi.password     | string | `"CHANGE_ME_STRONG_PASSWORD_HERE"` | Wazuh API password (CHANGE IN PRODUCTION)        |
+| secrets.wazuhApi.username     | string | `"wazuh-api"`                      | Wazuh API username                               |
+| secrets.wazuhAuthd.enabled    | bool   | `true`                             | Enable authd password secret creation            |
+| secrets.wazuhAuthd.password   | string | `"CHANGE_ME_STRONG_PASSWORD_HERE"` | Agent enrollment password (CHANGE IN PRODUCTION) |
 
-- **XS (Extra Small)**: Testing only - single node, minimal resources
-- **S (Small)**: Dev/Test - 1 indexer, 1 worker
-- **M (Medium)**: Small Production - 3 indexers, 2 workers
-- **L (Large)**: Production - 3 indexers, 3 workers, HA dashboard
-- **XL (Extra Large)**: Enterprise - 5 indexers, 5 workers, 3 dashboards
+### External Secrets Operator (ESO)
 
-## Ingress Configuration
+| Key                                              | Type   | Default         | Description                                                                                           |
+| ------------------------------------------------ | ------ | --------------- | ----------------------------------------------------------------------------------------------------- |
+| externalSecrets.enabled                          | bool   | `false`         | Enable External Secrets integration (when true, inline secrets are ignored for configured components) |
+| externalSecrets.indexerAdmin.name                | string | `""`            | ExternalSecret name (leave empty to use inline secrets)                                               |
+| externalSecrets.indexerAdmin.passwordKey         | string | `"password"`    | Key in synced secret containing password                                                              |
+| externalSecrets.indexerAdmin.refreshInterval     | string | `"1h"`          | Sync interval (e.g., "1h", "30m")                                                                     |
+| externalSecrets.indexerAdmin.remoteRef.key       | string | `""`            | Key/path in external provider (e.g., "secret/data/wazuh/indexer")                                     |
+| externalSecrets.indexerAdmin.secretStoreRef.kind | string | `"SecretStore"` | SecretStore kind: SecretStore or ClusterSecretStore                                                   |
+| externalSecrets.indexerAdmin.secretStoreRef.name | string | `""`            | SecretStore name                                                                                      |
+| externalSecrets.indexerAdmin.usernameKey         | string | `"username"`    | Key in synced secret containing username                                                              |
+| externalSecrets.wazuhApi.name                    | string | `""`            | ExternalSecret name (leave empty to use inline secrets)                                               |
+| externalSecrets.wazuhApi.passwordKey             | string | `"password"`    |                                                                                                       |
+| externalSecrets.wazuhApi.refreshInterval         | string | `"1h"`          |                                                                                                       |
+| externalSecrets.wazuhApi.remoteRef.key           | string | `""`            |                                                                                                       |
+| externalSecrets.wazuhApi.secretStoreRef.kind     | string | `"SecretStore"` |                                                                                                       |
+| externalSecrets.wazuhApi.secretStoreRef.name     | string | `""`            |                                                                                                       |
+| externalSecrets.wazuhApi.usernameKey             | string | `"username"`    |                                                                                                       |
+| externalSecrets.wazuhAuthd.name                  | string | `""`            | ExternalSecret name (leave empty to use inline secrets)                                               |
+| externalSecrets.wazuhAuthd.passwordKey           | string | `"password"`    | Key in synced secret containing password                                                              |
+| externalSecrets.wazuhAuthd.refreshInterval       | string | `"1h"`          |                                                                                                       |
+| externalSecrets.wazuhAuthd.remoteRef.key         | string | `""`            |                                                                                                       |
+| externalSecrets.wazuhAuthd.secretStoreRef.kind   | string | `"SecretStore"` |                                                                                                       |
+| externalSecrets.wazuhAuthd.secretStoreRef.name   | string | `""`            |                                                                                                       |
 
-The WazuhCluster CRD supports Ingress for the Dashboard, Indexer, and Manager components.
+### WazuhCluster Configuration
 
-### Dashboard Ingress Example
+| Key                          | Type   | Default           | Description                       |
+| ---------------------------- | ------ | ----------------- | --------------------------------- |
+| cluster.enabled              | bool   | `true`            | Enable WazuhCluster deployment    |
+| cluster.name                 | string | `"wazuh-cluster"` | Name of the WazuhCluster resource |
+| cluster.spec.dashboard       | object | `{}`              |                                   |
+| cluster.spec.indexer         | object | `{}`              |                                   |
+| cluster.spec.manager.master  | object | `{}`              |                                   |
+| cluster.spec.manager.workers | object | `{}`              |                                   |
+| cluster.spec.version         | string | `"4.9.0"`         | Wazuh version to deploy           |
+
+### Backup Configuration
+
+| Key                              | Type | Default | Description                                      |
+| -------------------------------- | ---- | ------- | ------------------------------------------------ |
+| backupCredentials.enabled        | bool | `false` | Enable backup credentials Secret creation        |
+| opensearchRepository.enabled     | bool | `false` | Enable OpenSearchSnapshotRepository CRD creation |
+| opensearchSnapshotPolicy.enabled | bool | `false` | Enable OpenSearchSnapshotPolicy CRD creation     |
+| wazuhBackup.enabled              | bool | `false` | Enable WazuhBackup CRD creation                  |
+
+### Network Policy Configuration
+
+| Key                                         | Type   | Default          | Description                                                |
+| ------------------------------------------- | ------ | ---------------- | ---------------------------------------------------------- |
+| networkPolicy.dashboard.additionalEgress    | list   | `[]`             |                                                            |
+| networkPolicy.dashboard.ingressFrom         | list   | `[]`             | Custom ingress rules (default: allow all on port 5601)     |
+| networkPolicy.enabled                       | bool   | `false`          | Enable NetworkPolicies for cluster components              |
+| networkPolicy.indexer.additionalEgress      | list   | `[]`             | Additional egress rules for indexer (e.g., for S3 backups) |
+| networkPolicy.indexer.additionalIngress     | list   | `[]`             | Additional ingress rules for indexer                       |
+| networkPolicy.manager.additionalEgress      | list   | `[]`             |                                                            |
+| networkPolicy.manager.additionalIngress     | list   | `[]`             |                                                            |
+| networkPolicy.manager.agentCIDRs            | list   | `[]`             | Restrict agent connections to specific CIDRs (empty = all) |
+| networkPolicy.manager.allowAgentConnections | bool   | `true`           | Allow agent connections from outside the cluster           |
+| networkPolicy.operatorNamespace             | string | `"wazuh-system"` | Operator namespace (for allowing operator access)          |
+
+### Resource Quota Configuration
+
+| Key                                            | Type   | Default   | Description                                                                   |
+| ---------------------------------------------- | ------ | --------- | ----------------------------------------------------------------------------- |
+| resourceQuota.configmaps                       | string | `"50"`    | Maximum ConfigMaps in namespace                                               |
+| resourceQuota.enabled                          | bool   | `false`   | Enable ResourceQuota and LimitRange                                           |
+| resourceQuota.limitRange.default.cpu           | string | `"1"`     |                                                                               |
+| resourceQuota.limitRange.default.memory        | string | `"2Gi"`   |                                                                               |
+| resourceQuota.limitRange.defaultRequest.cpu    | string | `"100m"`  |                                                                               |
+| resourceQuota.limitRange.defaultRequest.memory | string | `"256Mi"` |                                                                               |
+| resourceQuota.limitRange.max.cpu               | string | `"16"`    |                                                                               |
+| resourceQuota.limitRange.max.memory            | string | `"32Gi"`  |                                                                               |
+| resourceQuota.limitRange.pvcMax                | string | `"500Gi"` | Maximum PVC size                                                              |
+| resourceQuota.limitRange.pvcMin                | string | `"1Gi"`   | Minimum PVC size                                                              |
+| resourceQuota.limits.cpu                       | string | `"40"`    | Total CPU limits                                                              |
+| resourceQuota.limits.memory                    | string | `"80Gi"`  | Total memory limits                                                           |
+| resourceQuota.persistentvolumeclaims           | string | `"20"`    | Maximum PVCs in namespace                                                     |
+| resourceQuota.pods                             | string | `"25"`    | Maximum pods (adjust based on sizing profile: XS=10, S=15, M=25, L=40, XL=60) |
+| resourceQuota.requests.cpu                     | string | `"20"`    | Total CPU requests limit                                                      |
+| resourceQuota.requests.memory                  | string | `"40Gi"`  | Total memory requests limit                                                   |
+| resourceQuota.requests.storage                 | string | `"500Gi"` | Total storage requests limit                                                  |
+| resourceQuota.secrets                          | string | `"50"`    | Maximum Secrets in namespace                                                  |
+| resourceQuota.services                         | string | `"20"`    | Maximum Services in namespace                                                 |
+
+## Examples
+
+### Minimal Deployment
 
 ```yaml
-dashboard:
-  service:
-    type: ClusterIP # Use ClusterIP when using Ingress
-  ingress:
-    enabled: true
-    ingressClassName: nginx
-    annotations:
-      cert-manager.io/cluster-issuer: letsencrypt-prod
-      nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
-      nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    hosts:
-      - host: wazuh.example.com
-        paths:
-          - path: /
-            pathType: Prefix
-    tls:
-      - secretName: wazuh-dashboard-tls
-        hosts:
-          - wazuh.example.com
+sizing:
+  profile: S
+
+secrets:
+  wazuhApi:
+    password: "MySecurePassword123!"
+  indexerAdmin:
+    password: "MySecurePassword456!"
+  wazuhAuthd:
+    password: "MySecurePassword789!"
 ```
 
-### Prerequisites for Ingress
-
-1. **Ingress Controller** must be installed (e.g., NGINX Ingress Controller, Traefik)
-
-   ```bash
-   # Example: Install NGINX Ingress Controller
-   kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/cloud/deploy.yaml
-   ```
-
-2. **Cert-Manager** (optional, for automatic TLS certificate management)
-
-   ```bash
-   # Install cert-manager
-   kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.13.0/cert-manager.yaml
-   ```
-
-3. **DNS Configuration** - Ensure your domain points to the Ingress Controller's external IP
-
-### Common Ingress Annotations
-
-#### NGINX Ingress Controller
+### Production with External Secrets (Vault)
 
 ```yaml
-annotations:
-  # TLS
-  cert-manager.io/cluster-issuer: letsencrypt-prod
-  nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
-  nginx.ingress.kubernetes.io/ssl-redirect: "true"
+sizing:
+  profile: L
 
-  # Timeouts
-  nginx.ingress.kubernetes.io/proxy-connect-timeout: "300"
-  nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+# Disable inline secrets
+secrets:
+  wazuhApi:
+    password: ""
+  indexerAdmin:
+    password: ""
 
-  # Body size
-  nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+# Use External Secrets Operator
+externalSecrets:
+  enabled: true
+  indexerAdmin:
+    name: wazuh-indexer-credentials
+    secretStoreRef:
+      name: vault-backend
+      kind: SecretStore
+    remoteRef:
+      key: secret/data/wazuh/indexer
+  wazuhApi:
+    name: wazuh-api-credentials
+    secretStoreRef:
+      name: vault-backend
+      kind: SecretStore
+    remoteRef:
+      key: secret/data/wazuh/api
 ```
 
-#### Traefik
+### HPA and High Availability
 
 ```yaml
-annotations:
-  cert-manager.io/cluster-issuer: letsencrypt-prod
-  traefik.ingress.kubernetes.io/router.tls: "true"
+sizing:
+  profile: L
+
+cluster:
+  spec:
+    indexer:
+      antiAffinity:
+        enabled: true
+        type: required
+        topologyKey: topology.kubernetes.io/zone
+    manager:
+      workers:
+        hpa:
+          enabled: true
+          minReplicas: 2
+          maxReplicas: 10
+          targetCPUUtilizationPercentage: 80
+    dashboard:
+      hpa:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 5
 ```
 
-#### AWS ALB Ingress
+### Gateway API Configuration
 
 ```yaml
-annotations:
-  kubernetes.io/ingress.class: alb
-  alb.ingress.kubernetes.io/scheme: internet-facing
-  alb.ingress.kubernetes.io/target-type: ip
-  alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:region:account:certificate/id
+cluster:
+  spec:
+    dashboard:
+      gatewayAPI:
+        enabled: true
+        gatewayRef:
+          name: wazuh-gateway
+          namespace: gateway-system
+        hostnames:
+          - dashboard.wazuh.example.com
+        http:
+          pathPrefix: /
+    manager:
+      workers:
+        gatewayAPI:
+          enabled: true
+          gatewayRef:
+            name: wazuh-gateway
+          tcp:
+            enabled: true
+            enrollmentEnabled: true
+            eventsEnabled: true
 ```
 
 ## Security Considerations
 
-⚠️ **IMPORTANT**: The default passwords in this chart are for demonstration purposes only.
+**IMPORTANT**: The default passwords in this chart are for demonstration purposes only.
 
 For production use, you **MUST**:
 
 1. Change all default passwords
-2. Consider using external secret management (e.g., Sealed Secrets, External Secrets Operator)
+2. Use External Secrets Operator for credential management
 3. Enable TLS for all communications
 4. Review and apply appropriate RBAC policies
+5. Enable anti-affinity for high availability
+6. Configure network policies
 
 ## Support
-
-For issues and questions:
 
 - GitHub Issues: https://github.com/MaximeWewer/wazuh-operator/issues
 - Documentation: https://documentation.wazuh.com/

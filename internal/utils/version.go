@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package utils
+package utils //nolint:revive // utils is a common package name
 
 import (
 	"fmt"
@@ -111,8 +111,7 @@ func (v *Version) String() string {
 // Based on Wazuh documentation:
 // - Wazuh 4.9.x uses OpenSearch 2.13.x
 // - Wazuh 4.10.x-4.11.x uses OpenSearch 2.16.x
-// - Wazuh 4.12.x+ uses OpenSearch 2.19.x
-// - Wazuh 5.0.x (future) will use OpenSearch 2.19.x+
+// - Wazuh 4.12.x+ uses OpenSearch 2.19.x+
 func WazuhToOpenSearchVersion(wazuhVersion string) (*Version, error) {
 	// First try to get exact version from the mapping table
 	info, err := GetWazuhVersionInfo(wazuhVersion)
@@ -260,6 +259,7 @@ type WazuhVersionInfo struct {
 // The plugin version format is: OpenSearchVersion.PatchVersion (e.g., 2.19.1.0)
 var wazuhVersionMapping = map[string]WazuhVersionInfo{
 	// Wazuh 4.14.x - OpenSearch 2.19.1
+	"4.14.2": {WazuhVersion: "4.14.2", OpenSearchVersion: "2.19.1", PrometheusExporterPluginVersion: "2.19.1.0"},
 	"4.14.1": {WazuhVersion: "4.14.1", OpenSearchVersion: "2.19.1", PrometheusExporterPluginVersion: "2.19.1.0"},
 	"4.14.0": {WazuhVersion: "4.14.0", OpenSearchVersion: "2.19.1", PrometheusExporterPluginVersion: "2.19.1.0"},
 	// Wazuh 4.13.x - OpenSearch 2.19.1

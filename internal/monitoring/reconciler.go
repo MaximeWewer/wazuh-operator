@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,7 +19,6 @@ package monitoring
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -30,7 +29,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 )
 
 // MonitoringReconciler reconciles monitoring resources for a WazuhCluster
@@ -48,7 +48,7 @@ func NewMonitoringReconciler(c client.Client, scheme *runtime.Scheme) *Monitorin
 }
 
 // Reconcile reconciles all monitoring resources for a WazuhCluster
-func (r *MonitoringReconciler) Reconcile(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *MonitoringReconciler) Reconcile(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Check if monitoring is enabled
@@ -96,7 +96,7 @@ func (r *MonitoringReconciler) Reconcile(ctx context.Context, cluster *wazuhv1al
 
 // reconcileServiceMonitor creates or updates a ServiceMonitor
 // If the ServiceMonitor CRD is not installed, logs a warning and returns nil
-func (r *MonitoringReconciler) reconcileServiceMonitor(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, desired *monitoringv1.ServiceMonitor) error {
+func (r *MonitoringReconciler) reconcileServiceMonitor(ctx context.Context, cluster *wazuhv1.WazuhCluster, desired *monitoringv1.ServiceMonitor) error {
 	log := logf.FromContext(ctx)
 
 	// Set owner reference
@@ -113,7 +113,7 @@ func (r *MonitoringReconciler) reconcileServiceMonitor(ctx context.Context, clus
 			log.Info("Creating ServiceMonitor", "name", desired.Name)
 			if err := r.Client.Create(ctx, desired); err != nil {
 				// If CRD is not installed, log warning and continue
-				if isNoMatchError(err) {
+				if utils.IsCRDNotInstalledError(err) {
 					log.Info("ServiceMonitor CRD not installed, skipping monitoring setup. Install prometheus-operator to enable monitoring.")
 					return nil
 				}
@@ -122,7 +122,7 @@ func (r *MonitoringReconciler) reconcileServiceMonitor(ctx context.Context, clus
 			return nil
 		}
 		// If CRD is not installed, log warning and continue
-		if isNoMatchError(err) {
+		if utils.IsCRDNotInstalledError(err) {
 			log.Info("ServiceMonitor CRD not installed, skipping monitoring setup. Install prometheus-operator to enable monitoring.")
 			return nil
 		}
@@ -137,7 +137,7 @@ func (r *MonitoringReconciler) reconcileServiceMonitor(ctx context.Context, clus
 }
 
 // cleanupMonitoringResources removes all monitoring resources when monitoring is disabled
-func (r *MonitoringReconciler) cleanupMonitoringResources(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *MonitoringReconciler) cleanupMonitoringResources(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Delete Manager ServiceMonitor
@@ -169,22 +169,12 @@ func (r *MonitoringReconciler) deleteServiceMonitorIfExists(ctx context.Context,
 			return nil
 		}
 		// Ignore "no matches for kind" errors (CRD not installed)
-		if isNoMatchError(err) {
+		if utils.IsCRDNotInstalledError(err) {
 			return nil
 		}
 		return err
 	}
 	return nil
-}
-
-// isNoMatchError checks if the error is a "no matches for kind" error
-// This happens when the CRD is not installed in the cluster
-func isNoMatchError(err error) bool {
-	if err == nil {
-		return false
-	}
-	// Check for NoMatchError from discovery
-	return strings.Contains(err.Error(), "no matches for kind")
 }
 
 // IsMonitoringCRDAvailable checks if the ServiceMonitor CRD is installed

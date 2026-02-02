@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -28,18 +28,19 @@ import (
 
 // ManagerConfigMapBuilder builds ConfigMaps for Wazuh Manager
 type ManagerConfigMapBuilder struct {
-	name         string
-	namespace    string
-	clusterName  string
-	version      string
-	nodeType     string // "master" or "worker"
-	data         map[string]string
-	binaryData   map[string][]byte
-	labels       map[string]string
-	annotations  map[string]string
-	ossecConf    string
-	filebeatYml  string
-	extraConfigs map[string]string
+	name             string
+	namespace        string
+	clusterName      string
+	version          string
+	nodeType         string // "master" or "worker"
+	data             map[string]string
+	binaryData       map[string][]byte
+	labels           map[string]string
+	annotations      map[string]string
+	ossecConf        string
+	filebeatYml      string
+	filebeatTemplate string
+	extraConfigs     map[string]string
 }
 
 // NewManagerConfigMapBuilder creates a new ManagerConfigMapBuilder
@@ -93,6 +94,12 @@ func (b *ManagerConfigMapBuilder) WithFilebeatConfig(config string) *ManagerConf
 	return b
 }
 
+// WithFilebeatTemplate sets the wazuh-template.json content for index template
+func (b *ManagerConfigMapBuilder) WithFilebeatTemplate(template string) *ManagerConfigMapBuilder {
+	b.filebeatTemplate = template
+	return b
+}
+
 // WithExtraConfig adds additional configuration files
 func (b *ManagerConfigMapBuilder) WithExtraConfig(filename, content string) *ManagerConfigMapBuilder {
 	b.extraConfigs[filename] = content
@@ -140,6 +147,11 @@ func (b *ManagerConfigMapBuilder) Build() *corev1.ConfigMap {
 	// Add filebeat.yml if provided
 	if b.filebeatYml != "" {
 		data["filebeat.yml"] = b.filebeatYml
+	}
+
+	// Add wazuh-template.json if provided
+	if b.filebeatTemplate != "" {
+		data[constants.ConfigMapKeyWazuhTemplate] = b.filebeatTemplate
 	}
 
 	// Add extra configs

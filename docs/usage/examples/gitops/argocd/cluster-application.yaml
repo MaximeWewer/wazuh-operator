@@ -1,0 +1,86 @@
+# ArgoCD Application for Wazuh Cluster
+#
+# This Application deploys a Wazuh cluster using the wazuh-cluster Helm chart.
+#
+# Prerequisites:
+#   - Wazuh Operator installed (see operator-application.yaml)
+#
+# Usage:
+#   kubectl apply -f cluster-application.yaml
+#
+apiVersion: argoproj.io/v1
+kind: Application
+metadata:
+  name: wazuh-cluster-prod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    # Git repository with Helm chart
+    repoURL: https://github.com/MaximeWewer/wazuh-operator.git
+    path: charts/wazuh-cluster
+    targetRevision: main
+
+    helm:
+      releaseName: wazuh-cluster
+      values: |
+        # Namespace for Wazuh cluster
+        namespace: wazuh
+        createNamespace: true
+
+        # Sizing profile: XS, S, M, L, XL
+        sizing:
+          profile: M
+          storageClassName: ""  # Use cluster default
+
+        # Cluster configuration
+        cluster:
+          name: wazuh-prod
+          spec:
+            version: "4.9.0"
+
+            # TLS configuration
+            tls:
+              enabled: true
+              hotReload:
+                enabled: true
+
+        # Secrets - USE EXTERNAL SECRETS IN PRODUCTION!
+        # Consider using External Secrets Operator or Sealed Secrets
+        secrets:
+          wazuhApi:
+            username: "wazuh-api"
+            password: "CHANGE_ME_USE_EXTERNAL_SECRETS"
+          indexerAdmin:
+            username: "admin"
+            password: "CHANGE_ME_USE_EXTERNAL_SECRETS"
+
+        # Network policies
+        networkPolicy:
+          enabled: true
+          operatorNamespace: wazuh-system
+
+        # Backup configuration (optional)
+        opensearchRepository:
+          enabled: false
+        wazuhBackup:
+          enabled: false
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: wazuh
+
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+
+  # Health checks for Wazuh CRDs
+  # ArgoCD will wait for these to be healthy
+  ignoreDifferences:
+    - group: resources.wazuh.com
+      kind: WazuhCluster
+      jsonPointers:
+        - /status

@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,17 +26,17 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // RollbackManager handles rollback operations for failed drains
 type RollbackManager interface {
 	// ExecuteRollback restores the component to its previous state
-	ExecuteRollback(ctx context.Context, cluster *v1alpha1.WazuhCluster, component string) error
+	ExecuteRollback(ctx context.Context, cluster *v1.WazuhCluster, component string) error
 
 	// VerifyRollbackComplete checks if rollback has finished
-	VerifyRollbackComplete(ctx context.Context, cluster *v1alpha1.WazuhCluster, component string) (bool, error)
+	VerifyRollbackComplete(ctx context.Context, cluster *v1.WazuhCluster, component string) (bool, error)
 }
 
 // RollbackManagerImpl implements RollbackManager
@@ -66,7 +66,7 @@ type RollbackResult struct {
 }
 
 // ExecuteRollback restores the component to its previous state
-func (r *RollbackManagerImpl) ExecuteRollback(ctx context.Context, cluster *v1alpha1.WazuhCluster, component string) error {
+func (r *RollbackManagerImpl) ExecuteRollback(ctx context.Context, cluster *v1.WazuhCluster, component string) error {
 	log := r.log.WithValues("cluster", cluster.Name, "namespace", cluster.Namespace, "component", component)
 	log.Info("Starting rollback operation")
 
@@ -81,7 +81,7 @@ func (r *RollbackManagerImpl) ExecuteRollback(ctx context.Context, cluster *v1al
 }
 
 // rollbackIndexer restores the indexer StatefulSet to its previous replica count
-func (r *RollbackManagerImpl) rollbackIndexer(ctx context.Context, cluster *v1alpha1.WazuhCluster) error {
+func (r *RollbackManagerImpl) rollbackIndexer(ctx context.Context, cluster *v1.WazuhCluster) error {
 	log := r.log.WithValues("cluster", cluster.Name, "component", constants.DrainComponentIndexer)
 
 	// Get previous replicas from drain status
@@ -114,7 +114,7 @@ func (r *RollbackManagerImpl) rollbackIndexer(ctx context.Context, cluster *v1al
 }
 
 // rollbackManager restores the manager worker StatefulSet to its previous replica count
-func (r *RollbackManagerImpl) rollbackManager(ctx context.Context, cluster *v1alpha1.WazuhCluster) error {
+func (r *RollbackManagerImpl) rollbackManager(ctx context.Context, cluster *v1.WazuhCluster) error {
 	log := r.log.WithValues("cluster", cluster.Name, "component", constants.DrainComponentManager)
 
 	// Get previous replicas from drain status
@@ -147,7 +147,7 @@ func (r *RollbackManagerImpl) rollbackManager(ctx context.Context, cluster *v1al
 }
 
 // VerifyRollbackComplete checks if rollback has finished
-func (r *RollbackManagerImpl) VerifyRollbackComplete(ctx context.Context, cluster *v1alpha1.WazuhCluster, component string) (bool, error) {
+func (r *RollbackManagerImpl) VerifyRollbackComplete(ctx context.Context, cluster *v1.WazuhCluster, component string) (bool, error) {
 	r.log.V(1).Info("Rollback verification requested", "cluster", cluster.Name, "namespace", cluster.Namespace, "component", component)
 
 	switch component {
@@ -161,7 +161,7 @@ func (r *RollbackManagerImpl) VerifyRollbackComplete(ctx context.Context, cluste
 }
 
 // verifyIndexerRollback checks if the indexer StatefulSet has rolled back
-func (r *RollbackManagerImpl) verifyIndexerRollback(ctx context.Context, cluster *v1alpha1.WazuhCluster) (bool, error) {
+func (r *RollbackManagerImpl) verifyIndexerRollback(ctx context.Context, cluster *v1.WazuhCluster) (bool, error) {
 	// Get previous replicas from drain status
 	var previousReplicas int32 = 3
 	if cluster.Status.Drain != nil && cluster.Status.Drain.Indexer != nil {
@@ -190,7 +190,7 @@ func (r *RollbackManagerImpl) verifyIndexerRollback(ctx context.Context, cluster
 }
 
 // verifyManagerRollback checks if the manager worker StatefulSet has rolled back
-func (r *RollbackManagerImpl) verifyManagerRollback(ctx context.Context, cluster *v1alpha1.WazuhCluster) (bool, error) {
+func (r *RollbackManagerImpl) verifyManagerRollback(ctx context.Context, cluster *v1.WazuhCluster) (bool, error) {
 	// Get previous replicas from drain status
 	var previousReplicas int32 = 1
 	if cluster.Status.Drain != nil && cluster.Status.Drain.Manager != nil {
@@ -219,7 +219,7 @@ func (r *RollbackManagerImpl) verifyManagerRollback(ctx context.Context, cluster
 }
 
 // ClearAllocationExclusion removes any OpenSearch allocation exclusions after rollback
-func (r *RollbackManagerImpl) ClearAllocationExclusion(ctx context.Context, cluster *v1alpha1.WazuhCluster, nodeName string) error {
+func (r *RollbackManagerImpl) ClearAllocationExclusion(ctx context.Context, cluster *v1.WazuhCluster, nodeName string) error {
 	// This would be called by the IndexerDrainer after rollback
 	// to clear any allocation exclusion settings that were set during drain
 	r.log.Info("Clearing allocation exclusion after rollback", "nodeName", nodeName)

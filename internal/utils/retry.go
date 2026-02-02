@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 // Package utils provides shared utilities for the Wazuh Operator
-package utils
+package utils //nolint:revive // utils is a common package name
 
 import (
 	"context"

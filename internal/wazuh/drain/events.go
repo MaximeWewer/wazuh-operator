@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 
-	"github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -82,7 +82,7 @@ func (r *DrainEventRecorder) EmitDrainRetry(obj runtime.Object, component string
 }
 
 // EmitDrainTimeout emits an event when a drain operation times out
-func (r *DrainEventRecorder) EmitDrainTimeout(obj runtime.Object, component, targetPod string, timeout string) {
+func (r *DrainEventRecorder) EmitDrainTimeout(obj runtime.Object, component, targetPod, timeout string) {
 	r.recorder.Eventf(obj, corev1.EventTypeWarning, constants.DrainEventReasonTimeout,
 		"[%s] Drain timed out for pod %s after %s", component, targetPod, timeout)
 }
@@ -94,7 +94,7 @@ func (r *DrainEventRecorder) EmitDrainMaxRetriesReached(obj runtime.Object, comp
 }
 
 // EmitDryRunResult emits an event with dry-run evaluation results
-func (r *DrainEventRecorder) EmitDryRunResult(obj runtime.Object, result *v1alpha1.DryRunResult) {
+func (r *DrainEventRecorder) EmitDryRunResult(obj runtime.Object, result *v1.DryRunResult) {
 	var message string
 	eventType := corev1.EventTypeNormal
 
@@ -118,7 +118,7 @@ func (r *DrainEventRecorder) EmitDryRunResult(obj runtime.Object, result *v1alph
 }
 
 // EmitIndexerShardRelocation emits an event when shard relocation status changes
-func (r *DrainEventRecorder) EmitIndexerShardRelocation(obj runtime.Object, targetNode string, remainingShards int32, totalShards int32) {
+func (r *DrainEventRecorder) EmitIndexerShardRelocation(obj runtime.Object, targetNode string, remainingShards, totalShards int32) {
 	if remainingShards == 0 {
 		r.recorder.Eventf(obj, corev1.EventTypeNormal, constants.DrainEventReasonShardsRelocated,
 			"[indexer] All shards relocated from node %s", targetNode)

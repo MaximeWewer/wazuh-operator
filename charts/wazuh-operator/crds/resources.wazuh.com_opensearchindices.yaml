@@ -35,7 +35,7 @@ spec:
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
-    name: v1alpha1
+    name: v1
     schema:
       openAPIV3Schema:
         description: OpenSearchIndex is the Schema for the opensearchindices API
@@ -74,7 +74,11 @@ spec:
                         the alias
                       type: boolean
                     name:
-                      description: Name is the alias name
+                      description: Name is the alias name (must be lowercase, alphanumeric
+                        with hyphens/underscores)
+                      maxLength: 255
+                      minLength: 1
+                      pattern: ^[a-z0-9][a-z0-9_\-\.]*$
                       type: string
                     routing:
                       description: Routing is the routing value for the alias

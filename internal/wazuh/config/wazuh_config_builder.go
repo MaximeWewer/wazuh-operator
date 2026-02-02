@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@ type BaseConfig struct {
 // TemplateBuilder is a helper for building configurations from templates
 type TemplateBuilder struct {
 	tmpl *template.Template
-	data interface{}
+	data any
 }
 
 // NewTemplateBuilder creates a new TemplateBuilder
@@ -51,7 +51,7 @@ func NewTemplateBuilder(name, tmpl string) (*TemplateBuilder, error) {
 }
 
 // WithData sets the data for the template
-func (b *TemplateBuilder) WithData(data interface{}) *TemplateBuilder {
+func (b *TemplateBuilder) WithData(data any) *TemplateBuilder {
 	b.data = data
 	return b
 }

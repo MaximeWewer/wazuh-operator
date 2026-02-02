@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -221,12 +221,6 @@ const (
 const (
 	// PathIndexerBin is the path to Wazuh Indexer binaries
 	PathIndexerBin = "/usr/share/wazuh-indexer/bin"
-)
-
-// Kubernetes domain suffix
-const (
-	// KubernetesDNSSuffix is the standard Kubernetes DNS suffix
-	KubernetesDNSSuffix = ".svc.cluster.local"
 )
 
 // Filebeat specific paths

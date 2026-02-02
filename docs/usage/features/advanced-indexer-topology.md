@@ -47,7 +47,7 @@ OpenSearch 2.x supports the following node roles:
 ### Simple Mode Example
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhCluster
 metadata:
   name: wazuh
@@ -60,7 +60,7 @@ spec:
 ### Advanced Mode Example
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: WazuhCluster
 metadata:
   name: wazuh

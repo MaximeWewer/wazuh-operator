@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,7 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
@@ -45,6 +46,8 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
+	affinityutil "github.com/MaximeWewer/wazuh-operator/pkg/resources/affinity"
+	"github.com/MaximeWewer/wazuh-operator/pkg/resources/pdb"
 )
 
 // ClusterReconciler handles reconciliation of Wazuh cluster components
@@ -52,6 +55,10 @@ type ClusterReconciler struct {
 	client.Client
 	Scheme          *runtime.Scheme
 	requeueInterval time.Duration
+	// RuleReconciler handles WazuhRule resources for mounting rules to manager pods
+	RuleReconciler *RuleReconciler
+	// DecoderReconciler handles WazuhDecoder resources for mounting decoders to manager pods
+	DecoderReconciler *DecoderReconciler
 }
 
 // NewClusterReconciler creates a new ClusterReconciler
@@ -68,8 +75,20 @@ func (r *ClusterReconciler) RequeueInterval() time.Duration {
 	return r.requeueInterval
 }
 
+// WithRuleReconciler sets the rule reconciler for mounting rule ConfigMaps to manager pods
+func (r *ClusterReconciler) WithRuleReconciler(rr *RuleReconciler) *ClusterReconciler {
+	r.RuleReconciler = rr
+	return r
+}
+
+// WithDecoderReconciler sets the decoder reconciler for mounting decoder ConfigMaps to manager pods
+func (r *ClusterReconciler) WithDecoderReconciler(dr *DecoderReconciler) *ClusterReconciler {
+	r.DecoderReconciler = dr
+	return r
+}
+
 // ReconcileCertificates reconciles TLS certificates for the cluster
-func (r *ClusterReconciler) ReconcileCertificates(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *ClusterReconciler) ReconcileCertificates(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Check if certificates already exist
@@ -140,7 +159,7 @@ type managerCertificates struct {
 }
 
 // generateManagerCertificates generates all certificates needed for the manager
-func (r *ClusterReconciler) generateManagerCertificates(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*managerCertificates, error) {
+func (r *ClusterReconciler) generateManagerCertificates(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*managerCertificates, error) {
 	log := logf.FromContext(ctx)
 
 	// Generate CA
@@ -152,7 +171,7 @@ func (r *ClusterReconciler) generateManagerCertificates(ctx context.Context, clu
 	log.V(1).Info("Generated CA certificate for manager")
 
 	// Determine worker replicas for SANs
-	var workerReplicas int32 = 0
+	var workerReplicas int32
 	if cluster.Spec.Manager != nil {
 		workerReplicas = cluster.Spec.Manager.Workers.GetReplicas()
 	}
@@ -197,13 +216,14 @@ type ManagerReconcileResult struct {
 }
 
 // ReconcileManager reconciles the Wazuh Manager (master and workers)
-func (r *ClusterReconciler) ReconcileManager(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *ClusterReconciler) ReconcileManager(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	return r.ReconcileManagerWithCertHashes(ctx, cluster, "", "")
 }
 
-// ReconcileManagerWithCertHashes reconciles the Wazuh Manager with certificate hashes for pod restart
-// DEPRECATED: Use ReconcileManagerNonBlocking for non-blocking rollouts
-func (r *ClusterReconciler) ReconcileManagerWithCertHashes(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, masterCertHash, workerCertHash string) error {
+// ReconcileManagerWithCertHashes reconciles the Wazuh Manager with certificate hashes for pod restart.
+//
+// Deprecated: Use ReconcileManagerNonBlocking for non-blocking rollouts.
+func (r *ClusterReconciler) ReconcileManagerWithCertHashes(ctx context.Context, cluster *wazuhv1.WazuhCluster, masterCertHash, workerCertHash string) error {
 	log := logf.FromContext(ctx)
 
 	// Ensure cluster key secret exists (needed for manager cluster communication)
@@ -226,13 +246,18 @@ func (r *ClusterReconciler) ReconcileManagerWithCertHashes(ctx context.Context, 
 		return fmt.Errorf("failed to reconcile workers: %w", err)
 	}
 
+	// Reconcile Manager PDB
+	if err := r.reconcileManagerPDB(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to reconcile manager PDB: %w", err)
+	}
+
 	log.Info("Manager reconciliation completed")
 	return nil
 }
 
 // ReconcileManagerNonBlocking reconciles the Wazuh Manager without blocking on rollouts
 // Returns pending rollouts that should be tracked and monitored by the caller
-func (r *ClusterReconciler) ReconcileManagerNonBlocking(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, masterCertHash, workerCertHash string) ManagerReconcileResult {
+func (r *ClusterReconciler) ReconcileManagerNonBlocking(ctx context.Context, cluster *wazuhv1.WazuhCluster, masterCertHash, workerCertHash string) ManagerReconcileResult {
 	log := logf.FromContext(ctx)
 	var pendingRollouts []utils.PendingRollout
 
@@ -264,13 +289,18 @@ func (r *ClusterReconciler) ReconcileManagerNonBlocking(ctx context.Context, clu
 		pendingRollouts = append(pendingRollouts, *workerRollout)
 	}
 
+	// Reconcile Manager PDB
+	if err := r.reconcileManagerPDB(ctx, cluster); err != nil {
+		return ManagerReconcileResult{Error: fmt.Errorf("failed to reconcile manager PDB: %w", err)}
+	}
+
 	log.Info("Manager reconciliation completed (non-blocking)", "pendingRollouts", len(pendingRollouts))
 	return ManagerReconcileResult{PendingRollouts: pendingRollouts}
 }
 
 // reconcileMasterNonBlocking reconciles the master without blocking on rollout
 // Returns a PendingRollout if a rollout was initiated, nil otherwise
-func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, certHash string) (*utils.PendingRollout, error) {
+func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) (*utils.PendingRollout, error) {
 	log := logf.FromContext(ctx)
 
 	// Extract master spec fields with defaults
@@ -283,6 +313,9 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		affinity     *corev1.Affinity
 	)
 
+	var env []corev1.EnvVar
+	var envFrom []corev1.EnvFromSource
+
 	if cluster.Spec.Manager != nil {
 		if cluster.Spec.Manager.Master.Resources != nil {
 			resources = cluster.Spec.Manager.Master.Resources
@@ -293,6 +326,14 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		nodeSelector = cluster.Spec.Manager.Master.NodeSelector
 		tolerations = cluster.Spec.Manager.Master.Tolerations
 		affinity = cluster.Spec.Manager.Master.Affinity
+		env = cluster.Spec.Manager.Master.Env
+		envFrom = cluster.Spec.Manager.Master.EnvFrom
+
+		// Apply cluster-level anti-affinity if enabled
+		if affinityutil.ShouldApplyAntiAffinity(cluster) {
+			clusterAntiAffinity := affinityutil.BuildManagerAntiAffinity(cluster.Name, cluster.Spec.Manager.AntiAffinity)
+			affinity = affinityutil.MergeAntiAffinity(clusterAntiAffinity, affinity)
+		}
 	}
 
 	// Build ConfigMap
@@ -325,6 +366,14 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	}
 	configBuilder.WithFilebeatConfig(filebeatConf)
 
+	// Generate wazuh-template.json for filebeat index template
+	templateBuilder := config.NewFilebeatTemplateBuilder()
+	filebeatTemplate, err := templateBuilder.Build()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build wazuh-template.json: %w", err)
+	}
+	configBuilder.WithFilebeatTemplate(filebeatTemplate)
+
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for master configmap: %w", err)
@@ -334,7 +383,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		return nil, fmt.Errorf("failed to reconcile master configmap: %w", err)
 	}
 
-	// Compute configHash for change detection (ossec.conf + filebeat.yml)
+	// Compute configHash for change detection (ossec.conf + filebeat.yml + wazuh-template.json)
 	configHash := patch.ComputeConfigHash(configMap.Data)
 
 	// Build Services
@@ -356,7 +405,16 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	}
 
 	// Compute specHash for change detection (version is included in image tag)
-	specHash, err := patch.ComputeManagerMasterSpecHash(version, resources, storageSize, "", nodeSelector, tolerations, affinity)
+	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
+		Version:      version,
+		Resources:    resources,
+		StorageSize:  storageSize,
+		NodeSelector: nodeSelector,
+		Tolerations:  tolerations,
+		Affinity:     affinity,
+		Env:          env,
+		EnvFrom:      envFrom,
+	})
 	if err != nil {
 		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
 		specHash = ""
@@ -382,6 +440,12 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	if affinity != nil {
 		stsBuilder.WithAffinity(affinity)
 	}
+	if len(env) > 0 {
+		stsBuilder.WithEnv(env)
+	}
+	if len(envFrom) > 0 {
+		stsBuilder.WithEnvFrom(envFrom)
+	}
 	if certHash != "" {
 		stsBuilder.WithCertHash(certHash)
 	}
@@ -394,6 +458,34 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	// Set cluster reference for monitoring sidecar
 	stsBuilder.WithCluster(cluster)
 
+	// Mount rule ConfigMaps if RuleReconciler is configured
+	var ruleHash string
+	if r.RuleReconciler != nil {
+		ruleConfigMaps, hash, err := r.RuleReconciler.GetRuleConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace)
+		if err != nil {
+			log.Error(err, "Failed to get rule ConfigMaps for cluster, continuing without rules")
+		} else if len(ruleConfigMaps) > 0 {
+			stsBuilder.WithRuleConfigMaps(convertRuleConfigMaps(ruleConfigMaps))
+			stsBuilder.WithRuleHash(hash)
+			ruleHash = hash
+			log.V(1).Info("Mounting rule ConfigMaps to master", "count", len(ruleConfigMaps), "hash", utils.ShortHash(hash))
+		}
+	}
+
+	// Mount decoder ConfigMaps if DecoderReconciler is configured
+	var decoderHash string
+	if r.DecoderReconciler != nil {
+		decoderConfigMaps, hash, err := r.DecoderReconciler.GetDecoderConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace)
+		if err != nil {
+			log.Error(err, "Failed to get decoder ConfigMaps for cluster, continuing without decoders")
+		} else if len(decoderConfigMaps) > 0 {
+			stsBuilder.WithDecoderConfigMaps(convertDecoderConfigMaps(decoderConfigMaps))
+			stsBuilder.WithDecoderHash(hash)
+			decoderHash = hash
+			log.V(1).Info("Mounting decoder ConfigMaps to master", "count", len(decoderConfigMaps), "hash", utils.ShortHash(hash))
+		}
+	}
+
 	sts := stsBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for master statefulset: %w", err)
@@ -402,7 +494,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	found := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Master StatefulSet", "name", sts.Name, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash))
+		log.Info("Creating Master StatefulSet", "name", sts.Name, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash), "ruleHash", utils.ShortHash(ruleHash), "decoderHash", utils.ShortHash(decoderHash))
 		if err := r.Create(ctx, sts); err != nil {
 			return nil, fmt.Errorf("failed to create master statefulset: %w", err)
 		}
@@ -509,13 +601,13 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 // reconcileWorkersNonBlocking reconciles the workers without blocking on rollout
 // Returns a PendingRollout if a rollout was initiated, nil otherwise
-func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, certHash string) (*utils.PendingRollout, error) {
+func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) (*utils.PendingRollout, error) {
 	log := logf.FromContext(ctx)
 
 	// Extract worker spec fields with defaults
 	var (
-		replicas     int32 = 0
-		version            = cluster.Spec.Version
+		replicas     int32
+		version      = cluster.Spec.Version
 		resources    *corev1.ResourceRequirements
 		storageSize  = constants.DefaultManagerStorageSize
 		nodeSelector map[string]string
@@ -534,6 +626,12 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		nodeSelector = cluster.Spec.Manager.Workers.NodeSelector
 		tolerations = cluster.Spec.Manager.Workers.Tolerations
 		affinity = cluster.Spec.Manager.Workers.Affinity
+
+		// Apply cluster-level anti-affinity if enabled
+		if affinityutil.ShouldApplyAntiAffinity(cluster) {
+			clusterAntiAffinity := affinityutil.BuildManagerAntiAffinity(cluster.Name, cluster.Spec.Manager.AntiAffinity)
+			affinity = affinityutil.MergeAntiAffinity(clusterAntiAffinity, affinity)
+		}
 	}
 
 	// Build ConfigMap
@@ -567,6 +665,14 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	}
 	configBuilder.WithFilebeatConfig(filebeatConf)
 
+	// Generate wazuh-template.json for filebeat index template
+	templateBuilder := config.NewFilebeatTemplateBuilder()
+	filebeatTemplate, err := templateBuilder.Build()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build wazuh-template.json: %w", err)
+	}
+	configBuilder.WithFilebeatTemplate(filebeatTemplate)
+
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for worker configmap: %w", err)
@@ -576,7 +682,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		return nil, fmt.Errorf("failed to reconcile worker configmap: %w", err)
 	}
 
-	// Compute configHash for change detection (ossec.conf + filebeat.yml)
+	// Compute configHash for change detection (ossec.conf + filebeat.yml + wazuh-template.json)
 	configHash := patch.ComputeConfigHash(configMap.Data)
 
 	// Build Services
@@ -635,6 +741,34 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		stsBuilder.WithSpecHash(specHash)
 	}
 
+	// Mount rule ConfigMaps if RuleReconciler is configured
+	var ruleHash string
+	if r.RuleReconciler != nil {
+		ruleConfigMaps, hash, err := r.RuleReconciler.GetRuleConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace)
+		if err != nil {
+			log.Error(err, "Failed to get rule ConfigMaps for cluster, continuing without rules")
+		} else if len(ruleConfigMaps) > 0 {
+			stsBuilder.WithRuleConfigMaps(convertRuleConfigMaps(ruleConfigMaps))
+			stsBuilder.WithRuleHash(hash)
+			ruleHash = hash
+			log.V(1).Info("Mounting rule ConfigMaps to workers", "count", len(ruleConfigMaps), "hash", utils.ShortHash(hash))
+		}
+	}
+
+	// Mount decoder ConfigMaps if DecoderReconciler is configured
+	var decoderHash string
+	if r.DecoderReconciler != nil {
+		decoderConfigMaps, hash, err := r.DecoderReconciler.GetDecoderConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace)
+		if err != nil {
+			log.Error(err, "Failed to get decoder ConfigMaps for cluster, continuing without decoders")
+		} else if len(decoderConfigMaps) > 0 {
+			stsBuilder.WithDecoderConfigMaps(convertDecoderConfigMaps(decoderConfigMaps))
+			stsBuilder.WithDecoderHash(hash)
+			decoderHash = hash
+			log.V(1).Info("Mounting decoder ConfigMaps to workers", "count", len(decoderConfigMaps), "hash", utils.ShortHash(hash))
+		}
+	}
+
 	sts := stsBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for worker statefulset: %w", err)
@@ -643,7 +777,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	found := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Worker StatefulSet", "name", sts.Name, "replicas", replicas, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash))
+		log.Info("Creating Worker StatefulSet", "name", sts.Name, "replicas", replicas, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash), "ruleHash", utils.ShortHash(ruleHash), "decoderHash", utils.ShortHash(decoderHash))
 		if err := r.Create(ctx, sts); err != nil {
 			return nil, fmt.Errorf("failed to create worker statefulset: %w", err)
 		}
@@ -755,7 +889,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 // resolveIndexerCredentials resolves indexer credentials from secret
 // It first checks for custom credentials in cluster.Spec.Indexer.Credentials
 // If not specified, it falls back to the default auto-generated secret: <cluster>-indexer-credentials
-func (r *ClusterReconciler) resolveIndexerCredentials(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (string, string) {
+func (r *ClusterReconciler) resolveIndexerCredentials(ctx context.Context, cluster *wazuhv1.WazuhCluster) (string, string) {
 	log := logf.FromContext(ctx)
 	indexerUsername := ""
 	indexerPassword := ""
@@ -804,13 +938,8 @@ func (r *ClusterReconciler) resolveIndexerCredentials(ctx context.Context, clust
 	return indexerUsername, indexerPassword
 }
 
-// reconcileMaster reconciles the master manager node
-func (r *ClusterReconciler) reconcileMaster(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
-	return r.reconcileMasterWithCertHash(ctx, cluster, "")
-}
-
 // reconcileMasterWithCertHash reconciles the master manager node with certificate hash for pod restart
-func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, certHash string) error {
+func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) error {
 	log := logf.FromContext(ctx)
 
 	// Build ConfigMap
@@ -871,6 +1000,14 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 		return fmt.Errorf("failed to build filebeat.yml: %w", err)
 	}
 	configBuilder.WithFilebeatConfig(filebeatConf)
+
+	// Generate wazuh-template.json for filebeat index template
+	templateBuilder := config.NewFilebeatTemplateBuilder()
+	filebeatTemplate, err := templateBuilder.Build()
+	if err != nil {
+		return fmt.Errorf("failed to build wazuh-template.json: %w", err)
+	}
+	configBuilder.WithFilebeatTemplate(filebeatTemplate)
 
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {
@@ -984,13 +1121,8 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	return nil
 }
 
-// reconcileWorkers reconciles the worker manager nodes
-func (r *ClusterReconciler) reconcileWorkers(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
-	return r.reconcileWorkersWithCertHash(ctx, cluster, "")
-}
-
 // reconcileWorkersWithCertHash reconciles the worker manager nodes with certificate hash for pod restart
-func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster, certHash string) error {
+func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) error {
 	log := logf.FromContext(ctx)
 
 	// Build ConfigMap
@@ -1052,6 +1184,14 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 	}
 	configBuilder.WithFilebeatConfig(filebeatConf)
 
+	// Generate wazuh-template.json for filebeat index template
+	templateBuilder := config.NewFilebeatTemplateBuilder()
+	filebeatTemplate, err := templateBuilder.Build()
+	if err != nil {
+		return fmt.Errorf("failed to build wazuh-template.json: %w", err)
+	}
+	configBuilder.WithFilebeatTemplate(filebeatTemplate)
+
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for worker configmap: %w", err)
@@ -1088,7 +1228,7 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		stsBuilder.WithVersion(cluster.Spec.Version)
 	}
 	// Always set replicas from spec (including 0 for no workers)
-	var workerReplicas2 int32 = 0
+	var workerReplicas2 int32
 	if cluster.Spec.Manager != nil {
 		workerReplicas2 = cluster.Spec.Manager.Workers.GetReplicas()
 		if cluster.Spec.Manager.Workers.Resources != nil {
@@ -1118,7 +1258,7 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		return fmt.Errorf("failed to get worker statefulset: %w", err)
 	}
 
-	// Check if update is needed (cert hash changed)
+	// Check if update is needed (cert hash changed or replicas changed)
 	existingCertHash := ""
 	if found.Spec.Template.Annotations != nil {
 		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
@@ -1126,6 +1266,7 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 
 	// Update if cert hash changed (including from empty to non-empty)
 	needsUpdate := false
+	certHashChanged := false
 	if certHash != existingCertHash {
 		if certHash != "" {
 			log.Info("Updating Worker StatefulSet due to certificate hash change",
@@ -1133,7 +1274,17 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 				"oldHash", utils.ShortHash(existingCertHash),
 				"newHash", utils.ShortHash(certHash))
 			needsUpdate = true
+			certHashChanged = true
 		}
+	}
+
+	// Check if replicas changed
+	if found.Spec.Replicas != nil && *found.Spec.Replicas != workerReplicas2 {
+		log.Info("Updating Worker StatefulSet due to replica count change",
+			"name", sts.Name,
+			"oldReplicas", *found.Spec.Replicas,
+			"newReplicas", workerReplicas2)
+		needsUpdate = true
 	}
 
 	if needsUpdate {
@@ -1142,34 +1293,36 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 			return fmt.Errorf("failed to update worker statefulset: %w", err)
 		}
 
-		// Wait for the StatefulSet to be ready after update (graceful rollout)
-		// This ensures new pods are healthy before the reconcile completes
-		log.Info("Waiting for Worker StatefulSet to be ready after certificate renewal",
-			"name", sts.Name,
-			"timeout", utils.DefaultRolloutTimeout)
-
-		waiter := utils.NewRolloutWaiter(r.Client)
-		result := waiter.WaitForStatefulSetReadyWithResult(ctx, sts.Namespace, sts.Name)
-		if result.TimedOut {
-			log.Error(result.Error, "Timeout waiting for Worker StatefulSet to be ready",
+		// Only wait for rollout on cert hash changes (pod restart required)
+		// Replica changes don't need rollout wait - Kubernetes handles scaling
+		if certHashChanged {
+			log.Info("Waiting for Worker StatefulSet to be ready after certificate renewal",
 				"name", sts.Name,
 				"timeout", utils.DefaultRolloutTimeout)
-			// Don't fail the reconcile on timeout - the StatefulSet strategy ensures
-			// OrderedReady policy, so old pods are kept until new ones are ready
-			return nil
-		}
-		if result.Error != nil {
-			return fmt.Errorf("error waiting for worker statefulset to be ready: %w", result.Error)
-		}
 
-		log.Info("Worker StatefulSet is ready after certificate renewal", "name", sts.Name)
+			waiter := utils.NewRolloutWaiter(r.Client)
+			result := waiter.WaitForStatefulSetReadyWithResult(ctx, sts.Namespace, sts.Name)
+			if result.TimedOut {
+				log.Error(result.Error, "Timeout waiting for Worker StatefulSet to be ready",
+					"name", sts.Name,
+					"timeout", utils.DefaultRolloutTimeout)
+				// Don't fail the reconcile on timeout - the StatefulSet strategy ensures
+				// OrderedReady policy, so old pods are kept until new ones are ready
+				return nil
+			}
+			if result.Error != nil {
+				return fmt.Errorf("error waiting for worker statefulset to be ready: %w", result.Error)
+			}
+
+			log.Info("Worker StatefulSet is ready after certificate renewal", "name", sts.Name)
+		}
 	}
 
 	return nil
 }
 
 // GetManagerStatus gets the manager status
-func (r *ClusterReconciler) GetManagerStatus(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) (*wazuhv1alpha1.ComponentStatus, error) {
+func (r *ClusterReconciler) GetManagerStatus(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*wazuhv1.ComponentStatus, error) {
 	// Get master status
 	masterSts := &appsv1.StatefulSet{}
 	masterName := fmt.Sprintf("%s-manager-master", cluster.Name)
@@ -1190,10 +1343,17 @@ func (r *ClusterReconciler) GetManagerStatus(ctx context.Context, cluster *wazuh
 		workerTotal = workerSts.Status.Replicas
 	}
 
-	return &wazuhv1alpha1.ComponentStatus{
-		Replicas:      masterSts.Status.Replicas + workerTotal,
-		ReadyReplicas: masterSts.Status.ReadyReplicas + workerReady,
-		Phase:         getStatefulSetPhase(masterSts),
+	// Get desired replicas from the spec
+	desiredReplicas := int32(0)
+	if cluster.Spec.Manager != nil {
+		desiredReplicas = cluster.Spec.Manager.GetTotalReplicas()
+	}
+
+	return &wazuhv1.ComponentStatus{
+		Replicas:        masterSts.Status.Replicas + workerTotal,
+		ReadyReplicas:   masterSts.Status.ReadyReplicas + workerReady,
+		DesiredReplicas: desiredReplicas,
+		Phase:           getStatefulSetPhase(masterSts),
 	}, nil
 }
 
@@ -1207,7 +1367,10 @@ func (r *ClusterReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 			Namespace: obj.GetNamespace(),
 		}
 
-		existing := obj.DeepCopyObject().(client.Object)
+		existing, ok := obj.DeepCopyObject().(client.Object)
+		if !ok {
+			return fmt.Errorf("failed to deep copy object")
+		}
 
 		err := r.Get(ctx, key, existing)
 		if err != nil && errors.IsNotFound(err) {
@@ -1223,9 +1386,10 @@ func (r *ClusterReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 
 		// Preserve immutable fields for Services
 		if svc, ok := obj.(*corev1.Service); ok {
-			existingSvc := existing.(*corev1.Service)
-			svc.Spec.ClusterIP = existingSvc.Spec.ClusterIP
-			svc.Spec.ClusterIPs = existingSvc.Spec.ClusterIPs
+			if existingSvc, ok := existing.(*corev1.Service); ok {
+				svc.Spec.ClusterIP = existingSvc.Spec.ClusterIP
+				svc.Spec.ClusterIPs = existingSvc.Spec.ClusterIPs
+			}
 		}
 
 		log.V(1).Info("Updating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
@@ -1262,7 +1426,7 @@ func (r *ClusterReconciler) resolveSecretKey(ctx context.Context, namespace, sec
 }
 
 // ensureClusterKeySecret ensures the cluster key secret exists
-func (r *ClusterReconciler) ensureClusterKeySecret(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *ClusterReconciler) ensureClusterKeySecret(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	secretName := fmt.Sprintf("%s-cluster-key", cluster.Name)
@@ -1297,7 +1461,7 @@ func (r *ClusterReconciler) ensureClusterKeySecret(ctx context.Context, cluster 
 // ensureAPICredentialsSecret ensures the API credentials secret exists when monitoring is enabled
 // This secret is required by the Wazuh Manager (API_USERNAME/API_PASSWORD env vars)
 // and optionally by the Wazuh Prometheus exporter sidecar
-func (r *ClusterReconciler) ensureAPICredentialsSecret(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *ClusterReconciler) ensureAPICredentialsSecret(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	secretName := fmt.Sprintf("%s-api-credentials", cluster.Name)
@@ -1333,7 +1497,7 @@ func (r *ClusterReconciler) ensureAPICredentialsSecret(ctx context.Context, clus
 // ReconcileLogRotation reconciles log rotation CronJob and RBAC resources
 // Creates or updates the CronJob, ServiceAccount, Role, and RoleBinding when log rotation is enabled
 // Deletes all log rotation resources when disabled
-func (r *ClusterReconciler) ReconcileLogRotation(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *ClusterReconciler) ReconcileLogRotation(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	// Check if log rotation is enabled
@@ -1404,7 +1568,7 @@ func (r *ClusterReconciler) ReconcileLogRotation(ctx context.Context, cluster *w
 }
 
 // cleanupLogRotationResources removes all log rotation resources when feature is disabled
-func (r *ClusterReconciler) cleanupLogRotationResources(ctx context.Context, cluster *wazuhv1alpha1.WazuhCluster) error {
+func (r *ClusterReconciler) cleanupLogRotationResources(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
 	builder := cronjobs.NewLogRotationCronJobBuilder(cluster.Name, cluster.Namespace)
@@ -1501,4 +1665,81 @@ func (r *ClusterReconciler) createOrUpdateCronJob(ctx context.Context, cronJob *
 	log.V(1).Info("Updating CronJob", "name", cronJob.Name)
 	cronJob.SetResourceVersion(existing.GetResourceVersion())
 	return r.Update(ctx, cronJob)
+}
+
+// convertRuleConfigMaps converts RuleConfigMapInfo from the rule reconciler to RuleConfigMapRef for the builder
+func convertRuleConfigMaps(infos []RuleConfigMapInfo) []deployments.RuleConfigMapRef {
+	refs := make([]deployments.RuleConfigMapRef, len(infos))
+	for i, info := range infos {
+		refs[i] = deployments.RuleConfigMapRef{
+			Name:     info.ConfigMapName,
+			FileName: info.FileName,
+		}
+	}
+	return refs
+}
+
+// convertDecoderConfigMaps converts DecoderConfigMapInfo from the decoder reconciler to DecoderConfigMapRef for the builder
+func convertDecoderConfigMaps(infos []DecoderConfigMapInfo) []deployments.DecoderConfigMapRef {
+	refs := make([]deployments.DecoderConfigMapRef, len(infos))
+	for i, info := range infos {
+		refs[i] = deployments.DecoderConfigMapRef{
+			Name:     info.ConfigMapName,
+			FileName: info.FileName,
+		}
+	}
+	return refs
+}
+
+// reconcileManagerPDB reconciles the PodDisruptionBudget for manager pods
+func (r *ClusterReconciler) reconcileManagerPDB(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	pdbName := pdb.GetManagerPDBName(cluster.Name)
+
+	// Check if PDB should exist
+	if !pdb.ShouldCreateManagerPDB(cluster) {
+		// If PDB should not exist, delete it if it does
+		existing := &policyv1.PodDisruptionBudget{}
+		err := r.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: cluster.Namespace}, existing)
+		if err == nil {
+			log.Info("Deleting Manager PDB (no longer needed)", "name", pdbName)
+			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+				return fmt.Errorf("failed to delete manager PDB: %w", err)
+			}
+		} else if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get manager PDB: %w", err)
+		}
+		return nil
+	}
+
+	// Build the PDB
+	builder := pdb.NewManagerPDBBuilder(cluster)
+	managerPDB := builder.Build()
+
+	if err := controllerutil.SetControllerReference(cluster, managerPDB, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for manager PDB: %w", err)
+	}
+
+	// Check if PDB exists
+	existing := &policyv1.PodDisruptionBudget{}
+	err := r.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: cluster.Namespace}, existing)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating Manager PDB", "name", pdbName)
+		if err := r.Create(ctx, managerPDB); err != nil {
+			return fmt.Errorf("failed to create manager PDB: %w", err)
+		}
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("failed to get manager PDB: %w", err)
+	}
+
+	// Update PDB if needed
+	managerPDB.SetResourceVersion(existing.GetResourceVersion())
+	log.V(1).Info("Updating Manager PDB", "name", pdbName)
+	if err := r.Update(ctx, managerPDB); err != nil {
+		return fmt.Errorf("failed to update manager PDB: %w", err)
+	}
+
+	return nil
 }

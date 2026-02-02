@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 )
 
@@ -51,7 +51,7 @@ func (r *ComponentTemplateReconciler) WithAPIClient(apiClient *api.Client) *Comp
 }
 
 // Reconcile reconciles an OpenSearch component template
-func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1alpha1.OpenSearchComponentTemplate) error {
+func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.OpenSearchComponentTemplate) error {
 	log := logf.FromContext(ctx)
 
 	if r.APIClient == nil {
@@ -94,10 +94,10 @@ func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *w
 }
 
 // buildComponentTemplate converts the CRD spec to a component template
-func (r *ComponentTemplateReconciler) buildComponentTemplate(template *wazuhv1alpha1.OpenSearchComponentTemplate) api.ComponentTemplate {
+func (r *ComponentTemplateReconciler) buildComponentTemplate(template *wazuhv1.OpenSearchComponentTemplate) api.ComponentTemplate {
 	componentTemplate := api.ComponentTemplate{}
 
-	// Convert RawExtension fields to map[string]interface{}
+	// Convert RawExtension fields to map[string]any
 	componentTemplate.Template = &api.ComponentTemplateSpec{}
 
 	if template.Spec.Template.Settings != nil && template.Spec.Template.Settings.Raw != nil {
@@ -112,7 +112,7 @@ func (r *ComponentTemplateReconciler) buildComponentTemplate(template *wazuhv1al
 }
 
 // updateStatus updates the template status
-func (r *ComponentTemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1alpha1.OpenSearchComponentTemplate, phase, message string) error {
+func (r *ComponentTemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1.OpenSearchComponentTemplate, phase, message string) error {
 	template.Status.Phase = phase
 	template.Status.Message = message
 	now := metav1.Now()
@@ -122,7 +122,7 @@ func (r *ComponentTemplateReconciler) updateStatus(ctx context.Context, template
 }
 
 // Delete handles cleanup when a component template is deleted
-func (r *ComponentTemplateReconciler) Delete(ctx context.Context, template *wazuhv1alpha1.OpenSearchComponentTemplate) error {
+func (r *ComponentTemplateReconciler) Delete(ctx context.Context, template *wazuhv1.OpenSearchComponentTemplate) error {
 	log := logf.FromContext(ctx)
 
 	if r.APIClient == nil {

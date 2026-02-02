@@ -111,6 +111,48 @@ kubectl get secret -n wazuh wazuh-ca -o yaml
 kubectl rollout restart statefulset/wazuh-indexer -n wazuh
 ```
 
+### Certificate Domain Mismatch
+
+**Symptoms**: TLS handshake errors like:
+
+- `x509: certificate is valid for *.svc.cluster.local, not *.svc.custom.domain`
+- Components cannot communicate after changing cluster DNS domain
+- Dashboard shows connection errors to indexer or manager
+
+**Causes**:
+
+1. Kubernetes cluster uses a custom DNS domain (not `cluster.local`)
+2. Operator was deployed without matching `operator.clusterDomain` setting
+3. Domain configuration changed after initial deployment
+
+**Solutions**:
+
+```bash
+# 1. Check your cluster's DNS domain
+kubectl get cm coredns -n kube-system -o yaml | grep -A5 "kubernetes"
+
+# 2. Verify operator configuration
+kubectl get deploy -n wazuh-system wazuh-operator-controller-manager -o yaml | grep KUBERNETES_CLUSTER_DOMAIN
+
+# 3. If mismatch, upgrade operator with correct domain
+helm upgrade wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-system \
+  --set operator.clusterDomain=your.custom.domain
+
+# 4. Force certificate regeneration
+kubectl delete secret -n wazuh -l app.kubernetes.io/component=certificates
+
+# 5. Operator will automatically regenerate certificates with correct SANs
+```
+
+**Verification**:
+
+```bash
+# Check certificate SANs match the configured domain
+kubectl get secret wazuh-indexer-certs -n wazuh -o jsonpath='{.data.tls\.crt}' | \
+  base64 -d | openssl x509 -text -noout | grep DNS
+```
+
 ## Storage Issues
 
 ### PVC Not Bound
@@ -175,7 +217,7 @@ spec:
 2. Enable ISM policy for index cleanup:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1alpha1
+apiVersion: resources.wazuh.com/v1
 kind: OpenSearchISMPolicy
 metadata:
   name: cleanup-policy
@@ -270,6 +312,69 @@ spec:
 ```
 
 2. Check firewall rules for ports 1514, 1515
+
+## Credential Issues
+
+### Password Not Working
+
+```bash
+# Verify secret exists and get password
+kubectl get secret -n wazuh wazuh-indexer-credentials \
+  -o jsonpath='{.data.admin-password}' | base64 -d && echo
+```
+
+### Secret Not Being Created
+
+```bash
+# Check operator logs
+kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager
+
+# Check WazuhCluster status
+kubectl describe wazuhcluster wazuh -n wazuh
+```
+
+### Dashboard Can't Connect to API
+
+```bash
+# Verify API credentials
+kubectl get secret -n wazuh wazuh-api-credentials \
+  -o jsonpath='{.data.password}' | base64 -d
+```
+
+## Monitoring Issues
+
+### Exporter Not Starting
+
+```bash
+# Check exporter logs
+kubectl logs -n wazuh <manager-pod> -c wazuh-exporter
+```
+
+### ServiceMonitor Not Discovered
+
+```bash
+# Verify labels match Prometheus selector
+kubectl get prometheus -o yaml | grep serviceMonitorSelector
+
+# Check ServiceMonitor exists
+kubectl get servicemonitor -n wazuh
+```
+
+## OpenTelemetry Issues
+
+### Traces Not Appearing
+
+```bash
+# Check endpoint connectivity
+kubectl exec -it deploy/wazuh-operator-controller-manager -n wazuh-system -- \
+  nc -zv jaeger-collector.observability 4317
+
+# Check operator logs
+kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager | grep -i otel
+
+# Verify environment variables
+kubectl get deploy wazuh-operator-controller-manager -n wazuh-system -o yaml | grep -A5 OTEL
+```
 
 ## Getting Help
 

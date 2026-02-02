@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -299,6 +299,8 @@ func SetPodAnnotation(podSpec *corev1.PodTemplateSpec, key, value string) {
 }
 
 // SetResourceAnnotation sets an annotation on a resource's metadata
+//
+//nolint:gocritic // ptrToRefParam: pointer needed to modify caller's map and handle nil initialization
 func SetResourceAnnotation(annotations *map[string]string, key, value string) {
 	if *annotations == nil {
 		*annotations = make(map[string]string)

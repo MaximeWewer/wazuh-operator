@@ -1,5 +1,5 @@
 /*
-Copyright 2025.
+Copyright 2026.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -34,7 +34,7 @@ type PrometheusPluginConfig struct {
 }
 
 // NewPrometheusPluginConfig creates a new PrometheusPluginConfig from the cluster spec
-func NewPrometheusPluginConfig(cluster *wazuhv1alpha1.WazuhCluster) *PrometheusPluginConfig {
+func NewPrometheusPluginConfig(cluster *wazuhv1.WazuhCluster) *PrometheusPluginConfig {
 	if !isIndexerExporterEnabled(cluster) {
 		return nil
 	}
@@ -127,7 +127,7 @@ ls -la /mnt/plugins/ | head -25
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{
-				Name:      "opensearch-data",
+				Name:      constants.VolumeNameIndexerData,
 				MountPath: "/mnt/plugins",
 				SubPath:   "plugins",
 			},
@@ -148,7 +148,7 @@ ls -la /mnt/plugins/ | head -25
 // GetPluginsVolumeMount returns the volume mount for the plugins directory
 func (c *PrometheusPluginConfig) GetPluginsVolumeMount() corev1.VolumeMount {
 	return corev1.VolumeMount{
-		Name:      "opensearch-data",
+		Name:      constants.VolumeNameIndexerData,
 		MountPath: "/usr/share/wazuh-indexer/plugins",
 		SubPath:   "plugins",
 	}
@@ -156,7 +156,7 @@ func (c *PrometheusPluginConfig) GetPluginsVolumeMount() corev1.VolumeMount {
 
 // BuildPluginInstallInitContainerFromSpec is a convenience function to build the init container
 // from a WazuhCluster spec. Returns nil if exporter is not enabled.
-func BuildPluginInstallInitContainerFromSpec(cluster *wazuhv1alpha1.WazuhCluster) *corev1.Container {
+func BuildPluginInstallInitContainerFromSpec(cluster *wazuhv1.WazuhCluster) *corev1.Container {
 	config := NewPrometheusPluginConfig(cluster)
 	if config == nil {
 		return nil
@@ -167,7 +167,7 @@ func BuildPluginInstallInitContainerFromSpec(cluster *wazuhv1alpha1.WazuhCluster
 
 // GetPluginsVolumeMountFromSpec returns the volume mount for plugins if enabled
 // Returns nil if exporter is not enabled.
-func GetPluginsVolumeMountFromSpec(cluster *wazuhv1alpha1.WazuhCluster) *corev1.VolumeMount {
+func GetPluginsVolumeMountFromSpec(cluster *wazuhv1.WazuhCluster) *corev1.VolumeMount {
 	config := NewPrometheusPluginConfig(cluster)
 	if config == nil {
 		return nil
