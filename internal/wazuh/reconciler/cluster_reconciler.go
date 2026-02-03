@@ -48,6 +48,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 	affinityutil "github.com/MaximeWewer/wazuh-operator/pkg/resources/affinity"
 	"github.com/MaximeWewer/wazuh-operator/pkg/resources/pdb"
+	"github.com/MaximeWewer/wazuh-operator/pkg/validation"
 )
 
 // ClusterReconciler handles reconciliation of Wazuh cluster components
@@ -1461,6 +1462,7 @@ func (r *ClusterReconciler) ensureClusterKeySecret(ctx context.Context, cluster 
 // ensureAPICredentialsSecret ensures the API credentials secret exists when monitoring is enabled
 // This secret is required by the Wazuh Manager (API_USERNAME/API_PASSWORD env vars)
 // and optionally by the Wazuh Prometheus exporter sidecar
+// It also validates that the password meets Wazuh's security requirements
 func (r *ClusterReconciler) ensureAPICredentialsSecret(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
@@ -1489,6 +1491,21 @@ func (r *ClusterReconciler) ensureAPICredentialsSecret(ctx context.Context, clus
 		return nil
 	} else if err != nil {
 		return fmt.Errorf("failed to get API credentials secret: %w", err)
+	}
+
+	// Secret exists - validate that the password meets Wazuh security requirements
+	// This prevents deployment failures due to Wazuh Error 5007 (Insecure user password)
+	password := string(found.Data[constants.SecretKeyAPIPassword])
+
+	if password != "" {
+		if err := validation.ValidateWazuhPassword(password); err != nil {
+			log.Error(err, "API credentials password does not meet Wazuh security requirements",
+				"secret", secretName,
+				"requirements", validation.FormatPasswordRequirements())
+			return fmt.Errorf("API credentials secret '%s' contains an insecure password: %w. %s",
+				secretName, err, validation.FormatPasswordRequirements())
+		}
+		log.V(1).Info("API credentials password validated successfully", "secret", secretName)
 	}
 
 	return nil
