@@ -303,6 +303,9 @@ func (r *WorkerReconciler) reconcileServices(ctx context.Context, cluster *wazuh
 	log := logf.FromContext(ctx)
 
 	serviceBuilder := services.NewWorkerServiceBuilder(cluster.Name, cluster.Namespace)
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Service != nil && len(cluster.Spec.Manager.Workers.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Workers.Service.Annotations)
+	}
 
 	// Regular ClusterIP service
 	service := serviceBuilder.Build()
@@ -338,9 +341,21 @@ func (r *WorkerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wa
 	nodeSelector := cluster.Spec.Manager.Workers.NodeSelector
 	tolerations := cluster.Spec.Manager.Workers.Tolerations
 	affinity := cluster.Spec.Manager.Workers.Affinity
+	annotations := cluster.Spec.Manager.Workers.Annotations
+	podAnnotations := cluster.Spec.Manager.Workers.PodAnnotations
 
 	// Compute spec hash for change detection (includes scheduling options)
-	specHash, err := patch.ComputeManagerWorkersSpecHash(replicas, version, resources, storageSize, "", nodeSelector, tolerations, affinity)
+	specHash, err := patch.ComputeManagerWorkersSpecHashFull(patch.ManagerWorkersSpecInput{
+		Replicas:       replicas,
+		Version:        version,
+		Resources:      resources,
+		StorageSize:    storageSize,
+		NodeSelector:   nodeSelector,
+		Tolerations:    tolerations,
+		Affinity:       affinity,
+		Annotations:    annotations,
+		PodAnnotations: podAnnotations,
+	})
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec tracking")
 		specHash = ""
@@ -362,6 +377,12 @@ func (r *WorkerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wa
 	}
 	if cluster.Spec.Manager.Workers.NodeSelector != nil {
 		stsBuilder.WithNodeSelector(cluster.Spec.Manager.Workers.NodeSelector)
+	}
+	if len(annotations) > 0 {
+		stsBuilder.WithAnnotations(annotations)
+	}
+	if len(podAnnotations) > 0 {
+		stsBuilder.WithPodAnnotations(podAnnotations)
 	}
 
 	// Set spec hash for change detection
@@ -558,6 +579,9 @@ func (r *WorkerReconciler) reconcileStandaloneConfigMap(ctx context.Context, wor
 // reconcileStandaloneServices reconciles services for standalone worker
 func (r *WorkerReconciler) reconcileStandaloneServices(ctx context.Context, worker *wazuhv1.WazuhWorker) error {
 	serviceBuilder := services.NewWorkerServiceBuilder(worker.Name, worker.Namespace)
+	if worker.Spec.Service != nil && len(worker.Spec.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(worker.Spec.Service.Annotations)
+	}
 
 	// Regular ClusterIP service
 	service := serviceBuilder.Build()
@@ -596,6 +620,12 @@ func (r *WorkerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, w
 	if worker.Spec.Resources != nil {
 		stsBuilder.WithResources(worker.Spec.Resources)
 	}
+	if len(worker.Spec.Annotations) > 0 {
+		stsBuilder.WithAnnotations(worker.Spec.Annotations)
+	}
+	if len(worker.Spec.PodAnnotations) > 0 {
+		stsBuilder.WithPodAnnotations(worker.Spec.PodAnnotations)
+	}
 	if worker.Spec.NodeSelector != nil {
 		stsBuilder.WithNodeSelector(worker.Spec.NodeSelector)
 	}
@@ -618,12 +648,24 @@ func (r *WorkerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, w
 		return fmt.Errorf("failed to get statefulset: %w", err)
 	}
 
-	// Update replicas if changed
+	// Update replicas or annotations if changed
+	needsUpdate := false
 	if *found.Spec.Replicas != *sts.Spec.Replicas {
 		log.Info("Updating Worker StatefulSet replicas", "name", sts.Name, "replicas", *sts.Spec.Replicas)
-		found.Spec.Replicas = sts.Spec.Replicas
-		if err := r.Update(ctx, found); err != nil {
-			return fmt.Errorf("failed to update statefulset replicas: %w", err)
+		needsUpdate = true
+	}
+	if utils.HashMap(sts.Annotations) != utils.HashMap(found.Annotations) {
+		log.Info("Updating Worker StatefulSet due to annotation change", "name", sts.Name)
+		needsUpdate = true
+	}
+	if utils.HashMap(sts.Spec.Template.Annotations) != utils.HashMap(found.Spec.Template.Annotations) {
+		log.Info("Updating Worker StatefulSet due to pod annotation change", "name", sts.Name)
+		needsUpdate = true
+	}
+	if needsUpdate {
+		sts.SetResourceVersion(found.GetResourceVersion())
+		if err := r.Update(ctx, sts); err != nil {
+			return fmt.Errorf("failed to update statefulset: %w", err)
 		}
 	}
 

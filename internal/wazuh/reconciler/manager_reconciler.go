@@ -235,6 +235,9 @@ func (r *ManagerReconciler) reconcileServices(ctx context.Context, cluster *wazu
 	log := logf.FromContext(ctx)
 
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil && len(cluster.Spec.Manager.Master.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Master.Service.Annotations)
+	}
 
 	// Regular ClusterIP service
 	service := serviceBuilder.Build()
@@ -269,9 +272,20 @@ func (r *ManagerReconciler) reconcileStatefulSet(ctx context.Context, cluster *w
 	nodeSelector := cluster.Spec.Manager.Master.NodeSelector
 	tolerations := cluster.Spec.Manager.Master.Tolerations
 	affinity := cluster.Spec.Manager.Master.Affinity
+	annotations := cluster.Spec.Manager.Master.Annotations
+	podAnnotations := cluster.Spec.Manager.Master.PodAnnotations
 
 	// Compute spec hash for change detection (includes scheduling options)
-	specHash, err := patch.ComputeManagerMasterSpecHash(version, resources, storageSize, "", nodeSelector, tolerations, affinity)
+	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
+		Version:        version,
+		Resources:      resources,
+		StorageSize:    storageSize,
+		NodeSelector:   nodeSelector,
+		Tolerations:    tolerations,
+		Affinity:       affinity,
+		Annotations:    annotations,
+		PodAnnotations: podAnnotations,
+	})
 	if err != nil {
 		log.Error(err, "Failed to compute manager master spec hash, continuing without spec tracking")
 		specHash = ""
@@ -291,6 +305,12 @@ func (r *ManagerReconciler) reconcileStatefulSet(ctx context.Context, cluster *w
 	}
 	if cluster.Spec.Manager.Master.NodeSelector != nil {
 		stsBuilder.WithNodeSelector(cluster.Spec.Manager.Master.NodeSelector)
+	}
+	if len(annotations) > 0 {
+		stsBuilder.WithAnnotations(annotations)
+	}
+	if len(podAnnotations) > 0 {
+		stsBuilder.WithPodAnnotations(podAnnotations)
 	}
 
 	// Set spec hash for change detection
@@ -541,6 +561,9 @@ func (r *ManagerReconciler) reconcileStandaloneConfigMap(ctx context.Context, ma
 func (r *ManagerReconciler) reconcileStandaloneServices(ctx context.Context, manager *wazuhv1.WazuhManager, nodeType string) error {
 	if nodeType == "master" {
 		serviceBuilder := services.NewManagerServiceBuilder(manager.Name, manager.Namespace, "master")
+		if manager.Spec.Master.Service != nil && len(manager.Spec.Master.Service.Annotations) > 0 {
+			serviceBuilder.WithAnnotations(manager.Spec.Master.Service.Annotations)
+		}
 
 		service := serviceBuilder.Build()
 		if err := controllerutil.SetControllerReference(manager, service, r.Scheme); err != nil {
@@ -559,6 +582,9 @@ func (r *ManagerReconciler) reconcileStandaloneServices(ctx context.Context, man
 		}
 	} else {
 		serviceBuilder := services.NewWorkerServiceBuilder(manager.Name, manager.Namespace)
+		if manager.Spec.Workers.Service != nil && len(manager.Spec.Workers.Service.Annotations) > 0 {
+			serviceBuilder.WithAnnotations(manager.Spec.Workers.Service.Annotations)
+		}
 
 		service := serviceBuilder.Build()
 		if err := controllerutil.SetControllerReference(manager, service, r.Scheme); err != nil {
@@ -593,6 +619,12 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 		if manager.Spec.Master.Resources != nil {
 			stsBuilder.WithResources(manager.Spec.Master.Resources)
 		}
+		if len(manager.Spec.Master.Annotations) > 0 {
+			stsBuilder.WithAnnotations(manager.Spec.Master.Annotations)
+		}
+		if len(manager.Spec.Master.PodAnnotations) > 0 {
+			stsBuilder.WithPodAnnotations(manager.Spec.Master.PodAnnotations)
+		}
 		if manager.Spec.Master.NodeSelector != nil {
 			stsBuilder.WithNodeSelector(manager.Spec.Master.NodeSelector)
 		}
@@ -606,6 +638,12 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 		stsBuilder.WithReplicas(manager.Spec.Workers.GetReplicas())
 		if manager.Spec.Workers.Resources != nil {
 			stsBuilder.WithResources(manager.Spec.Workers.Resources)
+		}
+		if len(manager.Spec.Workers.Annotations) > 0 {
+			stsBuilder.WithAnnotations(manager.Spec.Workers.Annotations)
+		}
+		if len(manager.Spec.Workers.PodAnnotations) > 0 {
+			stsBuilder.WithPodAnnotations(manager.Spec.Workers.PodAnnotations)
 		}
 		if manager.Spec.Workers.NodeSelector != nil {
 			stsBuilder.WithNodeSelector(manager.Spec.Workers.NodeSelector)
@@ -629,12 +667,23 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 		return fmt.Errorf("failed to get statefulset: %w", err)
 	}
 
-	// Update if replicas changed (for workers)
+	needsUpdate := false
 	if nodeType == "worker" && *found.Spec.Replicas != *sts.Spec.Replicas {
 		log.Info("Updating StatefulSet replicas", "name", sts.Name, "replicas", *sts.Spec.Replicas)
-		found.Spec.Replicas = sts.Spec.Replicas
-		if err := r.Update(ctx, found); err != nil {
-			return fmt.Errorf("failed to update statefulset replicas: %w", err)
+		needsUpdate = true
+	}
+	if utils.HashMap(sts.Annotations) != utils.HashMap(found.Annotations) {
+		log.Info("Updating StatefulSet due to annotation change", "name", sts.Name)
+		needsUpdate = true
+	}
+	if utils.HashMap(sts.Spec.Template.Annotations) != utils.HashMap(found.Spec.Template.Annotations) {
+		log.Info("Updating StatefulSet due to pod annotation change", "name", sts.Name)
+		needsUpdate = true
+	}
+	if needsUpdate {
+		sts.SetResourceVersion(found.GetResourceVersion())
+		if err := r.Update(ctx, sts); err != nil {
+			return fmt.Errorf("failed to update statefulset: %w", err)
 		}
 	}
 
