@@ -54,7 +54,7 @@ type GatewayAPIStatus struct {
 // IsGatewayAPIEnabled returns true if Gateway API support is enabled via environment variable.
 func IsGatewayAPIEnabled() bool {
 	val := os.Getenv(EnvGatewayAPIEnabled)
-	return strings.ToLower(val) == "true"
+	return strings.EqualFold(val, "true")
 }
 
 // CheckGatewayAPICRDs checks if Gateway API CRDs are installed in the cluster.

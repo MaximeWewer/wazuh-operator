@@ -78,9 +78,9 @@ func TestIsGatewayAPIEnabled(t *testing.T) {
 
 func TestGatewayAPIStatus_Message(t *testing.T) {
 	tests := []struct {
-		name           string
-		status         GatewayAPIStatus
-		shouldContain  string
+		name          string
+		status        GatewayAPIStatus
+		shouldContain string
 	}{
 		{
 			name: "disabled status",

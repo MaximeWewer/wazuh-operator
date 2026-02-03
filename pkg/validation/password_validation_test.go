@@ -17,6 +17,7 @@ limitations under the License.
 package validation
 
 import (
+	"errors"
 	"testing"
 )
 
@@ -101,7 +102,8 @@ func TestValidateWazuhPassword(t *testing.T) {
 			}
 
 			if tt.wantErr && err != nil {
-				if pve, ok := err.(*PasswordValidationError); ok {
+				var pve *PasswordValidationError
+				if errors.As(err, &pve) {
 					if len(pve.Reasons) != tt.errCount {
 						t.Errorf("ValidateWazuhPassword() got %d errors, want %d errors. Errors: %v",
 							len(pve.Reasons), tt.errCount, pve.Reasons)

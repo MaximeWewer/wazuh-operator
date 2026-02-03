@@ -190,7 +190,7 @@ func (r *CertificateReconciler) emitCertificateCreatedEvent(cluster *wazuhv1.Waz
 }
 
 // emitCertificateDomainMismatchEvent emits a warning event when a certificate has SANs with wrong cluster domain
-func (r *CertificateReconciler) emitCertificateDomainMismatchEvent(cluster *wazuhv1.WazuhCluster, certName string, expectedDomain string) {
+func (r *CertificateReconciler) emitCertificateDomainMismatchEvent(cluster *wazuhv1.WazuhCluster, certName, expectedDomain string) {
 	if r.EventRecorder != nil {
 		r.EventRecorder.Eventf(cluster, corev1.EventTypeWarning, EventReasonCertificateDomainMismatch,
 			"Certificate %s has SANs with wrong cluster domain (expected: %s), triggering regeneration", certName, expectedDomain)

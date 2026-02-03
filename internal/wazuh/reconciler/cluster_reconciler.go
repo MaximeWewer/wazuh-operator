@@ -1466,6 +1466,42 @@ func (r *ClusterReconciler) ensureClusterKeySecret(ctx context.Context, cluster 
 func (r *ClusterReconciler) ensureAPICredentialsSecret(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
+	// Check if user provided a custom API credentials secret
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.APICredentials != nil && cluster.Spec.Manager.APICredentials.SecretName != "" {
+		// User-provided secret - validate password meets Wazuh requirements
+		userSecretName := cluster.Spec.Manager.APICredentials.SecretName
+		passwordKey := cluster.Spec.Manager.APICredentials.PasswordKey
+		if passwordKey == "" {
+			passwordKey = "password" // default key
+		}
+
+		userSecret := &corev1.Secret{}
+		err := r.Get(ctx, types.NamespacedName{Name: userSecretName, Namespace: cluster.Namespace}, userSecret)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return fmt.Errorf("API credentials secret '%s' not found. Please create it with username and password keys", userSecretName)
+			}
+			return fmt.Errorf("failed to get API credentials secret '%s': %w", userSecretName, err)
+		}
+
+		password := string(userSecret.Data[passwordKey])
+		if password == "" {
+			return fmt.Errorf("API credentials secret '%s' does not contain password key '%s'", userSecretName, passwordKey)
+		}
+
+		// Validate password meets Wazuh security requirements
+		if err := validation.ValidateWazuhPassword(password); err != nil {
+			log.Error(err, "API credentials password does not meet Wazuh security requirements",
+				"secret", userSecretName,
+				"requirements", validation.FormatPasswordRequirements())
+			return fmt.Errorf("API credentials secret '%s' contains an insecure password: %w. %s",
+				userSecretName, err, validation.FormatPasswordRequirements())
+		}
+		log.V(1).Info("User-provided API credentials password validated successfully", "secret", userSecretName)
+		return nil
+	}
+
+	// No user-provided secret - use auto-generated secret
 	secretName := fmt.Sprintf("%s-api-credentials", cluster.Name)
 	found := &corev1.Secret{}
 	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cluster.Namespace}, found)

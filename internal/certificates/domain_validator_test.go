@@ -109,43 +109,43 @@ func TestCertificateDomainMismatch(t *testing.T) {
 	defer dns.Reset()
 
 	tests := []struct {
-		name            string
-		dnsNames        []string
+		name             string
+		dnsNames         []string
 		expectedMismatch bool
 	}{
 		{
-			name:            "nil certificate",
-			dnsNames:        nil,
+			name:             "nil certificate",
+			dnsNames:         nil,
 			expectedMismatch: false,
 		},
 		{
-			name:            "matching domain",
-			dnsNames:        []string{"my-service.my-ns.svc.cluster.local", "localhost"},
+			name:             "matching domain",
+			dnsNames:         []string{"my-service.my-ns.svc.cluster.local", "localhost"},
 			expectedMismatch: false,
 		},
 		{
-			name:            "mismatched domain",
-			dnsNames:        []string{"my-service.my-ns.svc.old.domain", "localhost"},
+			name:             "mismatched domain",
+			dnsNames:         []string{"my-service.my-ns.svc.old.domain", "localhost"},
 			expectedMismatch: true,
 		},
 		{
-			name:            "mixed domains - one mismatch",
-			dnsNames:        []string{"my-service.my-ns.svc.cluster.local", "another.svc.wrong.domain"},
+			name:             "mixed domains - one mismatch",
+			dnsNames:         []string{"my-service.my-ns.svc.cluster.local", "another.svc.wrong.domain"},
 			expectedMismatch: true,
 		},
 		{
-			name:            "no kubernetes FQDNs",
-			dnsNames:        []string{"localhost", "api.example.com"},
+			name:             "no kubernetes FQDNs",
+			dnsNames:         []string{"localhost", "api.example.com"},
 			expectedMismatch: false,
 		},
 		{
-			name:            "empty DNS names",
-			dnsNames:        []string{},
+			name:             "empty DNS names",
+			dnsNames:         []string{},
 			expectedMismatch: false,
 		},
 		{
-			name:            "multiple matching FQDNs",
-			dnsNames:        []string{
+			name: "multiple matching FQDNs",
+			dnsNames: []string{
 				"indexer.wazuh.svc.cluster.local",
 				"indexer-0.indexer-headless.wazuh.svc.cluster.local",
 				"*.indexer-headless.wazuh.svc.cluster.local",
@@ -179,11 +179,11 @@ func TestValidateCertificateDomain(t *testing.T) {
 	defer dns.Reset()
 
 	tests := []struct {
-		name                  string
-		dnsNames              []string
-		expectMismatch        bool
-		expectMismatchedSANs  int
-		expectActualDomains   []string
+		name                 string
+		dnsNames             []string
+		expectMismatch       bool
+		expectMismatchedSANs int
+		expectActualDomains  []string
 	}{
 		{
 			name:                 "all matching custom domain",
@@ -242,8 +242,8 @@ func TestRequiresDomainRegeneration(t *testing.T) {
 	log := logr.Discard()
 
 	tests := []struct {
-		name           string
-		dnsNames       []string
+		name             string
+		dnsNames         []string
 		expectRegenerate bool
 	}{
 		{

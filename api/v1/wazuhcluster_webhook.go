@@ -245,16 +245,9 @@ func validateMultiClusterIsolation(cluster *WazuhCluster) admission.Warnings {
 	var warnings admission.Warnings
 
 	// Warn about cross-namespace references requiring RBAC
-	hasCrossNamespaceRef := false
-	if cluster.Spec.ManagerRef != nil && cluster.Spec.ManagerRef.Namespace != "" && cluster.Spec.ManagerRef.Namespace != cluster.Namespace {
-		hasCrossNamespaceRef = true
-	}
-	if cluster.Spec.IndexerRef != nil && cluster.Spec.IndexerRef.Namespace != "" && cluster.Spec.IndexerRef.Namespace != cluster.Namespace {
-		hasCrossNamespaceRef = true
-	}
-	if cluster.Spec.DashboardRef != nil && cluster.Spec.DashboardRef.Namespace != "" && cluster.Spec.DashboardRef.Namespace != cluster.Namespace {
-		hasCrossNamespaceRef = true
-	}
+	hasCrossNamespaceRef := (cluster.Spec.ManagerRef != nil && cluster.Spec.ManagerRef.Namespace != "" && cluster.Spec.ManagerRef.Namespace != cluster.Namespace) ||
+		(cluster.Spec.IndexerRef != nil && cluster.Spec.IndexerRef.Namespace != "" && cluster.Spec.IndexerRef.Namespace != cluster.Namespace) ||
+		(cluster.Spec.DashboardRef != nil && cluster.Spec.DashboardRef.Namespace != "" && cluster.Spec.DashboardRef.Namespace != cluster.Namespace)
 
 	if hasCrossNamespaceRef {
 		warnings = append(warnings, "cross-namespace references detected; ensure RBAC allows the operator to access referenced namespaces")

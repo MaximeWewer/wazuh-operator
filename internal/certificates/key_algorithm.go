@@ -59,8 +59,6 @@ func getCurve(curve ECDSACurve) elliptic.Curve {
 		return elliptic.P521()
 	case ECDSACurveP384:
 		return elliptic.P384()
-	case ECDSACurveP256:
-		fallthrough
 	default:
 		return elliptic.P256()
 	}
@@ -71,8 +69,6 @@ func generatePrivateKey(algorithm KeyAlgorithm, keySize int, curve ECDSACurve) (
 	switch algorithm {
 	case KeyAlgorithmECDSA:
 		return ecdsa.GenerateKey(getCurve(curve), rand.Reader)
-	case KeyAlgorithmRSA:
-		fallthrough
 	default:
 		if keySize <= 0 {
 			keySize = DefaultKeySize

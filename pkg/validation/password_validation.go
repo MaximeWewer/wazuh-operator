@@ -17,6 +17,7 @@ limitations under the License.
 package validation
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"unicode"
@@ -111,8 +112,8 @@ func ValidateWazuhPasswordWithPolicy(password string, policy WazuhPasswordPolicy
 
 // IsPasswordValidationError checks if an error is a PasswordValidationError
 func IsPasswordValidationError(err error) bool {
-	_, ok := err.(*PasswordValidationError)
-	return ok
+	var pve *PasswordValidationError
+	return errors.As(err, &pve)
 }
 
 // FormatPasswordRequirements returns a human-readable string of password requirements

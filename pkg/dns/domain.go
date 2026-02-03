@@ -128,7 +128,7 @@ func ValidateDomain(domain string) error {
 		if len(label) > 63 {
 			return fmt.Errorf("domain label %q exceeds maximum length of 63 characters", label)
 		}
-		if len(label) == 0 {
+		if label == "" {
 			return fmt.Errorf("domain contains empty label (consecutive dots)")
 		}
 	}

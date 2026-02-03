@@ -29,12 +29,12 @@ import (
 
 const (
 	// Environment variables for rate limiting configuration
-	EnvRateLimitEnabled            = "RATE_LIMIT_ENABLED"
-	EnvRateLimitMaxConcurrent      = "RATE_LIMIT_MAX_CONCURRENT"
-	EnvRateLimitBaseDelay          = "RATE_LIMIT_BASE_DELAY"
-	EnvRateLimitMaxDelay           = "RATE_LIMIT_MAX_DELAY"
-	EnvRateLimitQPS                = "RATE_LIMIT_QPS"
-	EnvRateLimitBurst              = "RATE_LIMIT_BURST"
+	EnvRateLimitEnabled       = "RATE_LIMIT_ENABLED"
+	EnvRateLimitMaxConcurrent = "RATE_LIMIT_MAX_CONCURRENT"
+	EnvRateLimitBaseDelay     = "RATE_LIMIT_BASE_DELAY"
+	EnvRateLimitMaxDelay      = "RATE_LIMIT_MAX_DELAY"
+	EnvRateLimitQPS           = "RATE_LIMIT_QPS"
+	EnvRateLimitBurst         = "RATE_LIMIT_BURST"
 
 	// Default values
 	DefaultMaxConcurrentReconciles = 3

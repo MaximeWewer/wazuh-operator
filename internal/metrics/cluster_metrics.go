@@ -134,7 +134,7 @@ func SetClusterReplicas(cluster, namespace, component string, ready, desired int
 }
 
 // SetCertificateExpiryDays sets the certificate expiry days metric
-func SetCertificateExpiryDays(cluster, namespace, certType, secretName string, daysUntilExpiry float64, expiryTimestamp float64) {
+func SetCertificateExpiryDays(cluster, namespace, certType, secretName string, daysUntilExpiry, expiryTimestamp float64) {
 	CertificateExpiryDays.WithLabelValues(cluster, namespace, certType, secretName).Set(daysUntilExpiry)
 	CertificateExpiryTimestamp.WithLabelValues(cluster, namespace, certType, secretName).Set(expiryTimestamp)
 }
