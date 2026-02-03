@@ -82,7 +82,7 @@ HELM_NAMESPACE_CLUSTER ?= wazuh
 
 .PHONY: install
 install: manifests ## Install CRDs into the K8s cluster.
-	kubectl apply -f charts/wazuh-operator/crds/
+	kubectl apply --server-side -f charts/wazuh-operator/crds/
 
 .PHONY: uninstall
 uninstall: ## Uninstall CRDs from the K8s cluster.
