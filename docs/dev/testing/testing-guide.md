@@ -18,7 +18,7 @@ Complete testing guide for the wazuh-operator project.
 - Go 1.25.4+
 - Make
 - Docker
-- kubectl 1.24+
+- kubectl 1.25+
 - For E2E: Minikube or a Kubernetes cluster
 
 ---

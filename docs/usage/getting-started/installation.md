@@ -9,7 +9,7 @@ See [Prerequisites and Requirements](../../requirements.md) for detailed require
 **Quick check:**
 
 ```bash
-kubectl version --client  # 1.24+
+kubectl version --client  # 1.25+
 helm version              # 3.0+
 kubectl get storageclass  # StorageClass available
 ```

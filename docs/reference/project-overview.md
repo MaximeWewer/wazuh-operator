@@ -12,7 +12,7 @@
 - **Repository**: <https://github.com/MaximeWewer/wazuh-operator>
 - **Language**: Go 1.25.4
 - **Framework**: Kubebuilder v4 with controller-runtime v0.22.4
-- **Target**: Kubernetes 1.24+
+- **Target**: Kubernetes 1.25+
 
 ## Technology Stack
 
@@ -26,7 +26,7 @@ For detailed technology decisions and justifications, see [Technology Stack](tec
 
 The operator follows the standard Kubernetes operator pattern with:
 
-- 27 Custom Resource Definitions (CRDs)
+- 25 Custom Resource Definitions (CRDs)
 - 25 reconciliation controllers
 - Declarative resource management
 - Continuous reconciliation loops
@@ -52,7 +52,7 @@ The operator follows the standard Kubernetes operator pattern with:
 
 - **Declarative Cluster Management**: Define entire Wazuh cluster via YAML
 - **Automated Deployment**: Provisions Manager, Indexer, and Dashboard automatically
-- **Component Management**: 27 CRDs covering all aspects of Wazuh deployment
+- **Component Management**: 25 CRDs covering all aspects of Wazuh deployment
 
 ### Wazuh Management
 
@@ -85,7 +85,7 @@ The operator follows the standard Kubernetes operator pattern with:
 
 ## Project Statistics
 
-- **CRDs**: 27 Custom Resource Definitions
+- **CRDs**: 25 Custom Resource Definitions
 - **Controllers**: 25 Kubernetes controllers
 - **Go Packages**: 15+ internal packages
 - **Lines of Code**: ~50,000+ (estimated)
@@ -108,7 +108,7 @@ The operator creates and manages:
 
 ## Target Environment
 
-- **Kubernetes**: 1.24+ (tested on 1.24-1.30)
+- **Kubernetes**: 1.25+ (tested on 1.25-1.30)
 - **Resources**: 16GB+ RAM recommended
 - **Storage**: Dynamic PersistentVolume provisioning required
 - **Networking**: ClusterIP services, optional Ingress
@@ -121,7 +121,7 @@ The operator creates and manages:
 **Completed Features**:
 
 - Core operator functionality
-- All 27 CRDs implemented
+- All 25 CRDs implemented
 - TLS with auto-generation and hot reload
 - Prometheus monitoring integration
 - Advanced indexer topology (NodePools)

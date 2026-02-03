@@ -53,7 +53,7 @@ Documentation for users of the Wazuh Operator.
 
 ## Reference
 
-- [CRD Reference](CRD-REFERENCE.md) - Complete API documentation for all 27 CRDs
+- [CRD Reference](CRD-REFERENCE.md) - Complete API documentation for all 25 CRDs
 
 ## Troubleshooting
 

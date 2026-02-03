@@ -4,7 +4,7 @@ Before deploying a Wazuh cluster, ensure your environment meets these requiremen
 
 ## Kubernetes Cluster
 
-- [ ] Kubernetes version 1.24 or higher
+- [ ] Kubernetes version 1.25 or higher
 - [ ] `kubectl` configured and connected to your cluster
 - [ ] Cluster has at least 4GB RAM available
 - [ ] Storage provisioner for PersistentVolumeClaims (e.g., default StorageClass)

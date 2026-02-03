@@ -2,11 +2,11 @@
 
 ## Overview
 
-The Wazuh Operator defines 27 Custom Resource Definitions (CRDs) organized into 6 logical categories. All CRDs use API group `resources.wazuh.com` with version `v1` (storage version). Version `v1` is still served for backward compatibility.
+The Wazuh Operator defines 25 Custom Resource Definitions (CRDs) organized into 6 logical categories. All CRDs use API group `resources.wazuh.com` with version `v1` (storage version). Version `v1` is still served for backward compatibility.
 
 ## CRD Categories
 
-### 1. Wazuh Core CRDs (4)
+### 1. Wazuh Core CRDs (5)
 
 These CRDs define the main Wazuh cluster components.
 
@@ -37,7 +37,19 @@ These CRDs define the main Wazuh cluster components.
   - `logRotation`: Automated log cleanup configuration
 - **Short Name**: `wmgr`
 
-#### WazuhIndexer (based on OpenSearch)
+#### WazuhWorker
+
+- **Purpose**: Standalone CRD for managing per-worker overrides
+- **Key Fields**:
+  - `clusterRef`: Reference to WazuhCluster
+  - `workerIndex`: Worker index (0-based)
+  - `extraConfig`: Extra ossec.conf XML
+  - `resources`: Resource overrides
+  - `nodeSelector`: Node selector overrides
+  - `tolerations`: Toleration overrides
+- **Short Name**: `wwork`
+
+#### OpenSearchIndexer
 
 - **Purpose**: Defines OpenSearch indexer cluster for storing Wazuh alerts/archives
 - **Key Fields**:
@@ -45,16 +57,16 @@ These CRDs define the main Wazuh cluster components.
   - `nodePools`: Advanced topology with dedicated node roles (data, master, ingest, etc.)
   - `storageSize`: PVC size per node
   - `opensearchConfig`: Custom OpenSearch configuration
-- **Short Name**: `widx`
+- **Short Name**: `osidxr`
 
-#### WazuhDashboard (based on OpenSearch Dashboards)
+#### OpenSearchDashboard
 
 - **Purpose**: Defines Web UI dashboard for Wazuh visualization
 - **Key Fields**:
   - `replicas`: Number of dashboard instances
-  - `indexerRef`: Reference to associated WazuhIndexer
+  - `indexerRef`: Reference to associated OpenSearchIndexer
   - `ingress`: Ingress configuration for external access
-- **Short Name**: `wdash`
+- **Short Name**: `osdash`
 
 ### 2. Wazuh Configuration CRDs (4)
 
@@ -130,9 +142,9 @@ These CRDs handle Wazuh Manager data protection.
   - `preRestoreBackup`: Create safety backup before restore
 - **Short Name**: `wrest`
 
-### 4. OpenSearch Security CRDs (5)
+### 4. OpenSearch Security CRDs (6)
 
-These CRDs manage OpenSearch security configuration (users, roles, permissions).
+These CRDs manage OpenSearch security configuration (users, roles, permissions, authentication).
 
 #### OpenSearchUser
 
@@ -180,6 +192,17 @@ These CRDs manage OpenSearch security configuration (users, roles, permissions).
   - `clusterRef`: Target cluster
   - `description`: Tenant description
 - **Short Name**: `ostenant`
+
+#### OpenSearchAuthConfig
+
+- **Purpose**: Manages authentication configuration (Basic, OIDC, SAML, LDAP)
+- **Key Fields**:
+  - `clusterRef`: Target cluster
+  - `basicAuth`: Basic auth config
+  - `oidc`: OIDC config
+  - `saml`: SAML config
+  - `ldap`: LDAP config
+- **Short Names**: `osauthconfig`, `osauth`
 
 ### 5. OpenSearch Index Management CRDs (5)
 
@@ -272,7 +295,7 @@ These CRDs handle OpenSearch snapshot-based backup and restore.
 ### Reference Types
 
 - `WazuhClusterReference`: Cross-CRD reference to WazuhCluster
-- `ComponentRef`: Reference to WazuhManager/WazuhIndexer/WazuhDashboard
+- `ComponentRef`: Reference to WazuhManager/OpenSearchIndexer/OpenSearchDashboard
 - `SecretKeyRef`: Reference to Secret key for sensitive data
 - `ConfigMapReference`: Reference to ConfigMap data
 
@@ -318,24 +341,25 @@ All CRDs use Kubebuilder validation markers:
 
 ```
 WazuhCluster (1) ─┬─> (1) WazuhManager ──> (1..N) Manager Pods
-                  ├─> (1) WazuhIndexer ──> (1..N) Indexer Pods (StatefulSet)
-                  └─> (1) WazuhDashboard ─> (1..N) Dashboard Pods
+                  ├─> (0..N) WazuhWorker ──> Per-worker overrides
+                  ├─> (1) OpenSearchIndexer ──> (1..N) Indexer Pods (StatefulSet)
+                  └─> (1) OpenSearchDashboard ─> (1..N) Dashboard Pods
 
 WazuhCluster (1) ───> (0..N) WazuhRule ────> Manager ConfigMaps
 WazuhCluster (1) ───> (0..N) WazuhDecoder ─> Manager ConfigMaps
 WazuhCluster (1) ───> (0..1) WazuhCertificate ─> TLS Secrets
 
-WazuhIndexer (1) ───> (0..N) OpenSearchUser ──┐
-WazuhIndexer (1) ───> (0..N) OpenSearchRole ──┤─> OpenSearch Security API
-WazuhIndexer (1) ───> (0..N) OpenSearchRoleMapping ┘
+OpenSearchIndexer (1) ───> (0..N) OpenSearchUser ──┐
+OpenSearchIndexer (1) ───> (0..N) OpenSearchRole ──┤─> OpenSearch Security API
+OpenSearchIndexer (1) ───> (0..N) OpenSearchRoleMapping ┘
 
-WazuhIndexer (1) ───> (0..N) OpenSearchIndex ──┐
-WazuhIndexer (1) ───> (0..N) OpenSearchIndexTemplate ─┤─> OpenSearch Index API
-WazuhIndexer (1) ───> (0..N) OpenSearchISMPolicy ─────┘
+OpenSearchIndexer (1) ───> (0..N) OpenSearchIndex ──┐
+OpenSearchIndexer (1) ───> (0..N) OpenSearchIndexTemplate ─┤─> OpenSearch Index API
+OpenSearchIndexer (1) ───> (0..N) OpenSearchISMPolicy ─────┘
 
-WazuhIndexer (1) ───> (0..N) OpenSearchSnapshotRepository ──┐
-WazuhIndexer (1) ───> (0..N) OpenSearchSnapshot ────────────┤─> OpenSearch Snapshot API
-WazuhIndexer (1) ───> (0..N) OpenSearchRestore ─────────────┘
+OpenSearchIndexer (1) ───> (0..N) OpenSearchSnapshotRepository ──┐
+OpenSearchIndexer (1) ───> (0..N) OpenSearchSnapshot ────────────┤─> OpenSearch Snapshot API
+OpenSearchIndexer (1) ───> (0..N) OpenSearchRestore ─────────────┘
 
 WazuhManager (1) ───> (0..N) WazuhBackup ──> S3/MinIO (tar archives)
 WazuhManager (1) ───> (0..N) WazuhRestore ─> S3/MinIO (tar archives)

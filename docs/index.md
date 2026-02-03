@@ -24,10 +24,10 @@ kubectl get wazuhcluster -n wazuh
 | **Type**        | Kubernetes Operator                         |
 | **Language**    | Go 1.25.4                                   |
 | **Framework**   | Kubebuilder v4 + controller-runtime v0.22.4 |
-| **CRDs**        | 27 Custom Resource Definitions              |
+| **CRDs**        | 25 Custom Resource Definitions              |
 | **Controllers** | 25 reconciliation controllers               |
 | **API Group**   | `resources.wazuh.com/v1`                    |
-| **Target**      | Kubernetes 1.24+                            |
+| **Target**      | Kubernetes 1.25+                            |
 
 ## Documentation
 
@@ -40,7 +40,7 @@ kubectl get wazuhcluster -n wazuh
 ### User Guide
 
 - [User Documentation](usage/README.md) - Complete user guide index
-- [CRD Reference](usage/CRD-REFERENCE.md) - API documentation for all 27 CRDs
+- [CRD Reference](usage/CRD-REFERENCE.md) - API documentation for all 25 CRDs
 - [Examples](usage/examples/README.md) - Ready-to-use configurations
 
 ### Key Features

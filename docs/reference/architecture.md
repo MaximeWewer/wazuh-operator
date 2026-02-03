@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framework that manages the complete lifecycle of Wazuh security monitoring platform deployments on Kubernetes. It follows the operator pattern with declarative resource management through 27 Custom Resource Definitions (CRDs) and 25 reconciliation controllers.
+The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framework that manages the complete lifecycle of Wazuh security monitoring platform deployments on Kubernetes. It follows the operator pattern with declarative resource management through 25 Custom Resource Definitions (CRDs) and 25 reconciliation controllers.
 
 ## Technology Stack
 
@@ -115,7 +115,7 @@ The operator implements the standard Kubernetes operator pattern:
 
 **Components**:
 
-- 27 CRD type definitions
+- 25 CRD type definitions
 - Validation markers (Kubebuilder)
 - Status subresources
 - Short names and categories
@@ -246,18 +246,18 @@ builder := statefulsets.NewManagerBuilder(name, namespace).
 
 ## Data Architecture
 
-### Custom Resource Definitions (27 CRDs)
+### Custom Resource Definitions (25 CRDs)
 
 **API Group**: `resources.wazuh.com/v1` ()
 
 **Categories**:
 
-1. **Wazuh Core** (4): WazuhCluster, WazuhManager, WazuhIndexer, WazuhDashboard
+1. **Wazuh Core** (5): WazuhCluster, WazuhManager, WazuhWorker, OpenSearchIndexer, OpenSearchDashboard
 2. **Wazuh Config** (4): WazuhRule, WazuhDecoder, WazuhCertificate, WazuhFilebeat
 3. **Wazuh Backup** (2): WazuhBackup, WazuhRestore
-4. **OpenSearch Security** (5): User, Role, RoleMapping, ActionGroup, Tenant, AuthConfig
-5. **OpenSearch Index** (5): Index, IndexTemplate, ComponentTemplate, ISMPolicy, SnapshotPolicy
-6. **OpenSearch Backup** (3): SnapshotRepository, Snapshot, Restore
+4. **OpenSearch Security** (6): OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchActionGroup, OpenSearchTenant, OpenSearchAuthConfig
+5. **OpenSearch Index** (5): OpenSearchIndex, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchISMPolicy, OpenSearchSnapshotPolicy
+6. **OpenSearch Backup** (3): OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore
 
 **Common Patterns**:
 

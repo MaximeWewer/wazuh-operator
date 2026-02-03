@@ -37,7 +37,7 @@ kubectl get storageclass -o custom-columns=NAME:.metadata.name,ALLOW_EXPANSION:.
 
 ### Kubernetes Version
 
-Volume expansion is supported in Kubernetes 1.11+ (beta) and stable in 1.24+.
+Volume expansion is supported in Kubernetes 1.11+ (beta) and stable in 1.25+.
 
 ## Expanding Storage
 

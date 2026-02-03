@@ -130,7 +130,7 @@ make test       # Run unit tests
 
 ## Target Environment
 
-- **Kubernetes Version**: 1.24+
+- **Kubernetes Version**: 1.25+
 - **Minimum Resources**: 16GB+ RAM recommended
 - **Storage**: Dynamic PersistentVolume provisioning required
 - **Networking**: ClusterIP services, optional Ingress support

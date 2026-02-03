@@ -6,7 +6,7 @@ This document is the single source of truth for all prerequisites and requiremen
 
 | Requirement            | Minimum                 | Recommended                   |
 | ---------------------- | ----------------------- | ----------------------------- |
-| **Kubernetes Version** | 1.24+                   | 1.28+                         |
+| **Kubernetes Version** | 1.25+                   | 1.28+                         |
 | **RAM**                | 8GB                     | 16GB+                         |
 | **Storage**            | Dynamic PV provisioning | SSD-backed StorageClass       |
 | **Network**            | ClusterIP support       | Ingress controller (optional) |
@@ -17,7 +17,7 @@ This document is the single source of truth for all prerequisites and requiremen
 
 | Tool                                               | Minimum Version | Purpose         |
 | -------------------------------------------------- | --------------- | --------------- |
-| [kubectl](https://kubernetes.io/docs/tasks/tools/) | 1.24+           | Kubernetes CLI  |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | 1.25+           | Kubernetes CLI  |
 | [Helm](https://helm.sh/docs/intro/install/)        | 3.0+            | Package manager |
 
 ### For Developers (Contributing)
