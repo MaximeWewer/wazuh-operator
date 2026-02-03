@@ -318,6 +318,9 @@ func (r *DashboardReconciler) resolveAPIEndpointCredentials(ctx context.Context,
 // reconcileService reconciles the dashboard service
 func (r *DashboardReconciler) reconcileService(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	serviceBuilder := osservices.NewDashboardServiceBuilder(cluster.Name, cluster.Namespace)
+	if cluster.Spec.Dashboard != nil && cluster.Spec.Dashboard.Service != nil && len(cluster.Spec.Dashboard.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(cluster.Spec.Dashboard.Service.Annotations)
+	}
 	service := serviceBuilder.Build()
 
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -349,6 +352,14 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 	}
 	if cluster.Spec.Dashboard.Resources != nil {
 		deployBuilder.WithResources(cluster.Spec.Dashboard.Resources)
+	}
+	if cluster.Spec.Dashboard != nil {
+		if len(cluster.Spec.Dashboard.Annotations) > 0 {
+			deployBuilder.WithAnnotations(cluster.Spec.Dashboard.Annotations)
+		}
+		if len(cluster.Spec.Dashboard.PodAnnotations) > 0 {
+			deployBuilder.WithPodAnnotations(cluster.Spec.Dashboard.PodAnnotations)
+		}
 	}
 
 	// Set cert hash to trigger pod restart on cert renewal
@@ -649,16 +660,17 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 
 	// Extract spec values for hash computation
 	var (
-		replicas     = cluster.Spec.Dashboard.Replicas
-		version      = cluster.Spec.Version
-		resources    = cluster.Spec.Dashboard.Resources
-		image        string
-		nodeSelector map[string]string
-		tolerations  []corev1.Toleration
-		affinity     *corev1.Affinity
-		env          []corev1.EnvVar
-		envFrom      []corev1.EnvFromSource
-		annotations  map[string]string
+		replicas       = cluster.Spec.Dashboard.Replicas
+		version        = cluster.Spec.Version
+		resources      = cluster.Spec.Dashboard.Resources
+		image          string
+		nodeSelector   map[string]string
+		tolerations    []corev1.Toleration
+		affinity       *corev1.Affinity
+		env            []corev1.EnvVar
+		envFrom        []corev1.EnvFromSource
+		annotations    map[string]string
+		podAnnotations map[string]string
 	)
 
 	if cluster.Spec.Dashboard != nil {
@@ -668,20 +680,22 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		env = cluster.Spec.Dashboard.Env
 		envFrom = cluster.Spec.Dashboard.EnvFrom
 		annotations = cluster.Spec.Dashboard.Annotations
+		podAnnotations = cluster.Spec.Dashboard.PodAnnotations
 	}
 
 	// Compute spec hash for change detection (includes all configurable fields)
 	specHash, err := patch.ComputeDashboardSpecHashFull(patch.DashboardSpecInput{
-		Replicas:     replicas,
-		Version:      version,
-		Resources:    resources,
-		Image:        image,
-		NodeSelector: nodeSelector,
-		Tolerations:  tolerations,
-		Affinity:     affinity,
-		Env:          env,
-		EnvFrom:      envFrom,
-		Annotations:  annotations,
+		Replicas:       replicas,
+		Version:        version,
+		Resources:      resources,
+		Image:          image,
+		NodeSelector:   nodeSelector,
+		Tolerations:    tolerations,
+		Affinity:       affinity,
+		Env:            env,
+		EnvFrom:        envFrom,
+		Annotations:    annotations,
+		PodAnnotations: podAnnotations,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute dashboard spec hash, continuing without spec tracking")
@@ -720,6 +734,9 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 	}
 	if len(annotations) > 0 {
 		deployBuilder.WithAnnotations(annotations)
+	}
+	if len(podAnnotations) > 0 {
+		deployBuilder.WithPodAnnotations(podAnnotations)
 	}
 
 	if certHash != "" {
@@ -994,6 +1011,9 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 
 	// Build Service
 	serviceBuilder := osservices.NewDashboardServiceBuilder(dashboard.Name, dashboard.Namespace)
+	if dashboard.Spec.Service != nil && len(dashboard.Spec.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(dashboard.Spec.Service.Annotations)
+	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(dashboard, service, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for service: %w", err)
@@ -1013,6 +1033,12 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 	if dashboard.Spec.Resources != nil {
 		deployBuilder.WithResources(dashboard.Spec.Resources)
 	}
+	if len(dashboard.Spec.Annotations) > 0 {
+		deployBuilder.WithAnnotations(dashboard.Spec.Annotations)
+	}
+	if len(dashboard.Spec.PodAnnotations) > 0 {
+		deployBuilder.WithPodAnnotations(dashboard.Spec.PodAnnotations)
+	}
 
 	deploy := deployBuilder.Build()
 	if err := controllerutil.SetControllerReference(dashboard, deploy, r.Scheme); err != nil {
@@ -1028,6 +1054,22 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 		}
 	} else if err != nil {
 		return fmt.Errorf("failed to get deployment: %w", err)
+	} else {
+		needsUpdate := false
+		if utils.HashMap(deploy.Annotations) != utils.HashMap(foundDeploy.Annotations) {
+			log.Info("Updating standalone Dashboard Deployment due to annotation change", "name", deploy.Name)
+			needsUpdate = true
+		}
+		if utils.HashMap(deploy.Spec.Template.Annotations) != utils.HashMap(foundDeploy.Spec.Template.Annotations) {
+			log.Info("Updating standalone Dashboard Deployment due to pod annotation change", "name", deploy.Name)
+			needsUpdate = true
+		}
+		if needsUpdate {
+			deploy.SetResourceVersion(foundDeploy.GetResourceVersion())
+			if err := r.Update(ctx, deploy); err != nil {
+				return fmt.Errorf("failed to update deployment: %w", err)
+			}
+		}
 	}
 
 	log.Info("Standalone dashboard reconciliation completed", "name", dashboard.Name)
