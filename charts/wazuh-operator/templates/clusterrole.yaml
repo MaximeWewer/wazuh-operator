@@ -135,6 +135,19 @@ rules:
   - patch
   - update
   - watch
+# Autoscaling resources (HPA)
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
 # Wazuh and OpenSearch CRDs
 - apiGroups:
   - resources.wazuh.com
