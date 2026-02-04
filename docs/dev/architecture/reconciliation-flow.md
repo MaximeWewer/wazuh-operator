@@ -132,6 +132,50 @@ ReconcileWithHashes()
             - DashboardCertHash
 ```
 
+## Spec Hash Change Detection
+
+Each component uses a **spec hash** to detect configuration changes and trigger rolling updates.
+When any tracked field changes, the hash changes and the StatefulSet/Deployment pod template
+annotation is updated, causing Kubernetes to perform a rolling restart.
+
+### Tracked Fields by Component
+
+**Manager Master** (`ManagerMasterSpecInput`):
+
+- Version, Resources, StorageSize, Image
+- NodeSelector, Tolerations, Affinity
+- Env, EnvFrom
+- Annotations, PodAnnotations
+- ExtraConfig, ExtraVolumes, ExtraVolumeMounts
+- MonitoringEnabled
+
+**Manager Workers** (`ManagerWorkersSpecInput`):
+
+- All of the above plus Replicas (no MonitoringEnabled)
+
+**Indexer** (`IndexerSpecInput`):
+
+- Version, Resources, StorageSize, JavaOpts, Image
+- NodeSelector, Tolerations, Affinity
+- Env, EnvFrom
+- Annotations, PodAnnotations
+- MonitoringEnabled
+
+**Dashboard** (`DashboardSpecInput`):
+
+- Version, Resources, Image
+- NodeSelector, Tolerations, Affinity
+- Env, EnvFrom
+- Annotations, PodAnnotations
+
+### Additional Change Detection
+
+Beyond the spec hash, reconcilers also detect changes via:
+
+- **Config hash**: Computed from ConfigMap data (ossec.conf, filebeat.yml, etc.)
+- **Cert hash**: Computed from TLS certificate secrets
+- **Annotation comparison**: Direct comparison via `utils.HashMap()` for StatefulSet and pod template annotations
+
 ## Resource Creation Pattern
 
 Each component follows the same pattern:

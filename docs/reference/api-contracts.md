@@ -26,21 +26,27 @@ The main orchestrating controller that manages the complete Wazuh cluster lifecy
 2. Handle deletion with finalizers
 3. Validate cluster spec
 4. Reconcile certificates (CertificateReconciler)
-5. Reconcile manager (ClusterReconciler → ManagerReconciler + WorkerReconciler)
-6. Reconcile indexer (IndexerReconciler)
-7. Reconcile dashboard (DashboardReconciler)
-8. Reconcile monitoring (MonitoringReconciler)
-9. Update status conditions
-10. Requeue based on state (normal: 30s, rollout: 5s, drain: 10s)
+5. Reconcile manager master + workers (ClusterReconciler)
+6. Check worker scale-down drain (WorkerReconciler)
+7. Reconcile indexer (IndexerReconciler)
+8. Reconcile dashboard (DashboardReconciler)
+9. Reconcile monitoring (MonitoringReconciler)
+10. Update status conditions
+11. Requeue based on state (normal: 30s, rollout: 5s, drain: 10s)
 
 **Helper Reconcilers**:
 
-- `ClusterReconciler`: Manager cluster coordination
+- `ClusterReconciler`: Manager master + worker orchestration (ConfigMaps, Services, StatefulSets, spec hash change detection)
 - `CertificateReconciler`: TLS cert generation/renewal
 - `IndexerReconciler`: OpenSearch indexer management
 - `DashboardReconciler`: Dashboard deployment
-- `WorkerReconciler`: Worker node management
+- `WorkerReconciler`: Worker drain operations (CheckScaleDownDrain, EvaluateDrainFeasibility) + standalone WazuhWorker CRD reconciliation
+- `ManagerReconciler`: Standalone WazuhManager CRD reconciliation only
 - `MonitoringReconciler`: Prometheus integration
+
+> **Note**: For WazuhCluster reconciliation, ClusterReconciler handles all manager/worker logic directly.
+> ManagerReconciler and WorkerReconciler are only used for standalone CRDs (WazuhManager, WazuhWorker)
+> and for worker drain operations.
 
 **RBAC Permissions**:
 
@@ -74,7 +80,7 @@ Manages standalone WazuhManager CRs (used in reference mode).
 
 **controllers/wazuhworker_controller.go**
 
-Manages worker-specific operations (currently delegates to WorkerReconciler).
+Manages standalone WazuhWorker CRs (delegates to WorkerReconciler.ReconcileStandalone).
 
 ### OpenSearchIndexer Controller
 

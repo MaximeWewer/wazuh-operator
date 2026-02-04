@@ -40,9 +40,9 @@ wazuh-operator/
 ├── internal/                                      # Internal Implementation
 │   ├── wazuh/                                     # Wazuh-specific logic
 │   │   ├── reconciler/                            # Wazuh reconcilers
-│   │   │   ├── cluster_reconciler.go              # Manager cluster orchestration
-│   │   │   ├── manager_reconciler.go              # Master node reconciliation
-│   │   │   ├── worker_reconciler.go               # Worker nodes reconciliation
+│   │   │   ├── cluster_reconciler.go              # Manager master+worker orchestration (main WazuhCluster path)
+│   │   │   ├── manager_reconciler.go              # Standalone WazuhManager CRD reconciliation
+│   │   │   ├── worker_reconciler.go               # Standalone WazuhWorker CRD + drain operations
 │   │   │   ├── certificate_reconciler.go          # TLS management
 │   │   │   ├── certificate_hotreload.go           # Cert reload without restart
 │   │   │   ├── rule_reconciler.go                 # Rule deployment
@@ -127,7 +127,8 @@ wazuh-operator/
 │   │   └── servicemonitor.go                      # ServiceMonitor/PodMonitor reconciler
 │   │
 │   ├── shared/                                    # Shared Cross-Cutting Concerns
-│   │   ├── patch/                                 # Strategic patch utilities
+│   │   ├── patch/                                 # Change detection utilities
+│   │   │   ├── hash.go                            # Spec hash computation (per-component SpecInput structs)
 │   │   │   ├── detector.go                        # Detect resource changes
 │   │   │   ├── types.go                           # Patch types
 │   │   │   └── errors.go                          # Patch errors
@@ -346,7 +347,7 @@ wazuh-operator/
 - `k8s_objects.go`: Object creation helpers, owner references
 - `status_conditions.go`: Status condition management (Ready, Progressing, Degraded)
 - `merge.go`: Deep merge for strategic updates
-- `hash.go`: ConfigMap/Secret hash computation for change detection
+- `hash.go`: Spec/ConfigMap/Secret hash computation for change detection (tracks version, resources, annotations, extraConfig, extraVolumes, etc.)
 
 ### Configuration Builders
 

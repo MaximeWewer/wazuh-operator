@@ -429,10 +429,12 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		Affinity:          affinity,
 		Env:               env,
 		EnvFrom:           envFrom,
+		Annotations:       annotations,
 		PodAnnotations:    podAnnotations,
 		ExtraConfig:       extraConfig,
 		ExtraVolumes:      extraVolumes,
 		ExtraVolumeMounts: extraVolumeMounts,
+		MonitoringEnabled: cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Enabled,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
@@ -774,6 +776,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		Affinity:          affinity,
 		Env:               workerEnv,
 		EnvFrom:           workerEnvFrom,
+		Annotations:       annotations,
 		PodAnnotations:    workerPodAnnotations,
 		ExtraConfig:       workerExtraConfig,
 		ExtraVolumes:      workerExtraVolumes,
@@ -1181,8 +1184,11 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 		Affinity:          cluster.Spec.Manager.Master.Affinity,
 		ExtraVolumes:      extraVolumes,
 		ExtraVolumeMounts: extraVolumeMounts,
+		ExtraConfig:       extraConfig,
 		Env:               cluster.Spec.Manager.Master.Env,
 		EnvFrom:           cluster.Spec.Manager.Master.EnvFrom,
+		Annotations:       cluster.Spec.Manager.Master.Annotations,
+		PodAnnotations:    cluster.Spec.Manager.Master.PodAnnotations,
 		MonitoringEnabled: cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Enabled,
 	})
 	if err != nil {
@@ -1448,8 +1454,11 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		Affinity:          cluster.Spec.Manager.Workers.Affinity,
 		ExtraVolumes:      extraVolumes,
 		ExtraVolumeMounts: extraVolumeMounts,
+		ExtraConfig:       extraConfig,
 		Env:               cluster.Spec.Manager.Workers.Env,
 		EnvFrom:           cluster.Spec.Manager.Workers.EnvFrom,
+		Annotations:       cluster.Spec.Manager.Workers.Annotations,
+		PodAnnotations:    cluster.Spec.Manager.Workers.PodAnnotations,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec hash")
