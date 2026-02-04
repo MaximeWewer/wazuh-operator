@@ -180,6 +180,67 @@ var _ = Describe("WazuhCluster Controller", func() {
 			Expect(createdCluster.Spec.Dashboard).NotTo(BeNil())
 		})
 
+		It("Should apply extraConfig for master and workers and extra volumes for master", func() {
+			cluster.Spec.Manager.Workers.Replicas = int32Ptr(1)
+			cluster.Spec.Manager.Master.ExtraConfig = "<extra_config>master-extra</extra_config>"
+			cluster.Spec.Manager.Workers.ExtraConfig = "<extra_config>worker-extra</extra_config>"
+			cluster.Spec.Manager.Master.ExtraVolumes = []corev1.Volume{
+				{
+					Name: "master-extra-volume",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			}
+			cluster.Spec.Manager.Master.ExtraVolumeMounts = []corev1.VolumeMount{
+				{
+					Name:      "master-extra-volume",
+					MountPath: "/var/ossec/etc/master-extra",
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, cluster)).To(Succeed())
+
+			masterConfig := &corev1.ConfigMap{}
+			Eventually(func() error {
+				_, _ = reconciler.Reconcile(ctx, reconcileRequest)
+				return k8sClient.Get(ctx, types.NamespacedName{
+					Name:      clusterName + "-manager-master-config",
+					Namespace: namespace,
+				}, masterConfig)
+			}, timeout, interval).Should(Succeed())
+			Expect(masterConfig.Data["ossec.conf"]).To(ContainSubstring("master-extra"))
+
+			workerConfig := &corev1.ConfigMap{}
+			Eventually(func() error {
+				_, _ = reconciler.Reconcile(ctx, reconcileRequest)
+				return k8sClient.Get(ctx, types.NamespacedName{
+					Name:      clusterName + "-manager-worker-config",
+					Namespace: namespace,
+				}, workerConfig)
+			}, timeout, interval).Should(Succeed())
+			Expect(workerConfig.Data["ossec.conf"]).To(ContainSubstring("worker-extra"))
+
+			managerSts := &appsv1.StatefulSet{}
+			Eventually(func() error {
+				_, _ = reconciler.Reconcile(ctx, reconcileRequest)
+				return k8sClient.Get(ctx, types.NamespacedName{
+					Name:      clusterName + "-manager-master",
+					Namespace: namespace,
+				}, managerSts)
+			}, timeout, interval).Should(Succeed())
+			Expect(managerSts.Spec.Template.Spec.Volumes).To(ContainElement(corev1.Volume{
+				Name: "master-extra-volume",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			}))
+			Expect(managerSts.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(corev1.VolumeMount{
+				Name:      "master-extra-volume",
+				MountPath: "/var/ossec/etc/master-extra",
+			}))
+		})
+
 		// Task 8.4: Verify StatefulSets are created
 		It("Should create Manager StatefulSet with 1 replica", func() {
 			Expect(k8sClient.Create(ctx, cluster)).To(Succeed())

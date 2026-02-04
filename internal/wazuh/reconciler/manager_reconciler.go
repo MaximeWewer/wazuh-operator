@@ -269,9 +269,21 @@ func (r *ManagerReconciler) reconcileStatefulSet(ctx context.Context, cluster *w
 	nodeSelector := cluster.Spec.Manager.Master.NodeSelector
 	tolerations := cluster.Spec.Manager.Master.Tolerations
 	affinity := cluster.Spec.Manager.Master.Affinity
+	extraVolumes := cluster.Spec.Manager.Master.ExtraVolumes
+	extraVolumeMounts := cluster.Spec.Manager.Master.ExtraVolumeMounts
 
 	// Compute spec hash for change detection (includes scheduling options)
-	specHash, err := patch.ComputeManagerMasterSpecHash(version, resources, storageSize, "", nodeSelector, tolerations, affinity)
+	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
+		Version:           version,
+		Resources:         resources,
+		StorageSize:       storageSize,
+		Image:             "",
+		NodeSelector:      nodeSelector,
+		Tolerations:       tolerations,
+		Affinity:          affinity,
+		ExtraVolumes:      extraVolumes,
+		ExtraVolumeMounts: extraVolumeMounts,
+	})
 	if err != nil {
 		log.Error(err, "Failed to compute manager master spec hash, continuing without spec tracking")
 		specHash = ""
@@ -291,6 +303,12 @@ func (r *ManagerReconciler) reconcileStatefulSet(ctx context.Context, cluster *w
 	}
 	if cluster.Spec.Manager.Master.NodeSelector != nil {
 		stsBuilder.WithNodeSelector(cluster.Spec.Manager.Master.NodeSelector)
+	}
+	if len(extraVolumes) > 0 {
+		stsBuilder.WithVolumes(extraVolumes)
+	}
+	if len(extraVolumeMounts) > 0 {
+		stsBuilder.WithVolumeMounts(extraVolumeMounts)
 	}
 
 	// Set spec hash for change detection
@@ -593,6 +611,12 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 		if manager.Spec.Master.Resources != nil {
 			stsBuilder.WithResources(manager.Spec.Master.Resources)
 		}
+		if len(manager.Spec.Master.ExtraVolumes) > 0 {
+			stsBuilder.WithVolumes(manager.Spec.Master.ExtraVolumes)
+		}
+		if len(manager.Spec.Master.ExtraVolumeMounts) > 0 {
+			stsBuilder.WithVolumeMounts(manager.Spec.Master.ExtraVolumeMounts)
+		}
 		if manager.Spec.Master.NodeSelector != nil {
 			stsBuilder.WithNodeSelector(manager.Spec.Master.NodeSelector)
 		}
@@ -606,6 +630,12 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 		stsBuilder.WithReplicas(manager.Spec.Workers.GetReplicas())
 		if manager.Spec.Workers.Resources != nil {
 			stsBuilder.WithResources(manager.Spec.Workers.Resources)
+		}
+		if len(manager.Spec.Workers.ExtraVolumes) > 0 {
+			stsBuilder.WithVolumes(manager.Spec.Workers.ExtraVolumes)
+		}
+		if len(manager.Spec.Workers.ExtraVolumeMounts) > 0 {
+			stsBuilder.WithVolumeMounts(manager.Spec.Workers.ExtraVolumeMounts)
 		}
 		if manager.Spec.Workers.NodeSelector != nil {
 			stsBuilder.WithNodeSelector(manager.Spec.Workers.NodeSelector)

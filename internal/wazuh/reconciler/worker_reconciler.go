@@ -338,9 +338,22 @@ func (r *WorkerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wa
 	nodeSelector := cluster.Spec.Manager.Workers.NodeSelector
 	tolerations := cluster.Spec.Manager.Workers.Tolerations
 	affinity := cluster.Spec.Manager.Workers.Affinity
+	extraVolumes := cluster.Spec.Manager.Workers.ExtraVolumes
+	extraVolumeMounts := cluster.Spec.Manager.Workers.ExtraVolumeMounts
 
 	// Compute spec hash for change detection (includes scheduling options)
-	specHash, err := patch.ComputeManagerWorkersSpecHash(replicas, version, resources, storageSize, "", nodeSelector, tolerations, affinity)
+	specHash, err := patch.ComputeManagerWorkersSpecHashFull(patch.ManagerWorkersSpecInput{
+		Replicas:          replicas,
+		Version:           version,
+		Resources:         resources,
+		StorageSize:       storageSize,
+		Image:             "",
+		NodeSelector:      nodeSelector,
+		Tolerations:       tolerations,
+		Affinity:          affinity,
+		ExtraVolumes:      extraVolumes,
+		ExtraVolumeMounts: extraVolumeMounts,
+	})
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec tracking")
 		specHash = ""
@@ -362,6 +375,12 @@ func (r *WorkerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wa
 	}
 	if cluster.Spec.Manager.Workers.NodeSelector != nil {
 		stsBuilder.WithNodeSelector(cluster.Spec.Manager.Workers.NodeSelector)
+	}
+	if len(extraVolumes) > 0 {
+		stsBuilder.WithVolumes(extraVolumes)
+	}
+	if len(extraVolumeMounts) > 0 {
+		stsBuilder.WithVolumeMounts(extraVolumeMounts)
 	}
 
 	// Set spec hash for change detection
