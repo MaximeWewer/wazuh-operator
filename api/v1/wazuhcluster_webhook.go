@@ -21,10 +21,8 @@ import (
 	"fmt"
 	"regexp"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -33,8 +31,7 @@ var wazuhclusterlog = logf.Log.WithName("wazuhcluster-webhook")
 
 // SetupWazuhClusterWebhookWithManager registers the webhook for WazuhCluster in the manager.
 func SetupWazuhClusterWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&WazuhCluster{}).
+	return ctrl.NewWebhookManagedBy(mgr, &WazuhCluster{}).
 		WithValidator(&WazuhClusterCustomValidator{}).
 		WithDefaulter(&WazuhClusterCustomDefaulter{}).
 		Complete()
@@ -45,15 +42,10 @@ func SetupWazuhClusterWebhookWithManager(mgr ctrl.Manager) error {
 // WazuhClusterCustomDefaulter handles defaulting for WazuhCluster
 type WazuhClusterCustomDefaulter struct{}
 
-var _ webhook.CustomDefaulter = &WazuhClusterCustomDefaulter{}
+var _ admission.Defaulter[*WazuhCluster] = &WazuhClusterCustomDefaulter{}
 
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the type.
-func (d *WazuhClusterCustomDefaulter) Default(_ context.Context, obj runtime.Object) error {
-	cluster, ok := obj.(*WazuhCluster)
-	if !ok {
-		return fmt.Errorf("expected a WazuhCluster object but got %T", obj)
-	}
-
+func (d *WazuhClusterCustomDefaulter) Default(_ context.Context, cluster *WazuhCluster) error {
 	wazuhclusterlog.Info("defaulting", "name", cluster.Name, "namespace", cluster.Namespace)
 
 	// Default TLS enabled if not set
@@ -83,31 +75,17 @@ func (d *WazuhClusterCustomDefaulter) Default(_ context.Context, obj runtime.Obj
 // WazuhClusterCustomValidator handles validation for WazuhCluster
 type WazuhClusterCustomValidator struct{}
 
-var _ webhook.CustomValidator = &WazuhClusterCustomValidator{}
+var _ admission.Validator[*WazuhCluster] = &WazuhClusterCustomValidator{}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type.
-func (v *WazuhClusterCustomValidator) ValidateCreate(_ context.Context, obj runtime.Object) (admission.Warnings, error) {
-	cluster, ok := obj.(*WazuhCluster)
-	if !ok {
-		return nil, fmt.Errorf("expected a WazuhCluster object but got %T", obj)
-	}
-
+func (v *WazuhClusterCustomValidator) ValidateCreate(_ context.Context, cluster *WazuhCluster) (admission.Warnings, error) {
 	wazuhclusterlog.Info("validate create", "name", cluster.Name, "namespace", cluster.Namespace)
 
 	return v.validateWazuhCluster(cluster)
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type.
-func (v *WazuhClusterCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	newCluster, ok := newObj.(*WazuhCluster)
-	if !ok {
-		return nil, fmt.Errorf("expected a WazuhCluster object but got %T", newObj)
-	}
-	oldCluster, ok := oldObj.(*WazuhCluster)
-	if !ok {
-		return nil, fmt.Errorf("expected a WazuhCluster object but got %T", oldObj)
-	}
-
+func (v *WazuhClusterCustomValidator) ValidateUpdate(_ context.Context, oldCluster, newCluster *WazuhCluster) (admission.Warnings, error) {
 	wazuhclusterlog.Info("validate update", "name", newCluster.Name, "namespace", newCluster.Namespace)
 
 	// Validate the new spec
@@ -124,12 +102,7 @@ func (v *WazuhClusterCustomValidator) ValidateUpdate(_ context.Context, oldObj, 
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type.
-func (v *WazuhClusterCustomValidator) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	cluster, ok := obj.(*WazuhCluster)
-	if !ok {
-		return nil, fmt.Errorf("expected a WazuhCluster object but got %T", obj)
-	}
-
+func (v *WazuhClusterCustomValidator) ValidateDelete(_ context.Context, cluster *WazuhCluster) (admission.Warnings, error) {
 	wazuhclusterlog.Info("validate delete", "name", cluster.Name, "namespace", cluster.Namespace)
 
 	// No special delete validation currently

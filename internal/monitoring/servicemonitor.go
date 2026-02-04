@@ -140,23 +140,29 @@ func NewIndexerServiceMonitor(cluster *wazuhv1.WazuhCluster) *monitoringv1.Servi
 					ScrapeTimeout: monitoringv1.Duration(scrapeTimeout),
 					Path:          "/_prometheus/metrics",
 					Scheme:        schemePtr(monitoringv1.SchemeHTTPS),
-					TLSConfig: &monitoringv1.TLSConfig{
-						SafeTLSConfig: monitoringv1.SafeTLSConfig{
-							InsecureSkipVerify: boolPtr(true), // OpenSearch uses self-signed certs
-						},
-					},
-					BasicAuth: &monitoringv1.BasicAuth{
-						Username: corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: credentialsSecretName,
+					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+							TLSConfig: &monitoringv1.TLSConfig{
+								SafeTLSConfig: monitoringv1.SafeTLSConfig{
+									InsecureSkipVerify: boolPtr(true), // OpenSearch uses self-signed certs
+								},
 							},
-							Key: constants.SecretKeyAdminUsername,
-						},
-						Password: corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: credentialsSecretName,
+							HTTPConfigWithoutTLS: monitoringv1.HTTPConfigWithoutTLS{
+								BasicAuth: &monitoringv1.BasicAuth{
+									Username: corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: credentialsSecretName,
+										},
+										Key: constants.SecretKeyAdminUsername,
+									},
+									Password: corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: credentialsSecretName,
+										},
+										Key: constants.SecretKeyAdminPassword,
+									},
+								},
 							},
-							Key: constants.SecretKeyAdminPassword,
 						},
 					},
 				},
