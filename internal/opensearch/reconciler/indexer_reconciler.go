@@ -386,6 +386,9 @@ func (r *IndexerReconciler) getConfigHash(ctx context.Context, cluster *wazuhv1.
 // reconcileServices reconciles indexer services
 func (r *IndexerReconciler) reconcileServices(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	serviceBuilder := services.NewIndexerServiceBuilder(cluster.Name, cluster.Namespace)
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Service != nil && len(cluster.Spec.Indexer.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(cluster.Spec.Indexer.Service.Annotations)
+	}
 
 	// Regular service
 	service := serviceBuilder.Build()
@@ -438,6 +441,12 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 		}
 		if cluster.Spec.Indexer.JavaOpts != "" {
 			stsBuilder.WithJavaOpts(cluster.Spec.Indexer.JavaOpts)
+		}
+		if len(cluster.Spec.Indexer.Annotations) > 0 {
+			stsBuilder.WithAnnotations(cluster.Spec.Indexer.Annotations)
+		}
+		if len(cluster.Spec.Indexer.PodAnnotations) > 0 {
+			stsBuilder.WithPodAnnotations(cluster.Spec.Indexer.PodAnnotations)
 		}
 	}
 
@@ -647,17 +656,18 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 
 	// Extract spec values for hash computation
 	var (
-		replicas     = constants.DefaultIndexerReplicas
-		resources    *corev1.ResourceRequirements
-		storageSize  = constants.DefaultIndexerStorageSize
-		javaOpts     = constants.DefaultIndexerJavaOpts
-		image        string
-		nodeSelector map[string]string
-		tolerations  []corev1.Toleration
-		affinity     *corev1.Affinity
-		env          []corev1.EnvVar
-		envFrom      []corev1.EnvFromSource
-		annotations  map[string]string
+		replicas       = constants.DefaultIndexerReplicas
+		resources      *corev1.ResourceRequirements
+		storageSize    = constants.DefaultIndexerStorageSize
+		javaOpts       = constants.DefaultIndexerJavaOpts
+		image          string
+		nodeSelector   map[string]string
+		tolerations    []corev1.Toleration
+		affinity       *corev1.Affinity
+		env            []corev1.EnvVar
+		envFrom        []corev1.EnvFromSource
+		annotations    map[string]string
+		podAnnotations map[string]string
 	)
 	version := cluster.Spec.Version
 
@@ -681,6 +691,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		env = cluster.Spec.Indexer.Env
 		envFrom = cluster.Spec.Indexer.EnvFrom
 		annotations = cluster.Spec.Indexer.Annotations
+		podAnnotations = cluster.Spec.Indexer.PodAnnotations
 
 		// Apply cluster-level anti-affinity if enabled
 		if affinityutil.ShouldApplyIndexerAntiAffinity(cluster) {
@@ -703,6 +714,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		Env:               env,
 		EnvFrom:           envFrom,
 		Annotations:       annotations,
+		PodAnnotations:    podAnnotations,
 		MonitoringEnabled: monitoringEnabled,
 	})
 	if err != nil {
@@ -752,6 +764,9 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		}
 		if len(annotations) > 0 {
 			stsBuilder.WithAnnotations(annotations)
+		}
+		if len(podAnnotations) > 0 {
+			stsBuilder.WithPodAnnotations(podAnnotations)
 		}
 	}
 
@@ -1368,6 +1383,9 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 
 	// Build Services
 	serviceBuilder := services.NewIndexerServiceBuilder(indexer.Name, indexer.Namespace)
+	if indexer.Spec.Service != nil && len(indexer.Spec.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(indexer.Spec.Service.Annotations)
+	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(indexer, service, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for service: %w", err)
@@ -1393,6 +1411,12 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 	if indexer.Spec.Resources != nil {
 		stsBuilder.WithResources(indexer.Spec.Resources)
 	}
+	if len(indexer.Spec.Annotations) > 0 {
+		stsBuilder.WithAnnotations(indexer.Spec.Annotations)
+	}
+	if len(indexer.Spec.PodAnnotations) > 0 {
+		stsBuilder.WithPodAnnotations(indexer.Spec.PodAnnotations)
+	}
 
 	sts := stsBuilder.Build()
 	if err := controllerutil.SetControllerReference(indexer, sts, r.Scheme); err != nil {
@@ -1408,6 +1432,22 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 		}
 	} else if err != nil {
 		return fmt.Errorf("failed to get statefulset: %w", err)
+	} else {
+		needsUpdate := false
+		if utils.HashMap(sts.Annotations) != utils.HashMap(foundSts.Annotations) {
+			log.Info("Updating standalone Indexer StatefulSet due to annotation change", "name", sts.Name)
+			needsUpdate = true
+		}
+		if utils.HashMap(sts.Spec.Template.Annotations) != utils.HashMap(foundSts.Spec.Template.Annotations) {
+			log.Info("Updating standalone Indexer StatefulSet due to pod annotation change", "name", sts.Name)
+			needsUpdate = true
+		}
+		if needsUpdate {
+			sts.SetResourceVersion(foundSts.GetResourceVersion())
+			if err := r.Update(ctx, sts); err != nil {
+				return fmt.Errorf("failed to update statefulset: %w", err)
+			}
+		}
 	}
 
 	log.Info("Standalone indexer reconciliation completed", "name", indexer.Name)
@@ -2387,6 +2427,20 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 			updateReason += ", "
 		}
 		updateReason += "config changed"
+	}
+	if utils.HashMap(sts.Annotations) != utils.HashMap(found.Annotations) {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += ", "
+		}
+		updateReason += "annotations changed"
+	}
+	if utils.HashMap(sts.Spec.Template.Annotations) != utils.HashMap(found.Spec.Template.Annotations) {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += ", "
+		}
+		updateReason += "pod annotations changed"
 	}
 
 	if needsUpdate {

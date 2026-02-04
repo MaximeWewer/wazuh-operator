@@ -315,6 +315,8 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		extraVolumes      []corev1.Volume
 		extraVolumeMounts []corev1.VolumeMount
 		extraConfig       string
+ 		annotations       map[string]string
+		podAnnotations    map[string]string
 	)
 
 	var env []corev1.EnvVar
@@ -335,6 +337,8 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		extraVolumes = cluster.Spec.Manager.Master.ExtraVolumes
 		extraVolumeMounts = cluster.Spec.Manager.Master.ExtraVolumeMounts
 		extraConfig = cluster.Spec.Manager.Master.ExtraConfig
+		annotations = cluster.Spec.Manager.Master.Annotations
+		podAnnotations = cluster.Spec.Manager.Master.PodAnnotations
 
 		// Apply cluster-level anti-affinity if enabled
 		if affinityutil.ShouldApplyAntiAffinity(cluster) {
@@ -395,6 +399,9 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 	// Build Services
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil && len(cluster.Spec.Manager.Master.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Master.Service.Annotations)
+	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for master service: %w", err)
@@ -423,6 +430,8 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		ExtraVolumeMounts: extraVolumeMounts,
 		Env:               env,
 		EnvFrom:           envFrom,
+		Annotations:       annotations,
+		PodAnnotations:    podAnnotations,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
@@ -460,6 +469,11 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	}
 	if len(extraVolumeMounts) > 0 {
 		stsBuilder.WithVolumeMounts(extraVolumeMounts)
+	if len(annotations) > 0 {
+		stsBuilder.WithAnnotations(annotations)
+	}
+	if len(podAnnotations) > 0 {
+		stsBuilder.WithPodAnnotations(podAnnotations)
 	}
 	if certHash != "" {
 		stsBuilder.WithCertHash(certHash)
@@ -631,6 +645,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		extraVolumes      []corev1.Volume
 		extraVolumeMounts []corev1.VolumeMount
 		extraConfig       string
+   	annotations       map[string]string
+		podAnnotations    map[string]string
 	)
 
 	if cluster.Spec.Manager != nil {
@@ -647,6 +663,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		extraVolumes = cluster.Spec.Manager.Workers.ExtraVolumes
 		extraVolumeMounts = cluster.Spec.Manager.Workers.ExtraVolumeMounts
 		extraConfig = cluster.Spec.Manager.Workers.ExtraConfig
+		annotations = cluster.Spec.Manager.Workers.Annotations
+		podAnnotations = cluster.Spec.Manager.Workers.PodAnnotations
 
 		// Apply cluster-level anti-affinity if enabled
 		if affinityutil.ShouldApplyAntiAffinity(cluster) {
@@ -708,6 +726,9 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 
 	// Build Services
 	serviceBuilder := services.NewWorkerServiceBuilder(cluster.Name, cluster.Namespace)
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Service != nil && len(cluster.Spec.Manager.Workers.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Workers.Service.Annotations)
+	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for worker service: %w", err)
@@ -736,6 +757,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		Affinity:          affinity,
 		ExtraVolumes:      extraVolumes,
 		ExtraVolumeMounts: extraVolumeMounts,
+ 		Annotations:       annotations,
+		PodAnnotations:    podAnnotations,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec hash")
@@ -768,6 +791,11 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	}
 	if len(extraVolumeMounts) > 0 {
 		stsBuilder.WithVolumeMounts(extraVolumeMounts)
+	if len(annotations) > 0 {
+		stsBuilder.WithAnnotations(annotations)
+	}
+	if len(podAnnotations) > 0 {
+		stsBuilder.WithPodAnnotations(podAnnotations)
 	}
 	if certHash != "" {
 		stsBuilder.WithCertHash(certHash)
@@ -1069,6 +1097,9 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 
 	// Build Service
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil && len(cluster.Spec.Manager.Master.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Master.Service.Annotations)
+	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for master service: %w", err)
@@ -1101,6 +1132,13 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	}
 	if len(extraVolumeMounts) > 0 {
 		stsBuilder.WithVolumeMounts(extraVolumeMounts)
+	if cluster.Spec.Manager != nil {
+		if len(cluster.Spec.Manager.Master.Annotations) > 0 {
+			stsBuilder.WithAnnotations(cluster.Spec.Manager.Master.Annotations)
+		}
+		if len(cluster.Spec.Manager.Master.PodAnnotations) > 0 {
+			stsBuilder.WithPodAnnotations(cluster.Spec.Manager.Master.PodAnnotations)
+		}
 	}
 	// Set cert hash for pod restart on cert renewal
 	if certHash != "" {
@@ -1186,6 +1224,12 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingSpecHash),
 			"newHash", utils.ShortHash(specHash))
+	if utils.HashMap(sts.Annotations) != utils.HashMap(found.Annotations) {
+		log.Info("Updating Master StatefulSet due to annotation change", "name", sts.Name)
+		needsUpdate = true
+	}
+	if utils.HashMap(sts.Spec.Template.Annotations) != utils.HashMap(found.Spec.Template.Annotations) {
+		log.Info("Updating Master StatefulSet due to pod annotation change", "name", sts.Name)
 		needsUpdate = true
 	}
 
@@ -1314,6 +1358,9 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 
 	// Build Service
 	serviceBuilder := services.NewWorkerServiceBuilder(cluster.Name, cluster.Namespace)
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Service != nil && len(cluster.Spec.Manager.Workers.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Workers.Service.Annotations)
+	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for worker service: %w", err)
@@ -1350,6 +1397,11 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		}
 		if len(extraVolumeMounts) > 0 {
 			stsBuilder.WithVolumeMounts(extraVolumeMounts)
+		if len(cluster.Spec.Manager.Workers.Annotations) > 0 {
+			stsBuilder.WithAnnotations(cluster.Spec.Manager.Workers.Annotations)
+		}
+		if len(cluster.Spec.Manager.Workers.PodAnnotations) > 0 {
+			stsBuilder.WithPodAnnotations(cluster.Spec.Manager.Workers.PodAnnotations)
 		}
 	}
 	stsBuilder.WithReplicas(workerReplicas2)
@@ -1446,6 +1498,12 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingSpecHash),
 			"newHash", utils.ShortHash(specHash))
+	if utils.HashMap(sts.Annotations) != utils.HashMap(found.Annotations) {
+		log.Info("Updating Worker StatefulSet due to annotation change", "name", sts.Name)
+		needsUpdate = true
+	}
+	if utils.HashMap(sts.Spec.Template.Annotations) != utils.HashMap(found.Spec.Template.Annotations) {
+		log.Info("Updating Worker StatefulSet due to pod annotation change", "name", sts.Name)
 		needsUpdate = true
 	}
 
