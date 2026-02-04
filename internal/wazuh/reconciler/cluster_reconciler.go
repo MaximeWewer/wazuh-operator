@@ -307,12 +307,17 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 	// Extract master spec fields with defaults
 	var (
-		version      = cluster.Spec.Version
-		resources    *corev1.ResourceRequirements
-		storageSize  = constants.DefaultManagerStorageSize
-		nodeSelector map[string]string
-		tolerations  []corev1.Toleration
-		affinity     *corev1.Affinity
+		version           = cluster.Spec.Version
+		resources         *corev1.ResourceRequirements
+		storageSize       = constants.DefaultManagerStorageSize
+		nodeSelector      map[string]string
+		tolerations       []corev1.Toleration
+		affinity          *corev1.Affinity
+		extraVolumes      []corev1.Volume
+		extraVolumeMounts []corev1.VolumeMount
+		extraConfig       string
+ 		annotations       map[string]string
+		podAnnotations    map[string]string
 	)
 
 	var env []corev1.EnvVar
@@ -330,6 +335,11 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		affinity = cluster.Spec.Manager.Master.Affinity
 		env = cluster.Spec.Manager.Master.Env
 		envFrom = cluster.Spec.Manager.Master.EnvFrom
+		extraVolumes = cluster.Spec.Manager.Master.ExtraVolumes
+		extraVolumeMounts = cluster.Spec.Manager.Master.ExtraVolumeMounts
+		extraConfig = cluster.Spec.Manager.Master.ExtraConfig
+		annotations = cluster.Spec.Manager.Master.Annotations
+		podAnnotations = cluster.Spec.Manager.Master.PodAnnotations
 
 		// Apply cluster-level anti-affinity if enabled
 		if affinityutil.ShouldApplyAntiAffinity(cluster) {
@@ -341,7 +351,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "master")
 
-	ossecConf, err := config.BuildMasterConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-master", "", "")
+	ossecConf, err := config.BuildMasterConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-master", "", extraConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build ossec.conf: %w", err)
 	}
@@ -390,6 +400,9 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 	// Build Services
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil && len(cluster.Spec.Manager.Master.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Master.Service.Annotations)
+	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for master service: %w", err)
@@ -463,6 +476,17 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	}
 	if len(envFrom) > 0 {
 		stsBuilder.WithEnvFrom(envFrom)
+	}
+	if len(extraVolumes) > 0 {
+		stsBuilder.WithVolumes(extraVolumes)
+	}
+	if len(extraVolumeMounts) > 0 {
+		stsBuilder.WithVolumeMounts(extraVolumeMounts)
+	if len(annotations) > 0 {
+		stsBuilder.WithAnnotations(annotations)
+	}
+	if len(podAnnotations) > 0 {
+		stsBuilder.WithPodAnnotations(podAnnotations)
 	}
 	if certHash != "" {
 		stsBuilder.WithCertHash(certHash)
@@ -624,13 +648,18 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 
 	// Extract worker spec fields with defaults
 	var (
-		replicas     int32
-		version      = cluster.Spec.Version
-		resources    *corev1.ResourceRequirements
-		storageSize  = constants.DefaultManagerStorageSize
-		nodeSelector map[string]string
-		tolerations  []corev1.Toleration
-		affinity     *corev1.Affinity
+		replicas          int32
+		version           = cluster.Spec.Version
+		resources         *corev1.ResourceRequirements
+		storageSize       = constants.DefaultManagerStorageSize
+		nodeSelector      map[string]string
+		tolerations       []corev1.Toleration
+		affinity          *corev1.Affinity
+		extraVolumes      []corev1.Volume
+		extraVolumeMounts []corev1.VolumeMount
+		extraConfig       string
+   	annotations       map[string]string
+		podAnnotations    map[string]string
 	)
 
 	if cluster.Spec.Manager != nil {
@@ -644,6 +673,11 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		nodeSelector = cluster.Spec.Manager.Workers.NodeSelector
 		tolerations = cluster.Spec.Manager.Workers.Tolerations
 		affinity = cluster.Spec.Manager.Workers.Affinity
+		extraVolumes = cluster.Spec.Manager.Workers.ExtraVolumes
+		extraVolumeMounts = cluster.Spec.Manager.Workers.ExtraVolumeMounts
+		extraConfig = cluster.Spec.Manager.Workers.ExtraConfig
+		annotations = cluster.Spec.Manager.Workers.Annotations
+		podAnnotations = cluster.Spec.Manager.Workers.PodAnnotations
 
 		// Apply cluster-level anti-affinity if enabled
 		if affinityutil.ShouldApplyAntiAffinity(cluster) {
@@ -656,7 +690,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "worker")
 
 	// Build ossec.conf for workers - master service name is computed from cluster name
-	ossecConf, err := config.BuildWorkerConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-worker", "", int(constants.PortManagerCluster), "")
+	ossecConf, err := config.BuildWorkerConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-worker", "", int(constants.PortManagerCluster), extraConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build worker ossec.conf: %w", err)
 	}
@@ -705,6 +739,9 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 
 	// Build Services
 	serviceBuilder := services.NewWorkerServiceBuilder(cluster.Name, cluster.Namespace)
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Service != nil && len(cluster.Spec.Manager.Workers.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Workers.Service.Annotations)
+	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for worker service: %w", err)
@@ -778,6 +815,17 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	}
 	if affinity != nil {
 		stsBuilder.WithAffinity(affinity)
+	}
+	if len(extraVolumes) > 0 {
+		stsBuilder.WithVolumes(extraVolumes)
+	}
+	if len(extraVolumeMounts) > 0 {
+		stsBuilder.WithVolumeMounts(extraVolumeMounts)
+	if len(annotations) > 0 {
+		stsBuilder.WithAnnotations(annotations)
+	}
+	if len(podAnnotations) > 0 {
+		stsBuilder.WithPodAnnotations(podAnnotations)
 	}
 	if certHash != "" {
 		stsBuilder.WithCertHash(certHash)
@@ -990,11 +1038,20 @@ func (r *ClusterReconciler) resolveIndexerCredentials(ctx context.Context, clust
 func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) error {
 	log := logf.FromContext(ctx)
 
+	extraConfig := ""
+	var extraVolumes []corev1.Volume
+	var extraVolumeMounts []corev1.VolumeMount
+	if cluster.Spec.Manager != nil {
+		extraConfig = cluster.Spec.Manager.Master.ExtraConfig
+		extraVolumes = cluster.Spec.Manager.Master.ExtraVolumes
+		extraVolumeMounts = cluster.Spec.Manager.Master.ExtraVolumeMounts
+	}
+
 	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "master")
 
 	// Generate ossec.conf
-	ossecConf, err := config.BuildMasterConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-master", "", "")
+	ossecConf, err := config.BuildMasterConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-master", "", extraConfig)
 	if err != nil {
 		return fmt.Errorf("failed to build ossec.conf: %w", err)
 	}
@@ -1066,8 +1123,13 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 		return fmt.Errorf("failed to reconcile master configmap: %w", err)
 	}
 
+	configHash := patch.ComputeConfigHash(configMap.Data)
+
 	// Build Service
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil && len(cluster.Spec.Manager.Master.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Master.Service.Annotations)
+	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for master service: %w", err)
@@ -1095,12 +1157,50 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Resources != nil {
 		stsBuilder.WithResources(cluster.Spec.Manager.Master.Resources)
 	}
+	if len(extraVolumes) > 0 {
+		stsBuilder.WithVolumes(extraVolumes)
+	}
+	if len(extraVolumeMounts) > 0 {
+		stsBuilder.WithVolumeMounts(extraVolumeMounts)
+	if cluster.Spec.Manager != nil {
+		if len(cluster.Spec.Manager.Master.Annotations) > 0 {
+			stsBuilder.WithAnnotations(cluster.Spec.Manager.Master.Annotations)
+		}
+		if len(cluster.Spec.Manager.Master.PodAnnotations) > 0 {
+			stsBuilder.WithPodAnnotations(cluster.Spec.Manager.Master.PodAnnotations)
+		}
+	}
 	// Set cert hash for pod restart on cert renewal
 	if certHash != "" {
 		stsBuilder.WithCertHash(certHash)
 	}
+	if configHash != "" {
+		stsBuilder.WithConfigHash(configHash)
+	}
 	// Set cluster reference for monitoring sidecar
 	stsBuilder.WithCluster(cluster)
+
+	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
+		Version:           cluster.Spec.Version,
+		Resources:         cluster.Spec.Manager.Master.Resources,
+		StorageSize:       cluster.Spec.Manager.Master.StorageSize,
+		Image:             "",
+		NodeSelector:      cluster.Spec.Manager.Master.NodeSelector,
+		Tolerations:       cluster.Spec.Manager.Master.Tolerations,
+		Affinity:          cluster.Spec.Manager.Master.Affinity,
+		ExtraVolumes:      extraVolumes,
+		ExtraVolumeMounts: extraVolumeMounts,
+		Env:               cluster.Spec.Manager.Master.Env,
+		EnvFrom:           cluster.Spec.Manager.Master.EnvFrom,
+		MonitoringEnabled: cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Enabled,
+	})
+	if err != nil {
+		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
+		specHash = ""
+	}
+	if specHash != "" {
+		stsBuilder.WithSpecHash(specHash)
+	}
 
 	sts := stsBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
@@ -1121,8 +1221,14 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 
 	// Check if update is needed (cert hash changed)
 	existingCertHash := ""
+	existingConfigHash := ""
+	existingSpecHash := ""
 	if found.Spec.Template.Annotations != nil {
 		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
+		existingConfigHash = found.Spec.Template.Annotations[constants.AnnotationConfigHash]
+	}
+	if found.Annotations != nil {
+		existingSpecHash = found.Annotations[constants.AnnotationSpecHash]
 	}
 
 	// Update if cert hash changed (including from empty to non-empty)
@@ -1135,6 +1241,26 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 				"newHash", utils.ShortHash(certHash))
 			needsUpdate = true
 		}
+	}
+	if configHash != "" && configHash != existingConfigHash {
+		log.Info("Updating Master StatefulSet due to config hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingConfigHash),
+			"newHash", utils.ShortHash(configHash))
+		needsUpdate = true
+	}
+	if specHash != "" && specHash != existingSpecHash {
+		log.Info("Updating Master StatefulSet due to spec hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingSpecHash),
+			"newHash", utils.ShortHash(specHash))
+	if utils.HashMap(sts.Annotations) != utils.HashMap(found.Annotations) {
+		log.Info("Updating Master StatefulSet due to annotation change", "name", sts.Name)
+		needsUpdate = true
+	}
+	if utils.HashMap(sts.Spec.Template.Annotations) != utils.HashMap(found.Spec.Template.Annotations) {
+		log.Info("Updating Master StatefulSet due to pod annotation change", "name", sts.Name)
+		needsUpdate = true
 	}
 
 	if needsUpdate {
@@ -1173,11 +1299,20 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) error {
 	log := logf.FromContext(ctx)
 
+	extraConfig := ""
+	var extraVolumes []corev1.Volume
+	var extraVolumeMounts []corev1.VolumeMount
+	if cluster.Spec.Manager != nil {
+		extraConfig = cluster.Spec.Manager.Workers.ExtraConfig
+		extraVolumes = cluster.Spec.Manager.Workers.ExtraVolumes
+		extraVolumeMounts = cluster.Spec.Manager.Workers.ExtraVolumeMounts
+	}
+
 	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "worker")
 
 	// Build ossec.conf for workers - master service name is computed from cluster name
-	ossecConf, err := config.BuildWorkerConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-worker", "", int(constants.PortManagerCluster), "")
+	ossecConf, err := config.BuildWorkerConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-worker", "", int(constants.PortManagerCluster), extraConfig)
 	if err != nil {
 		return fmt.Errorf("failed to build worker ossec.conf: %w", err)
 	}
@@ -1249,8 +1384,13 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		return fmt.Errorf("failed to reconcile worker configmap: %w", err)
 	}
 
+	configHash := patch.ComputeConfigHash(configMap.Data)
+
 	// Build Service
 	serviceBuilder := services.NewWorkerServiceBuilder(cluster.Name, cluster.Namespace)
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Service != nil && len(cluster.Spec.Manager.Workers.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Workers.Service.Annotations)
+	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for worker service: %w", err)
@@ -1282,11 +1422,47 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		if cluster.Spec.Manager.Workers.Resources != nil {
 			stsBuilder.WithResources(cluster.Spec.Manager.Workers.Resources)
 		}
+		if len(extraVolumes) > 0 {
+			stsBuilder.WithVolumes(extraVolumes)
+		}
+		if len(extraVolumeMounts) > 0 {
+			stsBuilder.WithVolumeMounts(extraVolumeMounts)
+		if len(cluster.Spec.Manager.Workers.Annotations) > 0 {
+			stsBuilder.WithAnnotations(cluster.Spec.Manager.Workers.Annotations)
+		}
+		if len(cluster.Spec.Manager.Workers.PodAnnotations) > 0 {
+			stsBuilder.WithPodAnnotations(cluster.Spec.Manager.Workers.PodAnnotations)
+		}
 	}
 	stsBuilder.WithReplicas(workerReplicas2)
 	// Set cert hash for pod restart on cert renewal
 	if certHash != "" {
 		stsBuilder.WithCertHash(certHash)
+	}
+	if configHash != "" {
+		stsBuilder.WithConfigHash(configHash)
+	}
+
+	specHash, err := patch.ComputeManagerWorkersSpecHashFull(patch.ManagerWorkersSpecInput{
+		Replicas:          workerReplicas2,
+		Version:           cluster.Spec.Version,
+		Resources:         cluster.Spec.Manager.Workers.Resources,
+		StorageSize:       cluster.Spec.Manager.Workers.StorageSize,
+		Image:             "",
+		NodeSelector:      cluster.Spec.Manager.Workers.NodeSelector,
+		Tolerations:       cluster.Spec.Manager.Workers.Tolerations,
+		Affinity:          cluster.Spec.Manager.Workers.Affinity,
+		ExtraVolumes:      extraVolumes,
+		ExtraVolumeMounts: extraVolumeMounts,
+		Env:               cluster.Spec.Manager.Workers.Env,
+		EnvFrom:           cluster.Spec.Manager.Workers.EnvFrom,
+	})
+	if err != nil {
+		log.Error(err, "Failed to compute worker spec hash, continuing without spec hash")
+		specHash = ""
+	}
+	if specHash != "" {
+		stsBuilder.WithSpecHash(specHash)
 	}
 
 	sts := stsBuilder.Build()
@@ -1308,8 +1484,14 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 
 	// Check if update is needed (cert hash changed or replicas changed)
 	existingCertHash := ""
+	existingConfigHash := ""
+	existingSpecHash := ""
 	if found.Spec.Template.Annotations != nil {
 		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
+		existingConfigHash = found.Spec.Template.Annotations[constants.AnnotationConfigHash]
+	}
+	if found.Annotations != nil {
+		existingSpecHash = found.Annotations[constants.AnnotationSpecHash]
 	}
 
 	// Update if cert hash changed (including from empty to non-empty)
@@ -1332,6 +1514,26 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 			"name", sts.Name,
 			"oldReplicas", *found.Spec.Replicas,
 			"newReplicas", workerReplicas2)
+		needsUpdate = true
+	}
+	if configHash != "" && configHash != existingConfigHash {
+		log.Info("Updating Worker StatefulSet due to config hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingConfigHash),
+			"newHash", utils.ShortHash(configHash))
+		needsUpdate = true
+	}
+	if specHash != "" && specHash != existingSpecHash {
+		log.Info("Updating Worker StatefulSet due to spec hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingSpecHash),
+			"newHash", utils.ShortHash(specHash))
+	if utils.HashMap(sts.Annotations) != utils.HashMap(found.Annotations) {
+		log.Info("Updating Worker StatefulSet due to annotation change", "name", sts.Name)
+		needsUpdate = true
+	}
+	if utils.HashMap(sts.Spec.Template.Annotations) != utils.HashMap(found.Spec.Template.Annotations) {
+		log.Info("Updating Worker StatefulSet due to pod annotation change", "name", sts.Name)
 		needsUpdate = true
 	}
 

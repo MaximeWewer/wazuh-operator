@@ -180,6 +180,195 @@ var _ = Describe("WazuhCluster Controller", func() {
 			Expect(createdCluster.Spec.Dashboard).NotTo(BeNil())
 		})
 
+		It("Should propagate annotations to services, statefulsets, and deployments", func() {
+			cluster.Spec.Manager.Master.Annotations = map[string]string{
+				"wazuh.com/master-annotation": "true",
+			}
+			cluster.Spec.Manager.Master.PodAnnotations = map[string]string{
+				"wazuh.com/master-pod-annotation": "true",
+			}
+			cluster.Spec.Manager.Master.Service = &wazuhv1.ServiceSpec{
+				Annotations: map[string]string{
+					"wazuh.com/master-service-annotation": "true",
+				},
+			}
+
+			cluster.Spec.Manager.Workers.Annotations = map[string]string{
+				"wazuh.com/worker-annotation": "true",
+			}
+			cluster.Spec.Manager.Workers.PodAnnotations = map[string]string{
+				"wazuh.com/worker-pod-annotation": "true",
+			}
+			cluster.Spec.Manager.Workers.Service = &wazuhv1.ServiceSpec{
+				Annotations: map[string]string{
+					"wazuh.com/worker-service-annotation": "true",
+				},
+			}
+
+			cluster.Spec.Indexer.Annotations = map[string]string{
+				"wazuh.com/indexer-annotation": "true",
+			}
+			cluster.Spec.Indexer.PodAnnotations = map[string]string{
+				"wazuh.com/indexer-pod-annotation": "true",
+			}
+			cluster.Spec.Indexer.Service = &wazuhv1.ServiceSpec{
+				Annotations: map[string]string{
+					"wazuh.com/indexer-service-annotation": "true",
+				},
+			}
+
+			cluster.Spec.Dashboard.Annotations = map[string]string{
+				"wazuh.com/dashboard-annotation": "true",
+			}
+			cluster.Spec.Dashboard.PodAnnotations = map[string]string{
+				"wazuh.com/dashboard-pod-annotation": "true",
+			}
+			cluster.Spec.Dashboard.Service = &wazuhv1.ServiceSpec{
+				Annotations: map[string]string{
+					"wazuh.com/dashboard-service-annotation": "true",
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, cluster)).To(Succeed())
+
+			managerSts := &appsv1.StatefulSet{}
+			Eventually(func() error {
+				_, _ = reconciler.Reconcile(ctx, reconcileRequest)
+				return k8sClient.Get(ctx, types.NamespacedName{
+					Name:      clusterName + "-manager-master",
+					Namespace: namespace,
+				}, managerSts)
+			}, timeout, interval).Should(Succeed())
+
+			Expect(managerSts.Annotations).To(HaveKeyWithValue("wazuh.com/master-annotation", "true"))
+			Expect(managerSts.Spec.Template.Annotations).To(HaveKeyWithValue("wazuh.com/master-pod-annotation", "true"))
+
+			workerSts := &appsv1.StatefulSet{}
+			Eventually(func() error {
+				_, _ = reconciler.Reconcile(ctx, reconcileRequest)
+				return k8sClient.Get(ctx, types.NamespacedName{
+					Name:      clusterName + "-manager-worker",
+					Namespace: namespace,
+				}, workerSts)
+			}, timeout, interval).Should(Succeed())
+
+			Expect(workerSts.Annotations).To(HaveKeyWithValue("wazuh.com/worker-annotation", "true"))
+			Expect(workerSts.Spec.Template.Annotations).To(HaveKeyWithValue("wazuh.com/worker-pod-annotation", "true"))
+
+			indexerSts := &appsv1.StatefulSet{}
+			Eventually(func() error {
+				_, _ = reconciler.Reconcile(ctx, reconcileRequest)
+				return k8sClient.Get(ctx, types.NamespacedName{
+					Name:      clusterName + "-indexer",
+					Namespace: namespace,
+				}, indexerSts)
+			}, timeout, interval).Should(Succeed())
+
+			Expect(indexerSts.Annotations).To(HaveKeyWithValue("wazuh.com/indexer-annotation", "true"))
+			Expect(indexerSts.Spec.Template.Annotations).To(HaveKeyWithValue("wazuh.com/indexer-pod-annotation", "true"))
+
+			dashboardDeploy := &appsv1.Deployment{}
+			Eventually(func() error {
+				_, _ = reconciler.Reconcile(ctx, reconcileRequest)
+				return k8sClient.Get(ctx, types.NamespacedName{
+					Name:      clusterName + "-dashboard",
+					Namespace: namespace,
+				}, dashboardDeploy)
+			}, timeout, interval).Should(Succeed())
+
+			Expect(dashboardDeploy.Annotations).To(HaveKeyWithValue("wazuh.com/dashboard-annotation", "true"))
+			Expect(dashboardDeploy.Spec.Template.Annotations).To(HaveKeyWithValue("wazuh.com/dashboard-pod-annotation", "true"))
+
+			managerService := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      clusterName + "-manager-master",
+				Namespace: namespace,
+			}, managerService)).To(Succeed())
+			Expect(managerService.Annotations).To(HaveKeyWithValue("wazuh.com/master-service-annotation", "true"))
+
+			workerService := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      clusterName + "-manager-worker",
+				Namespace: namespace,
+			}, workerService)).To(Succeed())
+			Expect(workerService.Annotations).To(HaveKeyWithValue("wazuh.com/worker-service-annotation", "true"))
+
+			indexerService := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      clusterName + "-indexer",
+				Namespace: namespace,
+			}, indexerService)).To(Succeed())
+			Expect(indexerService.Annotations).To(HaveKeyWithValue("wazuh.com/indexer-service-annotation", "true"))
+
+			dashboardService := &corev1.Service{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{
+				Name:      clusterName + "-dashboard",
+				Namespace: namespace,
+			}, dashboardService)).To(Succeed())
+			Expect(dashboardService.Annotations).To(HaveKeyWithValue("wazuh.com/dashboard-service-annotation", "true"))
+		})
+
+		It("Should apply extraConfig for master and workers and extra volumes for master", func() {
+			cluster.Spec.Manager.Workers.Replicas = int32Ptr(1)
+			cluster.Spec.Manager.Master.ExtraConfig = "<extra_config>master-extra</extra_config>"
+			cluster.Spec.Manager.Workers.ExtraConfig = "<extra_config>worker-extra</extra_config>"
+			cluster.Spec.Manager.Master.ExtraVolumes = []corev1.Volume{
+				{
+					Name: "master-extra-volume",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			}
+			cluster.Spec.Manager.Master.ExtraVolumeMounts = []corev1.VolumeMount{
+				{
+					Name:      "master-extra-volume",
+					MountPath: "/var/ossec/etc/master-extra",
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, cluster)).To(Succeed())
+
+			masterConfig := &corev1.ConfigMap{}
+			Eventually(func() error {
+				_, _ = reconciler.Reconcile(ctx, reconcileRequest)
+				return k8sClient.Get(ctx, types.NamespacedName{
+					Name:      clusterName + "-manager-master-config",
+					Namespace: namespace,
+				}, masterConfig)
+			}, timeout, interval).Should(Succeed())
+			Expect(masterConfig.Data["ossec.conf"]).To(ContainSubstring("master-extra"))
+
+			workerConfig := &corev1.ConfigMap{}
+			Eventually(func() error {
+				_, _ = reconciler.Reconcile(ctx, reconcileRequest)
+				return k8sClient.Get(ctx, types.NamespacedName{
+					Name:      clusterName + "-manager-worker-config",
+					Namespace: namespace,
+				}, workerConfig)
+			}, timeout, interval).Should(Succeed())
+			Expect(workerConfig.Data["ossec.conf"]).To(ContainSubstring("worker-extra"))
+
+			managerSts := &appsv1.StatefulSet{}
+			Eventually(func() error {
+				_, _ = reconciler.Reconcile(ctx, reconcileRequest)
+				return k8sClient.Get(ctx, types.NamespacedName{
+					Name:      clusterName + "-manager-master",
+					Namespace: namespace,
+				}, managerSts)
+			}, timeout, interval).Should(Succeed())
+			Expect(managerSts.Spec.Template.Spec.Volumes).To(ContainElement(corev1.Volume{
+				Name: "master-extra-volume",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			}))
+			Expect(managerSts.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(corev1.VolumeMount{
+				Name:      "master-extra-volume",
+				MountPath: "/var/ossec/etc/master-extra",
+			}))
+		})
+
 		// Task 8.4: Verify StatefulSets are created
 		It("Should create Manager StatefulSet with 1 replica", func() {
 			Expect(k8sClient.Create(ctx, cluster)).To(Succeed())
