@@ -37,6 +37,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
+	wazuhcerts "github.com/MaximeWewer/wazuh-operator/internal/certificates/wazuh"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
@@ -104,7 +105,7 @@ func (r *ClusterReconciler) ReconcileCertificates(ctx context.Context, cluster *
 			return fmt.Errorf("failed to generate manager certificates: %w", err)
 		}
 
-		certsBuilder := secrets.NewManagerCertsSecretBuilder(cluster.Name, cluster.Namespace)
+		certsBuilder := wazuhcerts.NewManagerCertsSecretBuilder(cluster.Name, cluster.Namespace)
 		certsBuilder.WithCACert(certs.caCert).
 			WithNodeCert(certs.nodeCert).
 			WithNodeKey(certs.nodeKey).
@@ -418,6 +419,18 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		return nil, fmt.Errorf("failed to reconcile master headless service: %w", err)
 	}
 
+	// Extract additional fields for hash computation
+	var podAnnotations map[string]string
+	var extraConfig string
+	var extraVolumes []corev1.Volume
+	var extraVolumeMounts []corev1.VolumeMount
+	if cluster.Spec.Manager != nil {
+		podAnnotations = cluster.Spec.Manager.Master.PodAnnotations
+		extraConfig = cluster.Spec.Manager.Master.ExtraConfig
+		extraVolumes = cluster.Spec.Manager.Master.ExtraVolumes
+		extraVolumeMounts = cluster.Spec.Manager.Master.ExtraVolumeMounts
+	}
+
 	// Compute specHash for change detection (version is included in image tag)
 	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
 		Version:           version,
@@ -426,12 +439,12 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		NodeSelector:      nodeSelector,
 		Tolerations:       tolerations,
 		Affinity:          affinity,
-		ExtraVolumes:      extraVolumes,
-		ExtraVolumeMounts: extraVolumeMounts,
 		Env:               env,
 		EnvFrom:           envFrom,
-		Annotations:       annotations,
 		PodAnnotations:    podAnnotations,
+		ExtraConfig:       extraConfig,
+		ExtraVolumes:      extraVolumes,
+		ExtraVolumeMounts: extraVolumeMounts,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
@@ -745,20 +758,37 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		return nil, fmt.Errorf("failed to reconcile worker headless service: %w", err)
 	}
 
+	// Extract additional fields for hash computation
+	var workerPodAnnotations map[string]string
+	var workerExtraConfig string
+	var workerExtraVolumes []corev1.Volume
+	var workerExtraVolumeMounts []corev1.VolumeMount
+	var workerEnv []corev1.EnvVar
+	var workerEnvFrom []corev1.EnvFromSource
+	if cluster.Spec.Manager != nil {
+		workerPodAnnotations = cluster.Spec.Manager.Workers.PodAnnotations
+		workerExtraConfig = cluster.Spec.Manager.Workers.ExtraConfig
+		workerExtraVolumes = cluster.Spec.Manager.Workers.ExtraVolumes
+		workerExtraVolumeMounts = cluster.Spec.Manager.Workers.ExtraVolumeMounts
+		workerEnv = cluster.Spec.Manager.Workers.Env
+		workerEnvFrom = cluster.Spec.Manager.Workers.EnvFrom
+	}
+
 	// Compute specHash for change detection (version is included in image tag)
 	specHash, err := patch.ComputeManagerWorkersSpecHashFull(patch.ManagerWorkersSpecInput{
 		Replicas:          replicas,
 		Version:           version,
 		Resources:         resources,
 		StorageSize:       storageSize,
-		Image:             "",
 		NodeSelector:      nodeSelector,
 		Tolerations:       tolerations,
 		Affinity:          affinity,
-		ExtraVolumes:      extraVolumes,
-		ExtraVolumeMounts: extraVolumeMounts,
- 		Annotations:       annotations,
-		PodAnnotations:    podAnnotations,
+		Env:               workerEnv,
+		EnvFrom:           workerEnvFrom,
+		PodAnnotations:    workerPodAnnotations,
+		ExtraConfig:       workerExtraConfig,
+		ExtraVolumes:      workerExtraVolumes,
+		ExtraVolumeMounts: workerExtraVolumeMounts,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec hash")

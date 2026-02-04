@@ -190,6 +190,121 @@ cluster:
       #   enabled: true
       #   hostnames: ["dashboard.wazuh.example.com"]
 
+    # @extra cluster.spec.tls TLS/Certificate configuration
+    # Configure TLS certificates for secure communication between components.
+    tls:
+      # -- Enable TLS for all components
+      # @default -- `true`
+      enabled: true
+
+      # @extra cluster.spec.tls.certConfig Certificate validity and renewal settings
+      certConfig:
+        # -- CA certificate validity duration (e.g., "3650d" for 10 years)
+        # @default -- `"3650d"`
+        caValidity: "3650d"
+        # -- Renew CA certificate when this much time remains before expiry
+        # @default -- `"60d"`
+        caRenewalThreshold: "60d"
+
+        # -- Indexer node certificate validity duration
+        # @default -- `"365d"`
+        validity: "365d"
+        # -- Renew indexer node certificates when this much time remains before expiry
+        # @default -- `"30d"`
+        renewalThreshold: "30d"
+
+        # -- Admin certificate validity duration (used for OpenSearch security API)
+        # @default -- `"365d"`
+        adminValidity: "365d"
+        # -- Renew admin certificates when this much time remains before expiry
+        # @default -- `"30d"`
+        adminRenewalThreshold: "30d"
+
+        # -- Dashboard certificate validity duration (requires pod restart on renewal)
+        # @default -- `"365d"`
+        dashboardValidity: "365d"
+        # -- Renew dashboard certificates when this much time remains before expiry
+        # @default -- `"30d"`
+        dashboardRenewalThreshold: "30d"
+
+        # -- Filebeat certificate validity duration (requires manager pod restart on renewal)
+        # @default -- `"365d"`
+        filebeatValidity: "365d"
+        # -- Renew filebeat certificates when this much time remains before expiry
+        # @default -- `"30d"`
+        filebeatRenewalThreshold: "30d"
+
+        # -- Key algorithm: "RSA" (2048-bit) or "ECDSA" (P-256)
+        # @default -- `"RSA"`
+        keyAlgorithm: "RSA"
+        # -- ECDSA curve (only used when keyAlgorithm is "ECDSA"): P256, P384, P521
+        # @default -- `"P256"`
+        ecdsaCurve: "P256"
+
+        # @extra cluster.spec.tls.certConfig X.509 Distinguished Name fields
+        # These values are used in the Subject field of generated certificates.
+        # Note: CommonName (CN) is auto-generated based on certificate type:
+        #   - CA: "<cluster>-ca"
+        #   - Indexer: "<cluster>-indexer"
+        #   - Admin: "admin" (required by OpenSearch security plugin)
+        #   - Dashboard: "<cluster>-dashboard"
+        #   - Filebeat: "<cluster>-filebeat"
+        # -- Country code (2-letter ISO 3166-1 alpha-2)
+        # @default -- `"US"`
+        country: "US"
+        # -- State or Province
+        # @default -- `"California"`
+        state: "California"
+        # -- Locality (city)
+        # @default -- `"San Francisco"`
+        locality: "San Francisco"
+        # -- Organization name
+        # @default -- `"Wazuh"`
+        organization: "Wazuh"
+        # -- Organizational Unit
+        # @default -- `"Security"`
+        organizationalUnit: "Security"
+
+      # @extra cluster.spec.tls.hotReload Hot-reload configuration for certificate renewal without restart
+      # Requires Wazuh >= 4.9.0 (OpenSearch >= 2.13)
+      hotReload:
+        # -- Enable hot-reload of TLS certificates
+        # @default -- `true`
+        enabled: true
+        # -- Force API reload even for versions supporting automatic reload (OpenSearch >= 2.19)
+        # @default -- `false`
+        forceAPIReload: false
+
+      # @extra cluster.spec.tls.caMaintenance CA maintenance window for cluster-wide restarts
+      # CA renewal requires full cluster restart. Configure maintenance windows to control when this happens.
+      caMaintenance:
+        # -- Allow automatic restart when CA is renewed (if false, operator waits for manual intervention)
+        # @default -- `false`
+        autoRestart: false
+        # -- Maintenance windows when CA renewal restart is allowed (cron format)
+        allowedRestartWindows: []
+        # Example:
+        # allowedRestartWindows:
+        #   - schedule: "0 2 * * 0"  # Sundays at 2 AM
+        #     duration: "4h"
+        #     timezone: "UTC"
+
+      # @extra cluster.spec.tls.customCerts Use custom certificates instead of auto-generated
+      # customCerts:
+      #   ca:
+      #     secretName: "my-ca-secret"
+      #   indexer:
+      #     secretName: "my-indexer-certs"
+      #   dashboard:
+      #     secretName: "my-dashboard-certs"
+
+      # @extra cluster.spec.tls.certManager Use cert-manager for certificate management
+      # certManager:
+      #   enabled: true
+      #   issuerRef:
+      #     name: "wazuh-ca-issuer"
+      #     kind: "Issuer"
+
 # @section Backup Configuration
 # Configure backups for OpenSearch indices and Wazuh Manager data.
 # See [Backup & Restore Guide](../../docs/usage/features/backup-restore.md) for details.

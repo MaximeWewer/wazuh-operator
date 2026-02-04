@@ -39,12 +39,11 @@ type IndexerSpec struct {
 	Tolerations  []corev1.Toleration          `json:"tolerations,omitempty"`
 	Affinity     *corev1.Affinity             `json:"affinity,omitempty"`
 	// Custom pod configuration
-	Env         []corev1.EnvVar        `json:"env,omitempty"`
-	EnvFrom     []corev1.EnvFromSource `json:"envFrom,omitempty"`
-	Labels      map[string]string      `json:"labels,omitempty"`
-	Annotations map[string]string      `json:"annotations,omitempty"`
-	// Pod annotations
-	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
+	Env            []corev1.EnvVar        `json:"env,omitempty"`
+	EnvFrom        []corev1.EnvFromSource `json:"envFrom,omitempty"`
+	Labels         map[string]string      `json:"labels,omitempty"`
+	Annotations    map[string]string      `json:"annotations,omitempty"`
+	PodAnnotations map[string]string      `json:"podAnnotations,omitempty"`
 	// Monitoring configuration
 	MonitoringEnabled bool `json:"monitoringEnabled,omitempty"`
 }
@@ -59,12 +58,11 @@ type DashboardSpec struct {
 	Tolerations  []corev1.Toleration          `json:"tolerations,omitempty"`
 	Affinity     *corev1.Affinity             `json:"affinity,omitempty"`
 	// Custom pod configuration
-	Env         []corev1.EnvVar        `json:"env,omitempty"`
-	EnvFrom     []corev1.EnvFromSource `json:"envFrom,omitempty"`
-	Labels      map[string]string      `json:"labels,omitempty"`
-	Annotations map[string]string      `json:"annotations,omitempty"`
-	// Pod annotations
-	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
+	Env            []corev1.EnvVar        `json:"env,omitempty"`
+	EnvFrom        []corev1.EnvFromSource `json:"envFrom,omitempty"`
+	Labels         map[string]string      `json:"labels,omitempty"`
+	Annotations    map[string]string      `json:"annotations,omitempty"`
+	PodAnnotations map[string]string      `json:"podAnnotations,omitempty"`
 }
 
 // ManagerMasterSpec contains fields from WazuhCluster.Spec.Manager.Master used for hash computation
@@ -79,12 +77,14 @@ type ManagerMasterSpec struct {
 	ExtraVolumes      []corev1.Volume              `json:"extraVolumes,omitempty"`
 	ExtraVolumeMounts []corev1.VolumeMount         `json:"extraVolumeMounts,omitempty"`
 	// Custom pod configuration
-	Env         []corev1.EnvVar        `json:"env,omitempty"`
-	EnvFrom     []corev1.EnvFromSource `json:"envFrom,omitempty"`
-	Labels      map[string]string      `json:"labels,omitempty"`
-	Annotations map[string]string      `json:"annotations,omitempty"`
-	// Pod annotations
-	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
+	Env              []corev1.EnvVar        `json:"env,omitempty"`
+	EnvFrom          []corev1.EnvFromSource `json:"envFrom,omitempty"`
+	Labels           map[string]string      `json:"labels,omitempty"`
+	Annotations      map[string]string      `json:"annotations,omitempty"`
+	PodAnnotations   map[string]string      `json:"podAnnotations,omitempty"`
+	ExtraConfig      string                 `json:"extraConfig,omitempty"`
+	ExtraVolumes     []corev1.Volume        `json:"extraVolumes,omitempty"`
+	ExtraVolumeMounts []corev1.VolumeMount  `json:"extraVolumeMounts,omitempty"`
 	// Monitoring configuration
 	MonitoringEnabled bool `json:"monitoringEnabled,omitempty"`
 }
@@ -102,12 +102,14 @@ type ManagerWorkersSpec struct {
 	ExtraVolumes      []corev1.Volume              `json:"extraVolumes,omitempty"`
 	ExtraVolumeMounts []corev1.VolumeMount         `json:"extraVolumeMounts,omitempty"`
 	// Custom pod configuration
-	Env         []corev1.EnvVar        `json:"env,omitempty"`
-	EnvFrom     []corev1.EnvFromSource `json:"envFrom,omitempty"`
-	Labels      map[string]string      `json:"labels,omitempty"`
-	Annotations map[string]string      `json:"annotations,omitempty"`
-	// Pod annotations
-	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
+	Env              []corev1.EnvVar        `json:"env,omitempty"`
+	EnvFrom          []corev1.EnvFromSource `json:"envFrom,omitempty"`
+	Labels           map[string]string      `json:"labels,omitempty"`
+	Annotations      map[string]string      `json:"annotations,omitempty"`
+	PodAnnotations   map[string]string      `json:"podAnnotations,omitempty"`
+	ExtraConfig      string                 `json:"extraConfig,omitempty"`
+	ExtraVolumes     []corev1.Volume        `json:"extraVolumes,omitempty"`
+	ExtraVolumeMounts []corev1.VolumeMount  `json:"extraVolumeMounts,omitempty"`
 }
 
 // ComputeSpecHash computes a SHA256 hash of spec fields for change detection
@@ -244,6 +246,9 @@ type ManagerMasterSpecInput struct {
 	Labels            map[string]string
 	Annotations       map[string]string
 	PodAnnotations    map[string]string
+	ExtraConfig       string
+	ExtraVolumes      []corev1.Volume
+	ExtraVolumeMounts []corev1.VolumeMount
 	MonitoringEnabled bool
 }
 
@@ -276,13 +281,14 @@ type ManagerWorkersSpecInput struct {
 	NodeSelector      map[string]string
 	Tolerations       []corev1.Toleration
 	Affinity          *corev1.Affinity
-	ExtraVolumes      []corev1.Volume
-	ExtraVolumeMounts []corev1.VolumeMount
 	Env               []corev1.EnvVar
 	EnvFrom           []corev1.EnvFromSource
 	Labels            map[string]string
 	Annotations       map[string]string
 	PodAnnotations    map[string]string
+	ExtraConfig       string
+	ExtraVolumes      []corev1.Volume
+	ExtraVolumeMounts []corev1.VolumeMount
 }
 
 // ComputeManagerWorkersSpecHash computes the spec hash for Manager Workers component
@@ -303,17 +309,4 @@ func ComputeManagerWorkersSpecHash(replicas int32, version string, resources *co
 func ComputeManagerWorkersSpecHashFull(input ManagerWorkersSpecInput) (string, error) {
 	spec := ManagerWorkersSpec(input)
 	return ComputeSpecHash(spec)
-}
-
-// HashesMatch checks if two hash values are equal
-func HashesMatch(hash1, hash2 string) bool {
-	return hash1 == hash2
-}
-
-// ShortHash returns a truncated hash (first 8 characters)
-func ShortHash(hash string) string {
-	if len(hash) > 8 {
-		return hash[:8]
-	}
-	return hash
 }

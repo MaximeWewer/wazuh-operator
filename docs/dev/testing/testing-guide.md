@@ -58,12 +58,14 @@ go test ./controllers -run TestWazuhCluster -v
 The operator uses [envtest](https://book.kubebuilder.io/reference/envtest.html) for integration testing with a real Kubernetes API server.
 
 **How it works:**
+
 1. `make test` downloads Kubernetes binaries via `setup-envtest`
 2. `BeforeSuite` starts a local API server (etcd + kube-apiserver)
 3. Tests create real CRs, StatefulSets, Deployments, etc.
 4. `AfterSuite` stops the API server
 
 **Binary locations:**
+
 - Linux/WSL: `~/.local/share/kubebuilder-envtest/k8s/1.31.0-linux-amd64/`
 - macOS: `~/Library/Application Support/io.kubebuilder.envtest/k8s/1.31.0-darwin-amd64/`
 
@@ -129,6 +131,7 @@ make test  # Coverage shown in output
 ```
 
 **Manual validation:**
+
 ```bash
 # Verify workloads
 kubectl get statefulsets,deployments -n wazuh
@@ -167,6 +170,7 @@ kubectl get statefulsets -n wazuh -w
 ```
 
 **Manual validation:**
+
 ```bash
 # Update resources
 kubectl patch wazuhcluster wazuh-cluster -n wazuh --type=merge -p '

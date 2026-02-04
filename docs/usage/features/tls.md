@@ -127,20 +127,62 @@ tls:
     forceAPIReload: false # Force API reload even for newer versions
 ```
 
+> **RBAC Note:** API-based hot reload (Wazuh 4.9.x-4.11.x) requires `pods/exec` permission on the operator ClusterRole. This is included in the default operator RBAC configuration (`config/rbac/role.yaml`).
+
 ### Version Behavior
 
-| Wazuh Version | OpenSearch | Hot Reload Method              |
-| ------------- | ---------- | ------------------------------ |
-| 4.9.x         | 2.13-2.18  | Config + API call              |
-| 4.12+         | 2.19+      | Automatic file-based detection |
+| Wazuh Version | OpenSearch   | Hot Reload Method                          | OpenSearch Setting                                        |
+| ------------- | ------------ | ------------------------------------------ | --------------------------------------------------------- |
+| 4.9.x-4.11.x | 2.13-2.18    | API-based (`ssl_cert_reload_enabled`)      | `plugins.security.ssl_cert_reload_enabled: true`          |
+| 4.12+         | 2.19+        | Automatic inotify file-based detection     | `plugins.security.ssl.certificates_hot_reload.enabled: true` |
+
+Both methods have been validated to achieve **zero indexer restarts** during certificate renewal.
 
 ### How It Works
 
 1. Operator detects certificate renewal is needed
-2. New certificates are generated and stored in Secrets
-3. For Wazuh 4.9.x: Operator calls the reload certificates API
-4. For Wazuh 4.12+: OpenSearch automatically detects file changes
-5. Components reload certificates without restart
+2. New certificates are generated and stored in Kubernetes Secrets
+3. Certificate files (`tls.crt`, `tls.key`, `ca.crt`) are mounted as a directory (without `subPath`) to enable Kubernetes automatic secret updates
+4. For Wazuh 4.9.x-4.11.x: After kubelet syncs the new certificates to the pod filesystem, the operator execs into each indexer pod and calls the OpenSearch SSL reload API endpoint. This requires `pods/exec` RBAC permission on the operator ClusterRole.
+5. For Wazuh 4.12+: OpenSearch uses inotify to detect file changes automatically and reloads certificates without any API call
+6. The indexer reloads certificates **without pod restart** (0 restarts observed)
+7. Manager, worker, and dashboard pods are restarted via cert-hash annotation change when certificates are renewed
+
+## Cross-Version Compatibility
+
+The operator supports Wazuh versions 4.9.x through 4.14.x+ with automatic compatibility handling.
+
+### Indexer Configuration Paths
+
+The operator uses absolute paths for all certificate references in `opensearch.yml` (e.g., `/usr/share/wazuh-indexer/config/certs/tls.crt`). This ensures compatibility across all Wazuh versions regardless of where `opensearch.path.conf` points.
+
+### Dual Mount Strategy
+
+Different Wazuh/OpenSearch versions read configuration from different base directories. The operator mounts configuration files at **two** locations to ensure compatibility:
+
+| File                  | Mount Path (Wazuh 4.12+/OpenSearch 2.19+)                            | Mount Path (Wazuh 4.9-4.11/OpenSearch 2.13-2.18)          |
+| --------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `opensearch.yml`      | `/usr/share/wazuh-indexer/config/opensearch.yml`                     | `/usr/share/wazuh-indexer/opensearch.yml`                  |
+| `internal_users.yml`  | `/usr/share/wazuh-indexer/config/opensearch-security/`               | `/usr/share/wazuh-indexer/opensearch-security/`            |
+| `roles_mapping.yml`   | `/usr/share/wazuh-indexer/config/opensearch-security/`               | `/usr/share/wazuh-indexer/opensearch-security/`            |
+
+This dual mount means you do not need to adjust any configuration when upgrading between Wazuh versions -- the operator handles it automatically.
+
+### Filebeat Configuration Strategy
+
+The operator generates a complete `filebeat.yml` via ConfigMap with all values embedded (indexer URL, credentials, SSL certificate paths). The following Filebeat-related environment variables are intentionally **not set** on manager/worker containers:
+
+- `INDEXER_URL`
+- `INDEXER_USERNAME`
+- `INDEXER_PASSWORD`
+- `FILEBEAT_SSL_VERIFICATION_MODE`
+- `SSL_CERTIFICATE_AUTHORITIES`
+- `SSL_CERTIFICATE`
+- `SSL_KEY`
+
+**Reason:** The Wazuh container image includes an s6 init script (`1-config-filebeat`) that uses `sed` to modify `filebeat.yml` when these environment variables are set. However, the sed patterns expect the default image format (inline YAML arrays) and will corrupt the operator-generated YAML (which uses multi-line lists). By leaving these env vars unset, the init script skips modifications and the operator-generated configuration is preserved intact.
+
+The operator uses an init container to copy the generated `filebeat.yml` from the ConfigMap to an emptyDir volume mounted at `/etc/filebeat/`. This ensures the s6 init script `1-config-filebeat` finds the file but does not modify it.
 
 ## Cert-Manager Integration
 
@@ -258,7 +300,8 @@ kubectl get secret -n wazuh <cluster>-indexer-cert -o jsonpath='{.data.tls\.crt}
 ```bash
 # From inside a pod
 kubectl exec -n wazuh <indexer-pod> -- \
-  openssl s_client -connect localhost:9200 -CAfile /etc/ssl/ca.crt
+  openssl s_client -connect localhost:9200 \
+  -CAfile /usr/share/wazuh-indexer/config/certs/ca.crt
 ```
 
 ### Check Hot Reload Status

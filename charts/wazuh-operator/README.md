@@ -8,7 +8,7 @@ A Helm chart for Wazuh Kubernetes Operator
 
 ## Prerequisites
 
-- Kubernetes 1.24+
+- Kubernetes 1.25+
 - Helm 3.10+
 - (Optional) Prometheus Operator for ServiceMonitor support
 - (Optional) cert-manager v1.0+ for webhook TLS

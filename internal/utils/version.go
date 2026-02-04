@@ -258,24 +258,32 @@ type WazuhVersionInfo struct {
 // Based on Wazuh compatibility matrix
 // The plugin version format is: OpenSearchVersion.PatchVersion (e.g., 2.19.1.0)
 var wazuhVersionMapping = map[string]WazuhVersionInfo{
+	// Wazuh 4.15.x (future) - OpenSearch 2.19.x (estimated)
+	"4.15.0": {WazuhVersion: "4.15.0", OpenSearchVersion: "2.19.1", PrometheusExporterPluginVersion: "2.19.1.0"},
 	// Wazuh 4.14.x - OpenSearch 2.19.1
+	"4.14.3": {WazuhVersion: "4.14.3", OpenSearchVersion: "2.19.1", PrometheusExporterPluginVersion: "2.19.1.0"},
 	"4.14.2": {WazuhVersion: "4.14.2", OpenSearchVersion: "2.19.1", PrometheusExporterPluginVersion: "2.19.1.0"},
 	"4.14.1": {WazuhVersion: "4.14.1", OpenSearchVersion: "2.19.1", PrometheusExporterPluginVersion: "2.19.1.0"},
 	"4.14.0": {WazuhVersion: "4.14.0", OpenSearchVersion: "2.19.1", PrometheusExporterPluginVersion: "2.19.1.0"},
 	// Wazuh 4.13.x - OpenSearch 2.19.1
+	"4.13.2": {WazuhVersion: "4.13.2", OpenSearchVersion: "2.19.1", PrometheusExporterPluginVersion: "2.19.1.0"},
 	"4.13.1": {WazuhVersion: "4.13.1", OpenSearchVersion: "2.19.1", PrometheusExporterPluginVersion: "2.19.1.0"},
 	"4.13.0": {WazuhVersion: "4.13.0", OpenSearchVersion: "2.19.1", PrometheusExporterPluginVersion: "2.19.1.0"},
 	// Wazuh 4.12.x - OpenSearch 2.19.1
+	"4.12.1": {WazuhVersion: "4.12.1", OpenSearchVersion: "2.19.1", PrometheusExporterPluginVersion: "2.19.1.0"},
 	"4.12.0": {WazuhVersion: "4.12.0", OpenSearchVersion: "2.19.1", PrometheusExporterPluginVersion: "2.19.1.0"},
 	// Wazuh 4.11.x - OpenSearch 2.16.0
+	"4.11.3": {WazuhVersion: "4.11.3", OpenSearchVersion: "2.16.0", PrometheusExporterPluginVersion: "2.16.0.0"},
 	"4.11.2": {WazuhVersion: "4.11.2", OpenSearchVersion: "2.16.0", PrometheusExporterPluginVersion: "2.16.0.0"},
 	"4.11.1": {WazuhVersion: "4.11.1", OpenSearchVersion: "2.16.0", PrometheusExporterPluginVersion: "2.16.0.0"},
 	"4.11.0": {WazuhVersion: "4.11.0", OpenSearchVersion: "2.16.0", PrometheusExporterPluginVersion: "2.16.0.0"},
 	// Wazuh 4.10.x - OpenSearch 2.16.0
+	"4.10.3": {WazuhVersion: "4.10.3", OpenSearchVersion: "2.16.0", PrometheusExporterPluginVersion: "2.16.0.0"},
 	"4.10.2": {WazuhVersion: "4.10.2", OpenSearchVersion: "2.16.0", PrometheusExporterPluginVersion: "2.16.0.0"},
 	"4.10.1": {WazuhVersion: "4.10.1", OpenSearchVersion: "2.16.0", PrometheusExporterPluginVersion: "2.16.0.0"},
 	"4.10.0": {WazuhVersion: "4.10.0", OpenSearchVersion: "2.16.0", PrometheusExporterPluginVersion: "2.16.0.0"},
 	// Wazuh 4.9.x - OpenSearch 2.13.0
+	"4.9.3": {WazuhVersion: "4.9.3", OpenSearchVersion: "2.13.0", PrometheusExporterPluginVersion: "2.13.0.0"},
 	"4.9.2": {WazuhVersion: "4.9.2", OpenSearchVersion: "2.13.0", PrometheusExporterPluginVersion: "2.13.0.0"},
 	"4.9.1": {WazuhVersion: "4.9.1", OpenSearchVersion: "2.13.0", PrometheusExporterPluginVersion: "2.13.0.0"},
 	"4.9.0": {WazuhVersion: "4.9.0", OpenSearchVersion: "2.13.0", PrometheusExporterPluginVersion: "2.13.0.0"},
@@ -385,4 +393,186 @@ func ExtractOpenSearchVersionFromPluginVersion(pluginVersion string) string {
 		return strings.Join(parts[:3], ".")
 	}
 	return pluginVersion
+}
+
+// OpenSearchFeatureSupport describes feature support for an OpenSearch version
+type OpenSearchFeatureSupport struct {
+	// Version is the OpenSearch version
+	Version string
+	// SupportsHotReload indicates if hot reload is supported
+	SupportsHotReload bool
+	// HotReloadMethod describes how hot reload works
+	HotReloadMethod string
+	// SecurityAPIVersion is the security API version (1 or 2)
+	SecurityAPIVersion int
+	// ReloadCertAPIPath is the path for the reload certificates API
+	ReloadCertAPIPath string
+}
+
+// openSearchFeatureMapping maps OpenSearch major.minor versions to their feature support
+var openSearchFeatureMapping = map[string]OpenSearchFeatureSupport{
+	// OpenSearch 2.19.x - Automatic hot reload via file watching
+	"2.19": {
+		Version:            "2.19",
+		SupportsHotReload:  true,
+		HotReloadMethod:    "automatic-file-watch",
+		SecurityAPIVersion: 2,
+		ReloadCertAPIPath:  "/_plugins/_security/api/ssl/certs/reload",
+	},
+	// OpenSearch 2.18.x - API-based hot reload
+	"2.18": {
+		Version:            "2.18",
+		SupportsHotReload:  true,
+		HotReloadMethod:    "api-call",
+		SecurityAPIVersion: 2,
+		ReloadCertAPIPath:  "/_plugins/_security/api/ssl/certs/reload",
+	},
+	// OpenSearch 2.17.x - API-based hot reload
+	"2.17": {
+		Version:            "2.17",
+		SupportsHotReload:  true,
+		HotReloadMethod:    "api-call",
+		SecurityAPIVersion: 2,
+		ReloadCertAPIPath:  "/_plugins/_security/api/ssl/certs/reload",
+	},
+	// OpenSearch 2.16.x - API-based hot reload
+	"2.16": {
+		Version:            "2.16",
+		SupportsHotReload:  true,
+		HotReloadMethod:    "api-call",
+		SecurityAPIVersion: 2,
+		ReloadCertAPIPath:  "/_plugins/_security/api/ssl/certs/reload",
+	},
+	// OpenSearch 2.13.x-2.15.x - API-based hot reload
+	"2.15": {
+		Version:            "2.15",
+		SupportsHotReload:  true,
+		HotReloadMethod:    "api-call",
+		SecurityAPIVersion: 2,
+		ReloadCertAPIPath:  "/_plugins/_security/api/ssl/certs/reload",
+	},
+	"2.14": {
+		Version:            "2.14",
+		SupportsHotReload:  true,
+		HotReloadMethod:    "api-call",
+		SecurityAPIVersion: 2,
+		ReloadCertAPIPath:  "/_plugins/_security/api/ssl/certs/reload",
+	},
+	"2.13": {
+		Version:            "2.13",
+		SupportsHotReload:  true,
+		HotReloadMethod:    "api-call",
+		SecurityAPIVersion: 2,
+		ReloadCertAPIPath:  "/_plugins/_security/api/ssl/certs/reload",
+	},
+	// OpenSearch 2.10.x-2.12.x - No hot reload support
+	"2.12": {
+		Version:            "2.12",
+		SupportsHotReload:  false,
+		HotReloadMethod:    "restart-required",
+		SecurityAPIVersion: 2,
+		ReloadCertAPIPath:  "",
+	},
+	"2.11": {
+		Version:            "2.11",
+		SupportsHotReload:  false,
+		HotReloadMethod:    "restart-required",
+		SecurityAPIVersion: 2,
+		ReloadCertAPIPath:  "",
+	},
+	"2.10": {
+		Version:            "2.10",
+		SupportsHotReload:  false,
+		HotReloadMethod:    "restart-required",
+		SecurityAPIVersion: 2,
+		ReloadCertAPIPath:  "",
+	},
+}
+
+// GetOpenSearchFeatureSupport returns the feature support for a given OpenSearch version
+func GetOpenSearchFeatureSupport(version string) (*OpenSearchFeatureSupport, error) {
+	v, err := ParseVersion(version)
+	if err != nil {
+		return nil, err
+	}
+
+	// Try to find exact major.minor match
+	key := fmt.Sprintf("%d.%d", v.Major, v.Minor)
+	if support, exists := openSearchFeatureMapping[key]; exists {
+		return &support, nil
+	}
+
+	// For versions not in the map, make reasonable assumptions
+	if v.Major == 2 {
+		if v.Minor >= 19 {
+			// 2.19+ supports automatic hot reload
+			return &OpenSearchFeatureSupport{
+				Version:            version,
+				SupportsHotReload:  true,
+				HotReloadMethod:    "automatic-file-watch",
+				SecurityAPIVersion: 2,
+				ReloadCertAPIPath:  "/_plugins/_security/api/ssl/certs/reload",
+			}, nil
+		}
+		if v.Minor >= 13 {
+			// 2.13-2.18 supports API-based hot reload
+			return &OpenSearchFeatureSupport{
+				Version:            version,
+				SupportsHotReload:  true,
+				HotReloadMethod:    "api-call",
+				SecurityAPIVersion: 2,
+				ReloadCertAPIPath:  "/_plugins/_security/api/ssl/certs/reload",
+			}, nil
+		}
+	}
+
+	// Default: no hot reload support
+	return &OpenSearchFeatureSupport{
+		Version:            version,
+		SupportsHotReload:  false,
+		HotReloadMethod:    "restart-required",
+		SecurityAPIVersion: 2,
+		ReloadCertAPIPath:  "",
+	}, nil
+}
+
+// GetHotReloadAPIPath returns the API path for certificate hot reload
+// Returns empty string if hot reload is not supported via API
+func GetHotReloadAPIPath(openSearchVersion string) string {
+	support, err := GetOpenSearchFeatureSupport(openSearchVersion)
+	if err != nil {
+		return ""
+	}
+	return support.ReloadCertAPIPath
+}
+
+// IsWazuhVersionSupported returns true if the given Wazuh version is supported by the operator
+func IsWazuhVersionSupported(wazuhVersion string) bool {
+	v, err := ParseVersion(wazuhVersion)
+	if err != nil {
+		return false
+	}
+
+	// Support Wazuh 4.9+ (and future 5.x)
+	if v.Major >= 5 {
+		return true
+	}
+	if v.Major == 4 && v.Minor >= 9 {
+		return true
+	}
+	return false
+}
+
+// GetSupportedWazuhVersionRange returns the supported Wazuh version range
+func GetSupportedWazuhVersionRange() (minVersion, maxVersion string) {
+	return "4.9.0", "5.x.x"
+}
+
+// GetAllSupportedWazuhVersions returns all explicitly supported Wazuh versions
+func GetAllSupportedWazuhVersions() []string {
+	versions := make([]string, 0, len(wazuhVersionMapping))
+	for v := range wazuhVersionMapping {
+		versions = append(versions, v)
+	}
+	return versions
 }

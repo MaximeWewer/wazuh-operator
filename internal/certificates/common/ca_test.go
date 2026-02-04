@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package certificates
+package certcommon
 
 import (
 	"testing"
@@ -74,7 +74,7 @@ func TestFormatDN(t *testing.T) {
 }
 
 func TestDefaultAdminDN(t *testing.T) {
-	expected := "CN=admin,OU=Wazuh,O=Wazuh,L=Strasbourg,ST=Alsace,C=FR"
+	expected := "CN=admin,OU=Security,O=Wazuh,L=San Francisco,ST=California,C=US"
 	result := DefaultAdminDN()
 
 	if result != expected {
@@ -83,7 +83,7 @@ func TestDefaultAdminDN(t *testing.T) {
 }
 
 func TestDefaultNodesDN(t *testing.T) {
-	expected := "CN=*,OU=Wazuh,O=Wazuh,L=Strasbourg,ST=Alsace,C=FR"
+	expected := "CN=*,OU=Security,O=Wazuh,L=San Francisco,ST=California,C=US"
 	result := DefaultNodesDN()
 
 	if result != expected {

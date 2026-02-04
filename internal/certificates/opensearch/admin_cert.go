@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package certificates
+package opensearchcerts
 
 import (
 	"crypto"
@@ -24,11 +24,8 @@ import (
 	"encoding/pem"
 	"fmt"
 	"time"
-)
 
-const (
-	// DefaultAdminCommonName is the default common name for admin certificates
-	DefaultAdminCommonName = "admin"
+	certcommon "github.com/MaximeWewer/wazuh-operator/internal/certificates/common"
 )
 
 // AdminCertConfig holds configuration for admin certificate generation
@@ -39,25 +36,25 @@ type AdminCertConfig struct {
 	Country            string
 	State              string
 	Locality           string
-	Validity           time.Duration // Certificate validity as duration
-	KeySize            int           // Only used for RSA
-	KeyAlgorithm       KeyAlgorithm
-	ECDSACurve         ECDSACurve
+	Validity           time.Duration
+	KeySize            int
+	KeyAlgorithm       certcommon.KeyAlgorithm
+	ECDSACurve         certcommon.ECDSACurve
 }
 
 // DefaultAdminCertConfig returns an AdminCertConfig with default values
 func DefaultAdminCertConfig() *AdminCertConfig {
 	return &AdminCertConfig{
-		CommonName:         DefaultAdminCommonName,
-		Organization:       DefaultOrganization,
-		OrganizationalUnit: DefaultOrganizationalUnit,
-		Country:            DefaultCountry,
-		State:              DefaultState,
-		Locality:           DefaultLocality,
-		Validity:           MustParseCertDuration(DefaultNodeValidityStr), // Admin uses node validity
-		KeySize:            DefaultKeySize,
-		KeyAlgorithm:       KeyAlgorithmRSA,
-		ECDSACurve:         ECDSACurveP256,
+		CommonName:         certcommon.DefaultAdminCommonName,
+		Organization:       certcommon.DefaultOrganization,
+		OrganizationalUnit: certcommon.DefaultOrganizationalUnit,
+		Country:            certcommon.DefaultCountry,
+		State:              certcommon.DefaultState,
+		Locality:           certcommon.DefaultLocality,
+		Validity:           certcommon.MustParseCertDuration(certcommon.DefaultNodeValidityStr),
+		KeySize:            certcommon.DefaultKeySize,
+		KeyAlgorithm:       certcommon.KeyAlgorithmRSA,
+		ECDSACurve:         certcommon.ECDSACurveP256,
 	}
 }
 
@@ -69,9 +66,9 @@ type AdminCertResult struct {
 	PrivateKeyPEM  []byte
 }
 
-// GenerateAdminCert generates an admin certificate signed by the CA
-// Admin certificates are used for OpenSearch security management (securityadmin.sh)
-func GenerateAdminCert(config *AdminCertConfig, ca *CAResult) (*AdminCertResult, error) {
+// GenerateAdminCert generates an admin certificate signed by the CA.
+// Admin certificates are used for OpenSearch security management (securityadmin.sh).
+func GenerateAdminCert(config *AdminCertConfig, ca *certcommon.CAResult) (*AdminCertResult, error) {
 	if config == nil {
 		return nil, fmt.Errorf("admin cert config is required")
 	}
@@ -82,48 +79,43 @@ func GenerateAdminCert(config *AdminCertConfig, ca *CAResult) (*AdminCertResult,
 
 	// Apply defaults for empty fields
 	if config.CommonName == "" {
-		config.CommonName = DefaultAdminCommonName
+		config.CommonName = certcommon.DefaultAdminCommonName
 	}
 	if config.Organization == "" {
-		config.Organization = DefaultOrganization
+		config.Organization = certcommon.DefaultOrganization
 	}
 	if config.OrganizationalUnit == "" {
-		config.OrganizationalUnit = DefaultOrganizationalUnit
+		config.OrganizationalUnit = certcommon.DefaultOrganizationalUnit
 	}
 	if config.Country == "" {
-		config.Country = DefaultCountry
+		config.Country = certcommon.DefaultCountry
 	}
 	if config.State == "" {
-		config.State = DefaultState
+		config.State = certcommon.DefaultState
 	}
 	if config.Locality == "" {
-		config.Locality = DefaultLocality
+		config.Locality = certcommon.DefaultLocality
 	}
 	if config.Validity <= 0 {
-		config.Validity = MustParseCertDuration(DefaultNodeValidityStr)
+		config.Validity = certcommon.MustParseCertDuration(certcommon.DefaultNodeValidityStr)
 	}
 	if config.KeySize <= 0 {
-		config.KeySize = DefaultKeySize
+		config.KeySize = certcommon.DefaultKeySize
 	}
 
-	// Generate private key based on algorithm
-	privateKey, err := generatePrivateKey(config.KeyAlgorithm, config.KeySize, config.ECDSACurve)
+	privateKey, err := certcommon.GeneratePrivateKey(config.KeyAlgorithm, config.KeySize, config.ECDSACurve)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
 
-	// Generate serial number
-	serialNumber, err := generateSerialNumber()
+	serialNumber, err := certcommon.GenerateSerialNumber()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate serial number: %w", err)
 	}
 
-	// Calculate validity period
 	notBefore := time.Now()
 	notAfter := notBefore.Add(config.Validity)
 
-	// Create certificate template for admin cert
-	// Admin certs only need client authentication for running security commands
 	template := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
@@ -140,32 +132,27 @@ func GenerateAdminCert(config *AdminCertConfig, ca *CAResult) (*AdminCertResult,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 		BasicConstraintsValid: true,
 		IsCA:                  false,
-		// Admin cert typically doesn't need SANs as it's used for CLI operations
-		DNSNames:    []string{"localhost"},
-		IPAddresses: nil,
+		DNSNames:              []string{"localhost"},
+		IPAddresses:           nil,
 	}
 
-	// Sign the certificate with the CA
-	publicKey := getPublicKey(privateKey)
+	publicKey := certcommon.GetPublicKey(privateKey)
 	certDER, err := x509.CreateCertificate(rand.Reader, template, ca.Certificate, publicKey, ca.PrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create admin certificate: %w", err)
 	}
 
-	// Parse the certificate to get the x509.Certificate object
 	cert, err := x509.ParseCertificate(certDER)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse admin certificate: %w", err)
 	}
 
-	// Encode certificate to PEM
 	certPEM := pem.EncodeToMemory(&pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: certDER,
 	})
 
-	// Encode private key to PEM
-	keyPEM, err := encodePrivateKeyToPEM(privateKey)
+	keyPEM, err := certcommon.EncodePrivateKeyToPEM(privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode private key: %w", err)
 	}
@@ -180,7 +167,6 @@ func GenerateAdminCert(config *AdminCertConfig, ca *CAResult) (*AdminCertResult,
 
 // ParseAdminCert parses an admin certificate and private key from PEM data
 func ParseAdminCert(certPEM, keyPEM []byte) (*AdminCertResult, error) {
-	// Parse certificate
 	certBlock, _ := pem.Decode(certPEM)
 	if certBlock == nil {
 		return nil, fmt.Errorf("failed to decode certificate PEM")
@@ -191,8 +177,7 @@ func ParseAdminCert(certPEM, keyPEM []byte) (*AdminCertResult, error) {
 		return nil, fmt.Errorf("failed to parse certificate: %w", err)
 	}
 
-	// Parse private key
-	privateKey, err := parsePrivateKeyFromPEM(keyPEM)
+	privateKey, err := certcommon.ParsePrivateKeyFromPEM(keyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
@@ -211,7 +196,6 @@ func (a *AdminCertResult) IsExpired() bool {
 }
 
 // NeedsRenewal checks if the admin certificate needs renewal
-// The threshold parameter specifies how long before expiry to trigger renewal
 func (a *AdminCertResult) NeedsRenewal(threshold time.Duration) bool {
 	renewalTime := a.Certificate.NotAfter.Add(-threshold)
 	return time.Now().After(renewalTime)
@@ -222,3 +206,15 @@ func (a *AdminCertResult) DaysUntilExpiry() int {
 	duration := time.Until(a.Certificate.NotAfter)
 	return int(duration.Hours() / 24)
 }
+
+// GetCertificate returns the x509 certificate
+func (a *AdminCertResult) GetCertificate() *x509.Certificate { return a.Certificate }
+
+// GetPrivateKey returns the private key
+func (a *AdminCertResult) GetPrivateKey() crypto.PrivateKey { return a.PrivateKey }
+
+// GetCertificatePEM returns the PEM-encoded certificate
+func (a *AdminCertResult) GetCertificatePEM() []byte { return a.CertificatePEM }
+
+// GetPrivateKeyPEM returns the PEM-encoded private key
+func (a *AdminCertResult) GetPrivateKeyPEM() []byte { return a.PrivateKeyPEM }

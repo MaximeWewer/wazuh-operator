@@ -41,6 +41,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
+	opensearchcerts "github.com/MaximeWewer/wazuh-operator/internal/certificates/opensearch"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/configmaps"
@@ -179,7 +180,7 @@ func (r *IndexerReconciler) reconcileSecrets(ctx context.Context, cluster *wazuh
 			return fmt.Errorf("failed to generate indexer certificates: %w", err)
 		}
 
-		certsBuilder := secrets.NewIndexerCertsSecretBuilder(cluster.Name, cluster.Namespace)
+		certsBuilder := opensearchcerts.NewIndexerCertsSecretBuilder(cluster.Name, cluster.Namespace)
 		certsBuilder.WithCACert(certs.caCert).
 			WithNodeCert(certs.nodeCert).
 			WithNodeKey(certs.nodeKey).
@@ -244,7 +245,7 @@ func (r *IndexerReconciler) reconcileSecrets(ctx context.Context, cluster *wazuh
 	if err != nil && errors.IsNotFound(err) {
 		// If no external credentials provided, generate a random password
 		if adminPassword == "" {
-			adminPassword = config.GenerateRandomPassword(24)
+			adminPassword = utils.GenerateRandomPassword(24)
 		}
 		credsBuilder := secrets.NewIndexerCredentialsSecretBuilder(cluster.Name, cluster.Namespace)
 		credsBuilder.WithAdminCredentials(adminUsername, adminPassword)
@@ -270,11 +271,25 @@ func (r *IndexerReconciler) reconcileSecrets(ctx context.Context, cluster *wazuh
 	securitySecretName := fmt.Sprintf("%s-indexer-security", cluster.Name)
 	err = r.Get(ctx, types.NamespacedName{Name: securitySecretName, Namespace: cluster.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
+		// Build admin DN from TLS config for roles mapping
+		adminDN := certificates.DefaultAdminDN()
+		if cluster.Spec.TLS != nil && cluster.Spec.TLS.CertConfig != nil {
+			cfg := cluster.Spec.TLS.CertConfig
+			dnOpts := certificates.DNOptions{
+				OrganizationalUnit: cfg.OrganizationalUnit,
+				Organization:       cfg.Organization,
+				Locality:           cfg.Locality,
+				State:              cfg.State,
+				Country:            cfg.Country,
+			}
+			adminDN = certificates.AdminDN(dnOpts)
+		}
+
 		securityBuilder := secrets.NewIndexerSecuritySecretBuilder(cluster.Name, cluster.Namespace)
 		// Add default security configuration files with the SAME password as credentials
 		securityBuilder.WithInternalUsers(generateDefaultInternalUsers(adminPassword))
 		securityBuilder.WithRoles(generateDefaultRoles())
-		securityBuilder.WithRolesMapping(generateDefaultRolesMapping())
+		securityBuilder.WithRolesMapping(generateDefaultRolesMapping(adminDN))
 		securityBuilder.WithActionGroups(generateDefaultActionGroups())
 		securityBuilder.WithTenants(generateDefaultTenants())
 		securityBuilder.WithConfig(generateDefaultSecurityConfig())
@@ -308,8 +323,38 @@ type indexerCertificates struct {
 func (r *IndexerReconciler) generateIndexerCertificates(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*indexerCertificates, error) {
 	log := logf.FromContext(ctx)
 
-	// Generate CA
+	// Build DN options from WazuhCluster TLS config
+	var dnOpts *certificates.DNOptions
+	if cluster.Spec.TLS != nil && cluster.Spec.TLS.CertConfig != nil {
+		cfg := cluster.Spec.TLS.CertConfig
+		dnOpts = &certificates.DNOptions{
+			OrganizationalUnit: cfg.OrganizationalUnit,
+			Organization:       cfg.Organization,
+			Locality:           cfg.Locality,
+			State:              cfg.State,
+			Country:            cfg.Country,
+		}
+	}
+
+	// Generate CA with DN options
 	caConfig := certificates.DefaultCAConfig(fmt.Sprintf("%s-indexer-ca", cluster.Name))
+	if dnOpts != nil {
+		if dnOpts.Country != "" {
+			caConfig.Country = dnOpts.Country
+		}
+		if dnOpts.State != "" {
+			caConfig.State = dnOpts.State
+		}
+		if dnOpts.Locality != "" {
+			caConfig.Locality = dnOpts.Locality
+		}
+		if dnOpts.Organization != "" {
+			caConfig.Organization = dnOpts.Organization
+		}
+		if dnOpts.OrganizationalUnit != "" {
+			caConfig.OrganizationalUnit = dnOpts.OrganizationalUnit
+		}
+	}
 	ca, err := certificates.GenerateCA(caConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate CA: %w", err)
@@ -322,10 +367,28 @@ func (r *IndexerReconciler) generateIndexerCertificates(ctx context.Context, clu
 		replicas = cluster.Spec.Indexer.Replicas
 	}
 
-	// Generate node certificate with SANs
+	// Generate node certificate with SANs and DN options
+	// CommonName is derived from the cluster name + component (not user-configurable)
 	nodeConfig := certificates.DefaultNodeCertConfig(fmt.Sprintf("%s-indexer", cluster.Name))
 	nodeConfig.DNSNames = certificates.GenerateIndexerNodeSANs(cluster.Name, cluster.Namespace, replicas)
 	nodeConfig.IPAddresses = []net.IP{net.ParseIP("127.0.0.1")}
+	if dnOpts != nil {
+		if dnOpts.Country != "" {
+			nodeConfig.Country = dnOpts.Country
+		}
+		if dnOpts.State != "" {
+			nodeConfig.State = dnOpts.State
+		}
+		if dnOpts.Locality != "" {
+			nodeConfig.Locality = dnOpts.Locality
+		}
+		if dnOpts.Organization != "" {
+			nodeConfig.Organization = dnOpts.Organization
+		}
+		if dnOpts.OrganizationalUnit != "" {
+			nodeConfig.OrganizationalUnit = dnOpts.OrganizationalUnit
+		}
+	}
 
 	nodeCert, err := certificates.GenerateNodeCert(nodeConfig, ca)
 	if err != nil {
@@ -333,8 +396,26 @@ func (r *IndexerReconciler) generateIndexerCertificates(ctx context.Context, clu
 	}
 	log.V(1).Info("Generated node certificate", "sans", nodeConfig.DNSNames)
 
-	// Generate admin certificate
+	// Generate admin certificate with DN options
+	// CommonName for admin cert is always "admin" (required by OpenSearch security plugin)
 	adminConfig := certificates.DefaultAdminCertConfig()
+	if dnOpts != nil {
+		if dnOpts.Country != "" {
+			adminConfig.Country = dnOpts.Country
+		}
+		if dnOpts.State != "" {
+			adminConfig.State = dnOpts.State
+		}
+		if dnOpts.Locality != "" {
+			adminConfig.Locality = dnOpts.Locality
+		}
+		if dnOpts.Organization != "" {
+			adminConfig.Organization = dnOpts.Organization
+		}
+		if dnOpts.OrganizationalUnit != "" {
+			adminConfig.OrganizationalUnit = dnOpts.OrganizationalUnit
+		}
+	}
 	adminCert, err := certificates.GenerateAdminCert(adminConfig, ca)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate admin certificate: %w", err)
@@ -358,8 +439,22 @@ func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *waz
 		replicas = cluster.Spec.Indexer.Replicas
 	}
 
-	// Build opensearch.yml content (version-aware configuration)
-	opensearchYML := config.BuildIndexerConfig(cluster.Name, cluster.Namespace, replicas, cluster.Spec.Version)
+	// Build DN options from WazuhCluster TLS config
+	// Note: CommonName is not included as it's auto-generated per certificate type
+	var dnOpts *certificates.DNOptions
+	if cluster.Spec.TLS != nil && cluster.Spec.TLS.CertConfig != nil {
+		cfg := cluster.Spec.TLS.CertConfig
+		dnOpts = &certificates.DNOptions{
+			OrganizationalUnit: cfg.OrganizationalUnit,
+			Organization:       cfg.Organization,
+			Locality:           cfg.Locality,
+			State:              cfg.State,
+			Country:            cfg.Country,
+		}
+	}
+
+	// Build opensearch.yml content (version-aware configuration with DN options)
+	opensearchYML := config.BuildIndexerConfigWithDN(cluster.Name, cluster.Namespace, replicas, cluster.Spec.Version, dnOpts)
 
 	configBuilder := configmaps.NewIndexerConfigMapBuilder(cluster.Name, cluster.Namespace)
 	configBuilder.WithOpenSearchYML(opensearchYML)
@@ -700,6 +795,12 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		}
 	}
 
+	// Extract PodAnnotations for hash computation
+	var podAnnotations map[string]string
+	if cluster.Spec.Indexer != nil {
+		podAnnotations = cluster.Spec.Indexer.PodAnnotations
+	}
+
 	// Compute spec hash for change detection (includes all configurable fields)
 	specHash, err := patch.ComputeIndexerSpecHashFull(patch.IndexerSpecInput{
 		Replicas:          replicas,
@@ -798,7 +899,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 	found := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Indexer StatefulSet", "name", sts.Name, "certHash", utils.ShortHash(certHash), "specHash", patch.ShortHash(specHash))
+		log.Info("Creating Indexer StatefulSet", "name", sts.Name, "certHash", utils.ShortHash(certHash), "specHash", utils.ShortHash(specHash))
 		if err := r.Create(ctx, sts); err != nil {
 			return nil, fmt.Errorf("failed to create indexer statefulset: %w", err)
 		}
@@ -855,8 +956,8 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 	if specHash != "" && specHash != existingSpecHash {
 		log.Info("Indexer spec changed",
 			"name", sts.Name,
-			"oldSpecHash", patch.ShortHash(existingSpecHash),
-			"newSpecHash", patch.ShortHash(specHash))
+			"oldSpecHash", utils.ShortHash(existingSpecHash),
+			"newSpecHash", utils.ShortHash(specHash))
 		needsUpdate = true
 		updateReason = "spec-change"
 
@@ -895,8 +996,8 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 	if configHash != "" && configHash != existingConfigHash {
 		log.Info("ConfigMap hash changed",
 			"name", sts.Name,
-			"oldConfigHash", patch.ShortHash(existingConfigHash),
-			"newConfigHash", patch.ShortHash(configHash))
+			"oldConfigHash", utils.ShortHash(existingConfigHash),
+			"newConfigHash", utils.ShortHash(configHash))
 		needsUpdate = true
 		if updateReason == "" {
 			updateReason = "config-change"
@@ -1342,7 +1443,7 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 			return fmt.Errorf("failed to generate certificates: %w", err)
 		}
 
-		certsBuilder := secrets.NewIndexerCertsSecretBuilder(indexer.Name, indexer.Namespace)
+		certsBuilder := opensearchcerts.NewIndexerCertsSecretBuilder(indexer.Name, indexer.Namespace)
 		certsBuilder.WithCACert(certs.caCert).
 			WithNodeCert(certs.nodeCert).
 			WithNodeKey(certs.nodeKey).
@@ -1537,8 +1638,9 @@ _meta:
 }
 
 // generateDefaultRolesMapping generates the roles_mapping.yml content
-func generateDefaultRolesMapping() []byte {
-	return []byte(`---
+// adminDN is the Distinguished Name for the admin certificate (used for mTLS authentication)
+func generateDefaultRolesMapping(adminDN string) []byte {
+	return []byte(fmt.Sprintf(`---
 # Role mappings configuration
 _meta:
   type: "rolesmapping"
@@ -1550,7 +1652,7 @@ all_access:
     - "admin"
   users:
     # Admin certificate DN - required for certificate hot reload API
-    - "CN=admin,OU=Wazuh,O=Wazuh,L=Strasbourg,ST=Alsace,C=FR"
+    - "%s"
   description: "Maps admin to all_access"
 
 own_index:
@@ -1584,7 +1686,7 @@ kibana_server:
   reserved: true
   users:
     - "kibanaserver"
-`)
+`, adminDN))
 }
 
 // generateDefaultActionGroups generates the action_groups.yml content

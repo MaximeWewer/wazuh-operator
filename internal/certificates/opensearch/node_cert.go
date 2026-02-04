@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package certificates
+package opensearchcerts
 
 import (
 	"crypto"
@@ -26,12 +26,11 @@ import (
 	"net"
 	"time"
 
-	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
+	certcommon "github.com/MaximeWewer/wazuh-operator/internal/certificates/common"
 )
 
-// Node certificate constants are defined in duration.go
-
-// NodeCertConfig holds configuration for node certificate generation
+// NodeCertConfig holds configuration for node certificate generation.
+// Used for OpenSearch indexer and manager node certificates.
 type NodeCertConfig struct {
 	CommonName         string
 	Organization       string
@@ -41,8 +40,8 @@ type NodeCertConfig struct {
 	Locality           string
 	Validity           time.Duration // Certificate validity as duration
 	KeySize            int           // Only used for RSA
-	KeyAlgorithm       KeyAlgorithm
-	ECDSACurve         ECDSACurve
+	KeyAlgorithm       certcommon.KeyAlgorithm
+	ECDSACurve         certcommon.ECDSACurve
 	DNSNames           []string
 	IPAddresses        []net.IP
 }
@@ -51,15 +50,15 @@ type NodeCertConfig struct {
 func DefaultNodeCertConfig(commonName string) *NodeCertConfig {
 	return &NodeCertConfig{
 		CommonName:         commonName,
-		Organization:       DefaultOrganization,
-		OrganizationalUnit: DefaultOrganizationalUnit,
-		Country:            DefaultCountry,
-		State:              DefaultState,
-		Locality:           DefaultLocality,
-		Validity:           MustParseCertDuration(DefaultNodeValidityStr),
-		KeySize:            DefaultKeySize,
-		KeyAlgorithm:       KeyAlgorithmRSA,
-		ECDSACurve:         ECDSACurveP256,
+		Organization:       certcommon.DefaultOrganization,
+		OrganizationalUnit: certcommon.DefaultOrganizationalUnit,
+		Country:            certcommon.DefaultCountry,
+		State:              certcommon.DefaultState,
+		Locality:           certcommon.DefaultLocality,
+		Validity:           certcommon.MustParseCertDuration(certcommon.DefaultNodeValidityStr),
+		KeySize:            certcommon.DefaultKeySize,
+		KeyAlgorithm:       certcommon.KeyAlgorithmRSA,
+		ECDSACurve:         certcommon.ECDSACurveP256,
 		DNSNames:           []string{},
 		IPAddresses:        []net.IP{},
 	}
@@ -74,7 +73,7 @@ type NodeCertResult struct {
 }
 
 // GenerateNodeCert generates a node certificate signed by the CA
-func GenerateNodeCert(config *NodeCertConfig, ca *CAResult) (*NodeCertResult, error) {
+func GenerateNodeCert(config *NodeCertConfig, ca *certcommon.CAResult) (*NodeCertResult, error) {
 	if config == nil {
 		return nil, fmt.Errorf("node cert config is required")
 	}
@@ -89,35 +88,35 @@ func GenerateNodeCert(config *NodeCertConfig, ca *CAResult) (*NodeCertResult, er
 
 	// Apply defaults for empty fields
 	if config.Organization == "" {
-		config.Organization = DefaultOrganization
+		config.Organization = certcommon.DefaultOrganization
 	}
 	if config.OrganizationalUnit == "" {
-		config.OrganizationalUnit = DefaultOrganizationalUnit
+		config.OrganizationalUnit = certcommon.DefaultOrganizationalUnit
 	}
 	if config.Country == "" {
-		config.Country = DefaultCountry
+		config.Country = certcommon.DefaultCountry
 	}
 	if config.State == "" {
-		config.State = DefaultState
+		config.State = certcommon.DefaultState
 	}
 	if config.Locality == "" {
-		config.Locality = DefaultLocality
+		config.Locality = certcommon.DefaultLocality
 	}
 	if config.Validity <= 0 {
-		config.Validity = MustParseCertDuration(DefaultNodeValidityStr)
+		config.Validity = certcommon.MustParseCertDuration(certcommon.DefaultNodeValidityStr)
 	}
 	if config.KeySize <= 0 {
-		config.KeySize = DefaultKeySize
+		config.KeySize = certcommon.DefaultKeySize
 	}
 
 	// Generate private key based on algorithm
-	privateKey, err := generatePrivateKey(config.KeyAlgorithm, config.KeySize, config.ECDSACurve)
+	privateKey, err := certcommon.GeneratePrivateKey(config.KeyAlgorithm, config.KeySize, config.ECDSACurve)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
 
 	// Generate serial number
-	serialNumber, err := generateSerialNumber()
+	serialNumber, err := certcommon.GenerateSerialNumber()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate serial number: %w", err)
 	}
@@ -148,7 +147,7 @@ func GenerateNodeCert(config *NodeCertConfig, ca *CAResult) (*NodeCertResult, er
 	}
 
 	// Sign the certificate with the CA
-	publicKey := getPublicKey(privateKey)
+	publicKey := certcommon.GetPublicKey(privateKey)
 	certDER, err := x509.CreateCertificate(rand.Reader, template, ca.Certificate, publicKey, ca.PrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node certificate: %w", err)
@@ -167,7 +166,7 @@ func GenerateNodeCert(config *NodeCertConfig, ca *CAResult) (*NodeCertResult, er
 	})
 
 	// Encode private key to PEM
-	keyPEM, err := encodePrivateKeyToPEM(privateKey)
+	keyPEM, err := certcommon.EncodePrivateKeyToPEM(privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode private key: %w", err)
 	}
@@ -180,63 +179,8 @@ func GenerateNodeCert(config *NodeCertConfig, ca *CAResult) (*NodeCertResult, er
 	}, nil
 }
 
-// GenerateIndexerNodeSANs generates Subject Alternative Names for indexer nodes
-func GenerateIndexerNodeSANs(clusterName, namespace string, replicas int32) []string {
-	indexerService := clusterName + "-indexer"
-	headlessService := clusterName + "-indexer-headless"
-
-	sans := []string{
-		"localhost",
-		indexerService,
-		fmt.Sprintf("%s.%s", indexerService, namespace),
-		fmt.Sprintf("%s.%s.svc", indexerService, namespace),
-		dns.ServiceFQDN(indexerService, namespace),
-		dns.WildcardServiceFQDN(headlessService, namespace),
-	}
-
-	// Add individual pod names
-	for i := int32(0); i < replicas; i++ {
-		podName := fmt.Sprintf("%s-indexer-%d", clusterName, i)
-		sans = append(sans, podName, dns.PodFQDN(podName, headlessService, namespace))
-	}
-
-	return sans
-}
-
-// GenerateManagerNodeSANs generates Subject Alternative Names for manager nodes
-func GenerateManagerNodeSANs(clusterName, namespace string, workerReplicas int32) []string {
-	masterService := clusterName + "-manager-master"
-	workersService := clusterName + "-manager-workers"
-	masterPod := clusterName + "-manager-master-0"
-
-	sans := []string{
-		"localhost",
-		// Master node
-		masterService,
-		fmt.Sprintf("%s.%s", masterService, namespace),
-		fmt.Sprintf("%s.%s.svc", masterService, namespace),
-		dns.ServiceFQDN(masterService, namespace),
-		masterPod,
-		dns.PodFQDN(masterPod, masterService, namespace),
-		// Worker nodes service
-		workersService,
-		fmt.Sprintf("%s.%s", workersService, namespace),
-		fmt.Sprintf("%s.%s.svc", workersService, namespace),
-		dns.ServiceFQDN(workersService, namespace),
-	}
-
-	// Add individual worker pod names
-	for i := int32(0); i < workerReplicas; i++ {
-		podName := fmt.Sprintf("%s-manager-workers-%d", clusterName, i)
-		sans = append(sans, podName, dns.PodFQDN(podName, workersService, namespace))
-	}
-
-	return sans
-}
-
 // ParseNodeCert parses a node certificate and private key from PEM data
 func ParseNodeCert(certPEM, keyPEM []byte) (*NodeCertResult, error) {
-	// Parse certificate
 	certBlock, _ := pem.Decode(certPEM)
 	if certBlock == nil {
 		return nil, fmt.Errorf("failed to decode certificate PEM")
@@ -247,8 +191,7 @@ func ParseNodeCert(certPEM, keyPEM []byte) (*NodeCertResult, error) {
 		return nil, fmt.Errorf("failed to parse certificate: %w", err)
 	}
 
-	// Parse private key
-	privateKey, err := parsePrivateKeyFromPEM(keyPEM)
+	privateKey, err := certcommon.ParsePrivateKeyFromPEM(keyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
@@ -267,7 +210,6 @@ func (n *NodeCertResult) IsExpired() bool {
 }
 
 // NeedsRenewal checks if the node certificate needs renewal
-// The threshold parameter specifies how long before expiry to trigger renewal
 func (n *NodeCertResult) NeedsRenewal(threshold time.Duration) bool {
 	renewalTime := n.Certificate.NotAfter.Add(-threshold)
 	return time.Now().After(renewalTime)
@@ -277,4 +219,24 @@ func (n *NodeCertResult) NeedsRenewal(threshold time.Duration) bool {
 func (n *NodeCertResult) DaysUntilExpiry() int {
 	duration := time.Until(n.Certificate.NotAfter)
 	return int(duration.Hours() / 24)
+}
+
+// GetCertificate returns the x509 certificate
+func (n *NodeCertResult) GetCertificate() *x509.Certificate {
+	return n.Certificate
+}
+
+// GetPrivateKey returns the private key
+func (n *NodeCertResult) GetPrivateKey() crypto.PrivateKey {
+	return n.PrivateKey
+}
+
+// GetCertificatePEM returns the PEM-encoded certificate
+func (n *NodeCertResult) GetCertificatePEM() []byte {
+	return n.CertificatePEM
+}
+
+// GetPrivateKeyPEM returns the PEM-encoded private key
+func (n *NodeCertResult) GetPrivateKeyPEM() []byte {
+	return n.PrivateKeyPEM
 }

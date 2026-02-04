@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package certificates
+package certcommon
 
 import (
 	"crypto"
@@ -35,16 +35,19 @@ const (
 	DefaultOrganization = "Wazuh"
 
 	// DefaultOrganizationalUnit is the default organizational unit
-	DefaultOrganizationalUnit = "Wazuh"
+	DefaultOrganizationalUnit = "Security"
 
 	// DefaultCountry is the default country code
-	DefaultCountry = "FR"
+	DefaultCountry = "US"
 
 	// DefaultState is the default state/province
-	DefaultState = "Alsace"
+	DefaultState = "California"
 
 	// DefaultLocality is the default city/locality
-	DefaultLocality = "Strasbourg"
+	DefaultLocality = "San Francisco"
+
+	// DefaultAdminCommonName is the default common name for admin certificates
+	DefaultAdminCommonName = "admin"
 )
 
 // CAConfig holds configuration for CA certificate generation
@@ -97,6 +100,82 @@ func DefaultNodesDN() string {
 		DefaultLocality, DefaultState, DefaultCountry)
 }
 
+// DNOptions holds the options for generating Distinguished Names
+// Note: CommonName is typically auto-generated based on certificate type:
+//   - CA: "<cluster>-ca"
+//   - Indexer nodes: "<cluster>-indexer"
+//   - Admin: "admin" (required by OpenSearch security plugin)
+//   - Dashboard: "<cluster>-dashboard"
+//   - Filebeat: "<cluster>-filebeat"
+type DNOptions struct {
+	CommonName         string // Usually auto-generated, only used internally
+	OrganizationalUnit string
+	Organization       string
+	Locality           string
+	State              string
+	Country            string
+}
+
+// DefaultDNOptions returns the default DN options
+func DefaultDNOptions() DNOptions {
+	return DNOptions{
+		CommonName:         DefaultAdminCommonName,
+		OrganizationalUnit: DefaultOrganizationalUnit,
+		Organization:       DefaultOrganization,
+		Locality:           DefaultLocality,
+		State:              DefaultState,
+		Country:            DefaultCountry,
+	}
+}
+
+// AdminDN returns the admin Distinguished Name using the given options
+func AdminDN(opts DNOptions) string {
+	// Apply defaults for any empty values
+	if opts.CommonName == "" {
+		opts.CommonName = DefaultAdminCommonName
+	}
+	if opts.OrganizationalUnit == "" {
+		opts.OrganizationalUnit = DefaultOrganizationalUnit
+	}
+	if opts.Organization == "" {
+		opts.Organization = DefaultOrganization
+	}
+	if opts.Locality == "" {
+		opts.Locality = DefaultLocality
+	}
+	if opts.State == "" {
+		opts.State = DefaultState
+	}
+	if opts.Country == "" {
+		opts.Country = DefaultCountry
+	}
+	return FormatDN(opts.CommonName, opts.OrganizationalUnit, opts.Organization,
+		opts.Locality, opts.State, opts.Country)
+}
+
+// NodesDN returns the nodes Distinguished Name pattern using the given options
+// Uses wildcard CN=* to match any node certificate
+func NodesDN(opts DNOptions) string {
+	// Apply defaults for any empty values
+	if opts.OrganizationalUnit == "" {
+		opts.OrganizationalUnit = DefaultOrganizationalUnit
+	}
+	if opts.Organization == "" {
+		opts.Organization = DefaultOrganization
+	}
+	if opts.Locality == "" {
+		opts.Locality = DefaultLocality
+	}
+	if opts.State == "" {
+		opts.State = DefaultState
+	}
+	if opts.Country == "" {
+		opts.Country = DefaultCountry
+	}
+	return FormatDN("*", opts.OrganizationalUnit, opts.Organization,
+		opts.Locality, opts.State, opts.Country)
+}
+
 // CAResult contains the generated CA certificate and private key
 type CAResult struct {
 	Certificate    *x509.Certificate
@@ -139,13 +218,13 @@ func GenerateCA(config *CAConfig) (*CAResult, error) {
 	}
 
 	// Generate private key based on algorithm
-	privateKey, err := generatePrivateKey(config.KeyAlgorithm, config.KeySize, config.ECDSACurve)
+	privateKey, err := GeneratePrivateKey(config.KeyAlgorithm, config.KeySize, config.ECDSACurve)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
 
 	// Generate serial number
-	serialNumber, err := generateSerialNumber()
+	serialNumber, err := GenerateSerialNumber()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate serial number: %w", err)
 	}
@@ -174,7 +253,7 @@ func GenerateCA(config *CAConfig) (*CAResult, error) {
 	}
 
 	// Self-sign the CA certificate
-	publicKey := getPublicKey(privateKey)
+	publicKey := GetPublicKey(privateKey)
 	certDER, err := x509.CreateCertificate(rand.Reader, template, template, publicKey, privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create CA certificate: %w", err)
@@ -193,7 +272,7 @@ func GenerateCA(config *CAConfig) (*CAResult, error) {
 	})
 
 	// Encode private key to PEM
-	keyPEM, err := encodePrivateKeyToPEM(privateKey)
+	keyPEM, err := EncodePrivateKeyToPEM(privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode private key: %w", err)
 	}
@@ -220,7 +299,7 @@ func ParseCA(certPEM, keyPEM []byte) (*CAResult, error) {
 	}
 
 	// Parse private key
-	privateKey, err := parsePrivateKeyFromPEM(keyPEM)
+	privateKey, err := ParsePrivateKeyFromPEM(keyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
@@ -233,8 +312,8 @@ func ParseCA(certPEM, keyPEM []byte) (*CAResult, error) {
 	}, nil
 }
 
-// generateSerialNumber generates a random serial number for certificates
-func generateSerialNumber() (*big.Int, error) {
+// GenerateSerialNumber generates a random serial number for certificates
+func GenerateSerialNumber() (*big.Int, error) {
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	return rand.Int(rand.Reader, serialNumberLimit)
 }

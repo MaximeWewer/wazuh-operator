@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package certificates
+package certcommon
 
 import (
 	"crypto"
@@ -52,8 +52,8 @@ const (
 	ECDSACurveP521 ECDSACurve = "P521"
 )
 
-// getCurve returns the elliptic.Curve for the given ECDSACurve
-func getCurve(curve ECDSACurve) elliptic.Curve {
+// GetCurve returns the elliptic.Curve for the given ECDSACurve
+func GetCurve(curve ECDSACurve) elliptic.Curve {
 	switch curve {
 	case ECDSACurveP521:
 		return elliptic.P521()
@@ -64,11 +64,11 @@ func getCurve(curve ECDSACurve) elliptic.Curve {
 	}
 }
 
-// generatePrivateKey generates a private key based on the algorithm
-func generatePrivateKey(algorithm KeyAlgorithm, keySize int, curve ECDSACurve) (crypto.PrivateKey, error) {
+// GeneratePrivateKey generates a private key based on the algorithm
+func GeneratePrivateKey(algorithm KeyAlgorithm, keySize int, curve ECDSACurve) (crypto.PrivateKey, error) {
 	switch algorithm {
 	case KeyAlgorithmECDSA:
-		return ecdsa.GenerateKey(getCurve(curve), rand.Reader)
+		return ecdsa.GenerateKey(GetCurve(curve), rand.Reader)
 	default:
 		if keySize <= 0 {
 			keySize = DefaultKeySize
@@ -77,9 +77,9 @@ func generatePrivateKey(algorithm KeyAlgorithm, keySize int, curve ECDSACurve) (
 	}
 }
 
-// encodePrivateKeyToPEM encodes a private key to PEM format
+// EncodePrivateKeyToPEM encodes a private key to PEM format
 // Uses PKCS#8 format for ECDSA keys for OpenSearch compatibility
-func encodePrivateKeyToPEM(key crypto.PrivateKey) ([]byte, error) {
+func EncodePrivateKeyToPEM(key crypto.PrivateKey) ([]byte, error) {
 	switch k := key.(type) {
 	case *rsa.PrivateKey:
 		return pem.EncodeToMemory(&pem.Block{
@@ -101,8 +101,8 @@ func encodePrivateKeyToPEM(key crypto.PrivateKey) ([]byte, error) {
 	}
 }
 
-// parsePrivateKeyFromPEM parses a private key from PEM data
-func parsePrivateKeyFromPEM(keyPEM []byte) (crypto.PrivateKey, error) {
+// ParsePrivateKeyFromPEM parses a private key from PEM data
+func ParsePrivateKeyFromPEM(keyPEM []byte) (crypto.PrivateKey, error) {
 	keyBlock, _ := pem.Decode(keyPEM)
 	if keyBlock == nil {
 		return nil, fmt.Errorf("failed to decode private key PEM")
@@ -121,8 +121,8 @@ func parsePrivateKeyFromPEM(keyPEM []byte) (crypto.PrivateKey, error) {
 	}
 }
 
-// getPublicKey extracts the public key from a private key
-func getPublicKey(key crypto.PrivateKey) crypto.PublicKey {
+// GetPublicKey extracts the public key from a private key
+func GetPublicKey(key crypto.PrivateKey) crypto.PublicKey {
 	switch k := key.(type) {
 	case *rsa.PrivateKey:
 		return &k.PublicKey

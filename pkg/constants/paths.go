@@ -55,16 +55,16 @@ const (
 	PathIndexerData = "/var/lib/wazuh-indexer"
 
 	// PathIndexerConfig is the configuration directory
-	PathIndexerConfig = "/usr/share/wazuh-indexer"
+	PathIndexerConfig = "/usr/share/wazuh-indexer/config"
 
 	// PathIndexerLogs is the logs directory
 	PathIndexerLogs = "/var/log/wazuh-indexer"
 
 	// PathIndexerSecurityConfig is the security plugin config directory
-	PathIndexerSecurityConfig = "/usr/share/wazuh-indexer/opensearch-security"
+	PathIndexerSecurityConfig = "/usr/share/wazuh-indexer/config/opensearch-security"
 
 	// PathIndexerCerts is the certificates directory
-	PathIndexerCerts = "/usr/share/wazuh-indexer/certs"
+	PathIndexerCerts = "/usr/share/wazuh-indexer/config/certs"
 
 	// PathIndexerPlugins is the plugins directory
 	PathIndexerPlugins = "/usr/share/wazuh-indexer/plugins"

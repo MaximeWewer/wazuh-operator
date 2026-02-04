@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package certificates
+package certcommon
 
 import (
 	"testing"
@@ -37,6 +37,8 @@ func TestParseCertDuration(t *testing.T) {
 		{"1 hour", "1h", time.Hour, false},
 		{"24 hours", "24h", 24 * time.Hour, false},
 		{"48 hours", "48h", 48 * time.Hour, false},
+		{"8760 hours (1 year)", "8760h", 8760 * time.Hour, false},
+		{"720 hours (30 days)", "720h", 720 * time.Hour, false},
 
 		// Valid minutes
 		{"1 minute", "1m", time.Minute, false},

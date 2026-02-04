@@ -102,22 +102,22 @@ type DistinguishedNameConfig struct {
 
 	// Organizational Unit (OU)
 	// +optional
-	// +kubebuilder:default="Wazuh"
+	// +kubebuilder:default="Security"
 	OrganizationalUnit string `json:"organizationalUnit,omitempty"`
 
 	// Locality/City (L)
 	// +optional
-	// +kubebuilder:default="Strasbourg"
+	// +kubebuilder:default="San Francisco"
 	Locality string `json:"locality,omitempty"`
 
 	// State/Province (ST)
 	// +optional
-	// +kubebuilder:default="Alsace"
+	// +kubebuilder:default="California"
 	State string `json:"state,omitempty"`
 
 	// Country (C) - 2 letter code
 	// +optional
-	// +kubebuilder:default="FR"
+	// +kubebuilder:default="US"
 	// +kubebuilder:validation:Pattern=`^[A-Z]{2}$`
 	Country string `json:"country,omitempty"`
 

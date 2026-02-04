@@ -134,7 +134,7 @@ spec:
                     description: Common Name (CN)
                     type: string
                   country:
-                    default: FR
+                    default: US
                     description: Country (C) - 2 letter code
                     pattern: ^[A-Z]{2}$
                     type: string
@@ -142,7 +142,7 @@ spec:
                     description: Email Address
                     type: string
                   locality:
-                    default: Strasbourg
+                    default: San Francisco
                     description: Locality/City (L)
                     type: string
                   organization:
@@ -150,11 +150,11 @@ spec:
                     description: Organization (O)
                     type: string
                   organizationalUnit:
-                    default: Wazuh
+                    default: Security
                     description: Organizational Unit (OU)
                     type: string
                   state:
-                    default: Alsace
+                    default: California
                     description: State/Province (ST)
                     type: string
                 required:

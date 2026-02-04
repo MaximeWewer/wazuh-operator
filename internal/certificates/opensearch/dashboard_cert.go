@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package certificates
+package opensearchcerts
 
 import (
 	"crypto"
@@ -26,7 +26,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
+	certcommon "github.com/MaximeWewer/wazuh-operator/internal/certificates/common"
 )
 
 const (
@@ -42,10 +42,10 @@ type DashboardCertConfig struct {
 	Country            string
 	State              string
 	Locality           string
-	Validity           time.Duration // Certificate validity as duration
-	KeySize            int           // Only used for RSA
-	KeyAlgorithm       KeyAlgorithm
-	ECDSACurve         ECDSACurve
+	Validity           time.Duration
+	KeySize            int
+	KeyAlgorithm       certcommon.KeyAlgorithm
+	ECDSACurve         certcommon.ECDSACurve
 	DNSNames           []string
 	IPAddresses        []net.IP
 }
@@ -54,15 +54,15 @@ type DashboardCertConfig struct {
 func DefaultDashboardCertConfig() *DashboardCertConfig {
 	return &DashboardCertConfig{
 		CommonName:         DefaultDashboardCommonName,
-		Organization:       DefaultOrganization,
-		OrganizationalUnit: DefaultOrganizationalUnit,
-		Country:            DefaultCountry,
-		State:              DefaultState,
-		Locality:           DefaultLocality,
-		Validity:           MustParseCertDuration(DefaultNodeValidityStr),
-		KeySize:            DefaultKeySize,
-		KeyAlgorithm:       KeyAlgorithmRSA,
-		ECDSACurve:         ECDSACurveP256,
+		Organization:       certcommon.DefaultOrganization,
+		OrganizationalUnit: certcommon.DefaultOrganizationalUnit,
+		Country:            certcommon.DefaultCountry,
+		State:              certcommon.DefaultState,
+		Locality:           certcommon.DefaultLocality,
+		Validity:           certcommon.MustParseCertDuration(certcommon.DefaultNodeValidityStr),
+		KeySize:            certcommon.DefaultKeySize,
+		KeyAlgorithm:       certcommon.KeyAlgorithmRSA,
+		ECDSACurve:         certcommon.ECDSACurveP256,
 		DNSNames:           []string{},
 		IPAddresses:        []net.IP{},
 	}
@@ -77,7 +77,7 @@ type DashboardCertResult struct {
 }
 
 // GenerateDashboardCert generates a dashboard certificate signed by the CA
-func GenerateDashboardCert(config *DashboardCertConfig, ca *CAResult) (*DashboardCertResult, error) {
+func GenerateDashboardCert(config *DashboardCertConfig, ca *certcommon.CAResult) (*DashboardCertResult, error) {
 	if config == nil {
 		return nil, fmt.Errorf("dashboard cert config is required")
 	}
@@ -86,50 +86,44 @@ func GenerateDashboardCert(config *DashboardCertConfig, ca *CAResult) (*Dashboar
 		return nil, fmt.Errorf("CA is required")
 	}
 
-	// Apply defaults for empty fields
 	if config.CommonName == "" {
 		config.CommonName = DefaultDashboardCommonName
 	}
 	if config.Organization == "" {
-		config.Organization = DefaultOrganization
+		config.Organization = certcommon.DefaultOrganization
 	}
 	if config.OrganizationalUnit == "" {
-		config.OrganizationalUnit = DefaultOrganizationalUnit
+		config.OrganizationalUnit = certcommon.DefaultOrganizationalUnit
 	}
 	if config.Country == "" {
-		config.Country = DefaultCountry
+		config.Country = certcommon.DefaultCountry
 	}
 	if config.State == "" {
-		config.State = DefaultState
+		config.State = certcommon.DefaultState
 	}
 	if config.Locality == "" {
-		config.Locality = DefaultLocality
+		config.Locality = certcommon.DefaultLocality
 	}
 	if config.Validity <= 0 {
-		config.Validity = MustParseCertDuration(DefaultNodeValidityStr)
+		config.Validity = certcommon.MustParseCertDuration(certcommon.DefaultNodeValidityStr)
 	}
 	if config.KeySize <= 0 {
-		config.KeySize = DefaultKeySize
+		config.KeySize = certcommon.DefaultKeySize
 	}
 
-	// Generate private key based on algorithm
-	privateKey, err := generatePrivateKey(config.KeyAlgorithm, config.KeySize, config.ECDSACurve)
+	privateKey, err := certcommon.GeneratePrivateKey(config.KeyAlgorithm, config.KeySize, config.ECDSACurve)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate private key: %w", err)
 	}
 
-	// Generate serial number
-	serialNumber, err := generateSerialNumber()
+	serialNumber, err := certcommon.GenerateSerialNumber()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate serial number: %w", err)
 	}
 
-	// Calculate validity period
 	notBefore := time.Now()
 	notAfter := notBefore.Add(config.Validity)
 
-	// Create certificate template
-	// Dashboard cert needs both server and client auth for HTTPS and indexer communication
 	template := &x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
@@ -150,27 +144,23 @@ func GenerateDashboardCert(config *DashboardCertConfig, ca *CAResult) (*Dashboar
 		IPAddresses:           config.IPAddresses,
 	}
 
-	// Sign the certificate with the CA
-	publicKey := getPublicKey(privateKey)
+	publicKey := certcommon.GetPublicKey(privateKey)
 	certDER, err := x509.CreateCertificate(rand.Reader, template, ca.Certificate, publicKey, ca.PrivateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dashboard certificate: %w", err)
 	}
 
-	// Parse the certificate to get the x509.Certificate object
 	cert, err := x509.ParseCertificate(certDER)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse dashboard certificate: %w", err)
 	}
 
-	// Encode certificate to PEM
 	certPEM := pem.EncodeToMemory(&pem.Block{
 		Type:  "CERTIFICATE",
 		Bytes: certDER,
 	})
 
-	// Encode private key to PEM
-	keyPEM, err := encodePrivateKeyToPEM(privateKey)
+	keyPEM, err := certcommon.EncodePrivateKeyToPEM(privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode private key: %w", err)
 	}
@@ -183,21 +173,8 @@ func GenerateDashboardCert(config *DashboardCertConfig, ca *CAResult) (*Dashboar
 	}, nil
 }
 
-// GenerateDashboardSANs generates Subject Alternative Names for dashboard
-func GenerateDashboardSANs(clusterName, namespace string) []string {
-	dashboardService := clusterName + "-dashboard"
-	return []string{
-		"localhost",
-		dashboardService,
-		fmt.Sprintf("%s.%s", dashboardService, namespace),
-		fmt.Sprintf("%s.%s.svc", dashboardService, namespace),
-		dns.ServiceFQDN(dashboardService, namespace),
-	}
-}
-
 // ParseDashboardCert parses a dashboard certificate and private key from PEM data
 func ParseDashboardCert(certPEM, keyPEM []byte) (*DashboardCertResult, error) {
-	// Parse certificate
 	certBlock, _ := pem.Decode(certPEM)
 	if certBlock == nil {
 		return nil, fmt.Errorf("failed to decode certificate PEM")
@@ -208,8 +185,7 @@ func ParseDashboardCert(certPEM, keyPEM []byte) (*DashboardCertResult, error) {
 		return nil, fmt.Errorf("failed to parse certificate: %w", err)
 	}
 
-	// Parse private key
-	privateKey, err := parsePrivateKeyFromPEM(keyPEM)
+	privateKey, err := certcommon.ParsePrivateKeyFromPEM(keyPEM)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
@@ -228,7 +204,6 @@ func (d *DashboardCertResult) IsExpired() bool {
 }
 
 // NeedsRenewal checks if the dashboard certificate needs renewal
-// The threshold parameter specifies how long before expiry to trigger renewal
 func (d *DashboardCertResult) NeedsRenewal(threshold time.Duration) bool {
 	renewalTime := d.Certificate.NotAfter.Add(-threshold)
 	return time.Now().After(renewalTime)
@@ -239,3 +214,15 @@ func (d *DashboardCertResult) DaysUntilExpiry() int {
 	duration := time.Until(d.Certificate.NotAfter)
 	return int(duration.Hours() / 24)
 }
+
+// GetCertificate returns the x509 certificate
+func (d *DashboardCertResult) GetCertificate() *x509.Certificate { return d.Certificate }
+
+// GetPrivateKey returns the private key
+func (d *DashboardCertResult) GetPrivateKey() crypto.PrivateKey { return d.PrivateKey }
+
+// GetCertificatePEM returns the PEM-encoded certificate
+func (d *DashboardCertResult) GetCertificatePEM() []byte { return d.CertificatePEM }
+
+// GetPrivateKeyPEM returns the PEM-encoded private key
+func (d *DashboardCertResult) GetPrivateKeyPEM() []byte { return d.PrivateKeyPEM }

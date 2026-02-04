@@ -412,7 +412,7 @@ func (r *WorkerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wa
 	found := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Worker StatefulSet", "name", sts.Name, "specHash", patch.ShortHash(specHash))
+		log.Info("Creating Worker StatefulSet", "name", sts.Name, "specHash", utils.ShortHash(specHash))
 		if err := r.Create(ctx, sts); err != nil {
 			return fmt.Errorf("failed to create statefulset: %w", err)
 		}
@@ -435,8 +435,8 @@ func (r *WorkerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wa
 	if specHash != "" && specHash != existingSpecHash {
 		log.Info("Worker spec changed",
 			"name", sts.Name,
-			"oldSpecHash", patch.ShortHash(existingSpecHash),
-			"newSpecHash", patch.ShortHash(specHash))
+			"oldSpecHash", utils.ShortHash(existingSpecHash),
+			"newSpecHash", utils.ShortHash(specHash))
 		needsUpdate = true
 		updateReason = "spec-change"
 
@@ -456,8 +456,8 @@ func (r *WorkerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wa
 	if configHash != "" && configHash != existingConfigHash {
 		log.Info("Worker ConfigMap hash changed",
 			"name", sts.Name,
-			"oldConfigHash", patch.ShortHash(existingConfigHash),
-			"newConfigHash", patch.ShortHash(configHash))
+			"oldConfigHash", utils.ShortHash(existingConfigHash),
+			"newConfigHash", utils.ShortHash(configHash))
 		needsUpdate = true
 		if updateReason == "" {
 			updateReason = "config-change"
