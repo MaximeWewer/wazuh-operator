@@ -314,7 +314,7 @@ func (r *ManagerReconciler) reconcileStatefulSet(ctx context.Context, cluster *w
 	found := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Manager StatefulSet", "name", sts.Name, "specHash", patch.ShortHash(specHash))
+		log.Info("Creating Manager StatefulSet", "name", sts.Name, "specHash", utils.ShortHash(specHash))
 		if err := r.Create(ctx, sts); err != nil {
 			return fmt.Errorf("failed to create statefulset: %w", err)
 		}
@@ -337,8 +337,8 @@ func (r *ManagerReconciler) reconcileStatefulSet(ctx context.Context, cluster *w
 	if specHash != "" && specHash != existingSpecHash {
 		log.Info("Manager master spec changed",
 			"name", sts.Name,
-			"oldSpecHash", patch.ShortHash(existingSpecHash),
-			"newSpecHash", patch.ShortHash(specHash))
+			"oldSpecHash", utils.ShortHash(existingSpecHash),
+			"newSpecHash", utils.ShortHash(specHash))
 		needsUpdate = true
 		updateReason = "spec-change"
 
@@ -358,8 +358,8 @@ func (r *ManagerReconciler) reconcileStatefulSet(ctx context.Context, cluster *w
 	if configHash != "" && configHash != existingConfigHash {
 		log.Info("Manager ConfigMap hash changed",
 			"name", sts.Name,
-			"oldConfigHash", patch.ShortHash(existingConfigHash),
-			"newConfigHash", patch.ShortHash(configHash))
+			"oldConfigHash", utils.ShortHash(existingConfigHash),
+			"newConfigHash", utils.ShortHash(configHash))
 		needsUpdate = true
 		if updateReason == "" {
 			updateReason = "config-change"

@@ -3850,9 +3850,77 @@ spec:
               tls:
                 description: TLS configuration
                 properties:
+                  caMaintenance:
+                    description: |-
+                      CAMaintenance configures when CA certificate renewal can trigger cluster restarts
+                      CA renewal requires full cluster restart as trust stores need to be reloaded
+                    properties:
+                      autoRestart:
+                        default: true
+                        description: |-
+                          AutoRestart enables automatic cluster restart when CA is renewed
+                          If false, operator emits an event and waits for manual intervention
+                        type: boolean
+                      maintenanceWindows:
+                        description: |-
+                          MaintenanceWindows specifies time windows when CA renewal restarts are allowed
+                          Format: cron expression for the start of the window
+                          If empty, restarts can happen immediately when CA is renewed
+                          Example: "0 2 * * 6" allows restarts only on Saturdays at 2 AM
+                        items:
+                          description: MaintenanceWindow defines a time window for
+                            maintenance operations
+                          properties:
+                            duration:
+                              default: 4h
+                              description: |-
+                                Duration specifies how long the maintenance window lasts
+                                Format: duration string (e.g., "4h", "2h")
+                                Default: 4h
+                              pattern: ^\d+[dhm]$
+                              type: string
+                            schedule:
+                              description: |-
+                                Schedule defines when the maintenance window starts
+                                Format: cron expression (e.g., "0 2 * * 6" for Saturdays at 2 AM)
+                              type: string
+                            timezone:
+                              default: UTC
+                              description: Timezone for the schedule (e.g., "UTC",
+                                "Europe/Paris")
+                              type: string
+                          required:
+                          - schedule
+                          type: object
+                        type: array
+                      maxWaitDuration:
+                        default: 7d
+                        description: |-
+                          MaxWaitDuration specifies how long to wait for a maintenance window
+                          before forcing a restart anyway (to prevent running with an expired CA)
+                          Format: duration string (e.g., "7d", "168h")
+                          Default: 7d (7 days)
+                        pattern: ^\d+[dhm]$
+                        type: string
+                    type: object
                   certConfig:
                     description: Certificate configuration
                     properties:
+                      adminRenewalThreshold:
+                        default: 30d
+                        description: |-
+                          AdminRenewalThreshold for admin certificates as a duration string
+                          Admin certificates will be renewed when they expire within this duration
+                        pattern: ^\d+[dhm]$
+                        type: string
+                      adminValidity:
+                        default: 365d
+                        description: |-
+                          AdminValidity for admin certificates as a duration string
+                          Admin certs are used for OpenSearch security API authentication
+                          Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
+                        pattern: ^\d+[dhm]$
+                        type: string
                       caRenewalThreshold:
                         default: 60d
                         description: |-
@@ -3871,13 +3939,25 @@ spec:
                           CA certificates should have longer validity as CA renewal requires pod restart
                         pattern: ^\d+[dhm]$
                         type: string
-                      commonName:
-                        default: admin
-                        description: CommonName
-                        type: string
                       country:
                         default: US
-                        description: Country
+                        description: Country code (2-letter ISO 3166-1 alpha-2)
+                        type: string
+                      dashboardRenewalThreshold:
+                        default: 30d
+                        description: |-
+                          DashboardRenewalThreshold for dashboard certificates as a duration string
+                          Dashboard certificates will be renewed when they expire within this duration
+                        pattern: ^\d+[dhm]$
+                        type: string
+                      dashboardValidity:
+                        default: 365d
+                        description: |-
+                          DashboardValidity for dashboard certificates as a duration string
+                          Dashboard certs are used for HTTPS on the Wazuh Dashboard
+                          Renewal requires dashboard pod restart
+                          Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
+                        pattern: ^\d+[dhm]$
                         type: string
                       ecdsaCurve:
                         default: P256
@@ -3893,6 +3973,22 @@ spec:
                         - P384
                         - P521
                         type: string
+                      filebeatRenewalThreshold:
+                        default: 30d
+                        description: |-
+                          FilebeatRenewalThreshold for filebeat certificates as a duration string
+                          Filebeat certificates will be renewed when they expire within this duration
+                        pattern: ^\d+[dhm]$
+                        type: string
+                      filebeatValidity:
+                        default: 365d
+                        description: |-
+                          FilebeatValidity for filebeat certificates as a duration string
+                          Filebeat certs are used for TLS between managers and indexer
+                          Renewal requires manager pod restart
+                          Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
+                        pattern: ^\d+[dhm]$
+                        type: string
                       keyAlgorithm:
                         default: RSA
                         description: |-
@@ -3904,15 +4000,15 @@ spec:
                         - ECDSA
                         type: string
                       locality:
-                        default: Strasbourg
-                        description: Locality
+                        default: San Francisco
+                        description: Locality (city)
                         type: string
                       organization:
                         default: Wazuh
-                        description: Organization
+                        description: Organization name
                         type: string
                       organizationalUnit:
-                        default: Wazuh
+                        default: Security
                         description: OrganizationalUnit
                         type: string
                       renewalThreshold:
@@ -3925,8 +4021,8 @@ spec:
                         pattern: ^\d+[dhm]$
                         type: string
                       state:
-                        default: Alsace
-                        description: State
+                        default: California
+                        description: State or Province
                         type: string
                       validity:
                         default: 365d

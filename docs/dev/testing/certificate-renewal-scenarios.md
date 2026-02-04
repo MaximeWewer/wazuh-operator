@@ -305,6 +305,125 @@ kubectl get secret -n wazuh-test wazuh-test-indexer-certs \
 
 **Expected Result**: Certificates generated with ECDSA keys, TLS works correctly.
 
+## Scenario 10: Hot Reload Validation (Zero Restarts)
+
+**Objective**: Verify certificate hot reload works without pod restarts across Wazuh versions.
+
+### Scenario 10a: API-Based Hot Reload (Wazuh 4.9.0 / OpenSearch 2.13)
+
+**Steps**:
+
+1. Deploy cluster with Wazuh 4.9.0 and hot reload enabled
+2. Verify `plugins.security.ssl_cert_reload_enabled: true` is in opensearch.yml
+3. Note indexer pod restart count
+4. Trigger certificate renewal (delete cert secret or wait for threshold)
+5. Verify indexer pod restart count is unchanged
+
+**Configuration**:
+
+```yaml
+spec:
+  version: "4.9.0"
+  tls:
+    enabled: true
+    hotReload:
+      enabled: true
+    certConfig:
+      validity: "1h"
+      renewalThreshold: "30m"
+```
+
+**Verification**:
+
+```bash
+# Record restart count before renewal
+kubectl get pods -n wazuh-test -o custom-columns=NAME:.metadata.name,RESTARTS:.status.containerStatuses[0].restartCount
+
+# Trigger renewal
+kubectl delete secret -n wazuh-test wazuh-test-indexer-certs
+
+# Wait for operator to reconcile, then check restart count again
+sleep 60
+kubectl get pods -n wazuh-test -o custom-columns=NAME:.metadata.name,RESTARTS:.status.containerStatuses[0].restartCount
+
+# Verify the operator called the SSL reload API (check operator logs)
+kubectl logs -n wazuh-operator-system deploy/wazuh-operator-controller-manager | grep -i "ssl.*reload\|cert.*reload\|pods/exec"
+```
+
+**Expected Result**: Indexer pod restart count is **unchanged** (0 restarts). Operator logs show successful SSL reload API call.
+
+### Scenario 10b: Inotify-Based Hot Reload (Wazuh 4.14.1 / OpenSearch 2.19+)
+
+**Steps**:
+
+1. Deploy cluster with Wazuh 4.14.1 and hot reload enabled
+2. Verify `plugins.security.ssl.certificates_hot_reload.enabled: true` is in opensearch.yml
+3. Note indexer pod restart count
+4. Trigger certificate renewal
+5. Verify indexer pod restart count is unchanged
+
+**Configuration**:
+
+```yaml
+spec:
+  version: "4.14.1"
+  tls:
+    enabled: true
+    hotReload:
+      enabled: true
+    certConfig:
+      validity: "1h"
+      renewalThreshold: "30m"
+```
+
+**Verification**:
+
+```bash
+# Record restart count before renewal
+kubectl get pods -n wazuh-test -o custom-columns=NAME:.metadata.name,RESTARTS:.status.containerStatuses[0].restartCount
+
+# Trigger renewal
+kubectl delete secret -n wazuh-test wazuh-test-indexer-certs
+
+# Wait for kubelet to sync + inotify to detect, then check restart count
+sleep 120
+kubectl get pods -n wazuh-test -o custom-columns=NAME:.metadata.name,RESTARTS:.status.containerStatuses[0].restartCount
+
+# Verify OpenSearch detected the file change (check indexer logs)
+kubectl logs -n wazuh-test wazuh-test-indexer-0 | grep -i "certificate\|reload\|inotify"
+```
+
+**Expected Result**: Indexer pod restart count is **unchanged** (0 restarts). Indexer logs show certificate reload via file change detection.
+
+## Scenario 11: Cross-Version Compatibility
+
+**Objective**: Verify the dual mount strategy works for both old and new Wazuh versions.
+
+**Steps**:
+
+1. Deploy cluster with Wazuh 4.9.0
+2. Verify opensearch.yml is present at both mount locations
+3. Verify security config files are present at both mount locations
+4. Upgrade cluster to Wazuh 4.14.1
+5. Verify configuration is still accessible
+
+**Verification**:
+
+```bash
+# Check dual mount for opensearch.yml
+kubectl exec -n wazuh-test wazuh-test-indexer-0 -- ls -la /usr/share/wazuh-indexer/opensearch.yml
+kubectl exec -n wazuh-test wazuh-test-indexer-0 -- ls -la /usr/share/wazuh-indexer/config/opensearch.yml
+
+# Check dual mount for security config
+kubectl exec -n wazuh-test wazuh-test-indexer-0 -- ls -la /usr/share/wazuh-indexer/opensearch-security/
+kubectl exec -n wazuh-test wazuh-test-indexer-0 -- ls -la /usr/share/wazuh-indexer/config/opensearch-security/
+
+# Verify absolute certificate paths in opensearch.yml
+kubectl exec -n wazuh-test wazuh-test-indexer-0 -- cat /usr/share/wazuh-indexer/config/opensearch.yml | grep "/usr/share/wazuh-indexer/config/certs"
+```
+
+**Expected Result**: Configuration files are accessible at both paths. Certificate paths in opensearch.yml are absolute.
+
 ## Monitoring Commands
 
 ### Watch Certificate Status
@@ -339,17 +458,20 @@ kubectl logs -n wazuh-operator-system \
 
 ## Success Criteria
 
-| Scenario           | Expected Status |
-| ------------------ | --------------- |
-| Initial Creation   | PASS            |
-| Node Cert Renewal  | PASS            |
-| CA Cert Renewal    | PASS            |
-| Pod Rollout        | PASS            |
-| Concurrent Renewal | PASS            |
-| Optimistic Locking | PASS            |
-| Expiry Under Load  | PASS            |
-| Recovery           | PASS            |
-| ECDSA Support      | PASS            |
+| Scenario                          | Expected Status |
+| --------------------------------- | --------------- |
+| Initial Creation                  | PASS            |
+| Node Cert Renewal                 | PASS            |
+| CA Cert Renewal                   | PASS            |
+| Pod Rollout                       | PASS            |
+| Concurrent Renewal                | PASS            |
+| Optimistic Locking                | PASS            |
+| Expiry Under Load                 | PASS            |
+| Recovery                          | PASS            |
+| ECDSA Support                     | PASS            |
+| Hot Reload API (4.9.0)            | PASS            |
+| Hot Reload Inotify (4.14.1)       | PASS            |
+| Cross-Version Compatibility       | PASS            |
 
 ## Troubleshooting
 

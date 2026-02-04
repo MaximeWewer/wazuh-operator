@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -34,7 +33,13 @@ import (
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
+	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
+
+func init() {
+	// Initialize DNS for tests that use PodFQDN via HotReloader
+	_ = dns.InitializeWithDomain("cluster.local")
+}
 
 // boolPtr returns a pointer to a bool value
 func boolPtr(b bool) *bool {
@@ -436,203 +441,6 @@ func TestIsSecurityHealthy(t *testing.T) {
 	}
 }
 
-func TestWaitForSecurityReady_Success(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = wazuhv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	// Create a test server that returns healthy status
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/_plugins/_security/health" {
-			json.NewEncoder(w).Encode(api.SecurityHealthResponse{
-				Status: "UP",
-			})
-		}
-	}))
-	defer server.Close()
-
-	client, err := api.NewClient(api.ClientConfig{
-		BaseURL:  server.URL,
-		Insecure: true,
-	})
-	if err != nil {
-		t.Fatalf("Failed to create client: %v", err)
-	}
-
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	reconciler := NewCertificateReconciler(fakeClient, scheme)
-
-	err = reconciler.waitForSecurityReady(context.Background(), client, 5*time.Second)
-	if err != nil {
-		t.Errorf("waitForSecurityReady() should succeed when security is healthy, got error: %v", err)
-	}
-}
-
-func TestWaitForSecurityReady_Timeout(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = wazuhv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	// Create a test server that always returns unhealthy status
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/_plugins/_security/health" {
-			json.NewEncoder(w).Encode(api.SecurityHealthResponse{
-				Status: "DOWN",
-			})
-		}
-	}))
-	defer server.Close()
-
-	client, err := api.NewClient(api.ClientConfig{
-		BaseURL:  server.URL,
-		Insecure: true,
-	})
-	if err != nil {
-		t.Fatalf("Failed to create client: %v", err)
-	}
-
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	reconciler := NewCertificateReconciler(fakeClient, scheme)
-
-	// Use a very short timeout for the test
-	err = reconciler.waitForSecurityReady(context.Background(), client, 100*time.Millisecond)
-	if err == nil {
-		t.Error("waitForSecurityReady() should timeout when security never becomes healthy")
-	}
-	if !strings.Contains(err.Error(), "timeout") {
-		t.Errorf("Expected timeout error, got: %v", err)
-	}
-}
-
-func TestCallReloadCertificatesAPIPerPod_MultiPod(t *testing.T) {
-	scheme := runtime.NewScheme()
-	_ = wazuhv1.AddToScheme(scheme)
-	_ = corev1.AddToScheme(scheme)
-
-	// Create a cluster with multiple replicas
-	cluster := &wazuhv1.WazuhCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "default",
-		},
-		Spec: wazuhv1.WazuhClusterSpec{
-			Version: "4.9.0",
-			TLS: &wazuhv1.TLSConfig{
-				Enabled: boolPtr(true),
-			},
-			Indexer: &wazuhv1.WazuhIndexerClusterSpec{
-				Replicas: 3,
-			},
-		},
-	}
-
-	// Create required secrets
-	caSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-ca",
-			Namespace: "default",
-		},
-		Data: map[string][]byte{
-			constants.SecretKeyCACert: []byte("fake-ca-cert"),
-		},
-	}
-
-	adminSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster-admin-certs",
-			Namespace: "default",
-		},
-		Data: map[string][]byte{
-			constants.SecretKeyTLSCert: []byte("fake-admin-cert"),
-			constants.SecretKeyTLSKey:  []byte("fake-admin-key"),
-		},
-	}
-
-	client := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithRuntimeObjects(cluster, caSecret, adminSecret).
-		Build()
-
-	// Use short propagation timeout for unit tests
-	reconciler := NewCertificateReconciler(client, scheme).
-		WithPropagationTimeout(1 * time.Second)
-	result := &HotReloadResult{}
-
-	// This will fail because we can't connect to the pods, but we can verify
-	// that it attempts the propagation wait
-	reconciler.callReloadCertificatesAPIPerPod(context.Background(), cluster, result)
-
-	// In unit tests, propagation will timeout, so TotalPods may not be set
-	// but the error should indicate propagation failure
-	if result.Error == nil {
-		t.Logf("Note: Expected error due to propagation timeout in unit test")
-	}
-
-	// With propagation timeout in unit tests (no real server), the function
-	// returns early before iterating over pods. This verifies:
-	// 1. The propagation wait mechanism is called
-	// 2. Proper error handling when propagation fails
-	// 3. TotalPods is set before the wait (from replica count)
-	if result.TotalPods != 3 {
-		t.Errorf("Expected TotalPods = 3, got %d", result.TotalPods)
-	}
-
-	// Since propagation times out, no pod results will be populated
-	// (the function returns early with a propagation error)
-	if result.Error == nil {
-		t.Error("Expected error due to propagation timeout, but got nil")
-	} else if !strings.Contains(result.Error.Error(), "propagation") {
-		t.Logf("Got error (may be propagation or other): %v", result.Error)
-	}
-
-	// PodResults may be empty because propagation failed before per-pod iteration
-	t.Logf("PodResults count: %d (expected 0 due to early propagation timeout)", len(result.PodResults))
-}
-
-func TestHotReloadResult_PodReloadResult(t *testing.T) {
-	result := &HotReloadResult{
-		Supported:       true,
-		RequiresAPICall: true,
-		APICallMade:     true,
-		TotalPods:       3,
-		SuccessfulPods:  2,
-		PodResults: []PodReloadResult{
-			{
-				PodName: "test-cluster-indexer-0",
-				PodURL:  "https://test-cluster-indexer-0.test-cluster-indexer-headless.default.svc:9200",
-				Success: true,
-			},
-			{
-				PodName: "test-cluster-indexer-1",
-				PodURL:  "https://test-cluster-indexer-1.test-cluster-indexer-headless.default.svc:9200",
-				Success: true,
-			},
-			{
-				PodName:  "test-cluster-indexer-2",
-				PodURL:   "https://test-cluster-indexer-2.test-cluster-indexer-headless.default.svc:9200",
-				Success:  false,
-				Error:    nil, // Would have an error in real scenario
-				Attempts: 3,
-			},
-		},
-	}
-
-	if result.SuccessfulPods != 2 {
-		t.Errorf("Expected 2 successful pods, got %d", result.SuccessfulPods)
-	}
-
-	successCount := 0
-	for _, pr := range result.PodResults {
-		if pr.Success {
-			successCount++
-		}
-	}
-	if successCount != result.SuccessfulPods {
-		t.Errorf("Mismatch between SuccessfulPods (%d) and actual successful results (%d)",
-			result.SuccessfulPods, successCount)
-	}
-}
-
 func TestShouldForceAPIReload(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
@@ -699,152 +507,134 @@ func TestShouldForceAPIReload(t *testing.T) {
 	}
 }
 
-func TestIsHotReloadEnabled(t *testing.T) {
-	tests := []struct {
-		name    string
-		cluster *wazuhv1.WazuhCluster
-		want    bool
-	}{
-		{
-			name: "TLS enabled, hot reload enabled",
-			cluster: &wazuhv1.WazuhCluster{
-				Spec: wazuhv1.WazuhClusterSpec{
-					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
-						HotReload: &wazuhv1.HotReloadConfig{
-							Enabled: true,
-						},
-					},
-				},
-			},
-			want: true,
+func TestHotReloadWithFallbackResult_Fields(t *testing.T) {
+	result := HotReloadWithFallbackResult{
+		HotReloadResult: &HotReloadResult{
+			Supported:       true,
+			RequiresAPICall: true,
+			TotalPods:       3,
+			SuccessfulPods:  1,
 		},
-		{
-			name: "TLS enabled, no hot reload config (defaults to true)",
-			cluster: &wazuhv1.WazuhCluster{
-				Spec: wazuhv1.WazuhClusterSpec{
-					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
-					},
-				},
-			},
-			want: true,
+		FallbackTriggered: true,
+		FallbackReason:    "hot reload partially failed: 1/3 pods succeeded",
+		RollingRestartResult: &RollingRestartResult{
+			Triggered: true,
+			Component: "indexer",
 		},
-		{
-			name: "TLS enabled, hot reload explicitly disabled",
-			cluster: &wazuhv1.WazuhCluster{
-				Spec: wazuhv1.WazuhClusterSpec{
-					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
-						HotReload: &wazuhv1.HotReloadConfig{
-							Enabled: false,
-						},
-					},
-				},
-			},
-			want: false,
-		},
-		{
-			name: "TLS disabled",
-			cluster: &wazuhv1.WazuhCluster{
-				Spec: wazuhv1.WazuhClusterSpec{
-					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(false),
-					},
-				},
-			},
-			want: false,
-		},
-		{
-			name: "no TLS spec",
-			cluster: &wazuhv1.WazuhCluster{
-				Spec: wazuhv1.WazuhClusterSpec{},
-			},
-			want: false,
-		},
+		FinalSuccess: true,
+		Strategy:     "rolling-restart",
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := IsHotReloadEnabled(tt.cluster)
-			if got != tt.want {
-				t.Errorf("IsHotReloadEnabled() = %v, want %v", got, tt.want)
-			}
-		})
+	if !result.FallbackTriggered {
+		t.Error("Expected FallbackTriggered to be true")
+	}
+
+	if result.Strategy != "rolling-restart" {
+		t.Errorf("Expected Strategy 'rolling-restart', got %s", result.Strategy)
+	}
+
+	if !result.FinalSuccess {
+		t.Error("Expected FinalSuccess to be true")
+	}
+
+	if result.FallbackReason == "" {
+		t.Error("Expected FallbackReason to be set")
 	}
 }
 
-func TestGetHotReloadConfigString(t *testing.T) {
-	tests := []struct {
-		name    string
-		cluster *wazuhv1.WazuhCluster
-		want    string
-	}{
-		{
-			name: "hot reload enabled with supported version",
-			cluster: &wazuhv1.WazuhCluster{
-				Spec: wazuhv1.WazuhClusterSpec{
-					Version: "4.9.0",
-					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
-						HotReload: &wazuhv1.HotReloadConfig{
-							Enabled: true,
-						},
-					},
-				},
-			},
-			want: "plugins.security.ssl_cert_reload_enabled: true",
+func TestTriggerCertificateHotReloadWithFallback_NotSupported(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = wazuhv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	cluster := &wazuhv1.WazuhCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "default",
 		},
-		{
-			name: "hot reload disabled",
-			cluster: &wazuhv1.WazuhCluster{
-				Spec: wazuhv1.WazuhClusterSpec{
-					Version: "4.9.0",
-					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
-						HotReload: &wazuhv1.HotReloadConfig{
-							Enabled: false,
-						},
-					},
+		Spec: wazuhv1.WazuhClusterSpec{
+			Version: "4.7.0", // Version that doesn't support hot reload
+			TLS: &wazuhv1.TLSConfig{
+				Enabled: boolPtr(true),
+				HotReload: &wazuhv1.HotReloadConfig{
+					Enabled: true,
 				},
 			},
-			want: "",
-		},
-		{
-			name: "TLS disabled",
-			cluster: &wazuhv1.WazuhCluster{
-				Spec: wazuhv1.WazuhClusterSpec{
-					Version: "4.9.0",
-					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(false),
-					},
-				},
-			},
-			want: "",
-		},
-		{
-			name: "unsupported version (too old)",
-			cluster: &wazuhv1.WazuhCluster{
-				Spec: wazuhv1.WazuhClusterSpec{
-					Version: "4.7.0",
-					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
-						HotReload: &wazuhv1.HotReloadConfig{
-							Enabled: true,
-						},
-					},
-				},
-			},
-			want: "",
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := GetHotReloadConfigString(tt.cluster)
-			if got != tt.want {
-				t.Errorf("GetHotReloadConfigString() = %q, want %q", got, tt.want)
-			}
-		})
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	recorder := record.NewFakeRecorder(10)
+
+	reconciler := NewCertificateReconciler(client, scheme).
+		WithEventRecorder(recorder)
+
+	ctx := context.Background()
+	result := reconciler.TriggerCertificateHotReloadWithFallback(ctx, cluster, constants.CertTypeNode)
+
+	// Hot reload not supported, should trigger fallback
+	if result.HotReloadResult == nil {
+		t.Fatal("Expected HotReloadResult to be set")
+	}
+
+	if result.HotReloadResult.Supported {
+		t.Error("Expected hot reload to not be supported for version 4.7.0")
+	}
+
+	// Fallback should have been considered
+	if result.FallbackReason == "" {
+		t.Error("Expected FallbackReason to be set when hot reload not supported")
+	}
+}
+
+func TestTriggerCertificateHotReloadWithFallback_AutomaticSuccess(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = wazuhv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+
+	cluster := &wazuhv1.WazuhCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "default",
+		},
+		Spec: wazuhv1.WazuhClusterSpec{
+			Version: "4.14.0", // Version with automatic hot reload
+			TLS: &wazuhv1.TLSConfig{
+				Enabled: boolPtr(true),
+				HotReload: &wazuhv1.HotReloadConfig{
+					Enabled: true,
+				},
+			},
+		},
+	}
+
+	client := fake.NewClientBuilder().WithScheme(scheme).Build()
+	recorder := record.NewFakeRecorder(10)
+
+	reconciler := NewCertificateReconciler(client, scheme).
+		WithEventRecorder(recorder)
+
+	ctx := context.Background()
+	result := reconciler.TriggerCertificateHotReloadWithFallback(ctx, cluster, constants.CertTypeNode)
+
+	// Hot reload should succeed (automatic mode)
+	if result.HotReloadResult == nil {
+		t.Fatal("Expected HotReloadResult to be set")
+	}
+
+	if !result.HotReloadResult.Supported {
+		t.Error("Expected hot reload to be supported for version 4.14.0")
+	}
+
+	if result.FallbackTriggered {
+		t.Error("Expected no fallback for automatic hot reload success")
+	}
+
+	if result.Strategy != "hot-reload" {
+		t.Errorf("Expected Strategy 'hot-reload', got %s", result.Strategy)
+	}
+
+	if !result.FinalSuccess {
+		t.Error("Expected FinalSuccess to be true")
 	}
 }

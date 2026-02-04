@@ -32,26 +32,55 @@ type CertificateOptions struct {
 	// Default: 60 days
 	CARenewalThreshold time.Duration
 
-	// NodeValidity is the validity period for node certificates
+	// NodeValidity is the validity period for node certificates (indexer)
 	// Default: 365 days (1 year)
 	NodeValidity time.Duration
 
-	// RenewalThreshold is the duration before expiry to trigger renewal
+	// RenewalThreshold is the duration before expiry to trigger renewal for node certs
 	// Default: 30 days
 	RenewalThreshold time.Duration
+
+	// AdminValidity is the validity period for admin certificates
+	// Admin certs are used for OpenSearch security API authentication
+	// Default: 365 days (1 year)
+	AdminValidity time.Duration
+
+	// AdminRenewalThreshold is the duration before expiry to trigger renewal for admin certs
+	// Default: 30 days
+	AdminRenewalThreshold time.Duration
+
+	// DashboardValidity is the validity period for dashboard certificates
+	// Dashboard certs are used for HTTPS on the Wazuh Dashboard
+	// Renewal requires dashboard pod restart
+	// Default: 365 days (1 year)
+	DashboardValidity time.Duration
+
+	// DashboardRenewalThreshold is the duration before expiry to trigger renewal for dashboard certs
+	// Default: 30 days
+	DashboardRenewalThreshold time.Duration
+
+	// FilebeatValidity is the validity period for filebeat certificates
+	// Filebeat certs are used for TLS between managers and indexer
+	// Renewal requires manager pod restart
+	// Default: 365 days (1 year)
+	FilebeatValidity time.Duration
+
+	// FilebeatRenewalThreshold is the duration before expiry to trigger renewal for filebeat certs
+	// Default: 30 days
+	FilebeatRenewalThreshold time.Duration
 
 	// Certificate Subject Fields (from CRD TLS.CertConfig)
 
 	// Country is the country code for certificate subject (e.g., "US", "FR")
-	// Default: "FR"
+	// Default: "US"
 	Country string
 
 	// State is the state/province for certificate subject
-	// Default: "Alsace"
+	// Default: "California"
 	State string
 
 	// Locality is the city/locality for certificate subject
-	// Default: "Strasbourg"
+	// Default: "San Francisco"
 	Locality string
 
 	// Organization is the organization name for certificate subject
@@ -59,7 +88,7 @@ type CertificateOptions struct {
 	Organization string
 
 	// OrganizationalUnit is the organizational unit for certificate subject
-	// Default: "Wazuh"
+	// Default: "Security"
 	OrganizationalUnit string
 
 	// CommonName is the common name for certificates (may be overridden per cert)
@@ -82,6 +111,15 @@ func DefaultCertificateOptions() *CertificateOptions {
 		CARenewalThreshold: MustParseCertDuration(DefaultCARenewalThresholdStr),
 		NodeValidity:       MustParseCertDuration(DefaultNodeValidityStr),
 		RenewalThreshold:   MustParseCertDuration(DefaultNodeRenewalThresholdStr),
+		// Admin certificate defaults (same as node certs)
+		AdminValidity:         MustParseCertDuration(DefaultNodeValidityStr),
+		AdminRenewalThreshold: MustParseCertDuration(DefaultNodeRenewalThresholdStr),
+		// Dashboard certificate defaults (same as node certs)
+		DashboardValidity:         MustParseCertDuration(DefaultNodeValidityStr),
+		DashboardRenewalThreshold: MustParseCertDuration(DefaultNodeRenewalThresholdStr),
+		// Filebeat certificate defaults (same as node certs)
+		FilebeatValidity:         MustParseCertDuration(DefaultNodeValidityStr),
+		FilebeatRenewalThreshold: MustParseCertDuration(DefaultNodeRenewalThresholdStr),
 		// Certificate subject defaults
 		Country:            DefaultCountry,
 		State:              DefaultState,
@@ -126,6 +164,54 @@ func (o *CertificateOptions) GetRenewalThreshold() time.Duration {
 	return MustParseCertDuration(DefaultNodeRenewalThresholdStr)
 }
 
+// GetAdminValidity returns the admin certificate validity period
+func (o *CertificateOptions) GetAdminValidity() time.Duration {
+	if o.AdminValidity > 0 {
+		return o.AdminValidity
+	}
+	return MustParseCertDuration(DefaultNodeValidityStr)
+}
+
+// GetAdminRenewalThreshold returns the admin cert renewal threshold
+func (o *CertificateOptions) GetAdminRenewalThreshold() time.Duration {
+	if o.AdminRenewalThreshold > 0 {
+		return o.AdminRenewalThreshold
+	}
+	return MustParseCertDuration(DefaultNodeRenewalThresholdStr)
+}
+
+// GetDashboardValidity returns the dashboard certificate validity period
+func (o *CertificateOptions) GetDashboardValidity() time.Duration {
+	if o.DashboardValidity > 0 {
+		return o.DashboardValidity
+	}
+	return MustParseCertDuration(DefaultNodeValidityStr)
+}
+
+// GetDashboardRenewalThreshold returns the dashboard cert renewal threshold
+func (o *CertificateOptions) GetDashboardRenewalThreshold() time.Duration {
+	if o.DashboardRenewalThreshold > 0 {
+		return o.DashboardRenewalThreshold
+	}
+	return MustParseCertDuration(DefaultNodeRenewalThresholdStr)
+}
+
+// GetFilebeatValidity returns the filebeat certificate validity period
+func (o *CertificateOptions) GetFilebeatValidity() time.Duration {
+	if o.FilebeatValidity > 0 {
+		return o.FilebeatValidity
+	}
+	return MustParseCertDuration(DefaultNodeValidityStr)
+}
+
+// GetFilebeatRenewalThreshold returns the filebeat cert renewal threshold
+func (o *CertificateOptions) GetFilebeatRenewalThreshold() time.Duration {
+	if o.FilebeatRenewalThreshold > 0 {
+		return o.FilebeatRenewalThreshold
+	}
+	return MustParseCertDuration(DefaultNodeRenewalThresholdStr)
+}
+
 // ShouldRenewCA checks if a CA certificate should be renewed based on options
 func (o *CertificateOptions) ShouldRenewCA(ca *CAResult) bool {
 	return ca.NeedsRenewal(o.GetCARenewalThreshold())
@@ -138,15 +224,15 @@ func (o *CertificateOptions) ShouldRenewNode(cert *NodeCertResult) bool {
 
 // ShouldRenewDashboard checks if a dashboard certificate should be renewed based on options
 func (o *CertificateOptions) ShouldRenewDashboard(cert *DashboardCertResult) bool {
-	return cert.NeedsRenewal(o.GetRenewalThreshold())
+	return cert.NeedsRenewal(o.GetDashboardRenewalThreshold())
 }
 
 // ShouldRenewFilebeat checks if a filebeat certificate should be renewed based on options
 func (o *CertificateOptions) ShouldRenewFilebeat(cert *FilebeatCertResult) bool {
-	return cert.NeedsRenewal(o.GetRenewalThreshold())
+	return cert.NeedsRenewal(o.GetFilebeatRenewalThreshold())
 }
 
 // ShouldRenewAdmin checks if an admin certificate should be renewed based on options
 func (o *CertificateOptions) ShouldRenewAdmin(cert *AdminCertResult) bool {
-	return cert.NeedsRenewal(o.GetRenewalThreshold())
+	return cert.NeedsRenewal(o.GetAdminRenewalThreshold())
 }

@@ -721,7 +721,7 @@ func (r *WazuhClusterReconciler) checkAndUpdatePendingRollouts(ctx context.Conte
 			Reason:    rollout.Reason,
 		}
 
-		status := waiter.CheckRolloutStatus(ctx, pendingRollout)
+		status := waiter.CheckRolloutStatus(ctx, &pendingRollout)
 
 		if status.Error != nil {
 			log.Error(status.Error, "Error checking rollout status", "component", rollout.Component)

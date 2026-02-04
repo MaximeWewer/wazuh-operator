@@ -36,10 +36,10 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
+	opensearchcerts "github.com/MaximeWewer/wazuh-operator/internal/certificates/opensearch"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/deployments"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/hpa"
-	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/secrets"
 	osservices "github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
@@ -136,7 +136,7 @@ func (r *DashboardReconciler) reconcileSecrets(ctx context.Context, cluster *waz
 			return fmt.Errorf("failed to generate dashboard certificates: %w", err)
 		}
 
-		certsBuilder := secrets.NewDashboardCertsSecretBuilder(cluster.Name, cluster.Namespace)
+		certsBuilder := opensearchcerts.NewDashboardCertsSecretBuilder(cluster.Name, cluster.Namespace)
 		certsBuilder.WithCACert(certs.caCert).
 			WithDashboardCert(certs.dashboardCert).
 			WithDashboardKey(certs.dashboardKey)
@@ -744,7 +744,7 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 	found := &appsv1.Deployment{}
 	err = r.Get(ctx, types.NamespacedName{Name: deployment.Name, Namespace: deployment.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Dashboard Deployment", "name", deployment.Name, "certHash", utils.ShortHash(certHash), "specHash", patch.ShortHash(specHash))
+		log.Info("Creating Dashboard Deployment", "name", deployment.Name, "certHash", utils.ShortHash(certHash), "specHash", utils.ShortHash(specHash))
 		if err := r.Create(ctx, deployment); err != nil {
 			return nil, fmt.Errorf("failed to create dashboard deployment: %w", err)
 		}
@@ -779,8 +779,8 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 	if specHash != "" && specHash != existingSpecHash {
 		log.Info("Dashboard spec changed",
 			"name", deployment.Name,
-			"oldSpecHash", patch.ShortHash(existingSpecHash),
-			"newSpecHash", patch.ShortHash(specHash))
+			"oldSpecHash", utils.ShortHash(existingSpecHash),
+			"newSpecHash", utils.ShortHash(specHash))
 		needsUpdate = true
 		updateReason = "spec-change"
 
@@ -814,8 +814,8 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 	if configHash != "" && configHash != existingConfigHash {
 		log.Info("Dashboard ConfigMap hash changed",
 			"name", deployment.Name,
-			"oldConfigHash", patch.ShortHash(existingConfigHash),
-			"newConfigHash", patch.ShortHash(configHash))
+			"oldConfigHash", utils.ShortHash(existingConfigHash),
+			"newConfigHash", utils.ShortHash(configHash))
 		needsUpdate = true
 		if updateReason == "" {
 			updateReason = "config-change"
@@ -944,7 +944,7 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 			return fmt.Errorf("failed to generate certificates: %w", err)
 		}
 
-		certsBuilder := secrets.NewDashboardCertsSecretBuilder(dashboard.Name, dashboard.Namespace)
+		certsBuilder := opensearchcerts.NewDashboardCertsSecretBuilder(dashboard.Name, dashboard.Namespace)
 		certsBuilder.WithCACert(certs.caCert).
 			WithDashboardCert(certs.dashboardCert).
 			WithDashboardKey(certs.dashboardKey)

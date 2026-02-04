@@ -117,3 +117,30 @@ const (
 	// Format: RFC3339 timestamp
 	AnnotationLastExpansionTime = "wazuh.com/last-expansion-time"
 )
+
+// Configuration change tracking annotations (Phase 2)
+const (
+	// AnnotationEnvFromHash stores the hash of envFrom references (ConfigMaps/Secrets)
+	// Used to detect changes in environment variable sources
+	AnnotationEnvFromHash = "wazuh.com/envfrom-hash"
+
+	// AnnotationTLSConfigHash stores the hash of TLS/certificate configuration
+	// Used to detect certificate changes that require pod restart
+	AnnotationTLSConfigHash = "wazuh.com/tls-config-hash"
+
+	// AnnotationCompositeHash stores the combined hash of all monitored configurations
+	// This single hash can be used to detect any configuration change
+	AnnotationCompositeHash = "wazuh.com/composite-hash"
+
+	// AnnotationConfigChangeDetected indicates a configuration change was detected
+	// Value contains the change type (e.g., "EnvFrom", "TLSConfig", "Certificate")
+	AnnotationConfigChangeDetected = "wazuh.com/config-change-detected"
+
+	// AnnotationConfigChangeTimestamp stores when the last config change was detected
+	// Format: RFC3339 timestamp
+	AnnotationConfigChangeTimestamp = "wazuh.com/config-change-timestamp"
+
+	// AnnotationRequiredAction stores the required action for detected changes
+	// Values: "None", "HotReload", "RollingRestart", "FullRestart"
+	AnnotationRequiredAction = "wazuh.com/required-action"
+)

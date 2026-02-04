@@ -37,6 +37,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
+	wazuhcerts "github.com/MaximeWewer/wazuh-operator/internal/certificates/wazuh"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
@@ -104,7 +105,7 @@ func (r *ClusterReconciler) ReconcileCertificates(ctx context.Context, cluster *
 			return fmt.Errorf("failed to generate manager certificates: %w", err)
 		}
 
-		certsBuilder := secrets.NewManagerCertsSecretBuilder(cluster.Name, cluster.Namespace)
+		certsBuilder := wazuhcerts.NewManagerCertsSecretBuilder(cluster.Name, cluster.Namespace)
 		certsBuilder.WithCACert(certs.caCert).
 			WithNodeCert(certs.nodeCert).
 			WithNodeKey(certs.nodeKey).

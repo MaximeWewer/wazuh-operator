@@ -179,6 +179,8 @@ func RegisterMetrics() {
 	RegisterDrainMetrics()
 	// Register cluster health and observability metrics
 	RegisterClusterMetrics()
+	// Register config change detection metrics
+	RegisterConfigMetrics()
 }
 
 // RecordReconciliation records a reconciliation event

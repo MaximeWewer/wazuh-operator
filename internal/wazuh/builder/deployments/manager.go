@@ -669,8 +669,8 @@ ls -la /etc/filebeat/ 2>/dev/null || true`,
 }
 
 // buildEnvVars builds the environment variables
-// Note: Filebeat configuration (indexer URL, credentials, SSL) is now embedded directly
-// in filebeat.yml via the ConfigMap, no longer passed via environment variables
+// Filebeat configuration is passed via env vars for compatibility with Wazuh s6 init scripts
+// The s6 script 1-config-filebeat uses these to customize the default filebeat.yml
 func (b *ManagerStatefulSetBuilder) buildEnvVars() []corev1.EnvVar {
 	env := []corev1.EnvVar{
 		{
@@ -723,6 +723,11 @@ func (b *ManagerStatefulSetBuilder) buildEnvVars() []corev1.EnvVar {
 			},
 		},
 	}
+
+	// Note: Filebeat env vars (INDEXER_URL, INDEXER_USERNAME, etc.) are NOT set here.
+	// The operator-generated filebeat.yml (from ConfigMap) already contains all correct values.
+	// Setting these env vars would cause the s6 init script (1-config-filebeat) to run sed
+	// substitutions that break the YAML structure (inline vs multi-line format mismatch).
 
 	// Add master address for workers
 	if b.nodeType == "worker" {

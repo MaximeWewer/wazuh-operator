@@ -86,6 +86,12 @@ func TestValidateWazuhPassword(t *testing.T) {
 			errCount: 3, // missing uppercase, digit, special
 		},
 		{
+			name:     "backslash should be rejected",
+			password: `Wazuh4Admin\!2026`,
+			wantErr:  true,
+			errCount: 1, // backslash not allowed
+		},
+		{
 			name:     "empty password",
 			password: "",
 			wantErr:  true,

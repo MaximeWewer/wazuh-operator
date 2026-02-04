@@ -193,16 +193,16 @@ func TestCertificateOptions_ShouldRenewDashboard(t *testing.T) {
 	}
 
 	opts := &CertificateOptions{
-		RenewalThreshold: 365 * 24 * time.Hour,
+		DashboardRenewalThreshold: 365 * 24 * time.Hour,
 	}
 	if !opts.ShouldRenewDashboard(dash) {
 		t.Error("ShouldRenewDashboard() should return true when threshold is larger than remaining days")
 	}
 
-	opts.RenewalThreshold = 7 * 24 * time.Hour
+	opts.DashboardRenewalThreshold = 7 * 24 * time.Hour
 	if opts.ShouldRenewDashboard(dash) {
 		t.Errorf("ShouldRenewDashboard() should return false when threshold is smaller than remaining days (threshold: %v, expiry in: %d days)",
-			opts.RenewalThreshold, dash.DaysUntilExpiry())
+			opts.DashboardRenewalThreshold, dash.DaysUntilExpiry())
 	}
 }
 
@@ -223,16 +223,16 @@ func TestCertificateOptions_ShouldRenewFilebeat(t *testing.T) {
 	}
 
 	opts := &CertificateOptions{
-		RenewalThreshold: 365 * 24 * time.Hour,
+		FilebeatRenewalThreshold: 365 * 24 * time.Hour,
 	}
 	if !opts.ShouldRenewFilebeat(fb) {
 		t.Error("ShouldRenewFilebeat() should return true when threshold is larger than remaining days")
 	}
 
-	opts.RenewalThreshold = 7 * 24 * time.Hour
+	opts.FilebeatRenewalThreshold = 7 * 24 * time.Hour
 	if opts.ShouldRenewFilebeat(fb) {
 		t.Errorf("ShouldRenewFilebeat() should return false when threshold is smaller than remaining days (threshold: %v, expiry in: %d days)",
-			opts.RenewalThreshold, fb.DaysUntilExpiry())
+			opts.FilebeatRenewalThreshold, fb.DaysUntilExpiry())
 	}
 }
 
@@ -253,16 +253,16 @@ func TestCertificateOptions_ShouldRenewAdmin(t *testing.T) {
 	}
 
 	opts := &CertificateOptions{
-		RenewalThreshold: 365 * 24 * time.Hour,
+		AdminRenewalThreshold: 365 * 24 * time.Hour,
 	}
 	if !opts.ShouldRenewAdmin(admin) {
 		t.Error("ShouldRenewAdmin() should return true when threshold is larger than remaining days")
 	}
 
-	opts.RenewalThreshold = 7 * 24 * time.Hour
+	opts.AdminRenewalThreshold = 7 * 24 * time.Hour
 	if opts.ShouldRenewAdmin(admin) {
 		t.Errorf("ShouldRenewAdmin() should return false when threshold is smaller than remaining days (threshold: %v, expiry in: %d days)",
-			opts.RenewalThreshold, admin.DaysUntilExpiry())
+			opts.AdminRenewalThreshold, admin.DaysUntilExpiry())
 	}
 }
 

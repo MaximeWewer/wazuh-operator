@@ -43,7 +43,7 @@ func DefaultWazuhPasswordPolicy() WazuhPasswordPolicy {
 		RequireUppercase: true,
 		RequireDigit:     true,
 		RequireSpecial:   true,
-		SpecialChars:     ".*+?-_@#$%&!^()[]{}|:;<>,~/\\`\"'=",
+		SpecialChars:     ".*+?-_@#$%&!^()[]{}|:;<>,~/`\"'=",
 	}
 }
 
@@ -69,6 +69,11 @@ func ValidateWazuhPasswordWithPolicy(password string, policy WazuhPasswordPolicy
 	// Check minimum length
 	if len(password) < policy.MinLength {
 		reasons = append(reasons, fmt.Sprintf("minimum length is %d characters (got %d)", policy.MinLength, len(password)))
+	}
+
+	// Reject backslash - Wazuh stores API passwords in JSON config and backslash breaks JSON parsing
+	if strings.Contains(password, `\`) {
+		reasons = append(reasons, "must not contain backslash (\\) character - incompatible with Wazuh JSON configuration")
 	}
 
 	// Check for required character types

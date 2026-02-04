@@ -284,16 +284,3 @@ func ComputeManagerWorkersSpecHashFull(input ManagerWorkersSpecInput) (string, e
 	spec := ManagerWorkersSpec(input)
 	return ComputeSpecHash(spec)
 }
-
-// HashesMatch checks if two hash values are equal
-func HashesMatch(hash1, hash2 string) bool {
-	return hash1 == hash2
-}
-
-// ShortHash returns a truncated hash (first 8 characters)
-func ShortHash(hash string) string {
-	if len(hash) > 8 {
-		return hash[:8]
-	}
-	return hash
-}

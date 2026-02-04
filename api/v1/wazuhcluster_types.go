@@ -445,6 +445,11 @@ type TLSConfig struct {
 	// Requires Wazuh >= 4.9.0 (OpenSearch >= 2.13)
 	// +optional
 	HotReload *HotReloadConfig `json:"hotReload,omitempty"`
+
+	// CAMaintenance configures when CA certificate renewal can trigger cluster restarts
+	// CA renewal requires full cluster restart as trust stores need to be reloaded
+	// +optional
+	CAMaintenance *CAMaintenanceConfig `json:"caMaintenance,omitempty"`
 }
 
 // HotReloadConfig defines hot reload behavior for TLS certificates
@@ -467,37 +472,86 @@ type HotReloadConfig struct {
 	ForceAPIReload bool `json:"forceAPIReload,omitempty"`
 }
 
+// CAMaintenanceConfig defines maintenance window configuration for CA certificate renewal
+// CA renewal requires full cluster restart because trust stores need to be reloaded
+// This configuration controls when and how the restart happens
+type CAMaintenanceConfig struct {
+	// AutoRestart enables automatic cluster restart when CA is renewed
+	// If false, operator emits an event and waits for manual intervention
+	// +optional
+	// +kubebuilder:default=true
+	AutoRestart bool `json:"autoRestart,omitempty"`
+
+	// MaintenanceWindows specifies time windows when CA renewal restarts are allowed
+	// Format: cron expression for the start of the window
+	// If empty, restarts can happen immediately when CA is renewed
+	// Example: "0 2 * * 6" allows restarts only on Saturdays at 2 AM
+	// +optional
+	MaintenanceWindows []MaintenanceWindow `json:"maintenanceWindows,omitempty"`
+
+	// MaxWaitDuration specifies how long to wait for a maintenance window
+	// before forcing a restart anyway (to prevent running with an expired CA)
+	// Format: duration string (e.g., "7d", "168h")
+	// Default: 7d (7 days)
+	// +optional
+	// +kubebuilder:default="7d"
+	// +kubebuilder:validation:Pattern=`^\d+[dhm]$`
+	MaxWaitDuration string `json:"maxWaitDuration,omitempty"`
+}
+
+// MaintenanceWindow defines a time window for maintenance operations
+type MaintenanceWindow struct {
+	// Schedule defines when the maintenance window starts
+	// Format: cron expression (e.g., "0 2 * * 6" for Saturdays at 2 AM)
+	// +kubebuilder:validation:Required
+	Schedule string `json:"schedule"`
+
+	// Duration specifies how long the maintenance window lasts
+	// Format: duration string (e.g., "4h", "2h")
+	// Default: 4h
+	// +optional
+	// +kubebuilder:default="4h"
+	// +kubebuilder:validation:Pattern=`^\d+[dhm]$`
+	Duration string `json:"duration,omitempty"`
+
+	// Timezone for the schedule (e.g., "UTC", "Europe/Paris")
+	// +optional
+	// +kubebuilder:default="UTC"
+	Timezone string `json:"timezone,omitempty"`
+}
+
 // CertificateConfig defines certificate generation configuration
+// Note: CommonName (CN) is auto-generated based on certificate type and cannot be configured:
+//   - CA: "<cluster>-ca"
+//   - Indexer: "<cluster>-indexer"
+//   - Admin: "admin" (required by OpenSearch security plugin)
+//   - Dashboard: "<cluster>-dashboard"
+//   - Filebeat: "<cluster>-filebeat"
 type CertificateConfig struct {
-	// Country
+	// Country code (2-letter ISO 3166-1 alpha-2)
 	// +optional
 	// +kubebuilder:default="US"
 	Country string `json:"country,omitempty"`
 
-	// State
+	// State or Province
 	// +optional
-	// +kubebuilder:default="Alsace"
+	// +kubebuilder:default="California"
 	State string `json:"state,omitempty"`
 
-	// Locality
+	// Locality (city)
 	// +optional
-	// +kubebuilder:default="Strasbourg"
+	// +kubebuilder:default="San Francisco"
 	Locality string `json:"locality,omitempty"`
 
-	// Organization
+	// Organization name
 	// +optional
 	// +kubebuilder:default="Wazuh"
 	Organization string `json:"organization,omitempty"`
 
 	// OrganizationalUnit
 	// +optional
-	// +kubebuilder:default="Wazuh"
+	// +kubebuilder:default="Security"
 	OrganizationalUnit string `json:"organizationalUnit,omitempty"`
-
-	// CommonName
-	// +optional
-	// +kubebuilder:default="admin"
-	CommonName string `json:"commonName,omitempty"`
 
 	// Validity for node certificates as a duration string
 	// Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
@@ -533,6 +587,53 @@ type CertificateConfig struct {
 	// +kubebuilder:default="60d"
 	// +kubebuilder:validation:Pattern=`^\d+[dhm]$`
 	CARenewalThreshold string `json:"caRenewalThreshold,omitempty"`
+
+	// AdminValidity for admin certificates as a duration string
+	// Admin certs are used for OpenSearch security API authentication
+	// Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
+	// +optional
+	// +kubebuilder:default="365d"
+	// +kubebuilder:validation:Pattern=`^\d+[dhm]$`
+	AdminValidity string `json:"adminValidity,omitempty"`
+
+	// AdminRenewalThreshold for admin certificates as a duration string
+	// Admin certificates will be renewed when they expire within this duration
+	// +optional
+	// +kubebuilder:default="30d"
+	// +kubebuilder:validation:Pattern=`^\d+[dhm]$`
+	AdminRenewalThreshold string `json:"adminRenewalThreshold,omitempty"`
+
+	// DashboardValidity for dashboard certificates as a duration string
+	// Dashboard certs are used for HTTPS on the Wazuh Dashboard
+	// Renewal requires dashboard pod restart
+	// Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
+	// +optional
+	// +kubebuilder:default="365d"
+	// +kubebuilder:validation:Pattern=`^\d+[dhm]$`
+	DashboardValidity string `json:"dashboardValidity,omitempty"`
+
+	// DashboardRenewalThreshold for dashboard certificates as a duration string
+	// Dashboard certificates will be renewed when they expire within this duration
+	// +optional
+	// +kubebuilder:default="30d"
+	// +kubebuilder:validation:Pattern=`^\d+[dhm]$`
+	DashboardRenewalThreshold string `json:"dashboardRenewalThreshold,omitempty"`
+
+	// FilebeatValidity for filebeat certificates as a duration string
+	// Filebeat certs are used for TLS between managers and indexer
+	// Renewal requires manager pod restart
+	// Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
+	// +optional
+	// +kubebuilder:default="365d"
+	// +kubebuilder:validation:Pattern=`^\d+[dhm]$`
+	FilebeatValidity string `json:"filebeatValidity,omitempty"`
+
+	// FilebeatRenewalThreshold for filebeat certificates as a duration string
+	// Filebeat certificates will be renewed when they expire within this duration
+	// +optional
+	// +kubebuilder:default="30d"
+	// +kubebuilder:validation:Pattern=`^\d+[dhm]$`
+	FilebeatRenewalThreshold string `json:"filebeatRenewalThreshold,omitempty"`
 
 	// KeyAlgorithm specifies the algorithm for key generation
 	// Supported values: RSA (default), ECDSA

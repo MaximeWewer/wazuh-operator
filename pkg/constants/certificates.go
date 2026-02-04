@@ -56,14 +56,26 @@ const (
 	// CertTypeCA is the certificate type for CA
 	CertTypeCA = "ca"
 
-	// CertTypeNode is the certificate type for node certificates
+	// CertTypeNode is the certificate type for node/indexer certificates
 	CertTypeNode = "node"
+
+	// CertTypeAdmin is the certificate type for admin certificates
+	CertTypeAdmin = "admin"
+
+	// CertTypeFilebeat is the certificate type for filebeat certificates
+	CertTypeFilebeat = "filebeat"
+
+	// CertTypeDashboard is the certificate type for dashboard certificates
+	CertTypeDashboard = "dashboard"
 )
 
-// CertificateTypes is the list of certificate types
+// CertificateTypes is the list of all certificate types
 var CertificateTypes = []string{
 	CertTypeCA,
 	CertTypeNode,
+	CertTypeAdmin,
+	CertTypeFilebeat,
+	CertTypeDashboard,
 }
 
 // Default certificate common names

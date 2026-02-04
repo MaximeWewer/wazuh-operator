@@ -105,6 +105,96 @@ var (
 		},
 		[]string{"cluster", "namespace", "component", "serial", "issuer"},
 	)
+
+	// HotReloadSuccessTotal counts successful certificate hot reloads
+	HotReloadSuccessTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: MetricsNamespace,
+			Subsystem: MetricsSubsystemCertificate,
+			Name:      "hotreload_success_total",
+			Help:      "Total number of successful certificate hot reloads",
+		},
+		[]string{"cluster", "namespace", "component", "method"},
+	)
+
+	// HotReloadFailureTotal counts failed certificate hot reloads
+	HotReloadFailureTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: MetricsNamespace,
+			Subsystem: MetricsSubsystemCertificate,
+			Name:      "hotreload_failure_total",
+			Help:      "Total number of failed certificate hot reloads",
+		},
+		[]string{"cluster", "namespace", "component", "reason"},
+	)
+
+	// HotReloadDuration measures duration of hot reload operations
+	HotReloadDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: MetricsNamespace,
+			Subsystem: MetricsSubsystemCertificate,
+			Name:      "hotreload_duration_seconds",
+			Help:      "Duration of certificate hot reload operations in seconds",
+			Buckets:   prometheus.ExponentialBuckets(0.1, 2, 10), // 100ms to ~51s
+		},
+		[]string{"cluster", "namespace", "component"},
+	)
+
+	// HotReloadFallbackTotal counts fallbacks from hot-reload to rolling restart
+	HotReloadFallbackTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: MetricsNamespace,
+			Subsystem: MetricsSubsystemCertificate,
+			Name:      "hotreload_fallback_total",
+			Help:      "Total number of fallbacks from hot-reload to rolling restart",
+		},
+		[]string{"cluster", "namespace", "component", "reason"},
+	)
+
+	// RollingRestartTotal counts rolling restarts triggered by certificate renewal
+	RollingRestartTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: MetricsNamespace,
+			Subsystem: MetricsSubsystemCertificate,
+			Name:      "rolling_restart_total",
+			Help:      "Total number of rolling restarts triggered by certificate renewal",
+		},
+		[]string{"cluster", "namespace", "component", "cert_type"},
+	)
+
+	// RollingRestartDuration measures duration of rolling restart operations
+	RollingRestartDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: MetricsNamespace,
+			Subsystem: MetricsSubsystemCertificate,
+			Name:      "rolling_restart_duration_seconds",
+			Help:      "Duration of rolling restart operations in seconds",
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 12), // 1s to ~68min
+		},
+		[]string{"cluster", "namespace", "component"},
+	)
+
+	// CertificatePropagationDuration measures time for certificate propagation to pods
+	CertificatePropagationDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: MetricsNamespace,
+			Subsystem: MetricsSubsystemCertificate,
+			Name:      "propagation_duration_seconds",
+			Help:      "Duration for certificate propagation to pods in seconds",
+		},
+		[]string{"cluster", "namespace", "component"},
+	)
+
+	// PodSyncStatusGauge tracks per-pod certificate sync status
+	PodSyncStatusGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: MetricsNamespace,
+			Subsystem: MetricsSubsystemCertificate,
+			Name:      "pod_sync_status",
+			Help:      "Certificate sync status per pod (1=synced, 0=pending, -1=failed)",
+		},
+		[]string{"cluster", "namespace", "component", "pod"},
+	)
 )
 
 // RegisterCertificateMetrics registers certificate-specific metrics
@@ -117,6 +207,17 @@ func RegisterCertificateMetrics() {
 		CertificateRolloutsPending,
 		CertificateErrorsTotal,
 		CertificateInfo,
+		// Hot-reload metrics
+		HotReloadSuccessTotal,
+		HotReloadFailureTotal,
+		HotReloadDuration,
+		HotReloadFallbackTotal,
+		// Rolling restart metrics
+		RollingRestartTotal,
+		RollingRestartDuration,
+		// Propagation metrics
+		CertificatePropagationDuration,
+		PodSyncStatusGauge,
 	)
 }
 
@@ -151,6 +252,49 @@ func SetCertificateInfo(cluster, namespace, component, serial, issuer string) {
 	CertificateInfo.WithLabelValues(cluster, namespace, component, serial, issuer).Set(1)
 }
 
+// RecordHotReloadSuccess records a successful hot reload
+// method should be "api-call" or "automatic-file-watch"
+func RecordHotReloadSuccess(cluster, namespace, component, method string, duration float64) {
+	HotReloadSuccessTotal.WithLabelValues(cluster, namespace, component, method).Inc()
+	HotReloadDuration.WithLabelValues(cluster, namespace, component).Observe(duration)
+}
+
+// RecordHotReloadFailure records a failed hot reload
+// reason should describe why the hot reload failed (e.g., "api_error", "timeout", "pod_unreachable")
+func RecordHotReloadFailure(cluster, namespace, component, reason string) {
+	HotReloadFailureTotal.WithLabelValues(cluster, namespace, component, reason).Inc()
+}
+
+// RecordHotReloadFallback records a fallback from hot-reload to rolling restart
+func RecordHotReloadFallback(cluster, namespace, component, reason string) {
+	HotReloadFallbackTotal.WithLabelValues(cluster, namespace, component, reason).Inc()
+}
+
+// RecordRollingRestart records a rolling restart triggered by certificate renewal
+// certType should be "ca", "node", "admin", "filebeat", or "dashboard"
+func RecordRollingRestart(cluster, namespace, component, certType string, duration float64) {
+	RollingRestartTotal.WithLabelValues(cluster, namespace, component, certType).Inc()
+	if duration > 0 {
+		RollingRestartDuration.WithLabelValues(cluster, namespace, component).Observe(duration)
+	}
+}
+
+// RecordCertificatePropagation records the time taken for certificate propagation
+func RecordCertificatePropagation(cluster, namespace, component string, duration float64) {
+	CertificatePropagationDuration.WithLabelValues(cluster, namespace, component).Observe(duration)
+}
+
+// SetPodSyncStatus sets the certificate sync status for a specific pod
+// status: 1=synced, 0=pending, -1=failed
+func SetPodSyncStatus(cluster, namespace, component, pod string, status float64) {
+	PodSyncStatusGauge.WithLabelValues(cluster, namespace, component, pod).Set(status)
+}
+
+// ClearPodSyncStatus clears the sync status for a specific pod
+func ClearPodSyncStatus(cluster, namespace, component, pod string) {
+	PodSyncStatusGauge.DeleteLabelValues(cluster, namespace, component, pod)
+}
+
 // ClearCertificateMetrics clears all certificate metrics for a cluster
 // Call this when a cluster is deleted
 func ClearCertificateMetrics(cluster, namespace string) {
@@ -163,6 +307,30 @@ func ClearCertificateMetrics(cluster, namespace string) {
 			CertificateExpirySeconds.DeleteLabelValues(cluster, namespace, component, certType)
 		}
 		CertificateInfo.DeletePartialMatch(prometheus.Labels{
+			"cluster":   cluster,
+			"namespace": namespace,
+			"component": component,
+		})
+		// Clear hot-reload metrics
+		HotReloadDuration.DeletePartialMatch(prometheus.Labels{
+			"cluster":   cluster,
+			"namespace": namespace,
+			"component": component,
+		})
+		// Clear rolling restart metrics
+		RollingRestartDuration.DeletePartialMatch(prometheus.Labels{
+			"cluster":   cluster,
+			"namespace": namespace,
+			"component": component,
+		})
+		// Clear propagation metrics
+		CertificatePropagationDuration.DeletePartialMatch(prometheus.Labels{
+			"cluster":   cluster,
+			"namespace": namespace,
+			"component": component,
+		})
+		// Clear pod sync status
+		PodSyncStatusGauge.DeletePartialMatch(prometheus.Labels{
 			"cluster":   cluster,
 			"namespace": namespace,
 			"component": component,

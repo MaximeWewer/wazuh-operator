@@ -349,3 +349,129 @@ func TestGetHotReloadSupportForWazuh(t *testing.T) {
 		})
 	}
 }
+
+func TestGetOpenSearchFeatureSupport(t *testing.T) {
+	tests := []struct {
+		name                string
+		version             string
+		wantHotReload       bool
+		wantHotReloadMethod string
+	}{
+		{
+			name:                "OpenSearch 2.19.1 - automatic hot reload",
+			version:             "2.19.1",
+			wantHotReload:       true,
+			wantHotReloadMethod: "automatic-file-watch",
+		},
+		{
+			name:                "OpenSearch 2.16.0 - API hot reload",
+			version:             "2.16.0",
+			wantHotReload:       true,
+			wantHotReloadMethod: "api-call",
+		},
+		{
+			name:                "OpenSearch 2.13.0 - API hot reload",
+			version:             "2.13.0",
+			wantHotReload:       true,
+			wantHotReloadMethod: "api-call",
+		},
+		{
+			name:                "OpenSearch 2.10.0 - no hot reload",
+			version:             "2.10.0",
+			wantHotReload:       false,
+			wantHotReloadMethod: "restart-required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			support, err := GetOpenSearchFeatureSupport(tt.version)
+			if err != nil {
+				t.Fatalf("GetOpenSearchFeatureSupport() error = %v", err)
+			}
+			if support.SupportsHotReload != tt.wantHotReload {
+				t.Errorf("SupportsHotReload = %v, want %v", support.SupportsHotReload, tt.wantHotReload)
+			}
+			if support.HotReloadMethod != tt.wantHotReloadMethod {
+				t.Errorf("HotReloadMethod = %s, want %s", support.HotReloadMethod, tt.wantHotReloadMethod)
+			}
+		})
+	}
+}
+
+func TestIsWazuhVersionSupported(t *testing.T) {
+	tests := []struct {
+		version string
+		want    bool
+	}{
+		{"4.9.0", true},
+		{"4.10.0", true},
+		{"4.14.0", true},
+		{"4.8.0", false},
+		{"4.7.0", false},
+		{"5.0.0", true},
+		{"3.13.0", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.version, func(t *testing.T) {
+			got := IsWazuhVersionSupported(tt.version)
+			if got != tt.want {
+				t.Errorf("IsWazuhVersionSupported(%s) = %v, want %v", tt.version, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetHotReloadAPIPath(t *testing.T) {
+	tests := []struct {
+		version  string
+		wantPath string
+	}{
+		{"2.19.1", "/_plugins/_security/api/ssl/certs/reload"},
+		{"2.16.0", "/_plugins/_security/api/ssl/certs/reload"},
+		{"2.13.0", "/_plugins/_security/api/ssl/certs/reload"},
+		{"2.10.0", ""}, // No hot reload support
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.version, func(t *testing.T) {
+			got := GetHotReloadAPIPath(tt.version)
+			if got != tt.wantPath {
+				t.Errorf("GetHotReloadAPIPath(%s) = %s, want %s", tt.version, got, tt.wantPath)
+			}
+		})
+	}
+}
+
+func TestGetSupportedWazuhVersionRange(t *testing.T) {
+	min, max := GetSupportedWazuhVersionRange()
+
+	if min != "4.9.0" {
+		t.Errorf("Expected min version 4.9.0, got %s", min)
+	}
+
+	if max != "5.x.x" {
+		t.Errorf("Expected max version 5.x.x, got %s", max)
+	}
+}
+
+func TestGetAllSupportedWazuhVersions(t *testing.T) {
+	versions := GetAllSupportedWazuhVersions()
+
+	if len(versions) == 0 {
+		t.Error("Expected at least one supported version")
+	}
+
+	// Check that 4.9.0 is in the list
+	found := false
+	for _, v := range versions {
+		if v == "4.9.0" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Expected 4.9.0 to be in the list of supported versions")
+	}
+}

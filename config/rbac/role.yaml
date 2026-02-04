@@ -1,0 +1,233 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  - serviceaccounts
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - delete
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/exec
+  verbs:
+  - create
+- apiGroups:
+  - ""
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  verbs:
+  - get
+  - list
+  - patch
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - autoscaling
+  resources:
+  - horizontalpodautoscalers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - cronjobs
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - servicemonitors
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - rbac.authorization.k8s.io
+  resources:
+  - rolebindings
+  - roles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - resources.wazuh.com
+  resources:
+  - opensearchactiongroups
+  - opensearchauthconfigs
+  - opensearchcomponenttemplates
+  - opensearchdashboards
+  - opensearchindexers
+  - opensearchindextemplates
+  - opensearchindices
+  - opensearchismpolicies
+  - opensearchrestores
+  - opensearchrolemappings
+  - opensearchroles
+  - opensearchsnapshotpolicies
+  - opensearchsnapshotrepositories
+  - opensearchsnapshots
+  - opensearchtenants
+  - opensearchusers
+  - wazuhbackups
+  - wazuhcertificates
+  - wazuhclusters
+  - wazuhdecoders
+  - wazuhfilebeats
+  - wazuhmanagers
+  - wazuhrestores
+  - wazuhrules
+  - wazuhworkers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - resources.wazuh.com
+  resources:
+  - opensearchactiongroups/finalizers
+  - opensearchauthconfigs/finalizers
+  - opensearchcomponenttemplates/finalizers
+  - opensearchdashboards/finalizers
+  - opensearchindexers/finalizers
+  - opensearchindextemplates/finalizers
+  - opensearchindices/finalizers
+  - opensearchismpolicies/finalizers
+  - opensearchrestores/finalizers
+  - opensearchrolemappings/finalizers
+  - opensearchroles/finalizers
+  - opensearchsnapshotpolicies/finalizers
+  - opensearchsnapshotrepositories/finalizers
+  - opensearchsnapshots/finalizers
+  - opensearchtenants/finalizers
+  - opensearchusers/finalizers
+  - wazuhbackups/finalizers
+  - wazuhcertificates/finalizers
+  - wazuhclusters/finalizers
+  - wazuhdecoders/finalizers
+  - wazuhfilebeats/finalizers
+  - wazuhmanagers/finalizers
+  - wazuhrestores/finalizers
+  - wazuhrules/finalizers
+  - wazuhworkers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - resources.wazuh.com
+  resources:
+  - opensearchactiongroups/status
+  - opensearchauthconfigs/status
+  - opensearchcomponenttemplates/status
+  - opensearchdashboards/status
+  - opensearchindexers/status
+  - opensearchindextemplates/status
+  - opensearchindices/status
+  - opensearchismpolicies/status
+  - opensearchrestores/status
+  - opensearchrolemappings/status
+  - opensearchroles/status
+  - opensearchsnapshotpolicies/status
+  - opensearchsnapshotrepositories/status
+  - opensearchsnapshots/status
+  - opensearchtenants/status
+  - opensearchusers/status
+  - wazuhbackups/status
+  - wazuhcertificates/status
+  - wazuhclusters/status
+  - wazuhdecoders/status
+  - wazuhfilebeats/status
+  - wazuhmanagers/status
+  - wazuhrestores/status
+  - wazuhrules/status
+  - wazuhworkers/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - storage.k8s.io
+  resources:
+  - storageclasses
+  verbs:
+  - get
+  - list
+  - watch
