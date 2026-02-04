@@ -406,16 +406,32 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		return nil, fmt.Errorf("failed to reconcile master headless service: %w", err)
 	}
 
+	// Extract additional fields for hash computation
+	var podAnnotations map[string]string
+	var extraConfig string
+	var extraVolumes []corev1.Volume
+	var extraVolumeMounts []corev1.VolumeMount
+	if cluster.Spec.Manager != nil {
+		podAnnotations = cluster.Spec.Manager.Master.PodAnnotations
+		extraConfig = cluster.Spec.Manager.Master.ExtraConfig
+		extraVolumes = cluster.Spec.Manager.Master.ExtraVolumes
+		extraVolumeMounts = cluster.Spec.Manager.Master.ExtraVolumeMounts
+	}
+
 	// Compute specHash for change detection (version is included in image tag)
 	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
-		Version:      version,
-		Resources:    resources,
-		StorageSize:  storageSize,
-		NodeSelector: nodeSelector,
-		Tolerations:  tolerations,
-		Affinity:     affinity,
-		Env:          env,
-		EnvFrom:      envFrom,
+		Version:           version,
+		Resources:         resources,
+		StorageSize:       storageSize,
+		NodeSelector:      nodeSelector,
+		Tolerations:       tolerations,
+		Affinity:          affinity,
+		Env:               env,
+		EnvFrom:           envFrom,
+		PodAnnotations:    podAnnotations,
+		ExtraConfig:       extraConfig,
+		ExtraVolumes:      extraVolumes,
+		ExtraVolumeMounts: extraVolumeMounts,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
@@ -705,8 +721,38 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		return nil, fmt.Errorf("failed to reconcile worker headless service: %w", err)
 	}
 
+	// Extract additional fields for hash computation
+	var workerPodAnnotations map[string]string
+	var workerExtraConfig string
+	var workerExtraVolumes []corev1.Volume
+	var workerExtraVolumeMounts []corev1.VolumeMount
+	var workerEnv []corev1.EnvVar
+	var workerEnvFrom []corev1.EnvFromSource
+	if cluster.Spec.Manager != nil {
+		workerPodAnnotations = cluster.Spec.Manager.Workers.PodAnnotations
+		workerExtraConfig = cluster.Spec.Manager.Workers.ExtraConfig
+		workerExtraVolumes = cluster.Spec.Manager.Workers.ExtraVolumes
+		workerExtraVolumeMounts = cluster.Spec.Manager.Workers.ExtraVolumeMounts
+		workerEnv = cluster.Spec.Manager.Workers.Env
+		workerEnvFrom = cluster.Spec.Manager.Workers.EnvFrom
+	}
+
 	// Compute specHash for change detection (version is included in image tag)
-	specHash, err := patch.ComputeManagerWorkersSpecHash(replicas, version, resources, storageSize, "", nodeSelector, tolerations, affinity)
+	specHash, err := patch.ComputeManagerWorkersSpecHashFull(patch.ManagerWorkersSpecInput{
+		Replicas:          replicas,
+		Version:           version,
+		Resources:         resources,
+		StorageSize:       storageSize,
+		NodeSelector:      nodeSelector,
+		Tolerations:       tolerations,
+		Affinity:          affinity,
+		Env:               workerEnv,
+		EnvFrom:           workerEnvFrom,
+		PodAnnotations:    workerPodAnnotations,
+		ExtraConfig:       workerExtraConfig,
+		ExtraVolumes:      workerExtraVolumes,
+		ExtraVolumeMounts: workerExtraVolumeMounts,
+	})
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec hash")
 		specHash = ""

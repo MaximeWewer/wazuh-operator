@@ -661,6 +661,7 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		annotations  map[string]string
 	)
 
+	var podAnnotations map[string]string
 	if cluster.Spec.Dashboard != nil {
 		nodeSelector = cluster.Spec.Dashboard.NodeSelector
 		tolerations = cluster.Spec.Dashboard.Tolerations
@@ -668,20 +669,22 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		env = cluster.Spec.Dashboard.Env
 		envFrom = cluster.Spec.Dashboard.EnvFrom
 		annotations = cluster.Spec.Dashboard.Annotations
+		podAnnotations = cluster.Spec.Dashboard.PodAnnotations
 	}
 
 	// Compute spec hash for change detection (includes all configurable fields)
 	specHash, err := patch.ComputeDashboardSpecHashFull(patch.DashboardSpecInput{
-		Replicas:     replicas,
-		Version:      version,
-		Resources:    resources,
-		Image:        image,
-		NodeSelector: nodeSelector,
-		Tolerations:  tolerations,
-		Affinity:     affinity,
-		Env:          env,
-		EnvFrom:      envFrom,
-		Annotations:  annotations,
+		Replicas:       replicas,
+		Version:        version,
+		Resources:      resources,
+		Image:          image,
+		NodeSelector:   nodeSelector,
+		Tolerations:    tolerations,
+		Affinity:       affinity,
+		Env:            env,
+		EnvFrom:        envFrom,
+		Annotations:    annotations,
+		PodAnnotations: podAnnotations,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute dashboard spec hash, continuing without spec tracking")

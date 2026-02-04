@@ -784,6 +784,12 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		}
 	}
 
+	// Extract PodAnnotations for hash computation
+	var podAnnotations map[string]string
+	if cluster.Spec.Indexer != nil {
+		podAnnotations = cluster.Spec.Indexer.PodAnnotations
+	}
+
 	// Compute spec hash for change detection (includes all configurable fields)
 	specHash, err := patch.ComputeIndexerSpecHashFull(patch.IndexerSpecInput{
 		Replicas:          replicas,
@@ -798,6 +804,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		Env:               env,
 		EnvFrom:           envFrom,
 		Annotations:       annotations,
+		PodAnnotations:    podAnnotations,
 		MonitoringEnabled: monitoringEnabled,
 	})
 	if err != nil {
