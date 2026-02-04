@@ -74,17 +74,16 @@ type ManagerMasterSpec struct {
 	NodeSelector      map[string]string            `json:"nodeSelector,omitempty"`
 	Tolerations       []corev1.Toleration          `json:"tolerations,omitempty"`
 	Affinity          *corev1.Affinity             `json:"affinity,omitempty"`
-	ExtraVolumes      []corev1.Volume              `json:"extraVolumes,omitempty"`
-	ExtraVolumeMounts []corev1.VolumeMount         `json:"extraVolumeMounts,omitempty"`
 	// Custom pod configuration
-	Env              []corev1.EnvVar        `json:"env,omitempty"`
-	EnvFrom          []corev1.EnvFromSource `json:"envFrom,omitempty"`
-	Labels           map[string]string      `json:"labels,omitempty"`
-	Annotations      map[string]string      `json:"annotations,omitempty"`
-	PodAnnotations   map[string]string      `json:"podAnnotations,omitempty"`
-	ExtraConfig      string                 `json:"extraConfig,omitempty"`
-	ExtraVolumes     []corev1.Volume        `json:"extraVolumes,omitempty"`
-	ExtraVolumeMounts []corev1.VolumeMount  `json:"extraVolumeMounts,omitempty"`
+	Env               []corev1.EnvVar        `json:"env,omitempty"`
+	EnvFrom           []corev1.EnvFromSource `json:"envFrom,omitempty"`
+	Labels            map[string]string      `json:"labels,omitempty"`
+	Annotations       map[string]string      `json:"annotations,omitempty"`
+	PodAnnotations    map[string]string      `json:"podAnnotations,omitempty"`
+	// Extra configuration and volumes
+	ExtraConfig       string                 `json:"extraConfig,omitempty"`
+	ExtraVolumes      []corev1.Volume        `json:"extraVolumes,omitempty"`
+	ExtraVolumeMounts []corev1.VolumeMount   `json:"extraVolumeMounts,omitempty"`
 	// Monitoring configuration
 	MonitoringEnabled bool `json:"monitoringEnabled,omitempty"`
 }
@@ -99,17 +98,16 @@ type ManagerWorkersSpec struct {
 	NodeSelector      map[string]string            `json:"nodeSelector,omitempty"`
 	Tolerations       []corev1.Toleration          `json:"tolerations,omitempty"`
 	Affinity          *corev1.Affinity             `json:"affinity,omitempty"`
-	ExtraVolumes      []corev1.Volume              `json:"extraVolumes,omitempty"`
-	ExtraVolumeMounts []corev1.VolumeMount         `json:"extraVolumeMounts,omitempty"`
 	// Custom pod configuration
-	Env              []corev1.EnvVar        `json:"env,omitempty"`
-	EnvFrom          []corev1.EnvFromSource `json:"envFrom,omitempty"`
-	Labels           map[string]string      `json:"labels,omitempty"`
-	Annotations      map[string]string      `json:"annotations,omitempty"`
-	PodAnnotations   map[string]string      `json:"podAnnotations,omitempty"`
-	ExtraConfig      string                 `json:"extraConfig,omitempty"`
-	ExtraVolumes     []corev1.Volume        `json:"extraVolumes,omitempty"`
-	ExtraVolumeMounts []corev1.VolumeMount  `json:"extraVolumeMounts,omitempty"`
+	Env               []corev1.EnvVar        `json:"env,omitempty"`
+	EnvFrom           []corev1.EnvFromSource `json:"envFrom,omitempty"`
+	Labels            map[string]string      `json:"labels,omitempty"`
+	Annotations       map[string]string      `json:"annotations,omitempty"`
+	PodAnnotations    map[string]string      `json:"podAnnotations,omitempty"`
+	// Extra configuration and volumes
+	ExtraConfig       string                 `json:"extraConfig,omitempty"`
+	ExtraVolumes      []corev1.Volume        `json:"extraVolumes,omitempty"`
+	ExtraVolumeMounts []corev1.VolumeMount   `json:"extraVolumeMounts,omitempty"`
 }
 
 // ComputeSpecHash computes a SHA256 hash of spec fields for change detection
@@ -239,8 +237,6 @@ type ManagerMasterSpecInput struct {
 	NodeSelector      map[string]string
 	Tolerations       []corev1.Toleration
 	Affinity          *corev1.Affinity
-	ExtraVolumes      []corev1.Volume
-	ExtraVolumeMounts []corev1.VolumeMount
 	Env               []corev1.EnvVar
 	EnvFrom           []corev1.EnvFromSource
 	Labels            map[string]string

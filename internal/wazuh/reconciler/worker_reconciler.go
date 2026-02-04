@@ -343,6 +343,8 @@ func (r *WorkerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wa
 	affinity := cluster.Spec.Manager.Workers.Affinity
 	extraVolumes := cluster.Spec.Manager.Workers.ExtraVolumes
 	extraVolumeMounts := cluster.Spec.Manager.Workers.ExtraVolumeMounts
+	annotations := cluster.Spec.Manager.Workers.Annotations
+	podAnnotations := cluster.Spec.Manager.Workers.PodAnnotations
 
 	// Compute spec hash for change detection (includes scheduling options)
 	specHash, err := patch.ComputeManagerWorkersSpecHashFull(patch.ManagerWorkersSpecInput{
@@ -356,7 +358,7 @@ func (r *WorkerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wa
 		Affinity:          affinity,
 		ExtraVolumes:      extraVolumes,
 		ExtraVolumeMounts: extraVolumeMounts,
-    Annotations:       annotations,
+		Annotations:       annotations,
 		PodAnnotations:    podAnnotations,
 	})
 	if err != nil {
@@ -386,6 +388,7 @@ func (r *WorkerReconciler) reconcileStatefulSet(ctx context.Context, cluster *wa
 	}
 	if len(extraVolumeMounts) > 0 {
 		stsBuilder.WithVolumeMounts(extraVolumeMounts)
+	}
 	if len(annotations) > 0 {
 		stsBuilder.WithAnnotations(annotations)
 	}

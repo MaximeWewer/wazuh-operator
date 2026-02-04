@@ -419,18 +419,6 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		return nil, fmt.Errorf("failed to reconcile master headless service: %w", err)
 	}
 
-	// Extract additional fields for hash computation
-	var podAnnotations map[string]string
-	var extraConfig string
-	var extraVolumes []corev1.Volume
-	var extraVolumeMounts []corev1.VolumeMount
-	if cluster.Spec.Manager != nil {
-		podAnnotations = cluster.Spec.Manager.Master.PodAnnotations
-		extraConfig = cluster.Spec.Manager.Master.ExtraConfig
-		extraVolumes = cluster.Spec.Manager.Master.ExtraVolumes
-		extraVolumeMounts = cluster.Spec.Manager.Master.ExtraVolumeMounts
-	}
-
 	// Compute specHash for change detection (version is included in image tag)
 	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
 		Version:           version,
@@ -482,6 +470,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	}
 	if len(extraVolumeMounts) > 0 {
 		stsBuilder.WithVolumeMounts(extraVolumeMounts)
+	}
 	if len(annotations) > 0 {
 		stsBuilder.WithAnnotations(annotations)
 	}
@@ -821,6 +810,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	}
 	if len(extraVolumeMounts) > 0 {
 		stsBuilder.WithVolumeMounts(extraVolumeMounts)
+	}
 	if len(annotations) > 0 {
 		stsBuilder.WithAnnotations(annotations)
 	}
@@ -1162,6 +1152,7 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	}
 	if len(extraVolumeMounts) > 0 {
 		stsBuilder.WithVolumeMounts(extraVolumeMounts)
+	}
 	if cluster.Spec.Manager != nil {
 		if len(cluster.Spec.Manager.Master.Annotations) > 0 {
 			stsBuilder.WithAnnotations(cluster.Spec.Manager.Master.Annotations)
@@ -1254,6 +1245,8 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingSpecHash),
 			"newHash", utils.ShortHash(specHash))
+		needsUpdate = true
+	}
 	if utils.HashMap(sts.Annotations) != utils.HashMap(found.Annotations) {
 		log.Info("Updating Master StatefulSet due to annotation change", "name", sts.Name)
 		needsUpdate = true
@@ -1427,6 +1420,7 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		}
 		if len(extraVolumeMounts) > 0 {
 			stsBuilder.WithVolumeMounts(extraVolumeMounts)
+		}
 		if len(cluster.Spec.Manager.Workers.Annotations) > 0 {
 			stsBuilder.WithAnnotations(cluster.Spec.Manager.Workers.Annotations)
 		}
@@ -1528,6 +1522,8 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingSpecHash),
 			"newHash", utils.ShortHash(specHash))
+		needsUpdate = true
+	}
 	if utils.HashMap(sts.Annotations) != utils.HashMap(found.Annotations) {
 		log.Info("Updating Worker StatefulSet due to annotation change", "name", sts.Name)
 		needsUpdate = true

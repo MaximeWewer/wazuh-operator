@@ -274,6 +274,11 @@ func (r *ManagerReconciler) reconcileStatefulSet(ctx context.Context, cluster *w
 	affinity := cluster.Spec.Manager.Master.Affinity
 	extraVolumes := cluster.Spec.Manager.Master.ExtraVolumes
 	extraVolumeMounts := cluster.Spec.Manager.Master.ExtraVolumeMounts
+	annotations := cluster.Spec.Manager.Master.Annotations
+	podAnnotations := cluster.Spec.Manager.Master.PodAnnotations
+	extraConfig := cluster.Spec.Manager.Master.ExtraConfig
+	env := cluster.Spec.Manager.Master.Env
+	envFrom := cluster.Spec.Manager.Master.EnvFrom
 
 	// Compute spec hash for change detection (includes scheduling options)
 	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
@@ -284,10 +289,13 @@ func (r *ManagerReconciler) reconcileStatefulSet(ctx context.Context, cluster *w
 		NodeSelector:      nodeSelector,
 		Tolerations:       tolerations,
 		Affinity:          affinity,
+		Env:               env,
+		EnvFrom:           envFrom,
+		Annotations:       annotations,
+		PodAnnotations:    podAnnotations,
+		ExtraConfig:       extraConfig,
 		ExtraVolumes:      extraVolumes,
 		ExtraVolumeMounts: extraVolumeMounts,
-    Annotations:       annotations,
-		PodAnnotations:    podAnnotations,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute manager master spec hash, continuing without spec tracking")
@@ -314,6 +322,7 @@ func (r *ManagerReconciler) reconcileStatefulSet(ctx context.Context, cluster *w
 	}
 	if len(extraVolumeMounts) > 0 {
 		stsBuilder.WithVolumeMounts(extraVolumeMounts)
+	}
 	if len(annotations) > 0 {
 		stsBuilder.WithAnnotations(annotations)
 	}
@@ -632,6 +641,7 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 		}
 		if len(manager.Spec.Master.ExtraVolumeMounts) > 0 {
 			stsBuilder.WithVolumeMounts(manager.Spec.Master.ExtraVolumeMounts)
+		}
 		if len(manager.Spec.Master.Annotations) > 0 {
 			stsBuilder.WithAnnotations(manager.Spec.Master.Annotations)
 		}
@@ -657,6 +667,7 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 		}
 		if len(manager.Spec.Workers.ExtraVolumeMounts) > 0 {
 			stsBuilder.WithVolumeMounts(manager.Spec.Workers.ExtraVolumeMounts)
+		}
 		if len(manager.Spec.Workers.Annotations) > 0 {
 			stsBuilder.WithAnnotations(manager.Spec.Workers.Annotations)
 		}

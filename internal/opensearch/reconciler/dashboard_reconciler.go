@@ -673,7 +673,6 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		podAnnotations map[string]string
 	)
 
-	var podAnnotations map[string]string
 	if cluster.Spec.Dashboard != nil {
 		nodeSelector = cluster.Spec.Dashboard.NodeSelector
 		tolerations = cluster.Spec.Dashboard.Tolerations
