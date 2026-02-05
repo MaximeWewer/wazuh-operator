@@ -68,6 +68,12 @@ const (
 
 	// PathIndexerPlugins is the plugins directory
 	PathIndexerPlugins = "/usr/share/wazuh-indexer/plugins"
+
+	// PathIndexerLegacyCerts is the legacy certificates directory (Wazuh < 4.14.0)
+	PathIndexerLegacyCerts = "/usr/share/wazuh-indexer/certs"
+
+	// PathIndexerLegacySecurityConfig is the legacy security config directory (Wazuh < 4.14.0)
+	PathIndexerLegacySecurityConfig = "/usr/share/wazuh-indexer/opensearch-security"
 )
 
 // OpenSearch Dashboard paths (using Wazuh Dashboard paths)
