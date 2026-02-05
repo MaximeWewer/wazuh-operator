@@ -38,6 +38,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/deployments"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/config"
+	shareddrain "github.com/MaximeWewer/wazuh-operator/internal/shared/drain"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
@@ -62,7 +63,6 @@ func NewWorkerReconciler(c client.Client, scheme *runtime.Scheme) *WorkerReconci
 		Scheme: scheme,
 	}
 }
-
 // ReconcileStandalone reconciles a standalone WazuhWorker resource
 func (r *WorkerReconciler) ReconcileStandalone(ctx context.Context, worker *wazuhv1.WazuhWorker) error {
 	log := logf.FromContext(ctx)
@@ -241,7 +241,6 @@ func (r *WorkerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, w
 
 	return nil
 }
-
 // createOrUpdate creates or updates a resource with retry on conflict
 func (r *WorkerReconciler) createOrUpdate(ctx context.Context, obj client.Object) error {
 	log := logf.FromContext(ctx)
@@ -317,7 +316,7 @@ func (r *WorkerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *waz
 	}
 
 	// Detect scale-down
-	scaleInfo := drain.DetectStatefulSetScaleDown(sts, desiredReplicas)
+	scaleInfo := shareddrain.DetectStatefulSetScaleDown(sts, desiredReplicas)
 	if !scaleInfo.Detected {
 		// No scale-down detected
 		return result, nil
@@ -412,7 +411,7 @@ func (r *WorkerReconciler) getOrInitDrainStatus(cluster *wazuhv1.WazuhCluster) *
 }
 
 // startDrain initiates the drain process for a manager worker node
-func (r *WorkerReconciler) startDrain(ctx context.Context, cluster *wazuhv1.WazuhCluster, scaleInfo drain.ScaleDownInfo, status *wazuhv1.ComponentDrainStatus) error {
+func (r *WorkerReconciler) startDrain(ctx context.Context, cluster *wazuhv1.WazuhCluster, scaleInfo shareddrain.ScaleDownInfo, status *wazuhv1.ComponentDrainStatus) error {
 	log := logf.FromContext(ctx)
 
 	// Initialize Wazuh client if needed
@@ -435,7 +434,7 @@ func (r *WorkerReconciler) startDrain(ctx context.Context, cluster *wazuhv1.Wazu
 	nodeName := scaleInfo.TargetPodName
 
 	// Update status to pending
-	if err := drain.StartDrain(status, nodeName, scaleInfo.CurrentReplicas, scaleInfo.TargetReplicas); err != nil {
+	if err := shareddrain.StartDrain(status, nodeName, scaleInfo.CurrentReplicas, scaleInfo.TargetReplicas); err != nil {
 		return fmt.Errorf("failed to transition drain state: %w", err)
 	}
 
@@ -448,7 +447,7 @@ func (r *WorkerReconciler) startDrain(ctx context.Context, cluster *wazuhv1.Wazu
 	// Start the actual drain
 	if err := r.drainer.StartDrain(ctx, nodeName); err != nil {
 		// Mark as failed
-		_ = drain.MarkFailed(status, fmt.Sprintf("Failed to start drain: %v", err))
+		_ = shareddrain.MarkFailed(status, fmt.Sprintf("Failed to start drain: %v", err))
 		if r.Recorder != nil {
 			r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.DrainEventReasonFailed,
 				fmt.Sprintf("Failed to start manager drain: %v", err))
@@ -457,7 +456,7 @@ func (r *WorkerReconciler) startDrain(ctx context.Context, cluster *wazuhv1.Wazu
 	}
 
 	// Transition to draining phase
-	if err := drain.TransitionTo(status, wazuhv1.DrainPhaseDraining, "Draining event queue on worker"); err != nil {
+	if err := shareddrain.TransitionTo(status, wazuhv1.DrainPhaseDraining, "Draining event queue on worker"); err != nil {
 		log.Error(err, "Failed to transition to draining phase")
 	}
 
@@ -482,8 +481,8 @@ func (r *WorkerReconciler) monitorDrainProgress(ctx context.Context, _ *wazuhv1.
 	}
 
 	// Update status
-	drain.UpdateProgress(status, progress.Percent, progress.Message)
-	drain.UpdateQueueDepth(status, progress.QueueDepth)
+	shareddrain.UpdateProgress(status, progress.Percent, progress.Message)
+	shareddrain.UpdateQueueDepth(status, progress.QueueDepth)
 
 	log.V(1).Info("Manager drain progress",
 		"node", nodeName,
@@ -493,7 +492,7 @@ func (r *WorkerReconciler) monitorDrainProgress(ctx context.Context, _ *wazuhv1.
 
 	// Check for completion
 	if progress.IsComplete {
-		if err := drain.TransitionTo(status, wazuhv1.DrainPhaseVerifying, "Verifying queue drain completion"); err != nil {
+		if err := shareddrain.TransitionTo(status, wazuhv1.DrainPhaseVerifying, "Verifying queue drain completion"); err != nil {
 			log.Error(err, "Failed to transition to verifying phase")
 		}
 	}
@@ -517,7 +516,7 @@ func (r *WorkerReconciler) verifyDrainComplete(ctx context.Context, cluster *waz
 
 	if complete {
 		// Mark as complete
-		if err := drain.MarkComplete(status); err != nil {
+		if err := shareddrain.MarkComplete(status); err != nil {
 			log.Error(err, "Failed to mark drain as complete")
 		}
 
@@ -610,7 +609,7 @@ func (r *WorkerReconciler) getWazuhAPICredentials(ctx context.Context, cluster *
 // ResetDrainState resets the drain state after a successful scale-down
 func (r *WorkerReconciler) ResetDrainState(cluster *wazuhv1.WazuhCluster) {
 	if cluster.Status.Drain != nil && cluster.Status.Drain.Manager != nil {
-		drain.Reset(cluster.Status.Drain.Manager)
+		shareddrain.Reset(cluster.Status.Drain.Manager)
 	}
 	// Clear cached drainer for next operation
 	r.drainer = nil
@@ -638,3 +637,4 @@ func (r *WorkerReconciler) EvaluateDrainFeasibility(ctx context.Context, cluster
 	drainer := drain.NewManagerDrainer(r.wazuhClient, logf.FromContext(ctx), drainConfig)
 	return drainer.EvaluateFeasibility(ctx, nodeName)
 }
+

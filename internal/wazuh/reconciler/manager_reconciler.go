@@ -54,6 +54,7 @@ func NewManagerReconciler(c client.Client, scheme *runtime.Scheme) *ManagerRecon
 	}
 }
 
+
 // resolveSecretKey reads a key from a secret
 func (r *ManagerReconciler) resolveSecretKey(ctx context.Context, namespace, secretName, key string) (string, error) {
 	secret := &corev1.Secret{}
@@ -66,7 +67,6 @@ func (r *ManagerReconciler) resolveSecretKey(ctx context.Context, namespace, sec
 	}
 	return string(value), nil
 }
-
 // ReconcileStandalone reconciles a standalone WazuhManager resource
 func (r *ManagerReconciler) ReconcileStandalone(ctx context.Context, manager *wazuhv1.WazuhManager) error {
 	log := logf.FromContext(ctx)

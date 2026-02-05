@@ -26,6 +26,7 @@ import (
 
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
+	shareddrain "github.com/MaximeWewer/wazuh-operator/internal/shared/drain"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -338,8 +339,8 @@ func (d *ManagerDrainerImpl) WaitForDrainComplete(ctx context.Context, nodeName 
 
 			// Update status
 			if status != nil {
-				UpdateProgress(status, progress.Percent, progress.Message)
-				UpdateQueueDepth(status, progress.QueueDepth)
+				shareddrain.UpdateProgress(status, progress.Percent, progress.Message)
+				shareddrain.UpdateQueueDepth(status, progress.QueueDepth)
 			}
 
 			if progress.IsComplete {

@@ -27,7 +27,7 @@ import (
 
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
-	drainstate "github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
+	drainstate "github.com/MaximeWewer/wazuh-operator/internal/shared/drain"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 

@@ -67,47 +67,47 @@ type DashboardSpec struct {
 
 // ManagerMasterSpec contains fields from WazuhCluster.Spec.Manager.Master used for hash computation
 type ManagerMasterSpec struct {
-	Version      string                       `json:"version,omitempty"`
-	Resources    *corev1.ResourceRequirements `json:"resources,omitempty"`
-	StorageSize  string                       `json:"storageSize,omitempty"`
-	Image        string                       `json:"image,omitempty"`
-	NodeSelector map[string]string            `json:"nodeSelector,omitempty"`
-	Tolerations  []corev1.Toleration          `json:"tolerations,omitempty"`
-	Affinity     *corev1.Affinity             `json:"affinity,omitempty"`
+	Version           string                       `json:"version,omitempty"`
+	Resources         *corev1.ResourceRequirements `json:"resources,omitempty"`
+	StorageSize       string                       `json:"storageSize,omitempty"`
+	Image             string                       `json:"image,omitempty"`
+	NodeSelector      map[string]string            `json:"nodeSelector,omitempty"`
+	Tolerations       []corev1.Toleration          `json:"tolerations,omitempty"`
+	Affinity          *corev1.Affinity             `json:"affinity,omitempty"`
 	// Custom pod configuration
-	Env            []corev1.EnvVar        `json:"env,omitempty"`
-	EnvFrom        []corev1.EnvFromSource `json:"envFrom,omitempty"`
-	Labels         map[string]string      `json:"labels,omitempty"`
-	Annotations    map[string]string      `json:"annotations,omitempty"`
-	PodAnnotations map[string]string      `json:"podAnnotations,omitempty"`
+	Env               []corev1.EnvVar        `json:"env,omitempty"`
+	EnvFrom           []corev1.EnvFromSource `json:"envFrom,omitempty"`
+	Labels            map[string]string      `json:"labels,omitempty"`
+	Annotations       map[string]string      `json:"annotations,omitempty"`
+	PodAnnotations    map[string]string      `json:"podAnnotations,omitempty"`
 	// Extra configuration and volumes
-	ExtraConfig       string               `json:"extraConfig,omitempty"`
-	ExtraVolumes      []corev1.Volume      `json:"extraVolumes,omitempty"`
-	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+	ExtraConfig       string                 `json:"extraConfig,omitempty"`
+	ExtraVolumes      []corev1.Volume        `json:"extraVolumes,omitempty"`
+	ExtraVolumeMounts []corev1.VolumeMount   `json:"extraVolumeMounts,omitempty"`
 	// Monitoring configuration
 	MonitoringEnabled bool `json:"monitoringEnabled,omitempty"`
 }
 
 // ManagerWorkersSpec contains fields from WazuhCluster.Spec.Manager.Workers used for hash computation
 type ManagerWorkersSpec struct {
-	Replicas     int32                        `json:"replicas,omitempty"`
-	Version      string                       `json:"version,omitempty"`
-	Resources    *corev1.ResourceRequirements `json:"resources,omitempty"`
-	StorageSize  string                       `json:"storageSize,omitempty"`
-	Image        string                       `json:"image,omitempty"`
-	NodeSelector map[string]string            `json:"nodeSelector,omitempty"`
-	Tolerations  []corev1.Toleration          `json:"tolerations,omitempty"`
-	Affinity     *corev1.Affinity             `json:"affinity,omitempty"`
+	Replicas          int32                        `json:"replicas,omitempty"`
+	Version           string                       `json:"version,omitempty"`
+	Resources         *corev1.ResourceRequirements `json:"resources,omitempty"`
+	StorageSize       string                       `json:"storageSize,omitempty"`
+	Image             string                       `json:"image,omitempty"`
+	NodeSelector      map[string]string            `json:"nodeSelector,omitempty"`
+	Tolerations       []corev1.Toleration          `json:"tolerations,omitempty"`
+	Affinity          *corev1.Affinity             `json:"affinity,omitempty"`
 	// Custom pod configuration
-	Env            []corev1.EnvVar        `json:"env,omitempty"`
-	EnvFrom        []corev1.EnvFromSource `json:"envFrom,omitempty"`
-	Labels         map[string]string      `json:"labels,omitempty"`
-	Annotations    map[string]string      `json:"annotations,omitempty"`
-	PodAnnotations map[string]string      `json:"podAnnotations,omitempty"`
+	Env               []corev1.EnvVar        `json:"env,omitempty"`
+	EnvFrom           []corev1.EnvFromSource `json:"envFrom,omitempty"`
+	Labels            map[string]string      `json:"labels,omitempty"`
+	Annotations       map[string]string      `json:"annotations,omitempty"`
+	PodAnnotations    map[string]string      `json:"podAnnotations,omitempty"`
 	// Extra configuration and volumes
-	ExtraConfig       string               `json:"extraConfig,omitempty"`
-	ExtraVolumes      []corev1.Volume      `json:"extraVolumes,omitempty"`
-	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+	ExtraConfig       string                 `json:"extraConfig,omitempty"`
+	ExtraVolumes      []corev1.Volume        `json:"extraVolumes,omitempty"`
+	ExtraVolumeMounts []corev1.VolumeMount   `json:"extraVolumeMounts,omitempty"`
 }
 
 // ComputeSpecHash computes a SHA256 hash of spec fields for change detection
