@@ -31,7 +31,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
-	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/routes"
+	"github.com/MaximeWewer/wazuh-operator/internal/networking/builder/routes"
 )
 
 // GatewayReconciler handles reconciliation of Gateway API routes for Wazuh components

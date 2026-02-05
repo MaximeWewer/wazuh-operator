@@ -472,5 +472,5 @@ curl http://localhost:8080/metrics
 
 ## Support
 
-- GitHub Issues: https://github.com/MaximeWewer/wazuh-operator/issues
-- Documentation: https://documentation.wazuh.com/
+- GitHub Issues: <https://github.com/MaximeWewer/wazuh-operator/issues>
+- Documentation: <https://documentation.wazuh.com/>

@@ -270,6 +270,58 @@ cluster:
             eventsEnabled: true
 ```
 
+### Ingress Configuration
+
+```yaml
+cluster:
+  spec:
+    dashboard:
+      ingress:
+        enabled: true
+        ingressClassName: nginx
+        hosts:
+          - host: dashboard.wazuh.example.com
+            paths:
+              - path: /
+                pathType: Prefix
+        tls:
+          - secretName: dashboard-tls
+            hosts:
+              - dashboard.wazuh.example.com
+    indexer:
+      ingress:
+        enabled: true
+        ingressClassName: nginx
+        annotations:
+          nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+        hosts:
+          - host: indexer.wazuh.example.com
+            paths:
+              - path: /
+                pathType: Prefix
+    manager:
+      master:
+        ingress:
+          enabled: true
+          ingressClassName: nginx
+          hosts:
+            - host: manager.wazuh.example.com
+              paths:
+                - path: /
+                  pathType: Prefix
+      workers:
+        ingress:
+          enabled: true
+          ingressClassName: nginx
+          hosts:
+            - host: manager-workers.wazuh.example.com
+              paths:
+                - path: /
+                  pathType: Prefix
+```
+
+> **Note:** Ingress and Gateway API cannot both be enabled for the same component.
+
 ## Security Considerations
 
 **IMPORTANT**: The default passwords in this chart are for demonstration purposes only.
@@ -285,5 +337,5 @@ For production use, you **MUST**:
 
 ## Support
 
-- GitHub Issues: https://github.com/MaximeWewer/wazuh-operator/issues
-- Documentation: https://documentation.wazuh.com/
+- GitHub Issues: <https://github.com/MaximeWewer/wazuh-operator/issues>
+- Documentation: <https://documentation.wazuh.com/>

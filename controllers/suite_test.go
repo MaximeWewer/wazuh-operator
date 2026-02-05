@@ -37,6 +37,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
+	networkingreconciler "github.com/MaximeWewer/wazuh-operator/internal/networking/reconciler"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
@@ -95,7 +96,7 @@ var _ = BeforeSuite(func() {
 	dashboardReconciler := opensearchreconciler.NewDashboardReconciler(k8sClient, scheme.Scheme)
 	workerReconciler := wazuhreconciler.NewWorkerReconciler(k8sClient, scheme.Scheme)
 	monitoringReconciler := monitoring.NewMonitoringReconciler(k8sClient, scheme.Scheme)
-	gatewayReconciler := wazuhreconciler.NewGatewayReconciler(k8sClient, scheme.Scheme)
+	gatewayReconciler := networkingreconciler.NewGatewayReconciler(k8sClient, scheme.Scheme)
 
 	// Initialize drain managers for safe scale-down operations
 	rollbackManager := drain.NewRollbackManager(k8sClient, testLogger)

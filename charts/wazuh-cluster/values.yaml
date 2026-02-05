@@ -148,6 +148,20 @@ cluster:
       # gatewayAPI:
       #   enabled: true
       #   gatewayRef: { name: wazuh-gateway }
+      # ingress:
+      #   enabled: true
+      #   ingressClassName: nginx
+      #   annotations:
+      #     nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+      #   hosts:
+      #     - host: indexer.wazuh.example.com
+      #       paths:
+      #         - path: /
+      #           pathType: Prefix
+      #   tls:
+      #     - secretName: indexer-tls
+      #       hosts:
+      #         - indexer.wazuh.example.com
 
     # @extra cluster.spec.manager Wazuh Manager configuration
     manager:
@@ -158,6 +172,14 @@ cluster:
         # storageSize: 20Gi
         # resources:
         #   requests: { cpu: "1", memory: 2Gi }
+        # ingress:
+        #   enabled: true
+        #   ingressClassName: nginx
+        #   hosts:
+        #     - host: manager-master.wazuh.example.com
+        #       paths:
+        #         - path: /
+        #           pathType: Prefix
 
       # @extra cluster.spec.manager.workers Worker nodes configuration
       # @default -- `{}` (auto-configured by sizing profile)
@@ -173,6 +195,14 @@ cluster:
         # gatewayAPI:
         #   enabled: true
         #   tcp: { enabled: true, enrollmentEnabled: true, eventsEnabled: true }
+        # ingress:
+        #   enabled: true
+        #   ingressClassName: nginx
+        #   hosts:
+        #     - host: manager-workers.wazuh.example.com
+        #       paths:
+        #         - path: /
+        #           pathType: Prefix
 
     # @extra cluster.spec.dashboard OpenSearch Dashboard configuration
     # @default -- `{}` (auto-configured by sizing profile)
@@ -189,6 +219,18 @@ cluster:
       # gatewayAPI:
       #   enabled: true
       #   hostnames: ["dashboard.wazuh.example.com"]
+      # ingress:
+      #   enabled: true
+      #   ingressClassName: nginx
+      #   hosts:
+      #     - host: dashboard.wazuh.example.com
+      #       paths:
+      #         - path: /
+      #           pathType: Prefix
+      #   tls:
+      #     - secretName: dashboard-tls
+      #       hosts:
+      #         - dashboard.wazuh.example.com
 
     # @extra cluster.spec.tls TLS/Certificate configuration
     # Configure TLS certificates for secure communication between components.

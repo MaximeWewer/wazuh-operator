@@ -49,6 +49,7 @@ import (
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
+	networkingreconciler "github.com/MaximeWewer/wazuh-operator/internal/networking/reconciler"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/pkg/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
@@ -294,7 +295,8 @@ func main() {
 		DashboardReconciler:    opensearchreconciler.NewDashboardReconciler(mgr.GetClient(), mgr.GetScheme()),
 		WorkerReconciler:       wazuhreconciler.NewWorkerReconciler(mgr.GetClient(), mgr.GetScheme()),
 		MonitoringReconciler:   monitoring.NewMonitoringReconciler(mgr.GetClient(), mgr.GetScheme()),
-		GatewayReconciler:      wazuhreconciler.NewGatewayReconciler(mgr.GetClient(), mgr.GetScheme()),
+		GatewayReconciler:      networkingreconciler.NewGatewayReconciler(mgr.GetClient(), mgr.GetScheme()),
+		IngressReconciler:      networkingreconciler.NewIngressReconciler(mgr.GetClient(), mgr.GetScheme()),
 		RollbackManager:        drain.NewRollbackManager(mgr.GetClient(), ctrl.Log.WithName("rollback-manager")),
 		RetryManager:           drain.NewRetryManager(ctrl.Log.WithName("retry-manager")),
 		UseNonBlockingRollouts: nonBlockingRollouts,

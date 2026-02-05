@@ -65,6 +65,11 @@ Combines sizing profiles with credentials and other configurations
   {{- $_ := set $indexer "gatewayAPI" .Values.cluster.spec.indexer.gatewayAPI -}}
 {{- end -}}
 
+{{- /* Apply indexer ingress if configured */ -}}
+{{- if (default dict .Values.cluster.spec.indexer).ingress -}}
+  {{- $_ := set $indexer "ingress" .Values.cluster.spec.indexer.ingress -}}
+{{- end -}}
+
 {{- $_ := set $spec "indexer" $indexer -}}
 
 {{- /* Apply manager API credentials - either from External Secrets or inline secrets */ -}}
@@ -110,10 +115,22 @@ Combines sizing profiles with credentials and other configurations
   {{- $_ := set $manager "workers" $workers -}}
 {{- end -}}
 
+{{- /* Apply workers ingress if configured */ -}}
+{{- if (default dict (default dict .Values.cluster.spec.manager).workers).ingress -}}
+  {{- $_ := set $workers "ingress" .Values.cluster.spec.manager.workers.ingress -}}
+  {{- $_ := set $manager "workers" $workers -}}
+{{- end -}}
+
 {{- /* Apply master gatewayAPI if configured */ -}}
 {{- $master := default dict $manager.master -}}
 {{- if (default dict (default dict .Values.cluster.spec.manager).master).gatewayAPI -}}
   {{- $_ := set $master "gatewayAPI" .Values.cluster.spec.manager.master.gatewayAPI -}}
+  {{- $_ := set $manager "master" $master -}}
+{{- end -}}
+
+{{- /* Apply master ingress if configured */ -}}
+{{- if (default dict (default dict .Values.cluster.spec.manager).master).ingress -}}
+  {{- $_ := set $master "ingress" .Values.cluster.spec.manager.master.ingress -}}
   {{- $_ := set $manager "master" $master -}}
 {{- end -}}
 
@@ -133,6 +150,11 @@ Combines sizing profiles with credentials and other configurations
 {{- /* Apply dashboard gatewayAPI if configured */ -}}
 {{- if (default dict .Values.cluster.spec.dashboard).gatewayAPI -}}
   {{- $_ := set $dashboard "gatewayAPI" .Values.cluster.spec.dashboard.gatewayAPI -}}
+{{- end -}}
+
+{{- /* Apply dashboard ingress if configured */ -}}
+{{- if (default dict .Values.cluster.spec.dashboard).ingress -}}
+  {{- $_ := set $dashboard "ingress" .Values.cluster.spec.dashboard.ingress -}}
 {{- end -}}
 
 {{- $_ := set $spec "dashboard" $dashboard -}}

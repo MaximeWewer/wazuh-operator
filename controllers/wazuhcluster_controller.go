@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	networkingv1 "k8s.io/api/networking/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
@@ -47,6 +48,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
+	networkingreconciler "github.com/MaximeWewer/wazuh-operator/internal/networking/reconciler"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
@@ -79,7 +81,8 @@ type WazuhClusterReconciler struct {
 	DashboardReconciler   *opensearchreconciler.DashboardReconciler
 	WorkerReconciler      *wazuhreconciler.WorkerReconciler
 	MonitoringReconciler  *monitoring.MonitoringReconciler
-	GatewayReconciler     *wazuhreconciler.GatewayReconciler
+	GatewayReconciler     *networkingreconciler.GatewayReconciler
+	IngressReconciler     *networkingreconciler.IngressReconciler
 
 	// Drain management
 	RollbackManager *drain.RollbackManagerImpl
@@ -117,6 +120,7 @@ type WazuhClusterReconciler struct {
 // +kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is the main reconciliation loop for WazuhCluster
 func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -650,7 +654,25 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 	log.V(1).Info("Gateway API reconciliation completed")
 
-	// 11. Check for indexer restart and re-sync if needed
+	// 11. Reconcile Ingress resources if any component has Ingress enabled
+	if hasIngressEnabled(cluster) {
+		if r.IngressReconciler != nil {
+			if err := r.IngressReconciler.Reconcile(ctx, cluster); err != nil {
+				log.Error(err, "Failed to reconcile Ingress resources")
+				r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse, "IngressFailed", err.Error())
+				return ctrl.Result{}, err
+			}
+		}
+	} else if r.IngressReconciler != nil {
+		// Ingress is not configured on this cluster
+		// Still call reconciler to clean up any orphaned ingresses
+		if err := r.IngressReconciler.Reconcile(ctx, cluster); err != nil {
+			log.V(1).Info("Failed to reconcile Ingress resources (non-fatal)", "error", err)
+		}
+	}
+	log.V(1).Info("Ingress reconciliation completed")
+
+	// 13. Check for indexer restart and re-sync if needed
 	if restarted, err := r.IndexerReconciler.DetectIndexerRestart(ctx, cluster); err != nil {
 		log.Error(err, "Failed to detect indexer restart")
 	} else if restarted && securityInitialized {
@@ -660,7 +682,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 
-	// 12. Update pending rollouts status
+	// 14. Update pending rollouts status
 	if len(newPendingRollouts) > 0 {
 		r.addPendingRollouts(cluster, newPendingRollouts)
 		hasPendingRollouts = true
@@ -1713,6 +1735,7 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
+		Owns(&networkingv1.Ingress{}).
 		// Watch WazuhManager CRs - reconcile WazuhCluster when referenced manager changes
 		Watches(
 			&wazuhv1.WazuhManager{},
@@ -1765,6 +1788,35 @@ func hasGatewayAPIEnabled(cluster *wazuhv1.WazuhCluster) bool {
 	// Check Indexer
 	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.GatewayAPI != nil &&
 		cluster.Spec.Indexer.GatewayAPI.Enabled {
+		return true
+	}
+
+	return false
+}
+
+// hasIngressEnabled checks if any component has Ingress explicitly enabled
+func hasIngressEnabled(cluster *wazuhv1.WazuhCluster) bool {
+	// Check Dashboard
+	if cluster.Spec.Dashboard != nil && cluster.Spec.Dashboard.Ingress != nil &&
+		cluster.Spec.Dashboard.Ingress.Enabled {
+		return true
+	}
+
+	// Check Manager Master
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Ingress != nil &&
+		cluster.Spec.Manager.Master.Ingress.Enabled {
+		return true
+	}
+
+	// Check Manager Workers
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Ingress != nil &&
+		cluster.Spec.Manager.Workers.Ingress.Enabled {
+		return true
+	}
+
+	// Check Indexer
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Ingress != nil &&
+		cluster.Spec.Indexer.Ingress.Enabled {
 		return true
 	}
 
