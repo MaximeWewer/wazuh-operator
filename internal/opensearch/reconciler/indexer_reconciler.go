@@ -689,9 +689,20 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 	}
 
 	if needsUpdate {
-		sts.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, sts); err != nil {
-			return fmt.Errorf("failed to update indexer statefulset: %w", err)
+		if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, r.Recorder, sts, found, err)
+			if recErr != nil {
+				return fmt.Errorf("failed to update indexer statefulset: %w", recErr)
+			}
+			if !recreated {
+				return fmt.Errorf("failed to update indexer statefulset: %w", err)
+			}
+			// Workload deleted for recreation; emit event and requeue
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonWorkloadRecreating,
+					fmt.Sprintf("Deleted StatefulSet %s/%s due to immutable field change; re-creation on next reconciliation", sts.Namespace, sts.Name))
+			}
+			return fmt.Errorf("statefulset %s/%s deleted for immutable field recreation", sts.Namespace, sts.Name)
 		}
 
 		// Only wait for rollout on cert hash changes (pod restart required)
@@ -1063,9 +1074,20 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 			"name", sts.Name,
 			"reason", updateReason)
 
-		sts.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, sts); err != nil {
-			return nil, fmt.Errorf("failed to update indexer statefulset: %w", err)
+		if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, r.Recorder, sts, found, err)
+			if recErr != nil {
+				return nil, fmt.Errorf("failed to update indexer statefulset: %w", recErr)
+			}
+			if !recreated {
+				return nil, fmt.Errorf("failed to update indexer statefulset: %w", err)
+			}
+			// Workload deleted for recreation; emit event and requeue
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonWorkloadRecreating,
+					fmt.Sprintf("Deleted StatefulSet %s/%s due to immutable field change; re-creation on next reconciliation", sts.Namespace, sts.Name))
+			}
+			return nil, fmt.Errorf("statefulset %s/%s deleted for immutable field recreation", sts.Namespace, sts.Name)
 		}
 
 		// Return pending rollout instead of waiting
@@ -1460,6 +1482,18 @@ func (r *IndexerReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 	})
 }
 
+// updateStatefulSetWithRetry updates a StatefulSet with retry-on-conflict, always using the latest resourceVersion.
+func (r *IndexerReconciler) updateStatefulSetWithRetry(ctx context.Context, desired *appsv1.StatefulSet) error {
+	return utils.RetryOnConflict(ctx, func() error {
+		current := &appsv1.StatefulSet{}
+		if err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, current); err != nil {
+			return err
+		}
+		desired.SetResourceVersion(current.GetResourceVersion())
+		return r.Update(ctx, desired)
+	})
+}
+
 // getStatefulSetPhase returns the phase of a StatefulSet
 func getStatefulSetPhase(sts *appsv1.StatefulSet) string {
 	if sts.Status.ReadyReplicas == 0 {
@@ -1590,9 +1624,20 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 			needsUpdate = true
 		}
 		if needsUpdate {
-			sts.SetResourceVersion(foundSts.GetResourceVersion())
-			if err := r.Update(ctx, sts); err != nil {
-				return fmt.Errorf("failed to update statefulset: %w", err)
+			if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
+				recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, r.Recorder, sts, foundSts, err)
+				if recErr != nil {
+					return fmt.Errorf("failed to update statefulset: %w", recErr)
+				}
+				if !recreated {
+					return fmt.Errorf("failed to update statefulset: %w", err)
+				}
+				// Workload deleted for recreation; emit event and requeue
+				if r.Recorder != nil {
+					r.Recorder.Event(indexer, corev1.EventTypeWarning, constants.EventReasonWorkloadRecreating,
+						fmt.Sprintf("Deleted StatefulSet %s/%s due to immutable field change; re-creation on next reconciliation", sts.Namespace, sts.Name))
+				}
+				return fmt.Errorf("statefulset %s/%s deleted for immutable field recreation", sts.Namespace, sts.Name)
 			}
 		}
 	}
@@ -2596,9 +2641,20 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 			"pool", pool.Name,
 			"reason", updateReason)
 
-		sts.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, sts); err != nil {
-			return fmt.Errorf("failed to update statefulset: %w", err)
+		if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, r.Recorder, sts, found, err)
+			if recErr != nil {
+				return fmt.Errorf("failed to update statefulset: %w", recErr)
+			}
+			if !recreated {
+				return fmt.Errorf("failed to update statefulset: %w", err)
+			}
+			// Workload deleted for recreation; emit event and requeue
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonWorkloadRecreating,
+					fmt.Sprintf("Deleted StatefulSet %s/%s due to immutable field change; re-creation on next reconciliation", sts.Namespace, sts.Name))
+			}
+			return fmt.Errorf("statefulset %s/%s deleted for immutable field recreation", sts.Namespace, sts.Name)
 		}
 
 		// Emit event

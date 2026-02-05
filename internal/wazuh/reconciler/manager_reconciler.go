@@ -331,9 +331,20 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 		needsUpdate = true
 	}
 	if needsUpdate {
-		sts.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, sts); err != nil {
-			return fmt.Errorf("failed to update statefulset: %w", err)
+		if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, r.Recorder, sts, found, err)
+			if recErr != nil {
+				return fmt.Errorf("failed to update statefulset: %w", recErr)
+			}
+			if !recreated {
+				return fmt.Errorf("failed to update statefulset: %w", err)
+			}
+			// Workload deleted for recreation; emit event and requeue
+			if r.Recorder != nil {
+				r.Recorder.Event(manager, corev1.EventTypeWarning, constants.EventReasonWorkloadRecreating,
+					fmt.Sprintf("Deleted StatefulSet %s/%s due to immutable field change; re-creation on next reconciliation", sts.Namespace, sts.Name))
+			}
+			return fmt.Errorf("statefulset %s/%s deleted for immutable field recreation", sts.Namespace, sts.Name)
 		}
 	}
 
@@ -378,5 +389,17 @@ func (r *ManagerReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 		log.V(1).Info("Updating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
 		obj.SetResourceVersion(existing.GetResourceVersion())
 		return r.Update(ctx, obj)
+	})
+}
+
+// updateStatefulSetWithRetry updates a StatefulSet with retry-on-conflict, always using the latest resourceVersion.
+func (r *ManagerReconciler) updateStatefulSetWithRetry(ctx context.Context, desired *appsv1.StatefulSet) error {
+	return utils.RetryOnConflict(ctx, func() error {
+		current := &appsv1.StatefulSet{}
+		if err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, current); err != nil {
+			return err
+		}
+		desired.SetResourceVersion(current.GetResourceVersion())
+		return r.Update(ctx, desired)
 	})
 }

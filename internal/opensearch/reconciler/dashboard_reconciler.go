@@ -415,9 +415,20 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 	}
 
 	if needsUpdate {
-		deployment.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, deployment); err != nil {
-			return fmt.Errorf("failed to update dashboard deployment: %w", err)
+		if err := r.updateDeploymentWithRetry(ctx, deployment); err != nil {
+			recreated, recErr := utils.RecreateDeploymentOnError(ctx, r.Client, r.Recorder, deployment, found, err)
+			if recErr != nil {
+				return fmt.Errorf("failed to update dashboard deployment: %w", recErr)
+			}
+			if !recreated {
+				return fmt.Errorf("failed to update dashboard deployment: %w", err)
+			}
+			// Workload deleted for recreation; emit event and requeue
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonWorkloadRecreating,
+					fmt.Sprintf("Deleted Deployment %s/%s due to immutable field change; re-creation on next reconciliation", deployment.Namespace, deployment.Name))
+			}
+			return fmt.Errorf("deployment %s/%s deleted for immutable field recreation", deployment.Namespace, deployment.Name)
 		}
 
 		// Only wait for rollout on cert hash changes (pod restart required)
@@ -852,9 +863,20 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 			"name", deployment.Name,
 			"reason", updateReason)
 
-		deployment.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, deployment); err != nil {
-			return nil, fmt.Errorf("failed to update dashboard deployment: %w", err)
+		if err := r.updateDeploymentWithRetry(ctx, deployment); err != nil {
+			recreated, recErr := utils.RecreateDeploymentOnError(ctx, r.Client, r.Recorder, deployment, found, err)
+			if recErr != nil {
+				return nil, fmt.Errorf("failed to update dashboard deployment: %w", recErr)
+			}
+			if !recreated {
+				return nil, fmt.Errorf("failed to update dashboard deployment: %w", err)
+			}
+			// Workload deleted for recreation; emit event and requeue
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonWorkloadRecreating,
+					fmt.Sprintf("Deleted Deployment %s/%s due to immutable field change; re-creation on next reconciliation", deployment.Namespace, deployment.Name))
+			}
+			return nil, fmt.Errorf("deployment %s/%s deleted for immutable field recreation", deployment.Namespace, deployment.Name)
 		}
 
 		// Return pending rollout instead of waiting
@@ -930,6 +952,18 @@ func (r *DashboardReconciler) createOrUpdate(ctx context.Context, obj client.Obj
 	log.V(1).Info("Updating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
 	obj.SetResourceVersion(existing.GetResourceVersion())
 	return r.Update(ctx, obj)
+}
+
+// updateDeploymentWithRetry updates a Deployment with retry-on-conflict, always using the latest resourceVersion.
+func (r *DashboardReconciler) updateDeploymentWithRetry(ctx context.Context, desired *appsv1.Deployment) error {
+	return utils.RetryOnConflict(ctx, func() error {
+		current := &appsv1.Deployment{}
+		if err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, current); err != nil {
+			return err
+		}
+		desired.SetResourceVersion(current.GetResourceVersion())
+		return r.Update(ctx, desired)
+	})
 }
 
 // getDeploymentPhase returns the phase of a Deployment
@@ -1065,9 +1099,20 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 			needsUpdate = true
 		}
 		if needsUpdate {
-			deploy.SetResourceVersion(foundDeploy.GetResourceVersion())
-			if err := r.Update(ctx, deploy); err != nil {
-				return fmt.Errorf("failed to update deployment: %w", err)
+			if err := r.updateDeploymentWithRetry(ctx, deploy); err != nil {
+				recreated, recErr := utils.RecreateDeploymentOnError(ctx, r.Client, r.Recorder, deploy, foundDeploy, err)
+				if recErr != nil {
+					return fmt.Errorf("failed to update deployment: %w", recErr)
+				}
+				if !recreated {
+					return fmt.Errorf("failed to update deployment: %w", err)
+				}
+				// Workload deleted for recreation; emit event and requeue
+				if r.Recorder != nil {
+					r.Recorder.Event(dashboard, corev1.EventTypeWarning, constants.EventReasonWorkloadRecreating,
+						fmt.Sprintf("Deleted Deployment %s/%s due to immutable field change; re-creation on next reconciliation", deploy.Namespace, deploy.Name))
+				}
+				return fmt.Errorf("deployment %s/%s deleted for immutable field recreation", deploy.Namespace, deploy.Name)
 			}
 		}
 	}
