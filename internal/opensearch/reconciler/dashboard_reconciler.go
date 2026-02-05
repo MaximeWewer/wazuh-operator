@@ -42,9 +42,9 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/hpa"
 	osservices "github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
-	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
 )
 
 // DashboardReconciler handles reconciliation of OpenSearch Dashboard
@@ -417,7 +417,13 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 	if needsUpdate {
 		deployment.SetResourceVersion(found.GetResourceVersion())
 		if err := r.Update(ctx, deployment); err != nil {
-			return fmt.Errorf("failed to update dashboard deployment: %w", err)
+			recreated, recErr := utils.RecreateDeploymentOnError(ctx, r.Client, deployment, found, err)
+			if recErr != nil {
+				return fmt.Errorf("failed to update dashboard deployment: %w", recErr)
+			}
+			if !recreated {
+				return fmt.Errorf("failed to update dashboard deployment: %w", err)
+			}
 		}
 
 		// Only wait for rollout on cert hash changes (pod restart required)
@@ -854,7 +860,13 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 
 		deployment.SetResourceVersion(found.GetResourceVersion())
 		if err := r.Update(ctx, deployment); err != nil {
-			return nil, fmt.Errorf("failed to update dashboard deployment: %w", err)
+			recreated, recErr := utils.RecreateDeploymentOnError(ctx, r.Client, deployment, found, err)
+			if recErr != nil {
+				return nil, fmt.Errorf("failed to update dashboard deployment: %w", recErr)
+			}
+			if !recreated {
+				return nil, fmt.Errorf("failed to update dashboard deployment: %w", err)
+			}
 		}
 
 		// Return pending rollout instead of waiting
@@ -1067,7 +1079,13 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 		if needsUpdate {
 			deploy.SetResourceVersion(foundDeploy.GetResourceVersion())
 			if err := r.Update(ctx, deploy); err != nil {
-				return fmt.Errorf("failed to update deployment: %w", err)
+				recreated, recErr := utils.RecreateDeploymentOnError(ctx, r.Client, deploy, foundDeploy, err)
+				if recErr != nil {
+					return fmt.Errorf("failed to update deployment: %w", recErr)
+				}
+				if !recreated {
+					return fmt.Errorf("failed to update deployment: %w", err)
+				}
 			}
 		}
 	}

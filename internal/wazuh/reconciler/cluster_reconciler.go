@@ -38,8 +38,11 @@ import (
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
 	wazuhcerts "github.com/MaximeWewer/wazuh-operator/internal/certificates/wazuh"
+	affinityutil "github.com/MaximeWewer/wazuh-operator/internal/shared/affinity"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
+	"github.com/MaximeWewer/wazuh-operator/internal/validation"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/cronjobs"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/deployments"
@@ -47,9 +50,6 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
-	affinityutil "github.com/MaximeWewer/wazuh-operator/internal/shared/affinity"
-	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
-	"github.com/MaximeWewer/wazuh-operator/internal/validation"
 )
 
 // ClusterReconciler handles reconciliation of Wazuh cluster components
@@ -316,7 +316,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		extraVolumes      []corev1.Volume
 		extraVolumeMounts []corev1.VolumeMount
 		extraConfig       string
- 		annotations       map[string]string
+		annotations       map[string]string
 		podAnnotations    map[string]string
 	)
 
@@ -617,7 +617,13 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	if needsUpdate {
 		sts.SetResourceVersion(found.GetResourceVersion())
 		if err := r.Update(ctx, sts); err != nil {
-			return nil, fmt.Errorf("failed to update master statefulset: %w", err)
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
+			if recErr != nil {
+				return nil, fmt.Errorf("failed to update master statefulset: %w", recErr)
+			}
+			if !recreated {
+				return nil, fmt.Errorf("failed to update master statefulset: %w", err)
+			}
 		}
 		return &utils.PendingRollout{
 			Component: "manager-master",
@@ -649,7 +655,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		extraVolumes      []corev1.Volume
 		extraVolumeMounts []corev1.VolumeMount
 		extraConfig       string
-   	annotations       map[string]string
+		annotations       map[string]string
 		podAnnotations    map[string]string
 	)
 
@@ -960,7 +966,13 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	if needsUpdate {
 		sts.SetResourceVersion(found.GetResourceVersion())
 		if err := r.Update(ctx, sts); err != nil {
-			return nil, fmt.Errorf("failed to update worker statefulset: %w", err)
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
+			if recErr != nil {
+				return nil, fmt.Errorf("failed to update worker statefulset: %w", recErr)
+			}
+			if !recreated {
+				return nil, fmt.Errorf("failed to update worker statefulset: %w", err)
+			}
 		}
 		return &utils.PendingRollout{
 			Component: "manager-worker",
@@ -1265,7 +1277,13 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	if needsUpdate {
 		sts.SetResourceVersion(found.GetResourceVersion())
 		if err := r.Update(ctx, sts); err != nil {
-			return fmt.Errorf("failed to update master statefulset: %w", err)
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
+			if recErr != nil {
+				return fmt.Errorf("failed to update master statefulset: %w", recErr)
+			}
+			if !recreated {
+				return fmt.Errorf("failed to update master statefulset: %w", err)
+			}
 		}
 
 		// Wait for the StatefulSet to be ready after update (graceful rollout)
@@ -1545,7 +1563,13 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 	if needsUpdate {
 		sts.SetResourceVersion(found.GetResourceVersion())
 		if err := r.Update(ctx, sts); err != nil {
-			return fmt.Errorf("failed to update worker statefulset: %w", err)
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
+			if recErr != nil {
+				return fmt.Errorf("failed to update worker statefulset: %w", recErr)
+			}
+			if !recreated {
+				return fmt.Errorf("failed to update worker statefulset: %w", err)
+			}
 		}
 
 		// Only wait for rollout on cert hash changes (pod restart required)

@@ -52,13 +52,13 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/config"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/drain"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	affinityutil "github.com/MaximeWewer/wazuh-operator/internal/shared/affinity"
+	drainstate "github.com/MaximeWewer/wazuh-operator/internal/shared/drain"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/storage"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
-	drainstate "github.com/MaximeWewer/wazuh-operator/internal/shared/drain"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
-	affinityutil "github.com/MaximeWewer/wazuh-operator/internal/shared/affinity"
-	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
 )
 
 // IndexerReconciler handles reconciliation of OpenSearch Indexer
@@ -639,7 +639,13 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 	if needsUpdate {
 		sts.SetResourceVersion(found.GetResourceVersion())
 		if err := r.Update(ctx, sts); err != nil {
-			return fmt.Errorf("failed to update indexer statefulset: %w", err)
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
+			if recErr != nil {
+				return fmt.Errorf("failed to update indexer statefulset: %w", recErr)
+			}
+			if !recreated {
+				return fmt.Errorf("failed to update indexer statefulset: %w", err)
+			}
 		}
 
 		// Only wait for rollout on cert hash changes (pod restart required)
@@ -1013,7 +1019,13 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 
 		sts.SetResourceVersion(found.GetResourceVersion())
 		if err := r.Update(ctx, sts); err != nil {
-			return nil, fmt.Errorf("failed to update indexer statefulset: %w", err)
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
+			if recErr != nil {
+				return nil, fmt.Errorf("failed to update indexer statefulset: %w", recErr)
+			}
+			if !recreated {
+				return nil, fmt.Errorf("failed to update indexer statefulset: %w", err)
+			}
 		}
 
 		// Return pending rollout instead of waiting
@@ -1540,7 +1552,13 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 		if needsUpdate {
 			sts.SetResourceVersion(foundSts.GetResourceVersion())
 			if err := r.Update(ctx, sts); err != nil {
-				return fmt.Errorf("failed to update statefulset: %w", err)
+				recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, foundSts, err)
+				if recErr != nil {
+					return fmt.Errorf("failed to update statefulset: %w", recErr)
+				}
+				if !recreated {
+					return fmt.Errorf("failed to update statefulset: %w", err)
+				}
 			}
 		}
 	}
@@ -2546,7 +2564,13 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 
 		sts.SetResourceVersion(found.GetResourceVersion())
 		if err := r.Update(ctx, sts); err != nil {
-			return fmt.Errorf("failed to update statefulset: %w", err)
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
+			if recErr != nil {
+				return fmt.Errorf("failed to update statefulset: %w", recErr)
+			}
+			if !recreated {
+				return fmt.Errorf("failed to update statefulset: %w", err)
+			}
 		}
 
 		// Emit event
