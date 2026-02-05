@@ -19,6 +19,8 @@ package reconciler
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"net"
 	"sort"
@@ -453,6 +455,12 @@ func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *waz
 		}
 	}
 
+	// Prefer DN options derived from the actual indexer certificate when available.
+	// This prevents nodes_dn mismatches after upgrades when defaults change.
+	if optsFromCert, err := r.dnOptionsFromIndexerCertSecret(ctx, cluster.Name, cluster.Namespace); err == nil && optsFromCert != nil {
+		dnOpts = optsFromCert
+	}
+
 	// Build opensearch.yml content (version-aware configuration with DN options)
 	opensearchYML := config.BuildIndexerConfigWithDN(cluster.Name, cluster.Namespace, replicas, cluster.Spec.Version, dnOpts)
 
@@ -465,6 +473,50 @@ func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *waz
 	}
 
 	return r.createOrUpdate(ctx, configMap)
+}
+
+// dnOptionsFromIndexerCertSecret extracts DN options from the indexer TLS cert secret.
+func (r *IndexerReconciler) dnOptionsFromIndexerCertSecret(ctx context.Context, clusterName, namespace string) (*certificates.DNOptions, error) {
+	secretName := constants.IndexerCertsName(clusterName)
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret); err != nil {
+		return nil, err
+	}
+
+	certPEM, ok := secret.Data[constants.SecretKeyTLSCert]
+	if !ok || len(certPEM) == 0 {
+		return nil, fmt.Errorf("tls.crt not found in secret %s", secretName)
+	}
+
+	block, _ := pem.Decode(certPEM)
+	if block == nil || len(block.Bytes) == 0 {
+		return nil, fmt.Errorf("failed to decode tls.crt from secret %s", secretName)
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse tls.crt from secret %s: %w", secretName, err)
+	}
+
+	subject := cert.Subject
+	opts := &certificates.DNOptions{}
+	if len(subject.OrganizationalUnit) > 0 {
+		opts.OrganizationalUnit = subject.OrganizationalUnit[0]
+	}
+	if len(subject.Organization) > 0 {
+		opts.Organization = subject.Organization[0]
+	}
+	if len(subject.Locality) > 0 {
+		opts.Locality = subject.Locality[0]
+	}
+	if len(subject.Province) > 0 {
+		opts.State = subject.Province[0]
+	}
+	if len(subject.Country) > 0 {
+		opts.Country = subject.Country[0]
+	}
+
+	return opts, nil
 }
 
 // getConfigHash retrieves the current config hash from the indexer ConfigMap

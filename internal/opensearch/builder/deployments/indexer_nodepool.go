@@ -455,29 +455,26 @@ func (b *NodePoolStatefulSetBuilder) buildVolumes(configMapName string) []corev1
 
 // buildVolumeMounts builds the volume mount list
 func (b *NodePoolStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
+	configPath := constants.IndexerConfigFilePath(b.version)
+	securityConfigDir := constants.IndexerSecurityConfigDir(b.version)
+	certsDir := constants.IndexerCertsDir(b.version)
+
 	mounts := []corev1.VolumeMount{
 		{
 			Name:      constants.VolumeNameIndexerData,
 			MountPath: constants.PathIndexerData,
 		},
-		// Mount opensearch.yml at config dir (Wazuh 4.12+/OpenSearch 2.19+ reads from here)
+		// Mount opensearch.yml at the correct location based on Wazuh version
 		{
 			Name:      constants.VolumeNameConfigProcessed,
-			MountPath: constants.PathIndexerConfig + "/opensearch.yml",
-			SubPath:   constants.ConfigMapKeyOpenSearchYml,
-			ReadOnly:  true,
-		},
-		// Mount opensearch.yml at base dir (Wazuh 4.9-4.11/OpenSearch 2.13-2.18 reads from here)
-		{
-			Name:      constants.VolumeNameConfigProcessed,
-			MountPath: constants.PathIndexerBase + "/opensearch.yml",
+			MountPath: configPath,
 			SubPath:   constants.ConfigMapKeyOpenSearchYml,
 			ReadOnly:  true,
 		},
 		// Mount certificates as directory for hot reload
 		{
 			Name:      constants.VolumeNameIndexerCerts,
-			MountPath: constants.PathIndexerCerts,
+			MountPath: certsDir,
 			ReadOnly:  true,
 		},
 		// Admin certificates for securityadmin tool
@@ -486,29 +483,16 @@ func (b *NodePoolStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 			MountPath: constants.PathIndexerAdminCerts,
 			ReadOnly:  true,
 		},
-		// Security config at config dir (Wazuh 4.12+)
+		// Security config at the correct location based on Wazuh version
 		{
 			Name:      constants.VolumeNameConfigProcessed,
-			MountPath: constants.PathIndexerSecurityConfig + "/internal_users.yml",
+			MountPath: securityConfigDir + "/internal_users.yml",
 			SubPath:   constants.SecretKeyInternalUsers,
 			ReadOnly:  true,
 		},
 		{
 			Name:      constants.VolumeNameConfigProcessed,
-			MountPath: constants.PathIndexerSecurityConfig + "/roles_mapping.yml",
-			SubPath:   constants.SecretKeyRolesMapping,
-			ReadOnly:  true,
-		},
-		// Security config at base dir (Wazuh 4.9-4.11)
-		{
-			Name:      constants.VolumeNameConfigProcessed,
-			MountPath: constants.PathIndexerBase + "/opensearch-security/internal_users.yml",
-			SubPath:   constants.SecretKeyInternalUsers,
-			ReadOnly:  true,
-		},
-		{
-			Name:      constants.VolumeNameConfigProcessed,
-			MountPath: constants.PathIndexerBase + "/opensearch-security/roles_mapping.yml",
+			MountPath: securityConfigDir + "/roles_mapping.yml",
 			SubPath:   constants.SecretKeyRolesMapping,
 			ReadOnly:  true,
 		},

@@ -148,6 +148,41 @@ func TestBuildIndexerConfig_NoVersion(t *testing.T) {
 	}
 }
 
+func TestBuildIndexerConfig_CertPathByVersion(t *testing.T) {
+	tests := []struct {
+		name          string
+		wazuhVersion  string
+		expectedCerts string
+		notExpected   string
+	}{
+		{
+			name:          "Wazuh 4.13.0 uses legacy certs path",
+			wazuhVersion:  "4.13.0",
+			expectedCerts: "plugins.security.ssl.transport.pemcert_filepath: /usr/share/wazuh-indexer/certs/tls.crt",
+			notExpected:   "plugins.security.ssl.transport.pemcert_filepath: /usr/share/wazuh-indexer/config/certs/tls.crt",
+		},
+		{
+			name:          "Wazuh 4.14.0 uses config certs path",
+			wazuhVersion:  "4.14.0",
+			expectedCerts: "plugins.security.ssl.transport.pemcert_filepath: /usr/share/wazuh-indexer/config/certs/tls.crt",
+			notExpected:   "plugins.security.ssl.transport.pemcert_filepath: /usr/share/wazuh-indexer/certs/tls.crt",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := BuildIndexerConfig("test-cluster", "test-ns", 1, tt.wazuhVersion)
+
+			if !strings.Contains(config, tt.expectedCerts) {
+				t.Fatalf("Expected config to contain %q, but it did not.\nConfig:\n%s", tt.expectedCerts, config)
+			}
+			if tt.notExpected != "" && strings.Contains(config, tt.notExpected) {
+				t.Fatalf("Expected config NOT to contain %q, but it did.\nConfig:\n%s", tt.notExpected, config)
+			}
+		})
+	}
+}
+
 // =============================================================================
 // NodePool Config Tests (Advanced Topology Mode)
 // =============================================================================

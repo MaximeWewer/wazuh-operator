@@ -316,6 +316,7 @@ func BuildIndexerConfigWithDN(clusterName, namespace string, replicas int32, waz
 	config.WithReplicas(replicas)
 	if wazuhVersion != "" {
 		config.WithWazuhVersion(wazuhVersion)
+		config.CertPath = constants.IndexerCertsDir(wazuhVersion)
 	}
 	if dnOpts != nil {
 		config.WithDNOptions(*dnOpts)
@@ -361,6 +362,7 @@ func BuildNodePoolConfig(params NodePoolConfigParams) string {
 	// Set Wazuh version for feature detection
 	if params.WazuhVersion != "" {
 		config.WithWazuhVersion(params.WazuhVersion)
+		config.CertPath = constants.IndexerCertsDir(params.WazuhVersion)
 	}
 
 	return config.Build()
