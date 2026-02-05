@@ -638,7 +638,7 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 
 	if needsUpdate {
 		if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
-			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, r.Recorder, sts, found, err)
 			if recErr != nil {
 				return fmt.Errorf("failed to update indexer statefulset: %w", recErr)
 			}
@@ -1023,7 +1023,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 			"reason", updateReason)
 
 		if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
-			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, r.Recorder, sts, found, err)
 			if recErr != nil {
 				return nil, fmt.Errorf("failed to update indexer statefulset: %w", recErr)
 			}
@@ -1573,7 +1573,7 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 		}
 		if needsUpdate {
 			if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
-				recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, foundSts, err)
+				recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, r.Recorder, sts, foundSts, err)
 				if recErr != nil {
 					return fmt.Errorf("failed to update statefulset: %w", recErr)
 				}
@@ -2590,7 +2590,7 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 			"reason", updateReason)
 
 		if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
-			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, r.Recorder, sts, found, err)
 			if recErr != nil {
 				return fmt.Errorf("failed to update statefulset: %w", recErr)
 			}

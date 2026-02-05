@@ -18,11 +18,13 @@ package utils //nolint:revive // utils is a common package name
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -60,15 +62,21 @@ func IsDeploymentImmutableError(err error) bool {
 // RecreateStatefulSetOnError deletes a StatefulSet if the error is immutable-field related.
 // Returns (true, nil) when the resource was deleted; the caller should requeue so the
 // normal Get→IsNotFound→Create path re-creates it on the next reconciliation cycle.
-func RecreateStatefulSetOnError(ctx context.Context, c client.Client, desired *appsv1.StatefulSet, existing *appsv1.StatefulSet, err error) (bool, error) {
+func RecreateStatefulSetOnError(ctx context.Context, c client.Client, recorder record.EventRecorder, desired *appsv1.StatefulSet, existing *appsv1.StatefulSet, err error) (bool, error) {
 	if !IsStatefulSetImmutableError(err) {
 		return false, err
 	}
 
 	logger := log.FromContext(ctx)
 	logger.Info("Deleting StatefulSet for immutable field recreation", "name", desired.Name, "namespace", desired.Namespace)
+	if recorder != nil {
+		recorder.Eventf(existing, "Warning", "WorkloadRecreated", "Deleting StatefulSet %s due to immutable field update", existing.Name)
+	}
 
 	propagation := metav1.DeletePropagationForeground
+	if existing.DeletionTimestamp != nil {
+		return false, fmt.Errorf("statefulset %s/%s is already being deleted", existing.Namespace, existing.Name)
+	}
 	if delErr := c.Delete(ctx, existing, &client.DeleteOptions{PropagationPolicy: &propagation}); delErr != nil {
 		if apierrors.IsNotFound(delErr) {
 			return true, nil
@@ -81,15 +89,21 @@ func RecreateStatefulSetOnError(ctx context.Context, c client.Client, desired *a
 // RecreateDeploymentOnError deletes a Deployment if the error is immutable-field related.
 // Returns (true, nil) when the resource was deleted; the caller should requeue so the
 // normal Get→IsNotFound→Create path re-creates it on the next reconciliation cycle.
-func RecreateDeploymentOnError(ctx context.Context, c client.Client, desired *appsv1.Deployment, existing *appsv1.Deployment, err error) (bool, error) {
+func RecreateDeploymentOnError(ctx context.Context, c client.Client, recorder record.EventRecorder, desired *appsv1.Deployment, existing *appsv1.Deployment, err error) (bool, error) {
 	if !IsDeploymentImmutableError(err) {
 		return false, err
 	}
 
 	logger := log.FromContext(ctx)
 	logger.Info("Deleting Deployment for immutable field recreation", "name", desired.Name, "namespace", desired.Namespace)
+	if recorder != nil {
+		recorder.Eventf(existing, "Warning", "WorkloadRecreated", "Deleting Deployment %s due to immutable field update", existing.Name)
+	}
 
 	propagation := metav1.DeletePropagationForeground
+	if existing.DeletionTimestamp != nil {
+		return false, fmt.Errorf("deployment %s/%s is already being deleted", existing.Namespace, existing.Name)
+	}
 	if delErr := c.Delete(ctx, existing, &client.DeleteOptions{PropagationPolicy: &propagation}); delErr != nil {
 		if apierrors.IsNotFound(delErr) {
 			return true, nil

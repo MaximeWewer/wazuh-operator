@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -114,11 +115,12 @@ func TestRecreateStatefulSetOnError(t *testing.T) {
 	desired.Spec.Replicas = int32Ptr(2)
 
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
+	recorder := record.NewFakeRecorder(10)
 
 	err := apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "statefulsets"}, "sts",
 		fmt.Errorf("StatefulSet.apps \"sts\" is invalid: spec: Forbidden: updates to statefulset spec for fields other than 'replicas' are forbidden"))
 
-	recreated, recErr := RecreateStatefulSetOnError(context.Background(), cl, desired, existing, err)
+	recreated, recErr := RecreateStatefulSetOnError(context.Background(), cl, recorder, desired, existing, err)
 	if recErr != nil {
 		t.Fatalf("unexpected error: %v", recErr)
 	}
@@ -156,11 +158,12 @@ func TestRecreateDeploymentOnError(t *testing.T) {
 	desired := existing.DeepCopy()
 
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
+	recorder := record.NewFakeRecorder(10)
 
 	err := apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "deployments"}, "dep",
 		fmt.Errorf("Deployment.apps \"dep\" is invalid: spec.selector: Invalid value: ... field is immutable"))
 
-	recreated, recErr := RecreateDeploymentOnError(context.Background(), cl, desired, existing, err)
+	recreated, recErr := RecreateDeploymentOnError(context.Background(), cl, recorder, desired, existing, err)
 	if recErr != nil {
 		t.Fatalf("unexpected error: %v", recErr)
 	}
@@ -202,7 +205,7 @@ func TestRecreateStatefulSetOnError_NonImmutablePassThrough(t *testing.T) {
 	// Use a generic error that is NOT an immutable field error
 	originalErr := fmt.Errorf("some random update error")
 
-	recreated, recErr := RecreateStatefulSetOnError(context.Background(), cl, desired, existing, originalErr)
+	recreated, recErr := RecreateStatefulSetOnError(context.Background(), cl, nil, desired, existing, originalErr)
 	if recreated {
 		t.Fatal("expected recreated to be false for non-immutable error")
 	}
@@ -246,7 +249,7 @@ func TestRecreateStatefulSetOnError_DeleteOnly(t *testing.T) {
 	err := apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "statefulsets"}, "sts",
 		fmt.Errorf("StatefulSet.apps \"sts\" is invalid: spec: Forbidden: updates to statefulset spec for fields other than 'replicas' are forbidden"))
 
-	recreated, recErr := RecreateStatefulSetOnError(context.Background(), cl, desired, existing, err)
+	recreated, recErr := RecreateStatefulSetOnError(context.Background(), cl, nil, desired, existing, err)
 	if recErr != nil {
 		t.Fatalf("unexpected error: %v", recErr)
 	}
@@ -291,7 +294,7 @@ func TestRecreateStatefulSetOnError_AlreadyGone(t *testing.T) {
 	err := apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "statefulsets"}, "sts",
 		fmt.Errorf("StatefulSet.apps \"sts\" is invalid: spec: Forbidden: updates to statefulset spec for fields other than 'replicas' are forbidden"))
 
-	recreated, recErr := RecreateStatefulSetOnError(context.Background(), cl, desired, existing, err)
+	recreated, recErr := RecreateStatefulSetOnError(context.Background(), cl, nil, desired, existing, err)
 	if recErr != nil {
 		t.Fatalf("expected no error when resource already gone, got: %v", recErr)
 	}
