@@ -35,6 +35,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
+	certreconciler "github.com/MaximeWewer/wazuh-operator/internal/certificates/reconciler"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
 	networkingreconciler "github.com/MaximeWewer/wazuh-operator/internal/networking/reconciler"
@@ -91,7 +92,7 @@ var _ = BeforeSuite(func() {
 	// Initialize reconciler with ALL helper reconcilers (fixes nil pointer issues)
 	testLogger := logf.Log.WithName("test")
 	clusterReconciler := wazuhreconciler.NewClusterReconciler(k8sClient, scheme.Scheme)
-	certificateReconciler := wazuhreconciler.NewCertificateReconciler(k8sClient, scheme.Scheme)
+	certificateReconciler := certreconciler.NewCertificateReconciler(k8sClient, scheme.Scheme)
 	indexerReconciler := opensearchreconciler.NewIndexerReconciler(k8sClient, scheme.Scheme)
 	dashboardReconciler := opensearchreconciler.NewDashboardReconciler(k8sClient, scheme.Scheme)
 	workerReconciler := wazuhreconciler.NewWorkerReconciler(k8sClient, scheme.Scheme)

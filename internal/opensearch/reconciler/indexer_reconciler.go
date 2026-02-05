@@ -57,8 +57,8 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	drainstate "github.com/MaximeWewer/wazuh-operator/internal/shared/drain"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
-	affinityutil "github.com/MaximeWewer/wazuh-operator/pkg/resources/affinity"
-	"github.com/MaximeWewer/wazuh-operator/pkg/resources/pdb"
+	affinityutil "github.com/MaximeWewer/wazuh-operator/internal/shared/affinity"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
 )
 
 // IndexerReconciler handles reconciliation of OpenSearch Indexer

@@ -24,7 +24,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
-	affinityutil "github.com/MaximeWewer/wazuh-operator/pkg/resources/affinity"
+	affinityutil "github.com/MaximeWewer/wazuh-operator/internal/shared/affinity"
 )
 
 // TestAntiAffinityIntegration tests the anti-affinity integration with the reconciler

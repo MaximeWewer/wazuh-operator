@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
-	"github.com/MaximeWewer/wazuh-operator/internal/utils"
+	"github.com/MaximeWewer/wazuh-operator/pkg/versions"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
@@ -246,11 +246,11 @@ func (c *OpenSearchConfig) Build() string {
 
 		// Version-aware SSL certificate hot reload configuration
 		// Uses Wazuh version to determine OpenSearch capabilities automatically
-		if c.WazuhVersion != "" && utils.SupportsAutomaticHotReload(c.WazuhVersion) {
+		if c.WazuhVersion != "" && versions.SupportsAutomaticHotReload(c.WazuhVersion) {
 			// Wazuh 4.12+ / OpenSearch 2.19+: automatic cluster-wide hot reload
 			sb.WriteString("# Automatic SSL certificate hot reload (OpenSearch 2.19+)\n")
 			sb.WriteString("plugins.security.ssl.certificates_hot_reload.enabled: true\n\n")
-		} else if c.WazuhVersion != "" && utils.RequiresAPIReload(c.WazuhVersion) {
+		} else if c.WazuhVersion != "" && versions.RequiresAPIReload(c.WazuhVersion) {
 			// Wazuh 4.9-4.11 / OpenSearch 2.13-2.18: API-based reload
 			sb.WriteString("# SSL certificate reload via API (OpenSearch 2.13-2.18)\n")
 			sb.WriteString("plugins.security.ssl_cert_reload_enabled: true\n\n")

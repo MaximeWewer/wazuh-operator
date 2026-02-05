@@ -19,7 +19,7 @@ package constants
 import (
 	"time"
 
-	"github.com/MaximeWewer/wazuh-operator/internal/utils"
+	"github.com/MaximeWewer/wazuh-operator/pkg/versions"
 )
 
 // Default version strings
@@ -33,7 +33,7 @@ const (
 // GetDefaultOpenSearchVersion returns the default OpenSearch version
 // corresponding to the DefaultWazuhVersion
 func GetDefaultOpenSearchVersion() string {
-	version, err := utils.GetOpenSearchVersionFromWazuh(DefaultWazuhVersion)
+	version, err := versions.GetOpenSearchVersionFromWazuh(DefaultWazuhVersion)
 	if err != nil {
 		// Fallback for safety - should never happen with valid DefaultWazuhVersion
 		return "2.19.1"
@@ -44,7 +44,7 @@ func GetDefaultOpenSearchVersion() string {
 // GetDefaultPrometheusExporterPluginVersion returns the default OpenSearch
 // Prometheus exporter plugin version corresponding to the DefaultWazuhVersion
 func GetDefaultPrometheusExporterPluginVersion() string {
-	version, err := utils.GetPrometheusExporterPluginVersion(DefaultWazuhVersion)
+	version, err := versions.GetPrometheusExporterPluginVersion(DefaultWazuhVersion)
 	if err != nil {
 		// Fallback for safety - should never happen with valid DefaultWazuhVersion
 		return "2.19.1.0"
@@ -55,7 +55,7 @@ func GetDefaultPrometheusExporterPluginVersion() string {
 // GetOpenSearchVersionForWazuh returns the OpenSearch version for a given Wazuh version
 // This is a convenience wrapper for use in the constants package
 func GetOpenSearchVersionForWazuh(wazuhVersion string) string {
-	version, err := utils.GetOpenSearchVersionFromWazuh(wazuhVersion)
+	version, err := versions.GetOpenSearchVersionFromWazuh(wazuhVersion)
 	if err != nil {
 		// Fallback to default if version is not found
 		return GetDefaultOpenSearchVersion()
@@ -66,7 +66,7 @@ func GetOpenSearchVersionForWazuh(wazuhVersion string) string {
 // GetPrometheusExporterPluginVersionForWazuh returns the Prometheus exporter plugin version
 // for a given Wazuh version
 func GetPrometheusExporterPluginVersionForWazuh(wazuhVersion string) string {
-	version, err := utils.GetPrometheusExporterPluginVersion(wazuhVersion)
+	version, err := versions.GetPrometheusExporterPluginVersion(wazuhVersion)
 	if err != nil {
 		// Fallback to default if version is not found
 		return GetDefaultPrometheusExporterPluginVersion()
@@ -76,8 +76,8 @@ func GetPrometheusExporterPluginVersionForWazuh(wazuhVersion string) string {
 
 // GetVersionInfo returns complete version information for a given Wazuh version
 // Returns nil if the version is not supported
-func GetVersionInfo(wazuhVersion string) *utils.WazuhVersionInfo {
-	info, err := utils.GetWazuhVersionInfo(wazuhVersion)
+func GetVersionInfo(wazuhVersion string) *versions.WazuhVersionInfo {
+	info, err := versions.GetWazuhVersionInfo(wazuhVersion)
 	if err != nil {
 		return nil
 	}

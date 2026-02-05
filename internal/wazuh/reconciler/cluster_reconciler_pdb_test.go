@@ -28,7 +28,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
-	"github.com/MaximeWewer/wazuh-operator/pkg/resources/pdb"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
 )
 
 func TestClusterReconciler_ReconcileManagerPDB(t *testing.T) {

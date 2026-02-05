@@ -46,6 +46,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/controllers"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
+	certreconciler "github.com/MaximeWewer/wazuh-operator/internal/certificates/reconciler"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
@@ -273,7 +274,7 @@ func main() {
 	}
 
 	// Create CertificateReconciler with REST config for pod exec support
-	certReconciler := wazuhreconciler.NewCertificateReconciler(mgr.GetClient(), mgr.GetScheme()).
+	certReconciler := certreconciler.NewCertificateReconciler(mgr.GetClient(), mgr.GetScheme()).
 		WithRESTConfig(mgr.GetConfig())
 
 	// Create shared rule and decoder reconcilers (used by both WazuhCluster and individual controllers)
@@ -335,7 +336,7 @@ func main() {
 	if err := (&controllers.WazuhCertificateReconciler{
 		Client:                mgr.GetClient(),
 		Scheme:                mgr.GetScheme(),
-		CertificateReconciler: wazuhreconciler.NewCertificateReconciler(mgr.GetClient(), mgr.GetScheme()).WithRESTConfig(mgr.GetConfig()),
+		CertificateReconciler: certreconciler.NewCertificateReconciler(mgr.GetClient(), mgr.GetScheme()).WithRESTConfig(mgr.GetConfig()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WazuhCertificate")
 		os.Exit(1)

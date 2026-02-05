@@ -43,6 +43,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
+	certreconciler "github.com/MaximeWewer/wazuh-operator/internal/certificates/reconciler"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/validation"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
@@ -76,7 +77,7 @@ type WazuhClusterReconciler struct {
 
 	// Helper reconcilers
 	ClusterReconciler     *wazuhreconciler.ClusterReconciler
-	CertificateReconciler *wazuhreconciler.CertificateReconciler
+	CertificateReconciler *certreconciler.CertificateReconciler
 	IndexerReconciler     *opensearchreconciler.IndexerReconciler
 	DashboardReconciler   *opensearchreconciler.DashboardReconciler
 	WorkerReconciler      *wazuhreconciler.WorkerReconciler
@@ -378,7 +379,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// Delegate reconciliation to helper reconcilers
 	// 1. Reconcile certificates using CertificateReconciler for full lifecycle management
 	// Use ReconcileWithHashes to get certificate hashes for triggering pod restarts
-	var certHashes *wazuhreconciler.CertHashResult
+	var certHashes *certreconciler.CertHashResult
 	if r.CertificateReconciler != nil {
 		var certErr error
 		certHashes, certErr = r.CertificateReconciler.ReconcileWithHashes(ctx, cluster)

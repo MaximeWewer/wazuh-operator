@@ -34,7 +34,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
-	"github.com/MaximeWewer/wazuh-operator/internal/utils"
+	"github.com/MaximeWewer/wazuh-operator/pkg/versions"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -224,7 +224,7 @@ func (h *HotReloader) TriggerHotReload(ctx context.Context, cluster *wazuhv1.Waz
 	}
 
 	// Get hot reload support level for this Wazuh version
-	support, err := utils.GetHotReloadSupportForWazuh(cluster.Spec.Version)
+	support, err := versions.GetHotReloadSupportForWazuh(cluster.Spec.Version)
 	if err != nil {
 		log.Error(err, "Failed to determine hot reload support",
 			"operation", "hot-reload",
@@ -237,18 +237,18 @@ func (h *HotReloader) TriggerHotReload(ctx context.Context, cluster *wazuhv1.Waz
 	}
 
 	switch support {
-	case utils.HotReloadNotSupported:
+	case versions.HotReloadNotSupported:
 		log.Info("Certificate hot reload not supported for version",
 			"operation", "hot-reload",
 			"component", "indexer",
 			"cluster", cluster.Name,
 			"version", cluster.Spec.Version,
-			"minRequired", utils.MinWazuhVersionForHotReload.String(),
+			"minRequired", versions.MinWazuhVersionForHotReload.String(),
 			"hotReloadSupported", false)
 		result.Supported = false
 		return result
 
-	case utils.HotReloadAutomatic:
+	case versions.HotReloadAutomatic:
 		result.Supported = true
 		result.RequiresAPICall = false
 		// Check if force API reload is configured
@@ -279,7 +279,7 @@ func (h *HotReloader) TriggerHotReload(ctx context.Context, cluster *wazuhv1.Waz
 		}
 		return result
 
-	case utils.HotReloadWithAPICall:
+	case versions.HotReloadWithAPICall:
 		result.Supported = true
 		result.RequiresAPICall = true
 		log.Info("Certificate hot reload starting (API mode)",
@@ -366,7 +366,7 @@ func GetHotReloadConfigString(cluster *wazuhv1.WazuhCluster) string {
 	}
 
 	// Check version support
-	if !utils.SupportsHotReload(cluster.Spec.Version) {
+	if !versions.SupportsHotReload(cluster.Spec.Version) {
 		return ""
 	}
 

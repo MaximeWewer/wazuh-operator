@@ -47,9 +47,9 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
-	affinityutil "github.com/MaximeWewer/wazuh-operator/pkg/resources/affinity"
-	"github.com/MaximeWewer/wazuh-operator/pkg/resources/pdb"
-	"github.com/MaximeWewer/wazuh-operator/pkg/validation"
+	affinityutil "github.com/MaximeWewer/wazuh-operator/internal/shared/affinity"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
+	"github.com/MaximeWewer/wazuh-operator/internal/validation"
 )
 
 // ClusterReconciler handles reconciliation of Wazuh cluster components

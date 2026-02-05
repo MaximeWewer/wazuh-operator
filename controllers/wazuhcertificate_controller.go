@@ -34,7 +34,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
-	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
+	certreconciler "github.com/MaximeWewer/wazuh-operator/internal/certificates/reconciler"
 )
 
 // WazuhCertificateReconciler reconciles a WazuhCertificate object
@@ -43,7 +43,7 @@ type WazuhCertificateReconciler struct {
 	Scheme *runtime.Scheme
 
 	// Helper reconciler
-	CertificateReconciler *wazuhreconciler.CertificateReconciler
+	CertificateReconciler *certreconciler.CertificateReconciler
 }
 
 // +kubebuilder:rbac:groups=resources.wazuh.com,resources=wazuhcertificates,verbs=get;list;watch;create;update;patch;delete

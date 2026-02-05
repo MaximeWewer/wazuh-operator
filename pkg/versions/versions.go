@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package utils //nolint:revive // utils is a common package name
+package versions
 
 import (
 	"fmt"
@@ -258,8 +258,6 @@ type WazuhVersionInfo struct {
 // Based on Wazuh compatibility matrix
 // The plugin version format is: OpenSearchVersion.PatchVersion (e.g., 2.19.1.0)
 var wazuhVersionMapping = map[string]WazuhVersionInfo{
-	// Wazuh 4.15.x (future) - OpenSearch 2.19.x (estimated)
-	"4.15.0": {WazuhVersion: "4.15.0", OpenSearchVersion: "2.19.1", PrometheusExporterPluginVersion: "2.19.1.0"},
 	// Wazuh 4.14.x - OpenSearch 2.19.1
 	"4.14.3": {WazuhVersion: "4.14.3", OpenSearchVersion: "2.19.1", PrometheusExporterPluginVersion: "2.19.1.0"},
 	"4.14.2": {WazuhVersion: "4.14.2", OpenSearchVersion: "2.19.1", PrometheusExporterPluginVersion: "2.19.1.0"},
