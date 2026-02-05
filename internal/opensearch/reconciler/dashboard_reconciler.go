@@ -415,9 +415,8 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 	}
 
 	if needsUpdate {
-		deployment.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, deployment); err != nil {
-			recreated, recErr := utils.RecreateDeploymentOnError(ctx, r.Client, deployment, found, err)
+		if err := r.updateDeploymentWithRetry(ctx, deployment); err != nil {
+			recreated, recErr := utils.RecreateDeploymentOnError(ctx, r.Client, r.Recorder, deployment, found, err)
 			if recErr != nil {
 				return fmt.Errorf("failed to update dashboard deployment: %w", recErr)
 			}
@@ -858,9 +857,8 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 			"name", deployment.Name,
 			"reason", updateReason)
 
-		deployment.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, deployment); err != nil {
-			recreated, recErr := utils.RecreateDeploymentOnError(ctx, r.Client, deployment, found, err)
+		if err := r.updateDeploymentWithRetry(ctx, deployment); err != nil {
+			recreated, recErr := utils.RecreateDeploymentOnError(ctx, r.Client, r.Recorder, deployment, found, err)
 			if recErr != nil {
 				return nil, fmt.Errorf("failed to update dashboard deployment: %w", recErr)
 			}
@@ -942,6 +940,18 @@ func (r *DashboardReconciler) createOrUpdate(ctx context.Context, obj client.Obj
 	log.V(1).Info("Updating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
 	obj.SetResourceVersion(existing.GetResourceVersion())
 	return r.Update(ctx, obj)
+}
+
+// updateDeploymentWithRetry updates a Deployment with retry-on-conflict, always using the latest resourceVersion.
+func (r *DashboardReconciler) updateDeploymentWithRetry(ctx context.Context, desired *appsv1.Deployment) error {
+	return utils.RetryOnConflict(ctx, func() error {
+		current := &appsv1.Deployment{}
+		if err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, current); err != nil {
+			return err
+		}
+		desired.SetResourceVersion(current.GetResourceVersion())
+		return r.Update(ctx, desired)
+	})
 }
 
 // getDeploymentPhase returns the phase of a Deployment
@@ -1077,9 +1087,8 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 			needsUpdate = true
 		}
 		if needsUpdate {
-			deploy.SetResourceVersion(foundDeploy.GetResourceVersion())
-			if err := r.Update(ctx, deploy); err != nil {
-				recreated, recErr := utils.RecreateDeploymentOnError(ctx, r.Client, deploy, foundDeploy, err)
+			if err := r.updateDeploymentWithRetry(ctx, deploy); err != nil {
+				recreated, recErr := utils.RecreateDeploymentOnError(ctx, r.Client, r.Recorder, deploy, foundDeploy, err)
 				if recErr != nil {
 					return fmt.Errorf("failed to update deployment: %w", recErr)
 				}

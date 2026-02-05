@@ -615,9 +615,8 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	}
 
 	if needsUpdate {
-		sts.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, sts); err != nil {
-			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
+		if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, r.Recorder, sts, found, err)
 			if recErr != nil {
 				return nil, fmt.Errorf("failed to update master statefulset: %w", recErr)
 			}
@@ -964,9 +963,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	}
 
 	if needsUpdate {
-		sts.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, sts); err != nil {
-			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
+		if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, r.Recorder, sts, found, err)
 			if recErr != nil {
 				return nil, fmt.Errorf("failed to update worker statefulset: %w", recErr)
 			}
@@ -1275,9 +1273,8 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	}
 
 	if needsUpdate {
-		sts.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, sts); err != nil {
-			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
+		if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, r.Recorder, sts, found, err)
 			if recErr != nil {
 				return fmt.Errorf("failed to update master statefulset: %w", recErr)
 			}
@@ -1561,9 +1558,8 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 	}
 
 	if needsUpdate {
-		sts.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, sts); err != nil {
-			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
+		if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
+			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, r.Recorder, sts, found, err)
 			if recErr != nil {
 				return fmt.Errorf("failed to update worker statefulset: %w", recErr)
 			}
@@ -1674,6 +1670,18 @@ func (r *ClusterReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 		log.V(1).Info("Updating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
 		obj.SetResourceVersion(existing.GetResourceVersion())
 		return r.Update(ctx, obj)
+	})
+}
+
+// updateStatefulSetWithRetry updates a StatefulSet with retry-on-conflict, always using the latest resourceVersion.
+func (r *ClusterReconciler) updateStatefulSetWithRetry(ctx context.Context, desired *appsv1.StatefulSet) error {
+	return utils.RetryOnConflict(ctx, func() error {
+		current := &appsv1.StatefulSet{}
+		if err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, current); err != nil {
+			return err
+		}
+		desired.SetResourceVersion(current.GetResourceVersion())
+		return r.Update(ctx, desired)
 	})
 }
 
@@ -2066,9 +2074,15 @@ func (r *ClusterReconciler) reconcileManagerPDB(ctx context.Context, cluster *wa
 	}
 
 	// Update PDB if needed
-	managerPDB.SetResourceVersion(existing.GetResourceVersion())
-	log.V(1).Info("Updating Manager PDB", "name", pdbName)
-	if err := r.Update(ctx, managerPDB); err != nil {
+	if err := utils.RetryOnConflict(ctx, func() error {
+		latest := &policyv1.PodDisruptionBudget{}
+		if err := r.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: cluster.Namespace}, latest); err != nil {
+			return err
+		}
+		managerPDB.SetResourceVersion(latest.GetResourceVersion())
+		log.V(1).Info("Updating Manager PDB", "name", pdbName)
+		return r.Update(ctx, managerPDB)
+	}); err != nil {
 		return fmt.Errorf("failed to update manager PDB: %w", err)
 	}
 

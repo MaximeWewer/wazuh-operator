@@ -637,8 +637,7 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 	}
 
 	if needsUpdate {
-		sts.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, sts); err != nil {
+		if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
 			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
 			if recErr != nil {
 				return fmt.Errorf("failed to update indexer statefulset: %w", recErr)
@@ -1017,8 +1016,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 			"name", sts.Name,
 			"reason", updateReason)
 
-		sts.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, sts); err != nil {
+		if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
 			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
 			if recErr != nil {
 				return nil, fmt.Errorf("failed to update indexer statefulset: %w", recErr)
@@ -1420,6 +1418,18 @@ func (r *IndexerReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 	})
 }
 
+// updateStatefulSetWithRetry updates a StatefulSet with retry-on-conflict, always using the latest resourceVersion.
+func (r *IndexerReconciler) updateStatefulSetWithRetry(ctx context.Context, desired *appsv1.StatefulSet) error {
+	return utils.RetryOnConflict(ctx, func() error {
+		current := &appsv1.StatefulSet{}
+		if err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, current); err != nil {
+			return err
+		}
+		desired.SetResourceVersion(current.GetResourceVersion())
+		return r.Update(ctx, desired)
+	})
+}
+
 // getStatefulSetPhase returns the phase of a StatefulSet
 func getStatefulSetPhase(sts *appsv1.StatefulSet) string {
 	if sts.Status.ReadyReplicas == 0 {
@@ -1550,8 +1560,7 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 			needsUpdate = true
 		}
 		if needsUpdate {
-			sts.SetResourceVersion(foundSts.GetResourceVersion())
-			if err := r.Update(ctx, sts); err != nil {
+			if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
 				recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, foundSts, err)
 				if recErr != nil {
 					return fmt.Errorf("failed to update statefulset: %w", recErr)
@@ -2562,8 +2571,7 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 			"pool", pool.Name,
 			"reason", updateReason)
 
-		sts.SetResourceVersion(found.GetResourceVersion())
-		if err := r.Update(ctx, sts); err != nil {
+		if err := r.updateStatefulSetWithRetry(ctx, sts); err != nil {
 			recreated, recErr := utils.RecreateStatefulSetOnError(ctx, r.Client, sts, found, err)
 			if recErr != nil {
 				return fmt.Errorf("failed to update statefulset: %w", recErr)
