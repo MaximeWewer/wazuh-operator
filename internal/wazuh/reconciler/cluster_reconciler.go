@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -56,6 +57,7 @@ import (
 type ClusterReconciler struct {
 	client.Client
 	Scheme          *runtime.Scheme
+	Recorder        record.EventRecorder
 	requeueInterval time.Duration
 	// RuleReconciler handles WazuhRule resources for mounting rules to manager pods
 	RuleReconciler *RuleReconciler
@@ -623,6 +625,12 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 			if !recreated {
 				return nil, fmt.Errorf("failed to update master statefulset: %w", err)
 			}
+			// Workload deleted for recreation; emit event and requeue
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonWorkloadRecreating,
+					fmt.Sprintf("Deleted StatefulSet %s/%s due to immutable field change; re-creation on next reconciliation", sts.Namespace, sts.Name))
+			}
+			return nil, fmt.Errorf("statefulset %s/%s deleted for immutable field recreation", sts.Namespace, sts.Name)
 		}
 		return &utils.PendingRollout{
 			Component: "manager-master",
@@ -971,6 +979,12 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 			if !recreated {
 				return nil, fmt.Errorf("failed to update worker statefulset: %w", err)
 			}
+			// Workload deleted for recreation; emit event and requeue
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonWorkloadRecreating,
+					fmt.Sprintf("Deleted StatefulSet %s/%s due to immutable field change; re-creation on next reconciliation", sts.Namespace, sts.Name))
+			}
+			return nil, fmt.Errorf("statefulset %s/%s deleted for immutable field recreation", sts.Namespace, sts.Name)
 		}
 		return &utils.PendingRollout{
 			Component: "manager-worker",
@@ -1281,6 +1295,12 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 			if !recreated {
 				return fmt.Errorf("failed to update master statefulset: %w", err)
 			}
+			// Workload deleted for recreation; emit event and requeue
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonWorkloadRecreating,
+					fmt.Sprintf("Deleted StatefulSet %s/%s due to immutable field change; re-creation on next reconciliation", sts.Namespace, sts.Name))
+			}
+			return fmt.Errorf("statefulset %s/%s deleted for immutable field recreation", sts.Namespace, sts.Name)
 		}
 
 		// Wait for the StatefulSet to be ready after update (graceful rollout)
@@ -1566,6 +1586,12 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 			if !recreated {
 				return fmt.Errorf("failed to update worker statefulset: %w", err)
 			}
+			// Workload deleted for recreation; emit event and requeue
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonWorkloadRecreating,
+					fmt.Sprintf("Deleted StatefulSet %s/%s due to immutable field change; re-creation on next reconciliation", sts.Namespace, sts.Name))
+			}
+			return fmt.Errorf("statefulset %s/%s deleted for immutable field recreation", sts.Namespace, sts.Name)
 		}
 
 		// Only wait for rollout on cert hash changes (pod restart required)

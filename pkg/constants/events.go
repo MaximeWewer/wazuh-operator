@@ -238,6 +238,13 @@ const (
 	EventReasonConfigHashChanged = "ConfigHashChanged"
 )
 
+// Workload recreation event reasons
+const (
+	// EventReasonWorkloadRecreating indicates a workload was deleted due to immutable field changes
+	// and will be re-created on the next reconciliation cycle
+	EventReasonWorkloadRecreating = "WorkloadRecreating"
+)
+
 // Certificate propagation event reasons
 const (
 	// EventReasonCertificatePropagationWait indicates waiting for certificate propagation to pods
