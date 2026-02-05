@@ -2066,9 +2066,15 @@ func (r *ClusterReconciler) reconcileManagerPDB(ctx context.Context, cluster *wa
 	}
 
 	// Update PDB if needed
-	managerPDB.SetResourceVersion(existing.GetResourceVersion())
-	log.V(1).Info("Updating Manager PDB", "name", pdbName)
-	if err := r.Update(ctx, managerPDB); err != nil {
+	if err := utils.RetryOnConflict(ctx, func() error {
+		latest := &policyv1.PodDisruptionBudget{}
+		if err := r.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: cluster.Namespace}, latest); err != nil {
+			return err
+		}
+		managerPDB.SetResourceVersion(latest.GetResourceVersion())
+		log.V(1).Info("Updating Manager PDB", "name", pdbName)
+		return r.Update(ctx, managerPDB)
+	}); err != nil {
 		return fmt.Errorf("failed to update manager PDB: %w", err)
 	}
 
