@@ -424,6 +424,12 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 			if !recreated {
 				return fmt.Errorf("failed to update dashboard deployment: %w", err)
 			}
+			// Workload deleted for recreation; emit event and requeue
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonWorkloadRecreating,
+					fmt.Sprintf("Deleted Deployment %s/%s due to immutable field change; re-creation on next reconciliation", deployment.Namespace, deployment.Name))
+			}
+			return fmt.Errorf("deployment %s/%s deleted for immutable field recreation", deployment.Namespace, deployment.Name)
 		}
 
 		// Only wait for rollout on cert hash changes (pod restart required)
@@ -867,6 +873,12 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 			if !recreated {
 				return nil, fmt.Errorf("failed to update dashboard deployment: %w", err)
 			}
+			// Workload deleted for recreation; emit event and requeue
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonWorkloadRecreating,
+					fmt.Sprintf("Deleted Deployment %s/%s due to immutable field change; re-creation on next reconciliation", deployment.Namespace, deployment.Name))
+			}
+			return nil, fmt.Errorf("deployment %s/%s deleted for immutable field recreation", deployment.Namespace, deployment.Name)
 		}
 
 		// Return pending rollout instead of waiting
@@ -1086,6 +1098,12 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 				if !recreated {
 					return fmt.Errorf("failed to update deployment: %w", err)
 				}
+				// Workload deleted for recreation; emit event and requeue
+				if r.Recorder != nil {
+					r.Recorder.Event(dashboard, corev1.EventTypeWarning, constants.EventReasonWorkloadRecreating,
+						fmt.Sprintf("Deleted Deployment %s/%s due to immutable field change; re-creation on next reconciliation", deploy.Namespace, deploy.Name))
+				}
+				return fmt.Errorf("deployment %s/%s deleted for immutable field recreation", deploy.Namespace, deploy.Name)
 			}
 		}
 	}

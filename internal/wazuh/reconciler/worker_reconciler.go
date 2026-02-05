@@ -243,6 +243,12 @@ func (r *WorkerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, w
 			if !recreated {
 				return fmt.Errorf("failed to update statefulset: %w", err)
 			}
+			// Workload deleted for recreation; emit event and requeue
+			if r.Recorder != nil {
+				r.Recorder.Event(worker, corev1.EventTypeWarning, constants.EventReasonWorkloadRecreating,
+					fmt.Sprintf("Deleted StatefulSet %s/%s due to immutable field change; re-creation on next reconciliation", sts.Namespace, sts.Name))
+			}
+			return fmt.Errorf("statefulset %s/%s deleted for immutable field recreation", sts.Namespace, sts.Name)
 		}
 	}
 

@@ -1731,6 +1731,11 @@ func (r *WazuhClusterReconciler) findClustersForDashboard(ctx context.Context, o
 
 // SetupWithManager sets up the controller with the Manager
 func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// Wire the event recorder into the cluster reconciler for workload recreation events
+	if r.ClusterReconciler != nil {
+		r.ClusterReconciler.Recorder = r.Recorder
+	}
+
 	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.WazuhCluster{}).
 		Owns(&appsv1.StatefulSet{}).
