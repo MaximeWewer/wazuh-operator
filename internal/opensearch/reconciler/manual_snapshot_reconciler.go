@@ -30,6 +30,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -41,8 +42,8 @@ const (
 // ManualSnapshotReconciler handles reconciliation of manual OpenSearch snapshots
 type ManualSnapshotReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	APIClient *api.Client
+	Scheme        *runtime.Scheme
+	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewManualSnapshotReconciler creates a new ManualSnapshotReconciler
@@ -53,9 +54,9 @@ func NewManualSnapshotReconciler(c client.Client, scheme *runtime.Scheme) *Manua
 	}
 }
 
-// WithAPIClient sets the OpenSearch API client
-func (r *ManualSnapshotReconciler) WithAPIClient(apiClient *api.Client) *ManualSnapshotReconciler {
-	r.APIClient = apiClient
+// WithClientFactory sets the OpenSearch client factory
+func (r *ManualSnapshotReconciler) WithClientFactory(factory *security.OpenSearchClientFactory) *ManualSnapshotReconciler {
+	r.ClientFactory = factory
 	return r
 }
 
@@ -76,11 +77,16 @@ func (r *ManualSnapshotReconciler) Reconcile(ctx context.Context, snapshot *wazu
 		return r.handleDeletion(ctx, snapshot)
 	}
 
-	if r.APIClient == nil {
-		return r.updateStatus(ctx, snapshot, constants.SnapshotPhasePending, "", "Waiting for OpenSearch API client")
+	if r.ClientFactory == nil {
+		return r.updateStatus(ctx, snapshot, constants.SnapshotPhasePending, "", "Waiting for OpenSearch client factory")
 	}
 
-	snapshotsAPI := api.NewSnapshotsAPI(r.APIClient)
+	apiClient, err := r.ClientFactory.GetClientForRef(ctx, snapshot.Spec.ClusterRef, snapshot.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get OpenSearch client: %w", err)
+	}
+
+	snapshotsAPI := api.NewSnapshotsAPI(apiClient)
 
 	// Validate repository exists
 	repo, err := snapshotsAPI.GetRepository(ctx, snapshot.Spec.Repository)

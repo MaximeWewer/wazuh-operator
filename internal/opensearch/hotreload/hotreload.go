@@ -34,8 +34,8 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
-	"github.com/MaximeWewer/wazuh-operator/pkg/versions"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
+	"github.com/MaximeWewer/wazuh-operator/pkg/versions"
 )
 
 const (

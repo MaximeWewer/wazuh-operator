@@ -27,13 +27,14 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 )
 
 // PolicyReconciler handles reconciliation of OpenSearch ISM policies
 type PolicyReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	APIClient *api.Client
+	Scheme        *runtime.Scheme
+	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewPolicyReconciler creates a new PolicyReconciler
@@ -44,9 +45,9 @@ func NewPolicyReconciler(c client.Client, scheme *runtime.Scheme) *PolicyReconci
 	}
 }
 
-// WithAPIClient sets the OpenSearch API client
-func (r *PolicyReconciler) WithAPIClient(apiClient *api.Client) *PolicyReconciler {
-	r.APIClient = apiClient
+// WithClientFactory sets the OpenSearch client factory
+func (r *PolicyReconciler) WithClientFactory(factory *security.OpenSearchClientFactory) *PolicyReconciler {
+	r.ClientFactory = factory
 	return r
 }
 
@@ -54,12 +55,17 @@ func (r *PolicyReconciler) WithAPIClient(apiClient *api.Client) *PolicyReconcile
 func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSearchISMPolicy) error {
 	log := logf.FromContext(ctx)
 
-	if r.APIClient == nil {
-		return r.updateStatus(ctx, policy, "Pending", "Waiting for OpenSearch API client")
+	if r.ClientFactory == nil {
+		return r.updateStatus(ctx, policy, "Pending", "Waiting for OpenSearch client factory")
+	}
+
+	apiClient, err := r.ClientFactory.GetClientForRef(ctx, policy.Spec.ClusterRef, policy.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
 	// Create ISM API client
-	ismAPI := api.NewISMAPI(r.APIClient)
+	ismAPI := api.NewISMAPI(apiClient)
 
 	// Check if policy exists
 	exists, err := ismAPI.Exists(ctx, policy.Name)
@@ -163,12 +169,18 @@ func (r *PolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.Ope
 func (r *PolicyReconciler) Delete(ctx context.Context, policy *wazuhv1.OpenSearchISMPolicy) error {
 	log := logf.FromContext(ctx)
 
-	if r.APIClient == nil {
-		log.Info("Skipping ISM policy deletion - no API client available")
+	if r.ClientFactory == nil {
+		log.Info("Skipping ISM policy deletion - no client factory available")
 		return nil
 	}
 
-	ismAPI := api.NewISMAPI(r.APIClient)
+	apiClient, err := r.ClientFactory.GetClientForRef(ctx, policy.Spec.ClusterRef, policy.Namespace)
+	if err != nil {
+		log.Info("Skipping ISM policy deletion - failed to get OpenSearch client", "error", err)
+		return nil
+	}
+
+	ismAPI := api.NewISMAPI(apiClient)
 	if err := ismAPI.Delete(ctx, policy.Name); err != nil {
 		return fmt.Errorf("failed to delete ISM policy: %w", err)
 	}

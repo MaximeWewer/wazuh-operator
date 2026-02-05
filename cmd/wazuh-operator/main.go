@@ -42,15 +42,19 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
+	"k8s.io/client-go/kubernetes"
+
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/controllers"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
+
 	certreconciler "github.com/MaximeWewer/wazuh-operator/internal/certificates/reconciler"
+	networkingreconciler "github.com/MaximeWewer/wazuh-operator/internal/networking/reconciler"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
-	networkingreconciler "github.com/MaximeWewer/wazuh-operator/internal/networking/reconciler"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/pkg/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
@@ -273,6 +277,17 @@ func main() {
 			"message", gatewayAPIStatus.Message)
 	}
 
+	// Create shared OpenSearch client factory for all standalone controllers
+	osClientFactory := security.NewOpenSearchClientFactory(mgr.GetClient())
+
+	// Create SecurityAdmin executor for applying security config via securityadmin.sh
+	k8sClientset, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		setupLog.Error(err, "unable to create kubernetes clientset")
+		os.Exit(1)
+	}
+	securityAdminExecutor := security.NewSecurityAdminExecutor(mgr.GetClient(), mgr.GetConfig(), k8sClientset)
+
 	// Create CertificateReconciler with REST config for pod exec support
 	certReconciler := certreconciler.NewCertificateReconciler(mgr.GetClient(), mgr.GetScheme()).
 		WithRESTConfig(mgr.GetConfig())
@@ -369,113 +384,127 @@ func main() {
 
 	// OpenSearch Security Controllers
 	if err := (&controllers.OpenSearchUserReconciler{
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		UserReconciler: opensearchreconciler.NewUserReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor("opensearchuser-controller")),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		UserReconciler: opensearchreconciler.NewUserReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor("opensearchuser-controller")).
+			WithClientFactory(osClientFactory),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchUser")
 		os.Exit(1)
 	}
 	if err := (&controllers.OpenSearchRoleReconciler{
-		Client:         mgr.GetClient(),
-		Scheme:         mgr.GetScheme(),
-		RoleReconciler: opensearchreconciler.NewRoleReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor("opensearchrole-controller")),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		RoleReconciler: opensearchreconciler.NewRoleReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor("opensearchrole-controller")).
+			WithClientFactory(osClientFactory),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchRole")
 		os.Exit(1)
 	}
 	if err := (&controllers.OpenSearchRoleMappingReconciler{
-		Client:                mgr.GetClient(),
-		Scheme:                mgr.GetScheme(),
-		RoleMappingReconciler: opensearchreconciler.NewRoleMappingReconciler(mgr.GetClient(), mgr.GetScheme()),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		RoleMappingReconciler: opensearchreconciler.NewRoleMappingReconciler(mgr.GetClient(), mgr.GetScheme()).
+			WithClientFactory(osClientFactory),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchRoleMapping")
 		os.Exit(1)
 	}
 	if err := (&controllers.OpenSearchActionGroupReconciler{
-		Client:                mgr.GetClient(),
-		Scheme:                mgr.GetScheme(),
-		ActionGroupReconciler: opensearchreconciler.NewActionGroupReconciler(mgr.GetClient(), mgr.GetScheme()),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		ActionGroupReconciler: opensearchreconciler.NewActionGroupReconciler(mgr.GetClient(), mgr.GetScheme()).
+			WithClientFactory(osClientFactory),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchActionGroup")
 		os.Exit(1)
 	}
 	if err := (&controllers.OpenSearchTenantReconciler{
-		Client:           mgr.GetClient(),
-		Scheme:           mgr.GetScheme(),
-		TenantReconciler: opensearchreconciler.NewTenantReconciler(mgr.GetClient(), mgr.GetScheme()),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		TenantReconciler: opensearchreconciler.NewTenantReconciler(mgr.GetClient(), mgr.GetScheme()).
+			WithClientFactory(osClientFactory),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchTenant")
 		os.Exit(1)
 	}
 	if err := (&controllers.OpenSearchAuthConfigReconciler{
-		Client:               mgr.GetClient(),
-		Scheme:               mgr.GetScheme(),
-		AuthConfigReconciler: opensearchreconciler.NewAuthConfigReconciler(mgr.GetClient(), mgr.GetScheme()),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		AuthConfigReconciler: opensearchreconciler.NewAuthConfigReconciler(mgr.GetClient(), mgr.GetScheme()).
+			WithSecurityAdminExecutor(securityAdminExecutor),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchAuthConfig")
 		os.Exit(1)
 	}
 	if err := (&controllers.OpenSearchPolicyReconciler{
-		Client:           mgr.GetClient(),
-		Scheme:           mgr.GetScheme(),
-		PolicyReconciler: opensearchreconciler.NewPolicyReconciler(mgr.GetClient(), mgr.GetScheme()),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		PolicyReconciler: opensearchreconciler.NewPolicyReconciler(mgr.GetClient(), mgr.GetScheme()).
+			WithClientFactory(osClientFactory),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchISMPolicy")
 		os.Exit(1)
 	}
 	if err := (&controllers.OpenSearchIndexTemplateReconciler{
-		Client:             mgr.GetClient(),
-		Scheme:             mgr.GetScheme(),
-		TemplateReconciler: opensearchreconciler.NewTemplateReconciler(mgr.GetClient(), mgr.GetScheme()),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		TemplateReconciler: opensearchreconciler.NewTemplateReconciler(mgr.GetClient(), mgr.GetScheme()).
+			WithClientFactory(osClientFactory),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchIndexTemplate")
 		os.Exit(1)
 	}
 	if err := (&controllers.OpenSearchComponentTemplateReconciler{
-		Client:                      mgr.GetClient(),
-		Scheme:                      mgr.GetScheme(),
-		ComponentTemplateReconciler: opensearchreconciler.NewComponentTemplateReconciler(mgr.GetClient(), mgr.GetScheme()),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		ComponentTemplateReconciler: opensearchreconciler.NewComponentTemplateReconciler(mgr.GetClient(), mgr.GetScheme()).
+			WithClientFactory(osClientFactory),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchComponentTemplate")
 		os.Exit(1)
 	}
 	if err := (&controllers.OpenSearchIndexReconciler{
-		Client:          mgr.GetClient(),
-		Scheme:          mgr.GetScheme(),
-		IndexReconciler: opensearchreconciler.NewIndexReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor("opensearchindex-controller")),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		IndexReconciler: opensearchreconciler.NewIndexReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor("opensearchindex-controller")).
+			WithClientFactory(osClientFactory),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchIndex")
 		os.Exit(1)
 	}
 	if err := (&controllers.OpenSearchSnapshotPolicyReconciler{
-		Client:                   mgr.GetClient(),
-		Scheme:                   mgr.GetScheme(),
-		SnapshotPolicyReconciler: opensearchreconciler.NewSnapshotPolicyReconciler(mgr.GetClient(), mgr.GetScheme()),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		SnapshotPolicyReconciler: opensearchreconciler.NewSnapshotPolicyReconciler(mgr.GetClient(), mgr.GetScheme()).
+			WithClientFactory(osClientFactory),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchSnapshotPolicy")
 		os.Exit(1)
 	}
 	if err := (&controllers.OpenSearchSnapshotRepositoryReconciler{
-		Client:                       mgr.GetClient(),
-		Scheme:                       mgr.GetScheme(),
-		SnapshotRepositoryReconciler: opensearchreconciler.NewSnapshotRepositoryReconciler(mgr.GetClient(), mgr.GetScheme()),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		SnapshotRepositoryReconciler: opensearchreconciler.NewSnapshotRepositoryReconciler(mgr.GetClient(), mgr.GetScheme()).
+			WithClientFactory(osClientFactory),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchSnapshotRepository")
 		os.Exit(1)
 	}
 	if err := (&controllers.OpenSearchSnapshotReconciler{
-		Client:                   mgr.GetClient(),
-		Scheme:                   mgr.GetScheme(),
-		ManualSnapshotReconciler: opensearchreconciler.NewManualSnapshotReconciler(mgr.GetClient(), mgr.GetScheme()),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		ManualSnapshotReconciler: opensearchreconciler.NewManualSnapshotReconciler(mgr.GetClient(), mgr.GetScheme()).
+			WithClientFactory(osClientFactory),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchSnapshot")
 		os.Exit(1)
 	}
 	if err := (&controllers.OpenSearchRestoreReconciler{
-		Client:            mgr.GetClient(),
-		Scheme:            mgr.GetScheme(),
-		RestoreReconciler: opensearchreconciler.NewRestoreReconciler(mgr.GetClient(), mgr.GetScheme()),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		RestoreReconciler: opensearchreconciler.NewRestoreReconciler(mgr.GetClient(), mgr.GetScheme()).
+			WithClientFactory(osClientFactory),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchRestore")
 		os.Exit(1)

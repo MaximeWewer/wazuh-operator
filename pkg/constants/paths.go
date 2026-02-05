@@ -44,6 +44,39 @@ const (
 
 	// PathWazuhSharedGroups is the shared groups directory
 	PathWazuhSharedGroups = "/var/ossec/etc/shared"
+
+	// PathWazuhAPIConfig is the API configuration directory
+	PathWazuhAPIConfig = "/var/ossec/api/configuration"
+
+	// PathWazuhVarMultigroups is the agent multigroup configs directory
+	PathWazuhVarMultigroups = "/var/ossec/var/multigroups"
+
+	// PathWazuhIntegrations is the integration scripts directory
+	PathWazuhIntegrations = "/var/ossec/integrations"
+
+	// PathWazuhActiveResponse is the active response scripts directory
+	PathWazuhActiveResponse = "/var/ossec/active-response/bin"
+
+	// PathWazuhAgentless is the agentless configs directory
+	PathWazuhAgentless = "/var/ossec/agentless"
+
+	// PathWazuhWodles is the wodle scripts directory
+	PathWazuhWodles = "/var/ossec/wodles"
+)
+
+// PVC subPath values for Wazuh data volume
+const (
+	SubPathWazuhAPIConfig      = "wazuh/api/configuration"
+	SubPathWazuhEtc            = "wazuh/etc"
+	SubPathWazuhLogs           = "wazuh/logs"
+	SubPathWazuhQueue          = "wazuh/queue"
+	SubPathWazuhVarMultigroups = "wazuh/var/multigroups"
+	SubPathWazuhIntegrations   = "wazuh/integrations"
+	SubPathWazuhActiveResponse = "wazuh/active-response/bin"
+	SubPathWazuhAgentless      = "wazuh/agentless"
+	SubPathWazuhWodles         = "wazuh/wodles"
+	SubPathFilebeatConfig      = "filebeat/config"
+	SubPathFilebeatData        = "filebeat/data"
 )
 
 // OpenSearch Indexer paths (using Wazuh Indexer paths)
@@ -65,6 +98,9 @@ const (
 
 	// PathIndexerCerts is the certificates directory
 	PathIndexerCerts = "/usr/share/wazuh-indexer/config/certs"
+
+	// PathIndexerAdminCerts is the admin certificates directory (for securityadmin tool)
+	PathIndexerAdminCerts = "/usr/share/wazuh-indexer/config/certs/admin"
 
 	// PathIndexerPlugins is the plugins directory
 	PathIndexerPlugins = "/usr/share/wazuh-indexer/plugins"

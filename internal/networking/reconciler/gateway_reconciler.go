@@ -30,8 +30,8 @@ import (
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
-	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/networking/builder/routes"
+	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 )
 
 // GatewayReconciler handles reconciliation of Gateway API routes for Wazuh components

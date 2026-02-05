@@ -478,7 +478,7 @@ func (b *IndexerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 		// Admin certificates for securityadmin tool
 		{
 			Name:      constants.VolumeNameAdminCerts,
-			MountPath: constants.PathIndexerBase + "/admin-certs",
+			MountPath: constants.PathIndexerAdminCerts,
 			ReadOnly:  true,
 		},
 		// Security config at config dir (Wazuh 4.12+)

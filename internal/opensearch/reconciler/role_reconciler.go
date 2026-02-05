@@ -29,16 +29,15 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 )
 
 // RoleReconciler handles reconciliation of OpenSearch roles
 type RoleReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	Recorder       record.EventRecorder
-	OpenSearchAddr string
-	OpenSearchUser string
-	OpenSearchPass string
+	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
+	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewRoleReconciler creates a new RoleReconciler
@@ -50,11 +49,17 @@ func NewRoleReconciler(c client.Client, scheme *runtime.Scheme, recorder record.
 	}
 }
 
+// WithClientFactory sets the OpenSearch client factory for dynamic client resolution
+func (r *RoleReconciler) WithClientFactory(factory *security.OpenSearchClientFactory) *RoleReconciler {
+	r.ClientFactory = factory
+	return r
+}
+
 // Reconcile reconciles an OpenSearch role
 func (r *RoleReconciler) Reconcile(ctx context.Context, role *wazuhv1.OpenSearchRole) error {
 	log := logf.FromContext(ctx)
 
-	osClient, err := r.getOpenSearchClient(ctx, role.Namespace)
+	osClient, err := r.getOpenSearchClient(ctx, role)
 	if err != nil {
 		r.recordEvent(role, corev1.EventTypeWarning, "ConnectionError", fmt.Sprintf("Failed to connect to OpenSearch: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
@@ -114,13 +119,23 @@ func (r *RoleReconciler) buildRole(role *wazuhv1.OpenSearchRole) adapters.Securi
 	return osRole
 }
 
-// getOpenSearchClient gets an OpenSearch HTTP adapter
-func (r *RoleReconciler) getOpenSearchClient(_ context.Context, _ string) (*adapters.OpenSearchHTTPAdapter, error) {
+// getOpenSearchClient gets an OpenSearch HTTP adapter using dynamic client resolution
+func (r *RoleReconciler) getOpenSearchClient(ctx context.Context, role *wazuhv1.OpenSearchRole) (*adapters.OpenSearchHTTPAdapter, error) {
+	if r.ClientFactory == nil {
+		return nil, fmt.Errorf("client factory not configured")
+	}
+
+	baseURL, username, password, caCert, err := r.ClientFactory.GetConnectionInfo(ctx, role.Spec.ClusterRef, role.Namespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get connection info: %w", err)
+	}
+
 	config := adapters.OpenSearchConfig{
-		BaseURL:  r.OpenSearchAddr,
-		Username: r.OpenSearchUser,
-		Password: r.OpenSearchPass,
-		Insecure: true,
+		BaseURL:  baseURL,
+		Username: username,
+		Password: password,
+		CACert:   caCert,
+		Insecure: false,
 	}
 
 	return adapters.NewOpenSearchHTTPAdapter(config)
@@ -140,7 +155,7 @@ func (r *RoleReconciler) updateStatus(ctx context.Context, role *wazuhv1.OpenSea
 func (r *RoleReconciler) Delete(ctx context.Context, role *wazuhv1.OpenSearchRole) error {
 	log := logf.FromContext(ctx)
 
-	osClient, err := r.getOpenSearchClient(ctx, role.Namespace)
+	osClient, err := r.getOpenSearchClient(ctx, role)
 	if err != nil {
 		log.Info("Skipping role deletion - failed to get OpenSearch client", "error", err)
 		return nil

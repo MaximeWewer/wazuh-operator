@@ -23,8 +23,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
-	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 	affinityutil "github.com/MaximeWewer/wazuh-operator/internal/shared/affinity"
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // TestIndexerAntiAffinityIntegration tests the anti-affinity integration with the indexer reconciler

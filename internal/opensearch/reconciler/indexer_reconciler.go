@@ -52,13 +52,13 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/config"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/drain"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	affinityutil "github.com/MaximeWewer/wazuh-operator/internal/shared/affinity"
+	drainstate "github.com/MaximeWewer/wazuh-operator/internal/shared/drain"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/storage"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
-	drainstate "github.com/MaximeWewer/wazuh-operator/internal/shared/drain"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
-	affinityutil "github.com/MaximeWewer/wazuh-operator/internal/shared/affinity"
-	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
 )
 
 // IndexerReconciler handles reconciliation of OpenSearch Indexer

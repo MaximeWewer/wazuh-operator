@@ -90,12 +90,12 @@ func (s ComponentTemplateSpec) MarshalJSON() ([]byte, error) {
 
 	// Use raw settings if provided
 	if len(s.SettingsRaw) > 0 {
-		var settings any
+		var settings map[string]any
 		if err := json.Unmarshal(s.SettingsRaw, &settings); err == nil {
-			result["settings"] = settings
+			result["settings"] = NormalizeIndexSettings(settings)
 		}
 	} else if s.Settings != nil {
-		result["settings"] = s.Settings
+		result["settings"] = NormalizeIndexSettings(s.Settings)
 	}
 
 	// Use raw mappings if provided
@@ -113,6 +113,54 @@ func (s ComponentTemplateSpec) MarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(result)
+}
+
+// camelToSnakeSettings maps known camelCase index setting keys to their OpenSearch snake_case equivalents.
+var camelToSnakeSettings = map[string]string{
+	"numberOfShards":        "number_of_shards",
+	"numberOfReplicas":      "number_of_replicas",
+	"numberOfRoutingShards": "number_of_routing_shards",
+	"refreshInterval":       "refresh_interval",
+	"maxResultWindow":       "max_result_window",
+	"autoExpandReplicas":    "auto_expand_replicas",
+}
+
+// NormalizeIndexSettings converts known camelCase shorthand settings keys to their
+// OpenSearch snake_case equivalents, wrapping them under an "index" object.
+// Keys already in snake_case or under "index" are passed through unchanged.
+func NormalizeIndexSettings(settings map[string]any) map[string]any {
+	if len(settings) == 0 {
+		return settings
+	}
+
+	result := make(map[string]any, len(settings))
+	indexSettings := map[string]any{}
+
+	// Check if there's already an "index" key
+	if existing, ok := settings["index"]; ok {
+		if m, ok := existing.(map[string]any); ok {
+			for k, v := range m {
+				indexSettings[k] = v
+			}
+		}
+	}
+
+	for key, value := range settings {
+		if key == "index" {
+			continue // already handled above
+		}
+		if snakeKey, ok := camelToSnakeSettings[key]; ok {
+			indexSettings[snakeKey] = value
+		} else {
+			result[key] = value
+		}
+	}
+
+	if len(indexSettings) > 0 {
+		result["index"] = indexSettings
+	}
+
+	return result
 }
 
 // CreateIndexTemplate creates a new index template

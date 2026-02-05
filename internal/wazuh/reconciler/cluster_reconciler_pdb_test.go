@@ -27,8 +27,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
-	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 func TestClusterReconciler_ReconcileManagerPDB(t *testing.T) {

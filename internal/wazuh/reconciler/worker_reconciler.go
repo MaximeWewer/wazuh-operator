@@ -33,12 +33,12 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
+	shareddrain "github.com/MaximeWewer/wazuh-operator/internal/shared/drain"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/deployments"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/config"
-	shareddrain "github.com/MaximeWewer/wazuh-operator/internal/shared/drain"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
@@ -63,6 +63,7 @@ func NewWorkerReconciler(c client.Client, scheme *runtime.Scheme) *WorkerReconci
 		Scheme: scheme,
 	}
 }
+
 // ReconcileStandalone reconciles a standalone WazuhWorker resource
 func (r *WorkerReconciler) ReconcileStandalone(ctx context.Context, worker *wazuhv1.WazuhWorker) error {
 	log := logf.FromContext(ctx)
@@ -241,6 +242,7 @@ func (r *WorkerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, w
 
 	return nil
 }
+
 // createOrUpdate creates or updates a resource with retry on conflict
 func (r *WorkerReconciler) createOrUpdate(ctx context.Context, obj client.Object) error {
 	log := logf.FromContext(ctx)
@@ -637,4 +639,3 @@ func (r *WorkerReconciler) EvaluateDrainFeasibility(ctx context.Context, cluster
 	drainer := drain.NewManagerDrainer(r.wazuhClient, logf.FromContext(ctx), drainConfig)
 	return drainer.EvaluateFeasibility(ctx, nodeName)
 }
-

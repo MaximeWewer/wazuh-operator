@@ -30,16 +30,15 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 )
 
 // UserReconciler handles reconciliation of OpenSearch users
 type UserReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	Recorder       record.EventRecorder
-	OpenSearchAddr string
-	OpenSearchUser string
-	OpenSearchPass string
+	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
+	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewUserReconciler creates a new UserReconciler
@@ -49,6 +48,12 @@ func NewUserReconciler(c client.Client, scheme *runtime.Scheme, recorder record.
 		Scheme:   scheme,
 		Recorder: recorder,
 	}
+}
+
+// WithClientFactory sets the OpenSearch client factory for dynamic client resolution
+func (r *UserReconciler) WithClientFactory(factory *security.OpenSearchClientFactory) *UserReconciler {
+	r.ClientFactory = factory
+	return r
 }
 
 // Reconcile reconciles an OpenSearch user
@@ -62,7 +67,7 @@ func (r *UserReconciler) Reconcile(ctx context.Context, user *wazuhv1.OpenSearch
 		return fmt.Errorf("failed to get password: %w", err)
 	}
 
-	osClient, err := r.getOpenSearchClient(ctx, user.Namespace)
+	osClient, err := r.getOpenSearchClient(ctx, user)
 	if err != nil {
 		r.recordEvent(user, corev1.EventTypeWarning, "ConnectionError", fmt.Sprintf("Failed to connect to OpenSearch: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
@@ -135,13 +140,23 @@ func (r *UserReconciler) getPassword(ctx context.Context, user *wazuhv1.OpenSear
 	return string(password), nil
 }
 
-// getOpenSearchClient gets an OpenSearch HTTP adapter
-func (r *UserReconciler) getOpenSearchClient(_ context.Context, _ string) (*adapters.OpenSearchHTTPAdapter, error) {
+// getOpenSearchClient gets an OpenSearch HTTP adapter using dynamic client resolution
+func (r *UserReconciler) getOpenSearchClient(ctx context.Context, user *wazuhv1.OpenSearchUser) (*adapters.OpenSearchHTTPAdapter, error) {
+	if r.ClientFactory == nil {
+		return nil, fmt.Errorf("client factory not configured")
+	}
+
+	baseURL, username, password, caCert, err := r.ClientFactory.GetConnectionInfo(ctx, user.Spec.ClusterRef, user.Namespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get connection info: %w", err)
+	}
+
 	config := adapters.OpenSearchConfig{
-		BaseURL:  r.OpenSearchAddr,
-		Username: r.OpenSearchUser,
-		Password: r.OpenSearchPass,
-		Insecure: true,
+		BaseURL:  baseURL,
+		Username: username,
+		Password: password,
+		CACert:   caCert,
+		Insecure: false,
 	}
 
 	return adapters.NewOpenSearchHTTPAdapter(config)
@@ -161,7 +176,7 @@ func (r *UserReconciler) updateStatus(ctx context.Context, user *wazuhv1.OpenSea
 func (r *UserReconciler) Delete(ctx context.Context, user *wazuhv1.OpenSearchUser) error {
 	log := logf.FromContext(ctx)
 
-	osClient, err := r.getOpenSearchClient(ctx, user.Namespace)
+	osClient, err := r.getOpenSearchClient(ctx, user)
 	if err != nil {
 		r.recordEvent(user, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to connect to OpenSearch for deletion: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)

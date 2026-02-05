@@ -42,9 +42,9 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/hpa"
 	osservices "github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
-	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
 )
 
 // DashboardReconciler handles reconciliation of OpenSearch Dashboard

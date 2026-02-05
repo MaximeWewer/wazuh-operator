@@ -27,13 +27,14 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 )
 
 // RoleMappingReconciler handles reconciliation of OpenSearch role mappings
 type RoleMappingReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	APIClient *api.Client
+	Scheme        *runtime.Scheme
+	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewRoleMappingReconciler creates a new RoleMappingReconciler
@@ -44,9 +45,9 @@ func NewRoleMappingReconciler(c client.Client, scheme *runtime.Scheme) *RoleMapp
 	}
 }
 
-// WithAPIClient sets the OpenSearch API client
-func (r *RoleMappingReconciler) WithAPIClient(apiClient *api.Client) *RoleMappingReconciler {
-	r.APIClient = apiClient
+// WithClientFactory sets the OpenSearch client factory
+func (r *RoleMappingReconciler) WithClientFactory(factory *security.OpenSearchClientFactory) *RoleMappingReconciler {
+	r.ClientFactory = factory
 	return r
 }
 
@@ -54,12 +55,16 @@ func (r *RoleMappingReconciler) WithAPIClient(apiClient *api.Client) *RoleMappin
 func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping) error {
 	log := logf.FromContext(ctx)
 
-	if r.APIClient == nil {
-		return r.updateStatus(ctx, mapping, "Pending", "Waiting for OpenSearch API client")
+	if r.ClientFactory == nil {
+		return r.updateStatus(ctx, mapping, "Pending", "Waiting for OpenSearch client factory")
 	}
 
-	// Create Security API client
-	securityAPI := api.NewSecurityAPI(r.APIClient)
+	apiClient, err := r.ClientFactory.GetClientForRef(ctx, mapping.Spec.ClusterRef, mapping.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get OpenSearch client: %w", err)
+	}
+
+	securityAPI := api.NewSecurityAPI(apiClient)
 
 	// Check if role mapping exists
 	existing, err := securityAPI.GetRoleMapping(ctx, mapping.Name)
@@ -118,12 +123,18 @@ func (r *RoleMappingReconciler) updateStatus(ctx context.Context, mapping *wazuh
 func (r *RoleMappingReconciler) Delete(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping) error {
 	log := logf.FromContext(ctx)
 
-	if r.APIClient == nil {
-		log.Info("Skipping role mapping deletion - no API client available")
+	if r.ClientFactory == nil {
+		log.Info("Skipping role mapping deletion - no client factory available")
 		return nil
 	}
 
-	securityAPI := api.NewSecurityAPI(r.APIClient)
+	apiClient, err := r.ClientFactory.GetClientForRef(ctx, mapping.Spec.ClusterRef, mapping.Namespace)
+	if err != nil {
+		log.Info("Skipping role mapping deletion - failed to get OpenSearch client", "error", err)
+		return nil
+	}
+
+	securityAPI := api.NewSecurityAPI(apiClient)
 	if err := securityAPI.DeleteRoleMapping(ctx, mapping.Name); err != nil {
 		return fmt.Errorf("failed to delete role mapping: %w", err)
 	}

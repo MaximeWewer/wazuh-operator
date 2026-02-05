@@ -137,6 +137,51 @@ func (f *OpenSearchClientFactory) buildServiceURL(cluster *wazuhv1.WazuhCluster)
 	)
 }
 
+// GetConnectionInfo returns raw connection parameters for a cluster.
+// This is used by old-pattern reconcilers that create their own HTTP adapters.
+func (f *OpenSearchClientFactory) GetConnectionInfo(ctx context.Context, clusterRef wazuhv1.WazuhClusterReference, resourceNamespace string) (baseURL, username, password string, caCert []byte, err error) {
+	// Determine namespace
+	namespace := clusterRef.Namespace
+	if namespace == "" {
+		namespace = resourceNamespace
+	}
+
+	// Get the WazuhCluster
+	var cluster wazuhv1.WazuhCluster
+	if err := f.k8sClient.Get(ctx, types.NamespacedName{Name: clusterRef.Name, Namespace: namespace}, &cluster); err != nil {
+		return "", "", "", nil, fmt.Errorf("failed to get WazuhCluster %s/%s: %w", namespace, clusterRef.Name, err)
+	}
+
+	// Get credentials
+	username, password, err = f.getCredentials(ctx, &cluster)
+	if err != nil {
+		return "", "", "", nil, fmt.Errorf("failed to get credentials: %w", err)
+	}
+
+	// Get CA certificate
+	caCert, err = f.getCACertificate(ctx, &cluster)
+	if err != nil {
+		return "", "", "", nil, fmt.Errorf("failed to get CA certificate: %w", err)
+	}
+
+	// Build the service URL
+	baseURL = f.buildServiceURL(&cluster)
+
+	return baseURL, username, password, caCert, nil
+}
+
+// GetClientForRef returns an authenticated OpenSearch client for a cluster reference.
+// This is used by new-pattern reconcilers that use the api.Client directly.
+func (f *OpenSearchClientFactory) GetClientForRef(ctx context.Context, clusterRef wazuhv1.WazuhClusterReference, resourceNamespace string) (*api.Client, error) {
+	// Determine namespace
+	namespace := clusterRef.Namespace
+	if namespace == "" {
+		namespace = resourceNamespace
+	}
+
+	return f.GetClient(ctx, types.NamespacedName{Name: clusterRef.Name, Namespace: namespace})
+}
+
 // GetClientWithCustomCredentials creates a client with specific credentials (for testing specific users)
 func (f *OpenSearchClientFactory) GetClientWithCustomCredentials(ctx context.Context, cluster *wazuhv1.WazuhCluster, username, password string) (*api.Client, error) {
 	// Get CA certificate from secret

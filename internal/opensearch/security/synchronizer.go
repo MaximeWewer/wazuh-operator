@@ -19,6 +19,7 @@ package security
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -217,7 +218,8 @@ func (s *SecurityConfigSynchronizer) createOrUpdateUser(ctx context.Context, osC
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 && resp.StatusCode != 201 {
-		return fmt.Errorf("failed to create/update user: HTTP %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to create/update user: HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
 	return nil
@@ -264,13 +266,16 @@ func (s *SecurityConfigSynchronizer) SyncRoles(ctx context.Context, cluster *waz
 			s.updateRoleStatus(ctx, &role, "Failed", err.Error())
 			continue
 		}
-		resp.Body.Close()
 
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
 			result.RolesFailed++
-			s.updateRoleStatus(ctx, &role, "Failed", fmt.Sprintf("HTTP %d", resp.StatusCode))
+			errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
+			s.updateRoleStatus(ctx, &role, "Failed", errMsg)
 			continue
 		}
+		resp.Body.Close()
 
 		s.updateRoleStatus(ctx, &role, "Ready", "Role synced successfully")
 		result.RolesUpdated++
@@ -350,13 +355,16 @@ func (s *SecurityConfigSynchronizer) SyncRoleMappings(ctx context.Context, clust
 			s.updateRoleMappingStatus(ctx, &mapping, "Failed", err.Error())
 			continue
 		}
-		resp.Body.Close()
 
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
 			result.MappingsFailed++
-			s.updateRoleMappingStatus(ctx, &mapping, "Failed", fmt.Sprintf("HTTP %d", resp.StatusCode))
+			errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
+			s.updateRoleMappingStatus(ctx, &mapping, "Failed", errMsg)
 			continue
 		}
+		resp.Body.Close()
 
 		s.updateRoleMappingStatus(ctx, &mapping, "Ready", "Role mapping synced successfully")
 		result.MappingsUpdated++
@@ -408,13 +416,16 @@ func (s *SecurityConfigSynchronizer) SyncTenants(ctx context.Context, cluster *w
 			s.updateTenantStatus(ctx, &tenant, "Failed", err.Error())
 			continue
 		}
-		resp.Body.Close()
 
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
 			result.TenantsFailed++
-			s.updateTenantStatus(ctx, &tenant, "Failed", fmt.Sprintf("HTTP %d", resp.StatusCode))
+			errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
+			s.updateTenantStatus(ctx, &tenant, "Failed", errMsg)
 			continue
 		}
+		resp.Body.Close()
 
 		s.updateTenantStatus(ctx, &tenant, "Ready", "Tenant synced successfully")
 		result.TenantsUpdated++
@@ -466,13 +477,16 @@ func (s *SecurityConfigSynchronizer) SyncActionGroups(ctx context.Context, clust
 			s.updateActionGroupStatus(ctx, &ag, "Failed", err.Error())
 			continue
 		}
-		resp.Body.Close()
 
 		if resp.StatusCode != 200 && resp.StatusCode != 201 {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
 			result.ActionGroupsFailed++
-			s.updateActionGroupStatus(ctx, &ag, "Failed", fmt.Sprintf("HTTP %d", resp.StatusCode))
+			errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
+			s.updateActionGroupStatus(ctx, &ag, "Failed", errMsg)
 			continue
 		}
+		resp.Body.Close()
 
 		s.updateActionGroupStatus(ctx, &ag, "Ready", "Action group synced successfully")
 		result.ActionGroupsUpdated++

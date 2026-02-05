@@ -29,6 +29,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -40,8 +41,8 @@ const (
 // RestoreReconciler handles reconciliation of OpenSearch restore operations
 type RestoreReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	APIClient *api.Client
+	Scheme        *runtime.Scheme
+	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewRestoreReconciler creates a new RestoreReconciler
@@ -52,9 +53,9 @@ func NewRestoreReconciler(c client.Client, scheme *runtime.Scheme) *RestoreRecon
 	}
 }
 
-// WithAPIClient sets the OpenSearch API client
-func (r *RestoreReconciler) WithAPIClient(apiClient *api.Client) *RestoreReconciler {
-	r.APIClient = apiClient
+// WithClientFactory sets the OpenSearch client factory
+func (r *RestoreReconciler) WithClientFactory(factory *security.OpenSearchClientFactory) *RestoreReconciler {
+	r.ClientFactory = factory
 	return r
 }
 
@@ -80,11 +81,16 @@ func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1.Open
 		return nil
 	}
 
-	if r.APIClient == nil {
-		return r.updateStatus(ctx, restore, constants.RestorePhasePending, "Waiting for OpenSearch API client")
+	if r.ClientFactory == nil {
+		return r.updateStatus(ctx, restore, constants.RestorePhasePending, "Waiting for OpenSearch client factory")
 	}
 
-	snapshotsAPI := api.NewSnapshotsAPI(r.APIClient)
+	apiClient, err := r.ClientFactory.GetClientForRef(ctx, restore.Spec.ClusterRef, restore.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get OpenSearch client: %w", err)
+	}
+
+	snapshotsAPI := api.NewSnapshotsAPI(apiClient)
 
 	// Phase: Validating
 	if restore.Status.Phase == "" || restore.Status.Phase == constants.RestorePhasePending {

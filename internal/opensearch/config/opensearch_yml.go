@@ -22,9 +22,9 @@ import (
 	"strings"
 
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
-	"github.com/MaximeWewer/wazuh-operator/pkg/versions"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
+	"github.com/MaximeWewer/wazuh-operator/pkg/versions"
 )
 
 // OpenSearchConfig holds configuration options for opensearch.yml

@@ -41,15 +41,15 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
+	certreconciler "github.com/MaximeWewer/wazuh-operator/internal/certificates/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
-	certreconciler "github.com/MaximeWewer/wazuh-operator/internal/certificates/reconciler"
+	networkingreconciler "github.com/MaximeWewer/wazuh-operator/internal/networking/reconciler"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/validation"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
-	networkingreconciler "github.com/MaximeWewer/wazuh-operator/internal/networking/reconciler"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
@@ -1729,6 +1729,54 @@ func (r *WazuhClusterReconciler) findClustersForDashboard(ctx context.Context, o
 	return requests
 }
 
+// findClustersForRule finds all WazuhClusters that a WazuhRule references via clusterRef
+// Used by the watch handler to enqueue clusters when rules change
+func (r *WazuhClusterReconciler) findClustersForRule(ctx context.Context, obj client.Object) []ctrl.Request {
+	rule, ok := obj.(*wazuhv1.WazuhRule)
+	if !ok {
+		return []ctrl.Request{}
+	}
+
+	// Determine the namespace of the target cluster
+	namespace := rule.Spec.ClusterRef.Namespace
+	if namespace == "" {
+		namespace = rule.Namespace
+	}
+
+	return []ctrl.Request{
+		{
+			NamespacedName: types.NamespacedName{
+				Name:      rule.Spec.ClusterRef.Name,
+				Namespace: namespace,
+			},
+		},
+	}
+}
+
+// findClustersForDecoder finds all WazuhClusters that a WazuhDecoder references via clusterRef
+// Used by the watch handler to enqueue clusters when decoders change
+func (r *WazuhClusterReconciler) findClustersForDecoder(ctx context.Context, obj client.Object) []ctrl.Request {
+	decoder, ok := obj.(*wazuhv1.WazuhDecoder)
+	if !ok {
+		return []ctrl.Request{}
+	}
+
+	// Determine the namespace of the target cluster
+	namespace := decoder.Spec.ClusterRef.Namespace
+	if namespace == "" {
+		namespace = decoder.Namespace
+	}
+
+	return []ctrl.Request{
+		{
+			NamespacedName: types.NamespacedName{
+				Name:      decoder.Spec.ClusterRef.Name,
+				Namespace: namespace,
+			},
+		},
+	}
+}
+
 // SetupWithManager sets up the controller with the Manager
 func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	builder := ctrl.NewControllerManagedBy(mgr).
@@ -1753,6 +1801,16 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&wazuhv1.OpenSearchDashboard{},
 			handler.EnqueueRequestsFromMapFunc(r.findClustersForDashboard),
+		).
+		// Watch WazuhRule CRs - reconcile WazuhCluster when rules change
+		Watches(
+			&wazuhv1.WazuhRule{},
+			handler.EnqueueRequestsFromMapFunc(r.findClustersForRule),
+		).
+		// Watch WazuhDecoder CRs - reconcile WazuhCluster when decoders change
+		Watches(
+			&wazuhv1.WazuhDecoder{},
+			handler.EnqueueRequestsFromMapFunc(r.findClustersForDecoder),
 		)
 
 	// Only add Gateway API watches if enabled AND the specific CRDs are available

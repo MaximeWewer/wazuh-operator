@@ -31,6 +31,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -42,8 +43,8 @@ const (
 // SnapshotRepositoryReconciler handles reconciliation of OpenSearch snapshot repositories
 type SnapshotRepositoryReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	APIClient *api.Client
+	Scheme        *runtime.Scheme
+	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewSnapshotRepositoryReconciler creates a new SnapshotRepositoryReconciler
@@ -54,9 +55,9 @@ func NewSnapshotRepositoryReconciler(c client.Client, scheme *runtime.Scheme) *S
 	}
 }
 
-// WithAPIClient sets the OpenSearch API client
-func (r *SnapshotRepositoryReconciler) WithAPIClient(apiClient *api.Client) *SnapshotRepositoryReconciler {
-	r.APIClient = apiClient
+// WithClientFactory sets the OpenSearch client factory
+func (r *SnapshotRepositoryReconciler) WithClientFactory(factory *security.OpenSearchClientFactory) *SnapshotRepositoryReconciler {
+	r.ClientFactory = factory
 	return r
 }
 
@@ -77,12 +78,17 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 		return r.handleDeletion(ctx, repo)
 	}
 
-	if r.APIClient == nil {
-		return r.updateStatus(ctx, repo, constants.RepositoryPhasePending, "Waiting for OpenSearch API client", false)
+	if r.ClientFactory == nil {
+		return r.updateStatus(ctx, repo, constants.RepositoryPhasePending, "Waiting for OpenSearch client factory", false)
+	}
+
+	apiClient, err := r.ClientFactory.GetClientForRef(ctx, repo.Spec.ClusterRef, repo.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
 	// Create Snapshots API client
-	snapshotsAPI := api.NewSnapshotsAPI(r.APIClient)
+	snapshotsAPI := api.NewSnapshotsAPI(apiClient)
 
 	// Check if repository exists
 	existingRepo, err := snapshotsAPI.GetRepository(ctx, repo.Name)
@@ -188,20 +194,25 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 func (r *SnapshotRepositoryReconciler) handleDeletion(ctx context.Context, repo *wazuhv1.OpenSearchSnapshotRepository) error {
 	log := logf.FromContext(ctx)
 
-	if r.APIClient != nil {
-		snapshotsAPI := api.NewSnapshotsAPI(r.APIClient)
-
-		// Check if repository has snapshots
-		if snapshots, err := snapshotsAPI.ListSnapshots(ctx, repo.Name); err == nil && snapshots != nil && len(snapshots.Snapshots) > 0 {
-			log.Info("Repository has snapshots, they will remain in storage", "name", repo.Name, "count", len(snapshots.Snapshots))
-		}
-
-		// Delete the repository from OpenSearch
-		if err := snapshotsAPI.DeleteRepository(ctx, repo.Name); err != nil {
-			log.Error(err, "Failed to delete repository from OpenSearch", "name", repo.Name)
-			// Continue with finalizer removal even if deletion fails
+	if r.ClientFactory != nil {
+		apiClient, err := r.ClientFactory.GetClientForRef(ctx, repo.Spec.ClusterRef, repo.Namespace)
+		if err != nil {
+			log.Error(err, "Failed to get OpenSearch client for deletion, proceeding with finalizer removal", "name", repo.Name)
 		} else {
-			log.Info("Deleted repository from OpenSearch", "name", repo.Name)
+			snapshotsAPI := api.NewSnapshotsAPI(apiClient)
+
+			// Check if repository has snapshots
+			if snapshots, err := snapshotsAPI.ListSnapshots(ctx, repo.Name); err == nil && snapshots != nil && len(snapshots.Snapshots) > 0 {
+				log.Info("Repository has snapshots, they will remain in storage", "name", repo.Name, "count", len(snapshots.Snapshots))
+			}
+
+			// Delete the repository from OpenSearch
+			if err := snapshotsAPI.DeleteRepository(ctx, repo.Name); err != nil {
+				log.Error(err, "Failed to delete repository from OpenSearch", "name", repo.Name)
+				// Continue with finalizer removal even if deletion fails
+			} else {
+				log.Info("Deleted repository from OpenSearch", "name", repo.Name)
+			}
 		}
 	}
 

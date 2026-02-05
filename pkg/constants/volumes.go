@@ -30,9 +30,6 @@ const (
 	// VolumeNameWazuhCerts is the volume name for Wazuh certificates
 	VolumeNameWazuhCerts = "wazuh-certs"
 
-	// VolumeNameFilebeatConfig is the volume name for Filebeat configuration
-	VolumeNameFilebeatConfig = "filebeat-config"
-
 	// VolumeNameFilebeatCerts is the volume name for Filebeat certificates
 	VolumeNameFilebeatCerts = "filebeat-certs"
 )

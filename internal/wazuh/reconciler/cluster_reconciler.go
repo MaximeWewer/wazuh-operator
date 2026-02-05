@@ -38,8 +38,11 @@ import (
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
 	wazuhcerts "github.com/MaximeWewer/wazuh-operator/internal/certificates/wazuh"
+	affinityutil "github.com/MaximeWewer/wazuh-operator/internal/shared/affinity"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
+	"github.com/MaximeWewer/wazuh-operator/internal/validation"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/cronjobs"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/deployments"
@@ -47,9 +50,6 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
-	affinityutil "github.com/MaximeWewer/wazuh-operator/internal/shared/affinity"
-	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
-	"github.com/MaximeWewer/wazuh-operator/internal/validation"
 )
 
 // ClusterReconciler handles reconciliation of Wazuh cluster components
@@ -316,7 +316,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		extraVolumes      []corev1.Volume
 		extraVolumeMounts []corev1.VolumeMount
 		extraConfig       string
- 		annotations       map[string]string
+		annotations       map[string]string
 		podAnnotations    map[string]string
 	)
 
@@ -566,13 +566,17 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		}, nil
 	}
 
-	// Check if update is needed (any hash changed: cert, config, or spec)
+	// Check if update is needed (any hash changed: cert, config, spec, rule, or decoder)
 	existingCertHash := ""
 	existingConfigHash := ""
 	existingSpecHash := ""
+	existingRuleHash := ""
+	existingDecoderHash := ""
 	if found.Spec.Template.Annotations != nil {
 		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
 		existingConfigHash = found.Spec.Template.Annotations[constants.AnnotationConfigHash]
+		existingRuleHash = found.Spec.Template.Annotations[constants.AnnotationRuleHash]
+		existingDecoderHash = found.Spec.Template.Annotations[constants.AnnotationDecoderHash]
 	}
 	if found.Annotations != nil {
 		existingSpecHash = found.Annotations[constants.AnnotationSpecHash]
@@ -613,6 +617,30 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 			"oldHash", utils.ShortHash(existingSpecHash),
 			"newHash", utils.ShortHash(specHash))
 	}
+	if ruleHash != existingRuleHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+rule-change"
+		} else {
+			updateReason = "rule-change"
+		}
+		log.Info("Master StatefulSet needs update due to rule hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingRuleHash),
+			"newHash", utils.ShortHash(ruleHash))
+	}
+	if decoderHash != existingDecoderHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+decoder-change"
+		} else {
+			updateReason = "decoder-change"
+		}
+		log.Info("Master StatefulSet needs update due to decoder hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingDecoderHash),
+			"newHash", utils.ShortHash(decoderHash))
+	}
 
 	if needsUpdate {
 		sts.SetResourceVersion(found.GetResourceVersion())
@@ -649,7 +677,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		extraVolumes      []corev1.Volume
 		extraVolumeMounts []corev1.VolumeMount
 		extraConfig       string
-   	annotations       map[string]string
+		annotations       map[string]string
 		podAnnotations    map[string]string
 	)
 
@@ -909,13 +937,17 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		}, nil
 	}
 
-	// Check if update is needed (any hash changed: cert, config, or spec)
+	// Check if update is needed (any hash changed: cert, config, spec, rule, or decoder)
 	existingCertHash := ""
 	existingConfigHash := ""
 	existingSpecHash := ""
+	existingRuleHash := ""
+	existingDecoderHash := ""
 	if found.Spec.Template.Annotations != nil {
 		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
 		existingConfigHash = found.Spec.Template.Annotations[constants.AnnotationConfigHash]
+		existingRuleHash = found.Spec.Template.Annotations[constants.AnnotationRuleHash]
+		existingDecoderHash = found.Spec.Template.Annotations[constants.AnnotationDecoderHash]
 	}
 	if found.Annotations != nil {
 		existingSpecHash = found.Annotations[constants.AnnotationSpecHash]
@@ -955,6 +987,30 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingSpecHash),
 			"newHash", utils.ShortHash(specHash))
+	}
+	if ruleHash != existingRuleHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+rule-change"
+		} else {
+			updateReason = "rule-change"
+		}
+		log.Info("Worker StatefulSet needs update due to rule hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingRuleHash),
+			"newHash", utils.ShortHash(ruleHash))
+	}
+	if decoderHash != existingDecoderHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+decoder-change"
+		} else {
+			updateReason = "decoder-change"
+		}
+		log.Info("Worker StatefulSet needs update due to decoder hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingDecoderHash),
+			"newHash", utils.ShortHash(decoderHash))
 	}
 
 	if needsUpdate {

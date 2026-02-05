@@ -28,13 +28,14 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 )
 
 // SnapshotPolicyReconciler handles reconciliation of OpenSearch snapshot policies
 type SnapshotPolicyReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	APIClient *api.Client
+	Scheme        *runtime.Scheme
+	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewSnapshotPolicyReconciler creates a new SnapshotPolicyReconciler
@@ -45,9 +46,9 @@ func NewSnapshotPolicyReconciler(c client.Client, scheme *runtime.Scheme) *Snaps
 	}
 }
 
-// WithAPIClient sets the OpenSearch API client
-func (r *SnapshotPolicyReconciler) WithAPIClient(apiClient *api.Client) *SnapshotPolicyReconciler {
-	r.APIClient = apiClient
+// WithClientFactory sets the OpenSearch client factory
+func (r *SnapshotPolicyReconciler) WithClientFactory(factory *security.OpenSearchClientFactory) *SnapshotPolicyReconciler {
+	r.ClientFactory = factory
 	return r
 }
 
@@ -55,13 +56,18 @@ func (r *SnapshotPolicyReconciler) WithAPIClient(apiClient *api.Client) *Snapsho
 func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSearchSnapshotPolicy) error {
 	log := logf.FromContext(ctx)
 
-	if r.APIClient == nil {
-		return r.updateStatus(ctx, policy, "Pending", "Waiting for OpenSearch API client")
+	if r.ClientFactory == nil {
+		return r.updateStatus(ctx, policy, "Pending", "Waiting for OpenSearch client factory")
+	}
+
+	apiClient, err := r.ClientFactory.GetClientForRef(ctx, policy.Spec.ClusterRef, policy.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
 	// Create Snapshot API clients
-	snapshotAPI := api.NewSnapshotAPI(r.APIClient)
-	snapshotsAPI := api.NewSnapshotsAPI(r.APIClient)
+	snapshotAPI := api.NewSnapshotAPI(apiClient)
+	snapshotsAPI := api.NewSnapshotsAPI(apiClient)
 
 	// Validate repository exists before creating/updating policy
 	repoName := policy.Spec.Repository.Name
@@ -189,12 +195,18 @@ func (r *SnapshotPolicyReconciler) updateStatus(ctx context.Context, policy *waz
 func (r *SnapshotPolicyReconciler) Delete(ctx context.Context, policy *wazuhv1.OpenSearchSnapshotPolicy) error {
 	log := logf.FromContext(ctx)
 
-	if r.APIClient == nil {
-		log.Info("Skipping snapshot policy deletion - no API client available")
+	if r.ClientFactory == nil {
+		log.Info("Skipping snapshot policy deletion - no client factory available")
 		return nil
 	}
 
-	snapshotAPI := api.NewSnapshotAPI(r.APIClient)
+	apiClient, err := r.ClientFactory.GetClientForRef(ctx, policy.Spec.ClusterRef, policy.Namespace)
+	if err != nil {
+		log.Info("Skipping snapshot policy deletion - failed to get OpenSearch client", "error", err)
+		return nil
+	}
+
+	snapshotAPI := api.NewSnapshotAPI(apiClient)
 	if err := snapshotAPI.DeletePolicy(ctx, policy.Name); err != nil {
 		return fmt.Errorf("failed to delete snapshot policy: %w", err)
 	}

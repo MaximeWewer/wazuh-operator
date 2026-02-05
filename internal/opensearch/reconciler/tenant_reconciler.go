@@ -27,13 +27,14 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 )
 
 // TenantReconciler handles reconciliation of OpenSearch tenants
 type TenantReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	APIClient *api.Client
+	Scheme        *runtime.Scheme
+	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewTenantReconciler creates a new TenantReconciler
@@ -44,9 +45,9 @@ func NewTenantReconciler(c client.Client, scheme *runtime.Scheme) *TenantReconci
 	}
 }
 
-// WithAPIClient sets the OpenSearch API client
-func (r *TenantReconciler) WithAPIClient(apiClient *api.Client) *TenantReconciler {
-	r.APIClient = apiClient
+// WithClientFactory sets the OpenSearch client factory
+func (r *TenantReconciler) WithClientFactory(factory *security.OpenSearchClientFactory) *TenantReconciler {
+	r.ClientFactory = factory
 	return r
 }
 
@@ -54,12 +55,18 @@ func (r *TenantReconciler) WithAPIClient(apiClient *api.Client) *TenantReconcile
 func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSearchTenant) error {
 	log := logf.FromContext(ctx)
 
-	if r.APIClient == nil {
-		return r.updateStatus(ctx, tenant, "Pending", "Waiting for OpenSearch API client")
+	if r.ClientFactory == nil {
+		return r.updateStatus(ctx, tenant, "Pending", "Waiting for OpenSearch client factory")
+	}
+
+	// Get OpenSearch client dynamically from cluster reference
+	apiClient, err := r.ClientFactory.GetClientForRef(ctx, tenant.Spec.ClusterRef, tenant.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
 	// Create Security API client
-	securityAPI := api.NewSecurityAPI(r.APIClient)
+	securityAPI := api.NewSecurityAPI(apiClient)
 
 	// Check if tenant exists
 	existing, err := securityAPI.GetTenant(ctx, tenant.Name)
@@ -114,12 +121,18 @@ func (r *TenantReconciler) updateStatus(ctx context.Context, tenant *wazuhv1.Ope
 func (r *TenantReconciler) Delete(ctx context.Context, tenant *wazuhv1.OpenSearchTenant) error {
 	log := logf.FromContext(ctx)
 
-	if r.APIClient == nil {
-		log.Info("Skipping tenant deletion - no API client available")
+	if r.ClientFactory == nil {
+		log.Info("Skipping tenant deletion - no client factory available")
 		return nil
 	}
 
-	securityAPI := api.NewSecurityAPI(r.APIClient)
+	apiClient, err := r.ClientFactory.GetClientForRef(ctx, tenant.Spec.ClusterRef, tenant.Namespace)
+	if err != nil {
+		log.Info("Skipping tenant deletion - failed to get OpenSearch client", "error", err)
+		return nil
+	}
+
+	securityAPI := api.NewSecurityAPI(apiClient)
 	if err := securityAPI.DeleteTenant(ctx, tenant.Name); err != nil {
 		return fmt.Errorf("failed to delete tenant: %w", err)
 	}

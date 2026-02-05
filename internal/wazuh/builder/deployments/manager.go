@@ -407,11 +407,11 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 					NodeSelector: b.nodeSelector,
 					Tolerations:  b.tolerations,
 					Affinity:     b.affinity,
-					// SecurityContext at pod level - fsGroup 101 is the wazuh group in the official image
+					// SecurityContext at pod level - fsGroup 999 is the wazuh group in the official image
 					// SeccompProfile Unconfined is needed on some environments (WSL2, certain kernels)
 					// to allow Filebeat's Go runtime to create threads (pthread_create)
 					SecurityContext: &corev1.PodSecurityContext{
-						FSGroup: func() *int64 { v := int64(101); return &v }(),
+						FSGroup: func() *int64 { v := int64(999); return &v }(),
 						SeccompProfile: &corev1.SeccompProfile{
 							Type: corev1.SeccompProfileTypeUnconfined,
 						},
@@ -476,15 +476,9 @@ func (b *ManagerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 			},
 		},
 		// Writable volume for ossec.conf (init container copies here)
+		// Must be emptyDir so s6 always gets fresh config from ConfigMap
 		{
 			Name: constants.VolumeNameWazuhConfigMount,
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
-		},
-		// Writable volume for filebeat.yml (init container copies here)
-		{
-			Name: constants.VolumeNameFilebeatConfig,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
@@ -555,20 +549,23 @@ func (b *ManagerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 // buildVolumeMounts builds the volume mount list for the main container
 func (b *ManagerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
-		{
-			Name:      constants.VolumeNameWazuhData,
-			MountPath: constants.PathWazuhData,
-		},
+		// PVC subPath mounts - each subdirectory is persisted on the same PVC
+		{Name: constants.VolumeNameWazuhData, MountPath: constants.PathWazuhAPIConfig, SubPath: constants.SubPathWazuhAPIConfig},
+		{Name: constants.VolumeNameWazuhData, MountPath: constants.PathWazuhConfig, SubPath: constants.SubPathWazuhEtc},
+		{Name: constants.VolumeNameWazuhData, MountPath: constants.PathWazuhLogs, SubPath: constants.SubPathWazuhLogs},
+		{Name: constants.VolumeNameWazuhData, MountPath: constants.PathWazuhQueue, SubPath: constants.SubPathWazuhQueue},
+		{Name: constants.VolumeNameWazuhData, MountPath: constants.PathWazuhVarMultigroups, SubPath: constants.SubPathWazuhVarMultigroups},
+		{Name: constants.VolumeNameWazuhData, MountPath: constants.PathWazuhIntegrations, SubPath: constants.SubPathWazuhIntegrations},
+		{Name: constants.VolumeNameWazuhData, MountPath: constants.PathWazuhActiveResponse, SubPath: constants.SubPathWazuhActiveResponse},
+		{Name: constants.VolumeNameWazuhData, MountPath: constants.PathWazuhAgentless, SubPath: constants.SubPathWazuhAgentless},
+		{Name: constants.VolumeNameWazuhData, MountPath: constants.PathWazuhWodles, SubPath: constants.SubPathWazuhWodles},
+		{Name: constants.VolumeNameWazuhData, MountPath: constants.PathFilebeatConfig, SubPath: constants.SubPathFilebeatConfig},
+		{Name: constants.VolumeNameWazuhData, MountPath: constants.PathFilebeatData, SubPath: constants.SubPathFilebeatData},
 		// Mount writable ossec.conf directory (populated by init container)
 		// The Wazuh entrypoint expects configs at /wazuh-config-mount/etc/
 		{
 			Name:      constants.VolumeNameWazuhConfigMount,
 			MountPath: constants.PathMountWazuhConfig,
-		},
-		// Mount writable filebeat.yml (populated by init container)
-		{
-			Name:      constants.VolumeNameFilebeatConfig,
-			MountPath: constants.PathMountFilebeat,
 		},
 		// Mount certificates as directory for filebeat SSL
 		{
@@ -618,15 +615,22 @@ func (b *ManagerStatefulSetBuilder) buildInitContainerVolumeMounts() []corev1.Vo
 			MountPath: constants.PathMountConfigSource,
 			ReadOnly:  true,
 		},
-		// Destination: writable ossec.conf directory
+		// Destination: writable ossec.conf directory (emptyDir - fresh every start)
 		{
 			Name:      constants.VolumeNameWazuhConfigMount,
 			MountPath: constants.PathMountWazuhConfig,
 		},
-		// Destination: writable filebeat config directory
+		// Destination: PVC-backed filebeat config
 		{
-			Name:      constants.VolumeNameFilebeatConfig,
-			MountPath: constants.PathMountFilebeat,
+			Name:      constants.VolumeNameWazuhData,
+			MountPath: constants.PathFilebeatConfig,
+			SubPath:   constants.SubPathFilebeatConfig,
+		},
+		// Destination: PVC-backed wazuh etc (includes shared/, rules/, decoders/)
+		{
+			Name:      constants.VolumeNameWazuhData,
+			MountPath: constants.PathWazuhConfig,
+			SubPath:   constants.SubPathWazuhEtc,
 		},
 	}
 }
@@ -639,9 +643,17 @@ func (b *ManagerStatefulSetBuilder) buildInitContainer() corev1.Container {
 		Command: []string{
 			"/bin/sh",
 			"-c",
-			`echo "Copying configuration files to writable volumes..."
-# Create directory structure for ossec.conf
+			`echo "Initializing PVC directories and copying configuration files..."
+# Create directory structure for ossec.conf (emptyDir)
 mkdir -p /wazuh-config-mount/etc
+# Create required subdirectories on PVC-backed /var/ossec/etc
+mkdir -p /var/ossec/etc/shared /var/ossec/etc/rules /var/ossec/etc/decoders
+# Create ar.conf in shared directory (required by wazuh-analysisd)
+touch /var/ossec/etc/shared/ar.conf
+chown 0:999 /var/ossec/etc/shared/ar.conf
+chmod 660 /var/ossec/etc/shared/ar.conf
+chown 0:999 /var/ossec/etc/shared
+chmod 770 /var/ossec/etc/shared
 # Copy ossec.conf if it exists
 if [ -f /config-source/ossec.conf ]; then
     cp /config-source/ossec.conf /wazuh-config-mount/etc/ossec.conf

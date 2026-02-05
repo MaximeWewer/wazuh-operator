@@ -29,16 +29,15 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 )
 
 // IndexReconciler handles reconciliation of OpenSearch indices
 type IndexReconciler struct {
 	client.Client
-	Scheme         *runtime.Scheme
-	Recorder       record.EventRecorder
-	OpenSearchAddr string
-	OpenSearchUser string
-	OpenSearchPass string
+	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
+	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewIndexReconciler creates a new IndexReconciler
@@ -50,12 +49,18 @@ func NewIndexReconciler(c client.Client, scheme *runtime.Scheme, recorder record
 	}
 }
 
+// WithClientFactory sets the OpenSearch client factory for dynamic client resolution
+func (r *IndexReconciler) WithClientFactory(factory *security.OpenSearchClientFactory) *IndexReconciler {
+	r.ClientFactory = factory
+	return r
+}
+
 // Reconcile reconciles an OpenSearch index
 func (r *IndexReconciler) Reconcile(ctx context.Context, index *wazuhv1.OpenSearchIndex) error {
 	log := logf.FromContext(ctx)
 
 	// Get OpenSearch client
-	osClient, err := r.getOpenSearchClient(ctx, index.Namespace)
+	osClient, err := r.getOpenSearchClient(ctx, index)
 	if err != nil {
 		r.recordEvent(index, corev1.EventTypeWarning, "ConnectionError", fmt.Sprintf("Failed to connect to OpenSearch: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
@@ -123,14 +128,23 @@ func (r *IndexReconciler) buildIndexSettings(index *wazuhv1.OpenSearchIndex) map
 	return settings
 }
 
-// getOpenSearchClient gets an OpenSearch HTTP adapter
-func (r *IndexReconciler) getOpenSearchClient(_ context.Context, _ string) (*adapters.OpenSearchHTTPAdapter, error) {
-	// In a real implementation, this would read credentials from secrets
+// getOpenSearchClient gets an OpenSearch HTTP adapter using dynamic client resolution
+func (r *IndexReconciler) getOpenSearchClient(ctx context.Context, index *wazuhv1.OpenSearchIndex) (*adapters.OpenSearchHTTPAdapter, error) {
+	if r.ClientFactory == nil {
+		return nil, fmt.Errorf("client factory not configured")
+	}
+
+	baseURL, username, password, caCert, err := r.ClientFactory.GetConnectionInfo(ctx, index.Spec.ClusterRef, index.Namespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get connection info: %w", err)
+	}
+
 	config := adapters.OpenSearchConfig{
-		BaseURL:  r.OpenSearchAddr,
-		Username: r.OpenSearchUser,
-		Password: r.OpenSearchPass,
-		Insecure: true,
+		BaseURL:  baseURL,
+		Username: username,
+		Password: password,
+		CACert:   caCert,
+		Insecure: false,
 	}
 
 	return adapters.NewOpenSearchHTTPAdapter(config)
@@ -150,7 +164,7 @@ func (r *IndexReconciler) updateStatus(ctx context.Context, index *wazuhv1.OpenS
 func (r *IndexReconciler) Delete(ctx context.Context, index *wazuhv1.OpenSearchIndex) error {
 	log := logf.FromContext(ctx)
 
-	osClient, err := r.getOpenSearchClient(ctx, index.Namespace)
+	osClient, err := r.getOpenSearchClient(ctx, index)
 	if err != nil {
 		r.recordEvent(index, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to connect to OpenSearch for deletion: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)

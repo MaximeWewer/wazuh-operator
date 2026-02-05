@@ -28,13 +28,14 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 )
 
 // TemplateReconciler handles reconciliation of OpenSearch index templates
 type TemplateReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	APIClient *api.Client
+	Scheme        *runtime.Scheme
+	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewTemplateReconciler creates a new TemplateReconciler
@@ -45,9 +46,9 @@ func NewTemplateReconciler(c client.Client, scheme *runtime.Scheme) *TemplateRec
 	}
 }
 
-// WithAPIClient sets the OpenSearch API client
-func (r *TemplateReconciler) WithAPIClient(apiClient *api.Client) *TemplateReconciler {
-	r.APIClient = apiClient
+// WithClientFactory sets the OpenSearch client factory
+func (r *TemplateReconciler) WithClientFactory(factory *security.OpenSearchClientFactory) *TemplateReconciler {
+	r.ClientFactory = factory
 	return r
 }
 
@@ -55,12 +56,17 @@ func (r *TemplateReconciler) WithAPIClient(apiClient *api.Client) *TemplateRecon
 func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.OpenSearchIndexTemplate) error {
 	log := logf.FromContext(ctx)
 
-	if r.APIClient == nil {
-		return r.updateStatus(ctx, template, "Pending", "Waiting for OpenSearch API client")
+	if r.ClientFactory == nil {
+		return r.updateStatus(ctx, template, "Pending", "Waiting for OpenSearch client factory")
+	}
+
+	apiClient, err := r.ClientFactory.GetClientForRef(ctx, template.Spec.ClusterRef, template.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
 	// Create Templates API client
-	templatesAPI := api.NewTemplatesAPI(r.APIClient)
+	templatesAPI := api.NewTemplatesAPI(apiClient)
 
 	// Check if template exists
 	exists, err := templatesAPI.IndexTemplateExists(ctx, template.Name)
@@ -74,15 +80,21 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.Op
 	// Build index template from spec
 	indexTemplate := r.buildIndexTemplate(template)
 
-	if !exists {
-		// Create new template
+	// Create or update index template (PUT is idempotent in OpenSearch)
+	if exists {
+		log.Info("Updating index template", "name", template.Name)
+	} else {
 		log.Info("Creating index template", "name", template.Name)
-		if err := templatesAPI.CreateIndexTemplate(ctx, template.Name, indexTemplate); err != nil {
-			if updateErr := r.updateStatus(ctx, template, "Error", fmt.Sprintf("Failed to create template: %v", err)); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			return fmt.Errorf("failed to create index template: %w", err)
+	}
+	if err := templatesAPI.CreateIndexTemplate(ctx, template.Name, indexTemplate); err != nil {
+		action := "create"
+		if exists {
+			action = "update"
 		}
+		if updateErr := r.updateStatus(ctx, template, "Error", fmt.Sprintf("Failed to %s template: %v", action, err)); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return fmt.Errorf("failed to %s index template: %w", action, err)
 	}
 
 	// Update status
@@ -105,11 +117,11 @@ func (r *TemplateReconciler) buildIndexTemplate(template *wazuhv1.OpenSearchInde
 	if template.Spec.Template != nil {
 		indexTemplate.Template = &api.TemplateSpec{}
 
-		// Convert RawExtension to map[string]any
+		// Convert RawExtension to map[string]any and normalize camelCase keys
 		if template.Spec.Template.Settings != nil && template.Spec.Template.Settings.Raw != nil {
 			var settings map[string]any
 			if err := json.Unmarshal(template.Spec.Template.Settings.Raw, &settings); err == nil {
-				indexTemplate.Template.Settings = settings
+				indexTemplate.Template.Settings = api.NormalizeIndexSettings(settings)
 			}
 		}
 
@@ -157,12 +169,18 @@ func (r *TemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1
 func (r *TemplateReconciler) Delete(ctx context.Context, template *wazuhv1.OpenSearchIndexTemplate) error {
 	log := logf.FromContext(ctx)
 
-	if r.APIClient == nil {
-		log.Info("Skipping index template deletion - no API client available")
+	if r.ClientFactory == nil {
+		log.Info("Skipping index template deletion - no client factory available")
 		return nil
 	}
 
-	templatesAPI := api.NewTemplatesAPI(r.APIClient)
+	apiClient, err := r.ClientFactory.GetClientForRef(ctx, template.Spec.ClusterRef, template.Namespace)
+	if err != nil {
+		log.Info("Skipping index template deletion - failed to get OpenSearch client", "error", err)
+		return nil
+	}
+
+	templatesAPI := api.NewTemplatesAPI(apiClient)
 	if err := templatesAPI.DeleteIndexTemplate(ctx, template.Name); err != nil {
 		return fmt.Errorf("failed to delete index template: %w", err)
 	}

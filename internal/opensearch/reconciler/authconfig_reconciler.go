@@ -30,13 +30,15 @@ import (
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/config"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // AuthConfigReconciler handles reconciliation of OpenSearch authentication configuration
 type AuthConfigReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme                *runtime.Scheme
+	SecurityAdminExecutor *security.SecurityAdminExecutor
 }
 
 // NewAuthConfigReconciler creates a new AuthConfigReconciler
@@ -45,6 +47,12 @@ func NewAuthConfigReconciler(c client.Client, scheme *runtime.Scheme) *AuthConfi
 		Client: c,
 		Scheme: scheme,
 	}
+}
+
+// WithSecurityAdminExecutor sets the SecurityAdmin executor for applying security config
+func (r *AuthConfigReconciler) WithSecurityAdminExecutor(executor *security.SecurityAdminExecutor) *AuthConfigReconciler {
+	r.SecurityAdminExecutor = executor
+	return r
 }
 
 // Reconcile reconciles an OpenSearchAuthConfig
@@ -69,6 +77,15 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 	// Reconcile indexer security config
 	if err := r.reconcileIndexerSecurityConfig(ctx, authConfig, clusterName, namespace, secrets); err != nil {
 		return r.updateStatus(ctx, authConfig, "Failed", fmt.Sprintf("Failed to reconcile indexer config: %v", err))
+	}
+
+	// Apply security config via securityadmin.sh (non-fatal if exec fails)
+	if r.SecurityAdminExecutor != nil {
+		if err := r.SecurityAdminExecutor.ApplySecurityConfig(ctx, clusterName, namespace); err != nil {
+			log.Error(err, "Failed to apply security config via securityadmin.sh - config will apply on next indexer restart")
+		} else {
+			log.Info("Security config applied via securityadmin.sh")
+		}
 	}
 
 	// Reconcile dashboard config

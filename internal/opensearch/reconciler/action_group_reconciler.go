@@ -27,13 +27,14 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 )
 
 // ActionGroupReconciler handles reconciliation of OpenSearch action groups
 type ActionGroupReconciler struct {
 	client.Client
-	Scheme    *runtime.Scheme
-	APIClient *api.Client
+	Scheme        *runtime.Scheme
+	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewActionGroupReconciler creates a new ActionGroupReconciler
@@ -44,9 +45,9 @@ func NewActionGroupReconciler(c client.Client, scheme *runtime.Scheme) *ActionGr
 	}
 }
 
-// WithAPIClient sets the OpenSearch API client
-func (r *ActionGroupReconciler) WithAPIClient(apiClient *api.Client) *ActionGroupReconciler {
-	r.APIClient = apiClient
+// WithClientFactory sets the OpenSearch client factory for dynamic client resolution
+func (r *ActionGroupReconciler) WithClientFactory(factory *security.OpenSearchClientFactory) *ActionGroupReconciler {
+	r.ClientFactory = factory
 	return r
 }
 
@@ -54,12 +55,18 @@ func (r *ActionGroupReconciler) WithAPIClient(apiClient *api.Client) *ActionGrou
 func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup) error {
 	log := logf.FromContext(ctx)
 
-	if r.APIClient == nil {
-		return r.updateStatus(ctx, ag, "Pending", "Waiting for OpenSearch API client")
+	if r.ClientFactory == nil {
+		return r.updateStatus(ctx, ag, "Pending", "Waiting for OpenSearch client factory")
+	}
+
+	// Get OpenSearch client dynamically from cluster reference
+	apiClient, err := r.ClientFactory.GetClientForRef(ctx, ag.Spec.ClusterRef, ag.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
 	// Create Security API client
-	securityAPI := api.NewSecurityAPI(r.APIClient)
+	securityAPI := api.NewSecurityAPI(apiClient)
 
 	// Check if action group exists
 	existing, err := securityAPI.GetActionGroup(ctx, ag.Name)
@@ -116,12 +123,18 @@ func (r *ActionGroupReconciler) updateStatus(ctx context.Context, ag *wazuhv1.Op
 func (r *ActionGroupReconciler) Delete(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup) error {
 	log := logf.FromContext(ctx)
 
-	if r.APIClient == nil {
-		log.Info("Skipping action group deletion - no API client available")
+	if r.ClientFactory == nil {
+		log.Info("Skipping action group deletion - no client factory available")
 		return nil
 	}
 
-	securityAPI := api.NewSecurityAPI(r.APIClient)
+	apiClient, err := r.ClientFactory.GetClientForRef(ctx, ag.Spec.ClusterRef, ag.Namespace)
+	if err != nil {
+		log.Info("Skipping action group deletion - failed to get OpenSearch client", "error", err)
+		return nil
+	}
+
+	securityAPI := api.NewSecurityAPI(apiClient)
 	if err := securityAPI.DeleteActionGroup(ctx, ag.Name); err != nil {
 		return fmt.Errorf("failed to delete action group: %w", err)
 	}

@@ -34,11 +34,11 @@ import (
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
-	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
 	certreconciler "github.com/MaximeWewer/wazuh-operator/internal/certificates/reconciler"
+	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
+	networkingreconciler "github.com/MaximeWewer/wazuh-operator/internal/networking/reconciler"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
-	networkingreconciler "github.com/MaximeWewer/wazuh-operator/internal/networking/reconciler"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
