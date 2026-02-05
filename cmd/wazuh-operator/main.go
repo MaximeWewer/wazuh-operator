@@ -408,6 +408,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchTenant")
 		os.Exit(1)
 	}
+	if err := (&controllers.OpenSearchAuthConfigReconciler{
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		AuthConfigReconciler: opensearchreconciler.NewAuthConfigReconciler(mgr.GetClient(), mgr.GetScheme()),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchAuthConfig")
+		os.Exit(1)
+	}
 	if err := (&controllers.OpenSearchPolicyReconciler{
 		Client:           mgr.GetClient(),
 		Scheme:           mgr.GetScheme(),
