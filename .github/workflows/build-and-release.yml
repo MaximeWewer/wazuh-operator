@@ -17,7 +17,7 @@ permissions:
   packages: write
 
 env:
-  GO_VERSION: '1.25.4'
+  GO_VERSION: '1.25.7'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/wazuh-operator
   HELM_OPERATOR_CHART_PATH: charts/wazuh-operator
