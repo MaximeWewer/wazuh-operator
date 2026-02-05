@@ -714,10 +714,54 @@ func (b *WorkerStatefulSetBuilder) buildEnvVars() []corev1.EnvVar {
 		},
 	}
 
-	// Note: Filebeat env vars (INDEXER_URL, INDEXER_USERNAME, etc.) are NOT set here.
-	// The operator-generated filebeat.yml (from ConfigMap) already contains all correct values.
-	// Setting these env vars would cause the s6 init script (1-config-filebeat) to run sed
-	// substitutions that break the YAML structure (inline vs multi-line format mismatch).
+	// Filebeat env vars for s6 init script (1-config-filebeat) compatibility.
+	// The s6 script 0-wazuh-init overwrites /etc/filebeat/filebeat.yml with the image default,
+	// then 1-config-filebeat uses sed to patch it with these env vars.
+	// These env vars are identical across all Wazuh 4.x versions (4.9 through 4.14).
+	env = append(env,
+		corev1.EnvVar{
+			Name:  "INDEXER_URL",
+			Value: fmt.Sprintf("https://%s:%d", constants.IndexerServiceFQDN(b.clusterName, b.namespace), constants.PortIndexerREST),
+		},
+		corev1.EnvVar{
+			Name: "INDEXER_USERNAME",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: constants.IndexerCredentialsName(b.clusterName),
+					},
+					Key: constants.SecretKeyAdminUsername,
+				},
+			},
+		},
+		corev1.EnvVar{
+			Name: "INDEXER_PASSWORD",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: constants.IndexerCredentialsName(b.clusterName),
+					},
+					Key: constants.SecretKeyAdminPassword,
+				},
+			},
+		},
+		corev1.EnvVar{
+			Name:  "FILEBEAT_SSL_VERIFICATION_MODE",
+			Value: "full",
+		},
+		corev1.EnvVar{
+			Name:  "SSL_CERTIFICATE_AUTHORITIES",
+			Value: constants.PathFilebeatCAFile,
+		},
+		corev1.EnvVar{
+			Name:  "SSL_CERTIFICATE",
+			Value: constants.PathFilebeatCertFile,
+		},
+		corev1.EnvVar{
+			Name:  "SSL_KEY",
+			Value: constants.PathFilebeatKeyFile,
+		},
+	)
 
 	// Add custom env vars
 	env = append(env, b.env...)
