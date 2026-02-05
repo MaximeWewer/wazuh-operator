@@ -49,6 +49,8 @@ type WazuhCertificateReconciler struct {
 // +kubebuilder:rbac:groups=resources.wazuh.com,resources=wazuhcertificates,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=resources.wazuh.com,resources=wazuhcertificates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=resources.wazuh.com,resources=wazuhcertificates/finalizers,verbs=update
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;delete
+// +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
 
 // Reconcile is the main reconciliation loop for WazuhCertificate
 func (r *WazuhCertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {

@@ -62,6 +62,7 @@ func NewWorkerReconciler(c client.Client, scheme *runtime.Scheme) *WorkerReconci
 		Scheme: scheme,
 	}
 }
+
 // ReconcileStandalone reconciles a standalone WazuhWorker resource
 func (r *WorkerReconciler) ReconcileStandalone(ctx context.Context, worker *wazuhv1.WazuhWorker) error {
 	log := logf.FromContext(ctx)
@@ -240,6 +241,7 @@ func (r *WorkerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, w
 
 	return nil
 }
+
 // createOrUpdate creates or updates a resource with retry on conflict
 func (r *WorkerReconciler) createOrUpdate(ctx context.Context, obj client.Object) error {
 	log := logf.FromContext(ctx)
@@ -636,4 +638,3 @@ func (r *WorkerReconciler) EvaluateDrainFeasibility(ctx context.Context, cluster
 	drainer := drain.NewManagerDrainer(r.wazuhClient, logf.FromContext(ctx), drainConfig)
 	return drainer.EvaluateFeasibility(ctx, nodeName)
 }
-

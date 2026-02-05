@@ -316,7 +316,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		extraVolumes      []corev1.Volume
 		extraVolumeMounts []corev1.VolumeMount
 		extraConfig       string
- 		annotations       map[string]string
+		annotations       map[string]string
 		podAnnotations    map[string]string
 	)
 
@@ -649,7 +649,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		extraVolumes      []corev1.Volume
 		extraVolumeMounts []corev1.VolumeMount
 		extraConfig       string
-   	annotations       map[string]string
+		annotations       map[string]string
 		podAnnotations    map[string]string
 	)
 
