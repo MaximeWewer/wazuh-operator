@@ -43,6 +43,7 @@ import (
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	wazuhv1alpha1 "github.com/MaximeWewer/wazuh-operator/api/v1alpha1"
 	"github.com/MaximeWewer/wazuh-operator/controllers"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
@@ -66,6 +67,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
+	utilruntime.Must(wazuhv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(wazuhv1.AddToScheme(scheme))
 
 	// Register Prometheus Operator types
