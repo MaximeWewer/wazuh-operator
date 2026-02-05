@@ -179,7 +179,7 @@ Automatically opens the browser with the correct URL.
 kubectl port-forward -n wazuh svc/wazuh-cluster-dashboard 5601:5601
 ```
 
-Then access: https://localhost:5601
+Then access: <https://localhost:5601>
 
 **Default credentials:**
 

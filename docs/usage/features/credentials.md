@@ -85,7 +85,7 @@ kubectl get secret -n wazuh wazuh-cluster-key \
 
 The operator validates all passwords (both auto-generated and user-provided) against the following rules:
 
-- Backslash (`\`) characters are **not allowed**. The backslash character is incompatible with Wazuh JSON configuration and will cause parsing errors. This validation is enforced in `pkg/validation/password_validation.go`.
+- Backslash (`\`) characters are **not allowed**. The backslash character is incompatible with Wazuh JSON configuration and will cause parsing errors. This validation is enforced in `internal/validation/password_validation.go`.
 
 If a custom password fails validation, the operator will reject it during reconciliation and emit a warning event.
 

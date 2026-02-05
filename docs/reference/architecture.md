@@ -8,13 +8,14 @@ The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framewor
 
 ### Core Technologies
 
-- **Language**: Go 1.25.4
-- **Framework**: Kubebuilder with controller-runtime v0.22.4
-- **Kubernetes API**: client-go v0.34.2, k8s.io/api v0.34.2
-- **Testing**: Ginkgo v2.27.2 + Gomega v1.38.2
-- **Monitoring**: Prometheus (prometheus-operator APIs, prometheus/client_golang)
-- **Tracing**: OpenTelemetry (OTLP gRPC exporter, otelhttp transport)
-- **Cryptography**: golang.org/x/crypto v0.42.0
+- **Language**: Go 1.25.7
+- **Framework**: Kubebuilder v4 with controller-runtime v0.23.1
+- **Kubernetes API**: client-go v0.35.0, k8s.io/api v0.35.0
+- **Gateway API**: sigs.k8s.io/gateway-api v1.4.1
+- **Testing**: Ginkgo v2.28.1 + Gomega v1.39.1
+- **Monitoring**: Prometheus (prometheus-operator v0.88.1 APIs, prometheus/client_golang v1.23.2)
+- **Tracing**: OpenTelemetry (OTLP gRPC exporter v1.40.0, otelhttp transport)
+- **Cryptography**: golang.org/x/crypto v0.47.0
 
 ### Build & Deployment
 
@@ -156,24 +157,47 @@ The operator implements the standard Kubernetes operator pattern:
 
 ```
 internal/
-├── wazuh/                  # Wazuh-specific logic
-│   ├── reconciler/         # Helper reconcilers
-│   ├── config/             # Configuration generation
-│   ├── builder/            # Resource builders
-│   └── drain/              # Drain strategy
-├── opensearch/             # OpenSearch-specific logic
-│   ├── reconciler/         # Helper reconcilers
+├── wazuh/                  # Wazuh-specific logic (NO cross-domain imports)
+│   ├── reconciler/         # Helper reconcilers (cluster, manager, worker, rules, etc.)
+│   ├── config/             # Configuration generation (ossec.conf)
+│   ├── builder/            # Resource builders (statefulsets, services, configmaps, etc.)
+│   ├── drain/              # Drain strategy (ManagerDrainer, rollback, retry)
+│   ├── health/             # Health checks
+│   └── validation/         # Wazuh-specific validation
+├── opensearch/             # OpenSearch-specific logic (NO cross-domain imports)
+│   ├── reconciler/         # Helper reconcilers (indexer, dashboard, security CRDs, etc.)
 │   ├── api/                # OpenSearch REST API clients
-│   ├── config/             # Configuration generation
-│   ├── security_config/    # Security config structures
+│   ├── config/             # Configuration generation (opensearch.yml, auth configs)
+│   ├── securityconfig/     # Security config structures
 │   ├── security/           # Security synchronization
-│   └── builder/            # Resource builders
-├── certificates/           # TLS certificate management
+│   ├── builder/            # Resource builders (statefulsets, deployments, etc.)
+│   ├── drain/              # Indexer drain operations
+│   ├── health/             # Health checks
+│   ├── hotreload/          # Hot reload support
+│   └── validation/         # OpenSearch-specific validation
+├── certificates/           # TLS certificate management (cross-cutting)
+│   ├── reconciler/         # CertificateReconciler + hot reload logic
+│   ├── common/             # Shared cert utilities
+│   ├── opensearch/         # OpenSearch cert generation
+│   ├── wazuh/              # Wazuh cert generation
+│   └── sans/               # SAN management
+├── networking/             # Networking (cross-cutting, shared by opensearch+wazuh)
+│   ├── reconciler/         # GatewayReconciler, IngressReconciler
+│   └── builder/            # HTTPRoute, TCPRoute, UDPRoute, Ingress builders
+├── shared/                 # Cross-cutting shared concerns
+│   ├── affinity/           # Anti-affinity builders (used by both domains)
+│   ├── pdb/                # PodDisruptionBudget builders (used by both domains)
+│   ├── drain/              # Drain state machine + detection (used by both domains)
+│   ├── config/             # Shared configuration utilities
+│   ├── storage/            # Storage utilities
+│   └── patch/              # Change detection (hash, drift)
+├── validation/             # CRD validation (cluster, opensearch, wazuh, password)
 ├── metrics/                # Prometheus metrics
 ├── monitoring/             # ServiceMonitor reconciliation
 ├── telemetry/              # OpenTelemetry tracing
-├── shared/                 # Cross-cutting concerns
-└── utils/                  # Internal utilities
+├── adapters/               # External system adapters
+├── secrets/                # Secret management utilities
+└── utils/                  # Internal utilities (k8s helpers, conditions, merge)
 ```
 
 **Reconciler Pattern**:
@@ -216,33 +240,50 @@ builder := statefulsets.NewManagerBuilder(name, namespace).
 - **PVCs**: Data storage
 - **Jobs/CronJobs**: Backups, restores, init tasks
 
-### Layer 5: Client Layer (`pkg/client/`)
+### Layer 5: Cross-Cutting Concerns
 
-**Purpose**: API client abstractions
+**Networking** (`internal/networking/`):
 
-**Clients**:
+- Gateway API reconciliation (HTTPRoute, TCPRoute, UDPRoute)
+- Ingress reconciliation (networkingv1.Ingress)
+- Shared by both wazuh and opensearch domains
 
-- **KubernetesClient**: Wrapper around client-go
-- **OpenSearchClient**: REST client for OpenSearch APIs
-- **WazuhClient**: REST client for Wazuh API
+**Certificates** (`internal/certificates/`):
 
-**Features**:
+- CertificateReconciler with hot reload support
+- Certificate generation per domain (opensearch, wazuh)
+- SAN management
 
-- Retry logic
-- Error handling
-- Connection pooling
-- Request/response logging
+**Shared** (`internal/shared/`):
 
-### Layer 6: Validation Layer (`pkg/validation/`)
+- Anti-affinity builders (manager, indexer, dashboard)
+- PodDisruptionBudget builders
+- Drain state machine (used by both wazuh and opensearch drain)
+- Change detection and patch utilities
+
+### Layer 6: Validation Layer (`internal/validation/`)
 
 **Purpose**: CRD validation logic
 
 **Types**:
 
 - **Structural validation**: Kubebuilder markers
-- **Semantic validation**: Business rule validation
+- **Semantic validation**: Business rule validation in `internal/validation/`
 - **Cross-field validation**: Field dependencies
-- **External validation**: API availability checks
+- **Domain-specific**: `internal/wazuh/validation/`, `internal/opensearch/validation/`
+
+### Layer 7: Public API Layer (`pkg/`)
+
+**Purpose**: Stable public packages (importable externally, NO `internal/` imports)
+
+**Packages**:
+
+- **`pkg/constants/`**: Port definitions, default values, backup constants
+- **`pkg/config/`**: Operator runtime configuration
+- **`pkg/dns/`**: Cluster domain resolution
+- **`pkg/logging/`**: Structured logging setup
+- **`pkg/version/`**: Operator version and build metadata
+- **`pkg/versions/`**: Wazuh↔OpenSearch version mapping, hot reload support detection
 
 ## Data Architecture
 

@@ -87,7 +87,7 @@ kubectl apply -f config/samples/wazuh_v1_wazuhcluster_minimal.yaml
 ### Adding a New CRD
 
 1. Define types in `api/v1/<name>_types.go`
-2. Add controller in `internal/controller/<domain>/`
+2. Add controller in `controllers/`
 3. Register controller in `cmd/wazuh-operator/main.go`
 4. Generate manifests: `make manifests`
 5. Add sample in `config/samples/`
@@ -95,8 +95,8 @@ kubectl apply -f config/samples/wazuh_v1_wazuhcluster_minimal.yaml
 ### Adding a New Feature to WazuhCluster
 
 1. Add field to `WazuhClusterSpec` in `api/v1/wazuhcluster_types.go`
-2. Add builder in `pkg/resources/` or update existing
-3. Update reconciler in `internal/controller/wazuhcluster/`
+2. Add builder in `internal/wazuh/builder/` or `internal/opensearch/builder/`
+3. Update reconciler in `internal/wazuh/reconciler/` or `internal/opensearch/reconciler/`
 4. Add tests
 5. Update documentation
 

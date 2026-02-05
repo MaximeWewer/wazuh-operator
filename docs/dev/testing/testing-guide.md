@@ -15,7 +15,7 @@ Complete testing guide for the wazuh-operator project.
 
 ## Prerequisites
 
-- Go 1.25.4+
+- Go 1.25.7+
 - Make
 - Docker
 - kubectl 1.25+

@@ -43,8 +43,6 @@ wazuh-operator/
 │   │   │   ├── cluster_reconciler.go              # Manager master+worker orchestration (main WazuhCluster path)
 │   │   │   ├── manager_reconciler.go              # Standalone WazuhManager CRD reconciliation
 │   │   │   ├── worker_reconciler.go               # Standalone WazuhWorker CRD + drain operations
-│   │   │   ├── certificate_reconciler.go          # TLS management
-│   │   │   ├── certificate_hotreload.go           # Cert reload without restart
 │   │   │   ├── rule_reconciler.go                 # Rule deployment
 │   │   │   ├── decoder_reconciler.go              # Decoder deployment
 │   │   │   ├── filebeat_reconciler.go             # Filebeat config
@@ -58,10 +56,12 @@ wazuh-operator/
 │   │   │   ├── configmaps/                        # ConfigMap builders
 │   │   │   ├── jobs/                              # Job builders (backup/restore)
 │   │   │   └── pvc/                               # PVC builders
-│   │   └── drain/                                 # Drain strategy for safe scale-down
-│   │       ├── drain.go                           # Drain coordinator
-│   │       ├── rollback.go                        # Rollback manager
-│   │       └── retry.go                           # Retry manager
+│   │   ├── drain/                                 # Drain strategy for safe scale-down
+│   │   │   ├── drain.go                           # ManagerDrainer coordinator
+│   │   │   ├── rollback.go                        # Rollback manager
+│   │   │   └── retry.go                           # Retry manager
+│   │   ├── health/                                # Wazuh health checks
+│   │   └── validation/                            # Wazuh-specific validation
 │   │
 │   ├── opensearch/                                # OpenSearch-specific logic
 │   │   ├── reconciler/                            # OpenSearch reconcilers
@@ -114,11 +114,26 @@ wazuh-operator/
 │   │   └── validation/                            # OpenSearch-specific validation
 │   │       └── ...                                # Validation logic
 │   │
-│   ├── certificates/                              # TLS Certificate Management
-│   │   ├── node_cert.go                           # Node certificates (indexer, manager, dashboard)
-│   │   ├── admin_cert.go                          # Admin certificate (security plugin)
-│   │   ├── filebeat_cert.go                       # Filebeat certificate
-│   │   └── dashboard_cert.go                      # Dashboard certificate
+│   ├── certificates/                              # TLS Certificate Management (cross-cutting)
+│   │   ├── reconciler/                            # Certificate reconciliation
+│   │   │   ├── certificate_reconciler.go          # CertificateReconciler (TLS lifecycle management)
+│   │   │   └── certificate_hotreload.go           # Cert reload without restart (Wazuh 4.9+)
+│   │   ├── common/                                # Shared certificate utilities
+│   │   ├── opensearch/                            # OpenSearch-specific cert generation
+│   │   ├── wazuh/                                 # Wazuh-specific cert generation
+│   │   └── sans/                                  # SAN (Subject Alternative Name) management
+│   │
+│   ├── networking/                                # Networking (cross-cutting, shared by opensearch+wazuh)
+│   │   ├── reconciler/                            # Networking reconcilers
+│   │   │   ├── gateway_reconciler.go              # GatewayReconciler (HTTPRoute, TCPRoute, UDPRoute)
+│   │   │   └── ingress_reconciler.go              # IngressReconciler (networkingv1.Ingress)
+│   │   └── builder/                               # Networking resource builders
+│   │       ├── routes/                            # Gateway API route builders
+│   │       │   ├── httproute_builder.go           # HTTPRoute builder
+│   │       │   ├── tcproute_builder.go            # TCPRoute builder
+│   │       │   └── udproute_builder.go            # UDPRoute builder
+│   │       └── ingresses/                         # Ingress builders
+│   │           └── ingress_builder.go             # Ingress builder (4 concrete builders)
 │   │
 │   ├── metrics/                                   # Prometheus Metrics
 │   │   └── metrics.go                             # Custom operator metrics
@@ -127,12 +142,22 @@ wazuh-operator/
 │   │   └── servicemonitor.go                      # ServiceMonitor/PodMonitor reconciler
 │   │
 │   ├── shared/                                    # Shared Cross-Cutting Concerns
-│   │   ├── patch/                                 # Change detection utilities
-│   │   │   ├── hash.go                            # Spec hash computation (per-component SpecInput structs)
-│   │   │   ├── detector.go                        # Detect resource changes
-│   │   │   ├── types.go                           # Patch types
-│   │   │   └── errors.go                          # Patch errors
-│   │   └── ...                                    # Other shared utilities
+│   │   ├── affinity/                              # Anti-affinity builders (manager, indexer, dashboard)
+│   │   ├── pdb/                                   # PodDisruptionBudget builders (manager, indexer, dashboard)
+│   │   ├── drain/                                 # Drain state machine and detection (used by wazuh & opensearch)
+│   │   ├── config/                                # Shared configuration utilities
+│   │   ├── storage/                               # Storage utilities
+│   │   └── patch/                                 # Change detection utilities
+│   │       ├── hash.go                            # Spec hash computation (per-component SpecInput structs)
+│   │       ├── detector.go                        # Detect resource changes
+│   │       ├── types.go                           # Patch types
+│   │       └── errors.go                          # Patch errors
+│   │
+│   ├── validation/                                # CRD Validation (moved from pkg/validation/)
+│   │   ├── cluster_validation.go                  # WazuhCluster validation
+│   │   ├── opensearch_validation.go               # OpenSearch CRD validation
+│   │   ├── wazuh_validation.go                    # Wazuh CRD validation
+│   │   └── password_validation.go                 # Password policy validation
 │   │
 │   ├── adapters/                                  # External system adapters
 │   │   └── ...                                    # Adapter implementations
@@ -147,8 +172,7 @@ wazuh-operator/
 │       ├── k8s_objects.go                         # Kubernetes object helpers
 │       ├── status_conditions.go                   # Status condition utilities
 │       ├── merge.go                               # Deep merge utilities
-│       ├── hash.go                                # Hash computation
-│       └── version_test.go                        # Version comparison tests
+│       └── hash.go                                # Hash computation
 │
 ├── controllers/                                   # Kubernetes Controllers (25 files)
 │   ├── wazuhcluster_controller.go                 # Main orchestrating controller
@@ -177,42 +201,27 @@ wazuh-operator/
 │   ├── opensearchrestore_controller.go            # Restore controller
 │   └── opensearchauthconfig_controller.go         # Auth config controller
 │
-├── pkg/                                           # Public Packages
-│   ├── client/                                    # API Clients
-│   │   ├── k8s_client.go                          # Kubernetes client wrapper
-│   │   ├── opensearch_client.go                   # OpenSearch REST client
-│   │   └── wazuh_client.go                        # Wazuh API client
-│   │
-│   ├── validation/                                # CRD Validation
-│   │   ├── cluster_validation.go                  # WazuhCluster validation
-│   │   ├── opensearch_validation.go               # OpenSearch CRD validation
-│   │   └── wazuh_validation.go                    # Wazuh CRD validation
-│   │
-│   ├── resources/                                 # Resource Builders
-│   │   ├── affinity/                              # Affinity configuration builders
-│   │   │   ├── manager.go                         # Manager pod affinity
-│   │   │   └── indexer.go                         # Indexer pod affinity
-│   │   └── pdb/                                   # PodDisruptionBudget builders
-│   │       ├── manager.go                         # Manager PDB
-│   │       ├── indexer.go                         # Indexer PDB
-│   │       └── dashboard.go                       # Dashboard PDB
-│   │
-│   ├── conditions/                                # Status Conditions
-│   │   ├── cluster_conditions.go                  # WazuhCluster conditions
-│   │   ├── opensearch_conditions.go               # OpenSearch conditions
-│   │   └── wazuh_conditions.go                    # Wazuh conditions
+├── pkg/                                           # Public Packages (stable API, importable externally)
+│   ├── config/                                    # Operator configuration
+│   │   └── config.go                              # Runtime configuration
 │   │
 │   ├── constants/                                 # Constants
 │   │   ├── ports.go                               # Port definitions
-│   │   ├── defaults_test.go                       # Default values tests
+│   │   ├── defaults.go                            # Default values (versions, images)
 │   │   └── backup.go                              # Backup constants
+│   │
+│   ├── dns/                                       # DNS utilities
+│   │   └── dns.go                                 # Cluster domain resolution
+│   │
+│   ├── logging/                                   # Logging configuration
+│   │   └── logging.go                             # Structured logging setup
 │   │
 │   ├── version/                                   # Version Information
 │   │   ├── version.go                             # Operator version
 │   │   └── buildinfo.go                           # Build metadata
 │   │
-│   └── scheme/                                    # Kubernetes Scheme
-│       └── add_scheme.go                          # Register CRDs to scheme
+│   └── versions/                                  # Wazuh↔OpenSearch Version Mapping
+│       └── versions.go                            # Version mapping, hot reload support detection
 │
 ├── cmd/                                           # Application Entry Point
 │   └── wazuh-operator/
@@ -286,14 +295,16 @@ wazuh-operator/
 ### Critical Paths
 
 - **`api/v1/`**: CRD type definitions (v1 storage version) - **READ FIRST** to understand data model
-- **`api/v1/`**: CRD type definitions ()
 - **`cmd/wazuh-operator/main.go`**: Application entry point - shows operator initialization
 - **`controllers/`**: Kubernetes controllers - main reconciliation logic
-- **`internal/wazuh/`**: Wazuh-specific implementation (reconcilers, config, builders)
+- **`internal/wazuh/`**: Wazuh-specific implementation (reconcilers, config, builders, drain)
 - **`internal/opensearch/`**: OpenSearch-specific implementation (reconcilers, API clients, config)
-- **`internal/certificates/`**: TLS certificate generation and management
+- **`internal/certificates/`**: TLS certificate management (reconciler, generation, SANs)
+- **`internal/networking/`**: Networking reconcilers and builders (Gateway API, Ingress)
+- **`internal/shared/`**: Cross-cutting concerns (affinity, PDB, drain state machine, config, storage, patch)
+- **`internal/validation/`**: CRD validation logic (cluster, opensearch, wazuh, password)
 - **`internal/telemetry/`**: OpenTelemetry tracing (TracerProvider, HTTP transport wrapper)
-- **`pkg/client/`**: API client wrappers (Kubernetes, OpenSearch, Wazuh)
+- **`pkg/versions/`**: Wazuh↔OpenSearch version mapping (public stable API)
 
 ### Entry Points
 
@@ -331,7 +342,7 @@ wazuh-operator/
 
 **Wazuh API**:
 
-- `pkg/client/wazuh_client.go`: REST calls to Wazuh Manager API
+- REST calls to Wazuh Manager API (via internal adapters)
 - Rule/decoder reload commands
 - Agent management
 
@@ -347,7 +358,11 @@ wazuh-operator/
 - `k8s_objects.go`: Object creation helpers, owner references
 - `status_conditions.go`: Status condition management (Ready, Progressing, Degraded)
 - `merge.go`: Deep merge for strategic updates
-- `hash.go`: Spec/ConfigMap/Secret hash computation for change detection (tracks version, resources, annotations, extraConfig, extraVolumes, etc.)
+- `hash.go`: Spec/ConfigMap/Secret hash computation for change detection
+
+### Version Mapping (`pkg/versions/`)
+
+- `versions.go`: Wazuh↔OpenSearch version mapping, hot reload support detection, Prometheus exporter version mapping
 
 ### Configuration Builders
 

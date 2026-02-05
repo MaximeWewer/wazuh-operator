@@ -10,15 +10,15 @@
 - **Purpose**: Kubernetes operator for Wazuh security platform
 - **License**: Apache License 2.0
 - **Repository**: <https://github.com/MaximeWewer/wazuh-operator>
-- **Language**: Go 1.25.4
-- **Framework**: Kubebuilder v4 with controller-runtime v0.22.4
+- **Language**: Go 1.25.7
+- **Framework**: Kubebuilder v4 with controller-runtime
 - **Target**: Kubernetes 1.25+
 
 ## Technology Stack
 
 For detailed technology decisions and justifications, see [Technology Stack](technology-stack.md).
 
-**Key Technologies**: Go 1.25.4, Kubebuilder v4, controller-runtime v0.22.4, Ginkgo/Gomega, Prometheus, OpenTelemetry
+**Key Technologies**: Go 1.25.7, Kubebuilder v4, controller-runtime, Ginkgo/Gomega, Prometheus, OpenTelemetry
 
 ## Architecture Type
 
@@ -40,9 +40,11 @@ The operator follows the standard Kubernetes operator pattern with:
 
 - **API Layer** (`api/v1/`): CRD type definitions (v1 storage version)
 - **Controller Layer** (`controllers/`): Main reconciliation controllers
-- **Business Logic Layer** (`internal/`): Domain-specific implementations
+- **Business Logic Layer** (`internal/wazuh/`, `internal/opensearch/`): Domain-specific implementations
+- **Cross-Cutting Layer** (`internal/certificates/`, `internal/networking/`, `internal/shared/`): Shared concerns
+- **Validation Layer** (`internal/validation/`): CRD validation logic
 - **Telemetry Layer** (`internal/telemetry/`): OpenTelemetry tracing
-- **Client Layer** (`pkg/client/`): API clients (K8s, OpenSearch, Wazuh)
+- **Public API Layer** (`pkg/`): Stable public packages (constants, config, dns, logging, version, versions)
 - **Resource Builders** (`internal/*/builder/`): Kubernetes resource generation
 - **Entry Point** (`cmd/wazuh-operator/`): Application startup
 
@@ -87,10 +89,10 @@ The operator follows the standard Kubernetes operator pattern with:
 
 - **CRDs**: 25 Custom Resource Definitions
 - **Controllers**: 25 Kubernetes controllers
-- **Go Packages**: 15+ internal packages
+- **Go Packages**: 30+ internal packages, 6 public packages
 - **Lines of Code**: ~50,000+ (estimated)
-- **Documentation Files**: 30+ markdown files
-- **Test Files**: E2E tests with Ginkgo/Gomega
+- **Documentation Files**: 53+ markdown files
+- **Test Files**: Unit, integration (envtest), and E2E tests with Ginkgo/Gomega
 
 ## Managed Resources
 
@@ -131,13 +133,14 @@ The operator creates and manages:
 - Helm charts (operator + cluster)
 - OpenTelemetry distributed tracing
 - API v1 migration (stable storage version)
+- Gateway API support (HTTPRoute, TCPRoute, UDPRoute)
+- Ingress support (networkingv1.Ingress)
 
 **Planned Features**:
 
 - Multiple cluster support
 - Extended test coverage
 - NetworkPolicies
-- GatewayAPI support
 - Validation webhooks
 - OLM/OperatorHub support
 

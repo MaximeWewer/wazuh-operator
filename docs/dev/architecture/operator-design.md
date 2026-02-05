@@ -50,20 +50,23 @@ The Wazuh Operator is a Kubernetes operator built with Kubebuilder v4 that manag
 
 The main controller that orchestrates all components:
 
-- **Location**: `internal/controller/wazuhcluster/`
+- **Location**: `controllers/wazuhcluster_controller.go`
+- **Delegates to**: `internal/wazuh/reconciler/`, `internal/opensearch/reconciler/`, `internal/certificates/reconciler/`, `internal/networking/reconciler/`
 - **Responsibilities**:
-  - Reconcile certificate secrets
-  - Deploy Indexer (OpenSearch) StatefulSet
-  - Deploy Manager (master + workers) StatefulSets
-  - Deploy Dashboard Deployment
+  - Reconcile certificate secrets (via `CertificateReconciler`)
+  - Deploy Indexer (OpenSearch) StatefulSet (via `IndexerReconciler`)
+  - Deploy Manager (master + workers) StatefulSets (via `ClusterReconciler`)
+  - Deploy Dashboard Deployment (via `DashboardReconciler`)
   - Create Services, ConfigMaps, PVCs
+  - Manage Gateway API routes and Ingress resources (via `GatewayReconciler`, `IngressReconciler`)
   - Manage Log Rotation CronJob
+  - Manage Monitoring resources (via `MonitoringReconciler`)
 
 ### OpenSearch CRD Controllers
 
 Controllers for managing OpenSearch security and index management:
 
-- **Location**: `internal/controller/opensearch/`
+- **Location**: `controllers/opensearch*_controller.go` → delegates to `internal/opensearch/reconciler/`
 - **CRDs Managed**:
   - OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping
   - OpenSearchTenant, OpenSearchActionGroup
@@ -74,7 +77,7 @@ Controllers for managing OpenSearch security and index management:
 
 Controllers for managing Wazuh detection rules and decoders:
 
-- **Location**: `internal/controller/wazuh/`
+- **Location**: `controllers/wazuh*_controller.go` → delegates to `internal/wazuh/reconciler/`
 - **CRDs Managed**:
   - WazuhRule - Custom detection rules
   - WazuhDecoder - Custom log decoders
@@ -163,9 +166,21 @@ The operator exposes Prometheus metrics:
 - `wazuh_cluster_reconcile_errors_total` - Reconciliation errors
 - `wazuh_cluster_reconcile_duration_seconds` - Reconciliation duration
 
+## Domain Separation
+
+The codebase enforces strict domain separation:
+
+- `internal/wazuh/` does **NOT** import from `internal/opensearch/` and vice-versa
+- Cross-cutting concerns live in shared packages:
+  - `internal/certificates/`: TLS certificate management (reconciler + generation)
+  - `internal/networking/`: Gateway API and Ingress reconciliation + builders
+  - `internal/shared/`: Affinity, PDB, drain state machine, config, storage, patch
+  - `internal/validation/`: CRD validation logic
+- `pkg/` contains only stable public APIs (constants, config, dns, logging, version, versions)
+- `pkg/` **NEVER** imports from `internal/`
+
 ## Future Improvements
 
 1. **Webhooks**: Admission webhooks for validation
-2. **Backup/Restore**: Automated backup and restore
-3. **Multi-cluster**: Federation support
-4. **OLM**: OperatorHub integration
+2. **Multi-cluster**: Federation support
+3. **OLM**: OperatorHub integration

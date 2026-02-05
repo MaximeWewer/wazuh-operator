@@ -73,12 +73,21 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 ### File Organization
 
 ```
-internal/controller/wazuhcluster/
-├── wazuhcluster_controller.go       # Main reconciler
-├── indexer_reconciler.go            # Indexer component
-├── manager_reconciler.go            # Manager component
-├── dashboard_reconciler.go          # Dashboard component
-└── wazuhcluster_controller_test.go  # Tests
+controllers/
+├── wazuhcluster_controller.go       # Main orchestrating controller
+├── wazuh*_controller.go             # Wazuh component controllers
+├── opensearch*_controller.go        # OpenSearch CRD controllers
+└── suite_test.go                    # Integration test suite
+
+internal/wazuh/reconciler/
+├── cluster_reconciler.go            # Manager master+worker orchestration
+├── worker_reconciler.go             # Worker drain operations
+└── ...                              # Other reconcilers
+
+internal/opensearch/reconciler/
+├── indexer_reconciler.go            # Indexer management
+├── dashboard_reconciler.go          # Dashboard management
+└── ...                              # Security/index CRD reconcilers
 ```
 
 ### Builder Pattern

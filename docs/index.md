@@ -22,8 +22,8 @@ kubectl get wazuhcluster -n wazuh
 | Property        | Value                                       |
 | --------------- | ------------------------------------------- |
 | **Type**        | Kubernetes Operator                         |
-| **Language**    | Go 1.25.4                                   |
-| **Framework**   | Kubebuilder v4 + controller-runtime v0.22.4 |
+| **Language**    | Go 1.25.7                                   |
+| **Framework**   | Kubebuilder v4 + controller-runtime         |
 | **CRDs**        | 25 Custom Resource Definitions              |
 | **Controllers** | 25 reconciliation controllers               |
 | **API Group**   | `resources.wazuh.com/v1`                    |
@@ -75,14 +75,19 @@ kubectl get wazuhcluster -n wazuh
 
 ## Key Directories
 
-| Path           | Description                                                 |
-| -------------- | ----------------------------------------------------------- |
-| `api/v1/`      | CRD type definitions (v1 storage version)                   |
-| `controllers/` | 25 Kubernetes controllers                                   |
-| `internal/`    | Business logic (wazuh, opensearch, certificates, telemetry) |
-| `pkg/`         | Shared packages (client, validation, resources)             |
-| `config/`      | CRDs, RBAC, samples                                         |
-| `charts/`      | Helm charts (operator, cluster)                             |
+| Path                      | Description                                                          |
+| ------------------------- | -------------------------------------------------------------------- |
+| `api/v1/`                 | CRD type definitions (v1 storage version)                            |
+| `controllers/`            | 25 Kubernetes controllers                                            |
+| `internal/wazuh/`         | Wazuh reconcilers, config, builders, drain                           |
+| `internal/opensearch/`    | OpenSearch reconcilers, API clients, config, builders                |
+| `internal/certificates/`  | TLS certificate reconciler and generation                            |
+| `internal/networking/`    | Gateway API and Ingress reconcilers + builders                       |
+| `internal/shared/`        | Cross-cutting: affinity, PDB, drain state machine, config, patch     |
+| `internal/validation/`    | CRD validation (cluster, opensearch, wazuh, password)                |
+| `pkg/`                    | Public stable APIs (constants, config, dns, logging, version, versions) |
+| `config/`                 | CRDs, RBAC, samples                                                  |
+| `charts/`                 | Helm charts (operator, cluster)                                      |
 
 ## Build Commands
 
