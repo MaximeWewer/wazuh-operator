@@ -503,6 +503,12 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	}
 	// Set cluster reference for monitoring sidecar
 	stsBuilder.WithCluster(cluster)
+	// Set termination grace period (default + user override)
+	masterTerminationGracePeriod := constants.DefaultManagerTerminationGracePeriod
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.TerminationGracePeriodSeconds != nil {
+		masterTerminationGracePeriod = *cluster.Spec.Manager.Master.TerminationGracePeriodSeconds
+	}
+	stsBuilder.WithTerminationGracePeriodSeconds(&masterTerminationGracePeriod)
 
 	// Mount rule ConfigMaps if RuleReconciler is configured
 	var ruleHash string
@@ -893,6 +899,13 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		stsBuilder.WithSpecHash(specHash)
 	}
 
+	// Set termination grace period (default + user override)
+	workerTerminationGracePeriod := constants.DefaultManagerTerminationGracePeriod
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.TerminationGracePeriodSeconds != nil {
+		workerTerminationGracePeriod = *cluster.Spec.Manager.Workers.TerminationGracePeriodSeconds
+	}
+	stsBuilder.WithTerminationGracePeriodSeconds(&workerTerminationGracePeriod)
+
 	// Mount rule ConfigMaps if RuleReconciler is configured
 	var ruleHash string
 	if r.RuleReconciler != nil {
@@ -1275,6 +1288,12 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	}
 	// Set cluster reference for monitoring sidecar
 	stsBuilder.WithCluster(cluster)
+	// Set termination grace period (default + user override)
+	legacyMasterTerminationGracePeriod := constants.DefaultManagerTerminationGracePeriod
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.TerminationGracePeriodSeconds != nil {
+		legacyMasterTerminationGracePeriod = *cluster.Spec.Manager.Master.TerminationGracePeriodSeconds
+	}
+	stsBuilder.WithTerminationGracePeriodSeconds(&legacyMasterTerminationGracePeriod)
 
 	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
 		Version:           cluster.Spec.Version,
@@ -1555,6 +1574,12 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 	if configHash != "" {
 		stsBuilder.WithConfigHash(configHash)
 	}
+	// Set termination grace period (default + user override)
+	legacyWorkerTerminationGracePeriod := constants.DefaultManagerTerminationGracePeriod
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.TerminationGracePeriodSeconds != nil {
+		legacyWorkerTerminationGracePeriod = *cluster.Spec.Manager.Workers.TerminationGracePeriodSeconds
+	}
+	stsBuilder.WithTerminationGracePeriodSeconds(&legacyWorkerTerminationGracePeriod)
 
 	specHash, err := patch.ComputeManagerWorkersSpecHashFull(patch.ManagerWorkersSpecInput{
 		Replicas:          workerReplicas2,

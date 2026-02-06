@@ -317,8 +317,7 @@ output.elasticsearch:
 {{- if .SSLEnabled }}
   protocol: {{ .IndexerProtocol }}
 {{- end }}
-  hosts:
-    - "{{ .IndexerHost }}:{{ .IndexerPort }}"
+  hosts: ["{{ .IndexerHost }}:{{ .IndexerPort }}"]
 {{- if .IndexerUsername }}
   username: "{{ .IndexerUsername }}"
 {{- end }}
