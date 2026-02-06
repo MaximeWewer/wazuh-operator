@@ -74,12 +74,13 @@ Only secrets have been created.
 To deploy a cluster, set 'cluster.enabled: true' in your values.yaml.
 {{- end }}
 
-{{- if and (not .Values.externalSecrets.enabled) (or (eq .Values.secrets.wazuhApi.password "CHANGE_ME_STRONG_PASSWORD_HERE") (eq .Values.secrets.indexerAdmin.password "CHANGE_ME_STRONG_PASSWORD_HERE")) }}
+{{- if and (not .Values.externalSecrets.enabled) (not .Values.secrets.wazuhApi.password) (not .Values.secrets.indexerAdmin.password) }}
 
-** SECURITY WARNING **
-Default passwords detected! For production use:
-1. Change all default passwords, OR
-2. Use External Secrets Operator (externalSecrets.enabled: true)
+NOTE: No inline passwords provided. The operator will auto-generate secure
+credentials at runtime. Retrieve them with:
+
+  kubectl get secret {{ .Values.cluster.name }}-wazuh-api -n {{ .Values.namespace }} -o jsonpath='{.data.password}' | base64 -d
+  kubectl get secret {{ .Values.cluster.name }}-indexer-admin -n {{ .Values.namespace }} -o jsonpath='{.data.password}' | base64 -d
 {{- end }}
 
 Documentation:

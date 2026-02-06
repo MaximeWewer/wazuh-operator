@@ -36,22 +36,22 @@ secrets:
   wazuhApi:
     # -- Wazuh API username
     username: "wazuh-api"
-    # -- Wazuh API password (CHANGE IN PRODUCTION)
-    password: "CHANGE_ME_STRONG_PASSWORD_HERE"
+    # -- Wazuh API password (leave empty for auto-generation by the operator)
+    password: ""
 
   # @extra secrets.indexerAdmin Indexer admin credentials (used by Dashboard and internal components)
   indexerAdmin:
     # -- Indexer admin username
     username: "admin"
-    # -- Indexer admin password (CHANGE IN PRODUCTION)
-    password: "CHANGE_ME_STRONG_PASSWORD_HERE"
+    # -- Indexer admin password (leave empty for auto-generation by the operator)
+    password: ""
 
   # @extra secrets.wazuhAuthd Wazuh authd password for agent enrollment
   wazuhAuthd:
     # -- Enable authd password secret creation
     enabled: true
-    # -- Agent enrollment password (CHANGE IN PRODUCTION)
-    password: "CHANGE_ME_STRONG_PASSWORD_HERE"
+    # -- Agent enrollment password (leave empty for auto-generation by the operator)
+    password: ""
 
 # @section External Secrets Operator (ESO)
 # Integration with external secret providers (HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, GCP Secret Manager).
