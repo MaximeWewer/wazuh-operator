@@ -66,8 +66,9 @@ import (
 // IndexerReconciler handles reconciliation of OpenSearch Indexer
 type IndexerReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
+	ClientFactory *security.OpenSearchClientFactory
 
 	// drainer handles indexer drain operations for safe scale-down
 	drainer *drain.IndexerDrainerImpl
@@ -81,6 +82,12 @@ func NewIndexerReconciler(c client.Client, scheme *runtime.Scheme) *IndexerRecon
 		Client: c,
 		Scheme: scheme,
 	}
+}
+
+// WithClientFactory sets the shared OpenSearch client factory
+func (r *IndexerReconciler) WithClientFactory(factory *security.OpenSearchClientFactory) *IndexerReconciler {
+	r.ClientFactory = factory
+	return r
 }
 
 // WithRecorder sets the event recorder
@@ -1405,14 +1412,22 @@ func (r *IndexerReconciler) ensureOpenSearchClient(ctx context.Context, cluster 
 		return nil
 	}
 
-	clientFactory := security.NewOpenSearchClientFactory(r.Client)
-	newClient, err := clientFactory.GetClientForCluster(ctx, cluster)
+	factory := r.getClientFactory()
+	newClient, err := factory.GetClientForCluster(ctx, cluster)
 	if err != nil {
 		return err
 	}
 
 	r.osClient = newClient
 	return nil
+}
+
+// getClientFactory returns the shared ClientFactory or creates one as fallback
+func (r *IndexerReconciler) getClientFactory() *security.OpenSearchClientFactory {
+	if r.ClientFactory != nil {
+		return r.ClientFactory
+	}
+	return security.NewOpenSearchClientFactory(r.Client)
 }
 
 // ResetDrainState resets the drain state after a successful scale-down
@@ -1882,8 +1897,7 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 	}
 
 	// Try to create OpenSearch client and update users
-	clientFactory := security.NewOpenSearchClientFactory(r.Client)
-	osClient, err := clientFactory.GetClientForCluster(ctx, cluster)
+	osClient, err := r.getClientFactory().GetClientForCluster(ctx, cluster)
 	if err != nil {
 		// Auth failed - this is expected on first startup before security auto-init
 		log.V(1).Info("Failed to create OpenSearch client for security sync (expected on first startup)", "error", err)
@@ -1947,9 +1961,8 @@ func (r *IndexerReconciler) CheckSecurityInitialization(ctx context.Context, clu
 		return false, nil
 	}
 
-	// Create OpenSearch client factory and get a client
-	clientFactory := security.NewOpenSearchClientFactory(r.Client)
-	osClient, err := clientFactory.GetClientForCluster(ctx, cluster)
+	// Get an OpenSearch client (cached by the shared factory)
+	osClient, err := r.getClientFactory().GetClientForCluster(ctx, cluster)
 	if err != nil {
 		log.V(1).Info("Failed to create OpenSearch client", "error", err)
 		return false, nil // Not an error, just not ready
@@ -1996,9 +2009,8 @@ func (r *IndexerReconciler) SyncSecurityCRDs(ctx context.Context, cluster *wazuh
 		return nil
 	}
 
-	// Create client factory and synchronizer
-	clientFactory := security.NewOpenSearchClientFactory(r.Client)
-	synchronizer := security.NewSecurityConfigSynchronizer(r.Client, clientFactory, r.Recorder)
+	// Create synchronizer using the shared client factory
+	synchronizer := security.NewSecurityConfigSynchronizer(r.Client, r.getClientFactory(), r.Recorder)
 
 	// Sync all security CRDs
 	result, err := synchronizer.SyncAllForCluster(ctx, cluster)

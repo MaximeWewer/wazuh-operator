@@ -18,7 +18,10 @@ package security
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -29,15 +32,28 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
-// OpenSearchClientFactory creates OpenSearch clients from cluster references
+// cachedClient holds a cached api.Client and the hash of the credentials
+// used to create it. When credentials or CA rotate, the hash changes and
+// the client is recreated.
+type cachedClient struct {
+	client    *api.Client
+	credsHash string
+}
+
+// OpenSearchClientFactory creates OpenSearch clients from cluster references.
+// Clients are cached per cluster (namespace/name) and reused across reconciliations
+// as long as credentials and CA certificate remain unchanged.
 type OpenSearchClientFactory struct {
 	k8sClient client.Client
+	mu        sync.RWMutex
+	cache     map[string]*cachedClient
 }
 
 // NewOpenSearchClientFactory creates a new OpenSearchClientFactory
 func NewOpenSearchClientFactory(k8sClient client.Client) *OpenSearchClientFactory {
 	return &OpenSearchClientFactory{
 		k8sClient: k8sClient,
+		cache:     make(map[string]*cachedClient),
 	}
 }
 
@@ -52,7 +68,9 @@ func (f *OpenSearchClientFactory) GetClient(ctx context.Context, clusterRef type
 	return f.GetClientForCluster(ctx, &cluster)
 }
 
-// GetClientForCluster returns an authenticated OpenSearch client using cluster object directly
+// GetClientForCluster returns an authenticated OpenSearch client using cluster object directly.
+// Clients are cached and reused across calls; a new client is created only when
+// credentials or CA certificate change.
 func (f *OpenSearchClientFactory) GetClientForCluster(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*api.Client, error) {
 	// Get credentials from secret
 	username, password, err := f.getCredentials(ctx, cluster)
@@ -66,10 +84,20 @@ func (f *OpenSearchClientFactory) GetClientForCluster(ctx context.Context, clust
 		return nil, fmt.Errorf("failed to get CA certificate: %w", err)
 	}
 
-	// Build the service URL
-	baseURL := f.buildServiceURL(cluster)
+	// Compute a hash over credentials + CA to detect rotation
+	hash := computeCredsHash(username, password, caCert)
+	cacheKey := cluster.Namespace + "/" + cluster.Name
 
-	// Create the client
+	// Fast path: check cache under read lock
+	f.mu.RLock()
+	if cached, ok := f.cache[cacheKey]; ok && cached.credsHash == hash {
+		f.mu.RUnlock()
+		return cached.client, nil
+	}
+	f.mu.RUnlock()
+
+	// Slow path: create a new client and store it
+	baseURL := f.buildServiceURL(cluster)
 	config := api.ClientConfig{
 		BaseURL:  baseURL,
 		Username: username,
@@ -78,7 +106,16 @@ func (f *OpenSearchClientFactory) GetClientForCluster(ctx context.Context, clust
 		Insecure: false, // Always verify TLS in production
 	}
 
-	return api.NewClient(config)
+	newClient, err := api.NewClient(config)
+	if err != nil {
+		return nil, err
+	}
+
+	f.mu.Lock()
+	f.cache[cacheKey] = &cachedClient{client: newClient, credsHash: hash}
+	f.mu.Unlock()
+
+	return newClient, nil
 }
 
 // getCredentials retrieves admin credentials from the indexer-credentials secret
@@ -182,7 +219,8 @@ func (f *OpenSearchClientFactory) GetClientForRef(ctx context.Context, clusterRe
 	return f.GetClient(ctx, types.NamespacedName{Name: clusterRef.Name, Namespace: namespace})
 }
 
-// GetClientWithCustomCredentials creates a client with specific credentials (for testing specific users)
+// GetClientWithCustomCredentials creates a client with specific credentials (for testing specific users).
+// These clients are NOT cached because they use non-standard credentials.
 func (f *OpenSearchClientFactory) GetClientWithCustomCredentials(ctx context.Context, cluster *wazuhv1.WazuhCluster, username, password string) (*api.Client, error) {
 	// Get CA certificate from secret
 	caCert, err := f.getCACertificate(ctx, cluster)
@@ -203,4 +241,16 @@ func (f *OpenSearchClientFactory) GetClientWithCustomCredentials(ctx context.Con
 	}
 
 	return api.NewClient(config)
+}
+
+// computeCredsHash produces a short hash over the material that determines
+// whether an existing cached client is still valid.
+func computeCredsHash(username, password string, caCert []byte) string {
+	h := sha256.New()
+	h.Write([]byte(username))
+	h.Write([]byte{0})
+	h.Write([]byte(password))
+	h.Write([]byte{0})
+	h.Write(caCert)
+	return hex.EncodeToString(h.Sum(nil))[:16]
 }
