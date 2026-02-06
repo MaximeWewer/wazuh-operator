@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -83,12 +84,7 @@ func RetryWithBackoff(ctx context.Context, config RetryConfig, fn func() error) 
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(interval):
-			// Calculate next interval
-			nextInterval := time.Duration(float64(interval) * config.Multiplier)
-			if nextInterval > config.MaxInterval {
-				nextInterval = config.MaxInterval
-			}
-			interval = nextInterval
+			interval = nextInterval(interval, config)
 		}
 	}
 
@@ -122,11 +118,7 @@ func RetryWithResult[T any](ctx context.Context, config RetryConfig, fn func() (
 		case <-ctx.Done():
 			return zero, ctx.Err()
 		case <-time.After(interval):
-			nextInterval := time.Duration(float64(interval) * config.Multiplier)
-			if nextInterval > config.MaxInterval {
-				nextInterval = config.MaxInterval
-			}
-			interval = nextInterval
+			interval = nextInterval(interval, config)
 		}
 	}
 
@@ -136,10 +128,33 @@ func RetryWithResult[T any](ctx context.Context, config RetryConfig, fn func() (
 // CalculateBackoff calculates the backoff duration for a given attempt
 func CalculateBackoff(attempt int, config RetryConfig) time.Duration {
 	backoff := float64(config.InitialInterval) * math.Pow(config.Multiplier, float64(attempt))
-	if time.Duration(backoff) > config.MaxInterval {
-		return config.MaxInterval
+	d := time.Duration(backoff)
+	if d > config.MaxInterval {
+		d = config.MaxInterval
 	}
-	return time.Duration(backoff)
+	if config.Jitter {
+		d = applyJitter(d)
+	}
+	return d
+}
+
+// applyJitter adds +/-25% randomness to a duration to spread out concurrent retries.
+func applyJitter(d time.Duration) time.Duration {
+	// rand.Float64() is safe for concurrent use since Go 1.22 (math/rand/v2)
+	jitter := 0.75 + rand.Float64()*0.5 //nolint:gosec // jitter does not need crypto randomness
+	return time.Duration(float64(d) * jitter)
+}
+
+// nextInterval computes the next backoff interval, capped and optionally jittered.
+func nextInterval(current time.Duration, config RetryConfig) time.Duration {
+	next := time.Duration(float64(current) * config.Multiplier)
+	if next > config.MaxInterval {
+		next = config.MaxInterval
+	}
+	if config.Jitter {
+		next = applyJitter(next)
+	}
+	return next
 }
 
 // IsRetryable checks if an error is retryable
@@ -241,11 +256,7 @@ func RetryOnConflictWithConfig(ctx context.Context, config RetryConfig, fn func(
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(interval):
-			nextInterval := time.Duration(float64(interval) * config.Multiplier)
-			if nextInterval > config.MaxInterval {
-				nextInterval = config.MaxInterval
-			}
-			interval = nextInterval
+			interval = nextInterval(interval, config)
 		}
 	}
 
@@ -291,11 +302,7 @@ func RetryOnConflictWithResultAndConfig[T any](ctx context.Context, config Retry
 		case <-ctx.Done():
 			return zero, ctx.Err()
 		case <-time.After(interval):
-			nextInterval := time.Duration(float64(interval) * config.Multiplier)
-			if nextInterval > config.MaxInterval {
-				nextInterval = config.MaxInterval
-			}
-			interval = nextInterval
+			interval = nextInterval(interval, config)
 		}
 	}
 
