@@ -121,6 +121,8 @@ type OpenSearchIndexStatus struct {
 	Message string `json:"message,omitempty"`
 
 	// Conditions represent the latest available observations
+	// +listType=map
+	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 

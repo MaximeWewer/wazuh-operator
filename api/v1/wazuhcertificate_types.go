@@ -29,7 +29,7 @@ type WazuhCertificateSpec struct {
 
 	// Certificate type (ca, node, admin, filebeat)
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=ca;node;admin;filebeat
+	// +kubebuilder:validation:Enum=ca;node;admin;filebeat;indexer;dashboard
 	Type CertificateType `json:"type"`
 
 	// Distinguished Name configuration
@@ -210,6 +210,8 @@ type WazuhCertificateStatus struct {
 	Phase CertificatePhase `json:"phase,omitempty"`
 
 	// Conditions represent the latest available observations
+	// +listType=map
+	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 

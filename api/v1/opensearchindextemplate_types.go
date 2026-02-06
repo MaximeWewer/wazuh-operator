@@ -117,6 +117,8 @@ type OpenSearchIndexTemplateStatus struct {
 	Phase string `json:"phase,omitempty"`
 
 	// Conditions represent the latest available observations of the index template's state
+	// +listType=map
+	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
