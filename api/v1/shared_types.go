@@ -50,6 +50,11 @@ type WazuhMasterSpec struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
 	Affinity *corev1.Affinity `json:"affinity,omitempty"`
 
+	// Topology spread constraints for pod scheduling
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
+
 	// Additional volumes
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
@@ -135,6 +140,11 @@ type WazuhWorkerSpec struct {
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
 	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+
+	// Topology spread constraints for pod scheduling
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 
 	// Pod Disruption Budget
 	// +optional

@@ -36,6 +36,26 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
+      path: /validate-resources-wazuh-com-v1-opensearchauthconfig
+  failurePolicy: Fail
+  name: vopensearchauthconfig.kb.io
+  rules:
+  - apiGroups:
+    - resources.wazuh.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - opensearchauthconfigs
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
       path: /validate-resources-wazuh-com-v1-wazuhcluster
   failurePolicy: Fail
   name: vwazuhcluster.kb.io

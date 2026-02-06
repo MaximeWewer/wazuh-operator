@@ -33,26 +33,28 @@ import (
 
 // ManagerStatefulSetBuilder builds a StatefulSet for Wazuh Manager (master or workers)
 type ManagerStatefulSetBuilder struct {
-	name             string
-	namespace        string
-	clusterName      string
-	version          string
-	replicas         int32
-	nodeType         string // "master" or "worker"
-	storageSize      string
-	storageClassName *string
-	resources        *corev1.ResourceRequirements
-	image            string
-	nodeSelector     map[string]string
-	tolerations      []corev1.Toleration
-	affinity         *corev1.Affinity
-	labels           map[string]string
-	annotations      map[string]string
-	podAnnotations   map[string]string
-	env              []corev1.EnvVar
-	envFrom          []corev1.EnvFromSource
-	volumes          []corev1.Volume
-	volumeMounts     []corev1.VolumeMount
+	name                      string
+	namespace                 string
+	clusterName               string
+	version                   string
+	replicas                  int32
+	nodeType                  string // "master" or "worker"
+	storageSize               string
+	storageClassName          *string
+	resources                 *corev1.ResourceRequirements
+	image                     string
+	nodeSelector              map[string]string
+	tolerations               []corev1.Toleration
+	affinity                  *corev1.Affinity
+	imagePullSecrets          []corev1.LocalObjectReference
+	topologySpreadConstraints []corev1.TopologySpreadConstraint
+	labels                    map[string]string
+	annotations               map[string]string
+	podAnnotations            map[string]string
+	env                       []corev1.EnvVar
+	envFrom                   []corev1.EnvFromSource
+	volumes                   []corev1.Volume
+	volumeMounts              []corev1.VolumeMount
 	// Monitoring configuration
 	cluster *wazuhv1.WazuhCluster
 	// Rule ConfigMaps to mount
@@ -140,6 +142,18 @@ func (b *ManagerStatefulSetBuilder) WithTolerations(tolerations []corev1.Tolerat
 // WithAffinity sets the affinity
 func (b *ManagerStatefulSetBuilder) WithAffinity(affinity *corev1.Affinity) *ManagerStatefulSetBuilder {
 	b.affinity = affinity
+	return b
+}
+
+// WithImagePullSecrets sets the image pull secrets
+func (b *ManagerStatefulSetBuilder) WithImagePullSecrets(secrets []corev1.LocalObjectReference) *ManagerStatefulSetBuilder {
+	b.imagePullSecrets = secrets
+	return b
+}
+
+// WithTopologySpreadConstraints sets the topology spread constraints
+func (b *ManagerStatefulSetBuilder) WithTopologySpreadConstraints(constraints []corev1.TopologySpreadConstraint) *ManagerStatefulSetBuilder {
+	b.topologySpreadConstraints = constraints
 	return b
 }
 
@@ -404,9 +418,11 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 					Annotations: b.podAnnotations,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector: b.nodeSelector,
-					Tolerations:  b.tolerations,
-					Affinity:     b.affinity,
+					NodeSelector:              b.nodeSelector,
+					Tolerations:               b.tolerations,
+					Affinity:                  b.affinity,
+					ImagePullSecrets:          b.imagePullSecrets,
+					TopologySpreadConstraints: b.topologySpreadConstraints,
 					// SecurityContext at pod level - fsGroup 999 is the wazuh group in the official image
 					// SeccompProfile Unconfined is needed on some environments (WSL2, certain kernels)
 					// to allow Filebeat's Go runtime to create threads (pthread_create)

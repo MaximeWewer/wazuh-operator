@@ -309,21 +309,23 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 	// Extract master spec fields with defaults
 	var (
-		version           = cluster.Spec.Version
-		resources         *corev1.ResourceRequirements
-		storageSize       = constants.DefaultManagerStorageSize
-		nodeSelector      map[string]string
-		tolerations       []corev1.Toleration
-		affinity          *corev1.Affinity
-		extraVolumes      []corev1.Volume
-		extraVolumeMounts []corev1.VolumeMount
-		extraConfig       string
-		annotations       map[string]string
-		podAnnotations    map[string]string
+		version                   = cluster.Spec.Version
+		resources                 *corev1.ResourceRequirements
+		storageSize               = constants.DefaultManagerStorageSize
+		nodeSelector              map[string]string
+		tolerations               []corev1.Toleration
+		affinity                  *corev1.Affinity
+		topologySpreadConstraints []corev1.TopologySpreadConstraint
+		extraVolumes              []corev1.Volume
+		extraVolumeMounts         []corev1.VolumeMount
+		extraConfig               string
+		annotations               map[string]string
+		podAnnotations            map[string]string
 	)
 
 	var env []corev1.EnvVar
 	var envFrom []corev1.EnvFromSource
+	imagePullSecrets := cluster.Spec.ImagePullSecrets
 
 	if cluster.Spec.Manager != nil {
 		if cluster.Spec.Manager.Master.Resources != nil {
@@ -335,6 +337,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		nodeSelector = cluster.Spec.Manager.Master.NodeSelector
 		tolerations = cluster.Spec.Manager.Master.Tolerations
 		affinity = cluster.Spec.Manager.Master.Affinity
+		topologySpreadConstraints = cluster.Spec.Manager.Master.TopologySpreadConstraints
 		env = cluster.Spec.Manager.Master.Env
 		envFrom = cluster.Spec.Manager.Master.EnvFrom
 		extraVolumes = cluster.Spec.Manager.Master.ExtraVolumes
@@ -423,20 +426,22 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 	// Compute specHash for change detection (version is included in image tag)
 	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
-		Version:           version,
-		Resources:         resources,
-		StorageSize:       storageSize,
-		NodeSelector:      nodeSelector,
-		Tolerations:       tolerations,
-		Affinity:          affinity,
-		Env:               env,
-		EnvFrom:           envFrom,
-		Annotations:       annotations,
-		PodAnnotations:    podAnnotations,
-		ExtraConfig:       extraConfig,
-		ExtraVolumes:      extraVolumes,
-		ExtraVolumeMounts: extraVolumeMounts,
-		MonitoringEnabled: cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Enabled,
+		Version:                   version,
+		Resources:                 resources,
+		StorageSize:               storageSize,
+		NodeSelector:              nodeSelector,
+		Tolerations:               tolerations,
+		Affinity:                  affinity,
+		ImagePullSecrets:          imagePullSecrets,
+		TopologySpreadConstraints: topologySpreadConstraints,
+		Env:                       env,
+		EnvFrom:                   envFrom,
+		Annotations:               annotations,
+		PodAnnotations:            podAnnotations,
+		ExtraConfig:               extraConfig,
+		ExtraVolumes:              extraVolumes,
+		ExtraVolumeMounts:         extraVolumeMounts,
+		MonitoringEnabled:         cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Enabled,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
@@ -462,6 +467,12 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	}
 	if affinity != nil {
 		stsBuilder.WithAffinity(affinity)
+	}
+	if len(topologySpreadConstraints) > 0 {
+		stsBuilder.WithTopologySpreadConstraints(topologySpreadConstraints)
+	}
+	if len(imagePullSecrets) > 0 {
+		stsBuilder.WithImagePullSecrets(imagePullSecrets)
 	}
 	if len(env) > 0 {
 		stsBuilder.WithEnv(env)
@@ -680,19 +691,21 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 
 	// Extract worker spec fields with defaults
 	var (
-		replicas          int32
-		version           = cluster.Spec.Version
-		resources         *corev1.ResourceRequirements
-		storageSize       = constants.DefaultManagerStorageSize
-		nodeSelector      map[string]string
-		tolerations       []corev1.Toleration
-		affinity          *corev1.Affinity
-		extraVolumes      []corev1.Volume
-		extraVolumeMounts []corev1.VolumeMount
-		extraConfig       string
-		annotations       map[string]string
-		podAnnotations    map[string]string
+		replicas                  int32
+		version                   = cluster.Spec.Version
+		resources                 *corev1.ResourceRequirements
+		storageSize               = constants.DefaultManagerStorageSize
+		nodeSelector              map[string]string
+		tolerations               []corev1.Toleration
+		affinity                  *corev1.Affinity
+		topologySpreadConstraints []corev1.TopologySpreadConstraint
+		extraVolumes              []corev1.Volume
+		extraVolumeMounts         []corev1.VolumeMount
+		extraConfig               string
+		annotations               map[string]string
+		podAnnotations            map[string]string
 	)
+	workerImagePullSecrets := cluster.Spec.ImagePullSecrets
 
 	if cluster.Spec.Manager != nil {
 		replicas = cluster.Spec.Manager.Workers.GetReplicas()
@@ -705,6 +718,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		nodeSelector = cluster.Spec.Manager.Workers.NodeSelector
 		tolerations = cluster.Spec.Manager.Workers.Tolerations
 		affinity = cluster.Spec.Manager.Workers.Affinity
+		topologySpreadConstraints = cluster.Spec.Manager.Workers.TopologySpreadConstraints
 		extraVolumes = cluster.Spec.Manager.Workers.ExtraVolumes
 		extraVolumeMounts = cluster.Spec.Manager.Workers.ExtraVolumeMounts
 		extraConfig = cluster.Spec.Manager.Workers.ExtraConfig
@@ -808,20 +822,22 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 
 	// Compute specHash for change detection (version is included in image tag)
 	specHash, err := patch.ComputeManagerWorkersSpecHashFull(patch.ManagerWorkersSpecInput{
-		Replicas:          replicas,
-		Version:           version,
-		Resources:         resources,
-		StorageSize:       storageSize,
-		NodeSelector:      nodeSelector,
-		Tolerations:       tolerations,
-		Affinity:          affinity,
-		Env:               workerEnv,
-		EnvFrom:           workerEnvFrom,
-		Annotations:       annotations,
-		PodAnnotations:    workerPodAnnotations,
-		ExtraConfig:       workerExtraConfig,
-		ExtraVolumes:      workerExtraVolumes,
-		ExtraVolumeMounts: workerExtraVolumeMounts,
+		Replicas:                  replicas,
+		Version:                   version,
+		Resources:                 resources,
+		StorageSize:               storageSize,
+		NodeSelector:              nodeSelector,
+		Tolerations:               tolerations,
+		Affinity:                  affinity,
+		ImagePullSecrets:          workerImagePullSecrets,
+		TopologySpreadConstraints: topologySpreadConstraints,
+		Env:                       workerEnv,
+		EnvFrom:                   workerEnvFrom,
+		Annotations:               annotations,
+		PodAnnotations:            workerPodAnnotations,
+		ExtraConfig:               workerExtraConfig,
+		ExtraVolumes:              workerExtraVolumes,
+		ExtraVolumeMounts:         workerExtraVolumeMounts,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec hash")
@@ -848,6 +864,12 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	}
 	if affinity != nil {
 		stsBuilder.WithAffinity(affinity)
+	}
+	if len(topologySpreadConstraints) > 0 {
+		stsBuilder.WithTopologySpreadConstraints(topologySpreadConstraints)
+	}
+	if len(workerImagePullSecrets) > 0 {
+		stsBuilder.WithImagePullSecrets(workerImagePullSecrets)
 	}
 	if len(extraVolumes) > 0 {
 		stsBuilder.WithVolumes(extraVolumes)

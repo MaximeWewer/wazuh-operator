@@ -29,15 +29,17 @@ import (
 
 // IndexerSpec contains fields from WazuhCluster.Spec.Indexer used for hash computation
 type IndexerSpec struct {
-	Replicas     int32                        `json:"replicas,omitempty"`
-	Version      string                       `json:"version,omitempty"`
-	Resources    *corev1.ResourceRequirements `json:"resources,omitempty"`
-	StorageSize  string                       `json:"storageSize,omitempty"`
-	JavaOpts     string                       `json:"javaOpts,omitempty"`
-	Image        string                       `json:"image,omitempty"`
-	NodeSelector map[string]string            `json:"nodeSelector,omitempty"`
-	Tolerations  []corev1.Toleration          `json:"tolerations,omitempty"`
-	Affinity     *corev1.Affinity             `json:"affinity,omitempty"`
+	Replicas                  int32                             `json:"replicas,omitempty"`
+	Version                   string                            `json:"version,omitempty"`
+	Resources                 *corev1.ResourceRequirements      `json:"resources,omitempty"`
+	StorageSize               string                            `json:"storageSize,omitempty"`
+	JavaOpts                  string                            `json:"javaOpts,omitempty"`
+	Image                     string                            `json:"image,omitempty"`
+	NodeSelector              map[string]string                 `json:"nodeSelector,omitempty"`
+	Tolerations               []corev1.Toleration               `json:"tolerations,omitempty"`
+	Affinity                  *corev1.Affinity                  `json:"affinity,omitempty"`
+	ImagePullSecrets          []corev1.LocalObjectReference     `json:"imagePullSecrets,omitempty"`
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 	// Custom pod configuration
 	Env            []corev1.EnvVar        `json:"env,omitempty"`
 	EnvFrom        []corev1.EnvFromSource `json:"envFrom,omitempty"`
@@ -50,13 +52,15 @@ type IndexerSpec struct {
 
 // DashboardSpec contains fields from WazuhCluster.Spec.Dashboard used for hash computation
 type DashboardSpec struct {
-	Replicas     int32                        `json:"replicas,omitempty"`
-	Version      string                       `json:"version,omitempty"`
-	Resources    *corev1.ResourceRequirements `json:"resources,omitempty"`
-	Image        string                       `json:"image,omitempty"`
-	NodeSelector map[string]string            `json:"nodeSelector,omitempty"`
-	Tolerations  []corev1.Toleration          `json:"tolerations,omitempty"`
-	Affinity     *corev1.Affinity             `json:"affinity,omitempty"`
+	Replicas                  int32                             `json:"replicas,omitempty"`
+	Version                   string                            `json:"version,omitempty"`
+	Resources                 *corev1.ResourceRequirements      `json:"resources,omitempty"`
+	Image                     string                            `json:"image,omitempty"`
+	NodeSelector              map[string]string                 `json:"nodeSelector,omitempty"`
+	Tolerations               []corev1.Toleration               `json:"tolerations,omitempty"`
+	Affinity                  *corev1.Affinity                  `json:"affinity,omitempty"`
+	ImagePullSecrets          []corev1.LocalObjectReference     `json:"imagePullSecrets,omitempty"`
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 	// Custom pod configuration
 	Env            []corev1.EnvVar        `json:"env,omitempty"`
 	EnvFrom        []corev1.EnvFromSource `json:"envFrom,omitempty"`
@@ -67,13 +71,15 @@ type DashboardSpec struct {
 
 // ManagerMasterSpec contains fields from WazuhCluster.Spec.Manager.Master used for hash computation
 type ManagerMasterSpec struct {
-	Version      string                       `json:"version,omitempty"`
-	Resources    *corev1.ResourceRequirements `json:"resources,omitempty"`
-	StorageSize  string                       `json:"storageSize,omitempty"`
-	Image        string                       `json:"image,omitempty"`
-	NodeSelector map[string]string            `json:"nodeSelector,omitempty"`
-	Tolerations  []corev1.Toleration          `json:"tolerations,omitempty"`
-	Affinity     *corev1.Affinity             `json:"affinity,omitempty"`
+	Version                   string                            `json:"version,omitempty"`
+	Resources                 *corev1.ResourceRequirements      `json:"resources,omitempty"`
+	StorageSize               string                            `json:"storageSize,omitempty"`
+	Image                     string                            `json:"image,omitempty"`
+	NodeSelector              map[string]string                 `json:"nodeSelector,omitempty"`
+	Tolerations               []corev1.Toleration               `json:"tolerations,omitempty"`
+	Affinity                  *corev1.Affinity                  `json:"affinity,omitempty"`
+	ImagePullSecrets          []corev1.LocalObjectReference     `json:"imagePullSecrets,omitempty"`
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 	// Custom pod configuration
 	Env            []corev1.EnvVar        `json:"env,omitempty"`
 	EnvFrom        []corev1.EnvFromSource `json:"envFrom,omitempty"`
@@ -90,14 +96,16 @@ type ManagerMasterSpec struct {
 
 // ManagerWorkersSpec contains fields from WazuhCluster.Spec.Manager.Workers used for hash computation
 type ManagerWorkersSpec struct {
-	Replicas     int32                        `json:"replicas,omitempty"`
-	Version      string                       `json:"version,omitempty"`
-	Resources    *corev1.ResourceRequirements `json:"resources,omitempty"`
-	StorageSize  string                       `json:"storageSize,omitempty"`
-	Image        string                       `json:"image,omitempty"`
-	NodeSelector map[string]string            `json:"nodeSelector,omitempty"`
-	Tolerations  []corev1.Toleration          `json:"tolerations,omitempty"`
-	Affinity     *corev1.Affinity             `json:"affinity,omitempty"`
+	Replicas                  int32                             `json:"replicas,omitempty"`
+	Version                   string                            `json:"version,omitempty"`
+	Resources                 *corev1.ResourceRequirements      `json:"resources,omitempty"`
+	StorageSize               string                            `json:"storageSize,omitempty"`
+	Image                     string                            `json:"image,omitempty"`
+	NodeSelector              map[string]string                 `json:"nodeSelector,omitempty"`
+	Tolerations               []corev1.Toleration               `json:"tolerations,omitempty"`
+	Affinity                  *corev1.Affinity                  `json:"affinity,omitempty"`
+	ImagePullSecrets          []corev1.LocalObjectReference     `json:"imagePullSecrets,omitempty"`
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 	// Custom pod configuration
 	Env            []corev1.EnvVar        `json:"env,omitempty"`
 	EnvFrom        []corev1.EnvFromSource `json:"envFrom,omitempty"`
@@ -161,21 +169,23 @@ func ComputeSecretHash(data map[string][]byte) string {
 
 // IndexerSpecInput contains all input parameters for computing indexer spec hash
 type IndexerSpecInput struct {
-	Replicas          int32
-	Version           string
-	Resources         *corev1.ResourceRequirements
-	StorageSize       string
-	JavaOpts          string
-	Image             string
-	NodeSelector      map[string]string
-	Tolerations       []corev1.Toleration
-	Affinity          *corev1.Affinity
-	Env               []corev1.EnvVar
-	EnvFrom           []corev1.EnvFromSource
-	Labels            map[string]string
-	Annotations       map[string]string
-	PodAnnotations    map[string]string
-	MonitoringEnabled bool
+	Replicas                  int32
+	Version                   string
+	Resources                 *corev1.ResourceRequirements
+	StorageSize               string
+	JavaOpts                  string
+	Image                     string
+	NodeSelector              map[string]string
+	Tolerations               []corev1.Toleration
+	Affinity                  *corev1.Affinity
+	ImagePullSecrets          []corev1.LocalObjectReference
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint
+	Env                       []corev1.EnvVar
+	EnvFrom                   []corev1.EnvFromSource
+	Labels                    map[string]string
+	Annotations               map[string]string
+	PodAnnotations            map[string]string
+	MonitoringEnabled         bool
 }
 
 // ComputeIndexerSpecHash computes the spec hash for an Indexer component
@@ -198,18 +208,20 @@ func ComputeIndexerSpecHashFull(input IndexerSpecInput) (string, error) {
 
 // DashboardSpecInput contains all input parameters for computing dashboard spec hash
 type DashboardSpecInput struct {
-	Replicas       int32
-	Version        string
-	Resources      *corev1.ResourceRequirements
-	Image          string
-	NodeSelector   map[string]string
-	Tolerations    []corev1.Toleration
-	Affinity       *corev1.Affinity
-	Env            []corev1.EnvVar
-	EnvFrom        []corev1.EnvFromSource
-	Labels         map[string]string
-	Annotations    map[string]string
-	PodAnnotations map[string]string
+	Replicas                  int32
+	Version                   string
+	Resources                 *corev1.ResourceRequirements
+	Image                     string
+	NodeSelector              map[string]string
+	Tolerations               []corev1.Toleration
+	Affinity                  *corev1.Affinity
+	ImagePullSecrets          []corev1.LocalObjectReference
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint
+	Env                       []corev1.EnvVar
+	EnvFrom                   []corev1.EnvFromSource
+	Labels                    map[string]string
+	Annotations               map[string]string
+	PodAnnotations            map[string]string
 }
 
 // ComputeDashboardSpecHash computes the spec hash for a Dashboard component
@@ -230,22 +242,24 @@ func ComputeDashboardSpecHashFull(input DashboardSpecInput) (string, error) {
 
 // ManagerMasterSpecInput contains all input parameters for computing manager master spec hash
 type ManagerMasterSpecInput struct {
-	Version           string
-	Resources         *corev1.ResourceRequirements
-	StorageSize       string
-	Image             string
-	NodeSelector      map[string]string
-	Tolerations       []corev1.Toleration
-	Affinity          *corev1.Affinity
-	Env               []corev1.EnvVar
-	EnvFrom           []corev1.EnvFromSource
-	Labels            map[string]string
-	Annotations       map[string]string
-	PodAnnotations    map[string]string
-	ExtraConfig       string
-	ExtraVolumes      []corev1.Volume
-	ExtraVolumeMounts []corev1.VolumeMount
-	MonitoringEnabled bool
+	Version                   string
+	Resources                 *corev1.ResourceRequirements
+	StorageSize               string
+	Image                     string
+	NodeSelector              map[string]string
+	Tolerations               []corev1.Toleration
+	Affinity                  *corev1.Affinity
+	ImagePullSecrets          []corev1.LocalObjectReference
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint
+	Env                       []corev1.EnvVar
+	EnvFrom                   []corev1.EnvFromSource
+	Labels                    map[string]string
+	Annotations               map[string]string
+	PodAnnotations            map[string]string
+	ExtraConfig               string
+	ExtraVolumes              []corev1.Volume
+	ExtraVolumeMounts         []corev1.VolumeMount
+	MonitoringEnabled         bool
 }
 
 // ComputeManagerMasterSpecHash computes the spec hash for a Manager Master component
@@ -269,22 +283,24 @@ func ComputeManagerMasterSpecHashFull(input ManagerMasterSpecInput) (string, err
 
 // ManagerWorkersSpecInput contains all input parameters for computing manager workers spec hash
 type ManagerWorkersSpecInput struct {
-	Replicas          int32
-	Version           string
-	Resources         *corev1.ResourceRequirements
-	StorageSize       string
-	Image             string
-	NodeSelector      map[string]string
-	Tolerations       []corev1.Toleration
-	Affinity          *corev1.Affinity
-	Env               []corev1.EnvVar
-	EnvFrom           []corev1.EnvFromSource
-	Labels            map[string]string
-	Annotations       map[string]string
-	PodAnnotations    map[string]string
-	ExtraConfig       string
-	ExtraVolumes      []corev1.Volume
-	ExtraVolumeMounts []corev1.VolumeMount
+	Replicas                  int32
+	Version                   string
+	Resources                 *corev1.ResourceRequirements
+	StorageSize               string
+	Image                     string
+	NodeSelector              map[string]string
+	Tolerations               []corev1.Toleration
+	Affinity                  *corev1.Affinity
+	ImagePullSecrets          []corev1.LocalObjectReference
+	TopologySpreadConstraints []corev1.TopologySpreadConstraint
+	Env                       []corev1.EnvVar
+	EnvFrom                   []corev1.EnvFromSource
+	Labels                    map[string]string
+	Annotations               map[string]string
+	PodAnnotations            map[string]string
+	ExtraConfig               string
+	ExtraVolumes              []corev1.Volume
+	ExtraVolumeMounts         []corev1.VolumeMount
 }
 
 // ComputeManagerWorkersSpecHash computes the spec hash for Manager Workers component

@@ -828,20 +828,22 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 
 	// Extract spec values for hash computation
 	var (
-		replicas       = constants.DefaultIndexerReplicas
-		resources      *corev1.ResourceRequirements
-		storageSize    = constants.DefaultIndexerStorageSize
-		javaOpts       = constants.DefaultIndexerJavaOpts
-		image          string
-		nodeSelector   map[string]string
-		tolerations    []corev1.Toleration
-		affinity       *corev1.Affinity
-		env            []corev1.EnvVar
-		envFrom        []corev1.EnvFromSource
-		annotations    map[string]string
-		podAnnotations map[string]string
+		replicas                  = constants.DefaultIndexerReplicas
+		resources                 *corev1.ResourceRequirements
+		storageSize               = constants.DefaultIndexerStorageSize
+		javaOpts                  = constants.DefaultIndexerJavaOpts
+		image                     string
+		nodeSelector              map[string]string
+		tolerations               []corev1.Toleration
+		affinity                  *corev1.Affinity
+		topologySpreadConstraints []corev1.TopologySpreadConstraint
+		env                       []corev1.EnvVar
+		envFrom                   []corev1.EnvFromSource
+		annotations               map[string]string
+		podAnnotations            map[string]string
 	)
 	version := cluster.Spec.Version
+	imagePullSecrets := cluster.Spec.ImagePullSecrets
 
 	// Check if monitoring is enabled
 	monitoringEnabled := cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Enabled
@@ -860,6 +862,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		nodeSelector = cluster.Spec.Indexer.NodeSelector
 		tolerations = cluster.Spec.Indexer.Tolerations
 		affinity = cluster.Spec.Indexer.Affinity
+		topologySpreadConstraints = cluster.Spec.Indexer.TopologySpreadConstraints
 		env = cluster.Spec.Indexer.Env
 		envFrom = cluster.Spec.Indexer.EnvFrom
 		annotations = cluster.Spec.Indexer.Annotations
@@ -874,20 +877,22 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 
 	// Compute spec hash for change detection (includes all configurable fields)
 	specHash, err := patch.ComputeIndexerSpecHashFull(patch.IndexerSpecInput{
-		Replicas:          replicas,
-		Version:           version,
-		Resources:         resources,
-		StorageSize:       storageSize,
-		JavaOpts:          javaOpts,
-		Image:             image,
-		NodeSelector:      nodeSelector,
-		Tolerations:       tolerations,
-		Affinity:          affinity,
-		Env:               env,
-		EnvFrom:           envFrom,
-		Annotations:       annotations,
-		PodAnnotations:    podAnnotations,
-		MonitoringEnabled: monitoringEnabled,
+		Replicas:                  replicas,
+		Version:                   version,
+		Resources:                 resources,
+		StorageSize:               storageSize,
+		JavaOpts:                  javaOpts,
+		Image:                     image,
+		NodeSelector:              nodeSelector,
+		Tolerations:               tolerations,
+		Affinity:                  affinity,
+		ImagePullSecrets:          imagePullSecrets,
+		TopologySpreadConstraints: topologySpreadConstraints,
+		Env:                       env,
+		EnvFrom:                   envFrom,
+		Annotations:               annotations,
+		PodAnnotations:            podAnnotations,
+		MonitoringEnabled:         monitoringEnabled,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute indexer spec hash, proceeding without spec hash tracking")
@@ -928,6 +933,9 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		if affinity != nil {
 			stsBuilder.WithAffinity(affinity)
 		}
+		if len(topologySpreadConstraints) > 0 {
+			stsBuilder.WithTopologySpreadConstraints(topologySpreadConstraints)
+		}
 		if len(env) > 0 {
 			stsBuilder.WithEnv(env)
 		}
@@ -940,6 +948,11 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		if len(podAnnotations) > 0 {
 			stsBuilder.WithPodAnnotations(podAnnotations)
 		}
+	}
+
+	// Apply cluster-level imagePullSecrets
+	if len(imagePullSecrets) > 0 {
+		stsBuilder.WithImagePullSecrets(imagePullSecrets)
 	}
 
 	if certHash != "" {
@@ -2548,11 +2561,19 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 	if pool.Affinity != nil {
 		stsBuilder.WithAffinity(pool.Affinity)
 	}
+	if len(pool.TopologySpreadConstraints) > 0 {
+		stsBuilder.WithTopologySpreadConstraints(pool.TopologySpreadConstraints)
+	}
 	if len(pool.Annotations) > 0 {
 		stsBuilder.WithAnnotations(pool.Annotations)
 	}
 	if len(pool.PodAnnotations) > 0 {
 		stsBuilder.WithPodAnnotations(pool.PodAnnotations)
+	}
+
+	// Apply cluster-level imagePullSecrets
+	if len(cluster.Spec.ImagePullSecrets) > 0 {
+		stsBuilder.WithImagePullSecrets(cluster.Spec.ImagePullSecrets)
 	}
 
 	// Compute config hash for change detection
