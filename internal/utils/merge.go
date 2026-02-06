@@ -42,22 +42,62 @@ func MergeAnnotations(maps ...map[string]string) map[string]string {
 	return MergeStringMaps(maps...)
 }
 
-// DeepMerge performs a deep merge of two objects
-// dst is the destination object that will be modified
-// src is the source object whose values will override dst
+// DeepMerge performs a recursive deep merge of two objects.
+// Both dst and src are marshaled to map[string]any, merged recursively,
+// then the result is unmarshalled back into dst.
+// For nested maps, keys are merged individually rather than overwritten.
 func DeepMerge(dst, src any) error {
-	// Marshal src to JSON
+	// Marshal both to JSON then to map[string]any
+	dstBytes, err := json.Marshal(dst)
+	if err != nil {
+		return fmt.Errorf("failed to marshal destination: %w", err)
+	}
 	srcBytes, err := json.Marshal(src)
 	if err != nil {
 		return fmt.Errorf("failed to marshal source: %w", err)
 	}
 
-	// Unmarshal into dst, which merges the values
-	if err := json.Unmarshal(srcBytes, dst); err != nil {
-		return fmt.Errorf("failed to unmarshal into destination: %w", err)
+	var dstMap, srcMap map[string]any
+	if err := json.Unmarshal(dstBytes, &dstMap); err != nil {
+		return fmt.Errorf("failed to unmarshal destination: %w", err)
+	}
+	if err := json.Unmarshal(srcBytes, &srcMap); err != nil {
+		return fmt.Errorf("failed to unmarshal source: %w", err)
+	}
+
+	merged := deepMergeMaps(dstMap, srcMap)
+
+	mergedBytes, err := json.Marshal(merged)
+	if err != nil {
+		return fmt.Errorf("failed to marshal merged result: %w", err)
+	}
+	if err := json.Unmarshal(mergedBytes, dst); err != nil {
+		return fmt.Errorf("failed to unmarshal merged result into destination: %w", err)
 	}
 
 	return nil
+}
+
+// deepMergeMaps recursively merges src into dst.
+// For keys present in both maps where both values are maps, the merge is recursive.
+// Otherwise src values override dst values.
+func deepMergeMaps(dst, src map[string]any) map[string]any {
+	result := make(map[string]any, len(dst))
+	for k, v := range dst {
+		result[k] = v
+	}
+	for k, srcVal := range src {
+		if dstVal, exists := result[k]; exists {
+			srcMap, srcOk := srcVal.(map[string]any)
+			dstMap, dstOk := dstVal.(map[string]any)
+			if srcOk && dstOk {
+				result[k] = deepMergeMaps(dstMap, srcMap)
+				continue
+			}
+		}
+		result[k] = srcVal
+	}
+	return result
 }
 
 // MergeSlices merges two string slices, removing duplicates
