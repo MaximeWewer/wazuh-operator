@@ -110,6 +110,17 @@ func (b *DashboardConfigMapBuilder) WithResolvedCredentials(credentials map[stri
 	return b
 }
 
+// NeedsDefaultCredentials returns true if the default API endpoint password
+// has not been resolved yet (no wazuhPlugin config or no explicit credentials)
+func (b *DashboardConfigMapBuilder) NeedsDefaultCredentials() bool {
+	if b.resolvedCredentials != nil {
+		if _, ok := b.resolvedCredentials["default:password"]; ok {
+			return false
+		}
+	}
+	return true
+}
+
 // WithAuthConfig sets the authentication configuration from CRD
 // This will be used to generate SSO settings in opensearch_dashboards.yml
 func (b *DashboardConfigMapBuilder) WithAuthConfig(authConfig *wazuhv1.OpenSearchAuthConfigSpec) *DashboardConfigMapBuilder {

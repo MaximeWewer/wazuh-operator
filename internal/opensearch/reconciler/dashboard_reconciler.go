@@ -220,6 +220,27 @@ func (r *DashboardReconciler) reconcileConfigMap(ctx context.Context, cluster *w
 		}
 	}
 
+	// Auto-resolve default API credentials from the operator-managed secret
+	// when no explicit wazuhPlugin credentials are configured
+	if configBuilder.NeedsDefaultCredentials() {
+		resolvedCredentials := make(map[string]string)
+		apiSecretName := constants.APICredentialsName(cluster.Name)
+		apiSecret := &corev1.Secret{}
+		if err := r.Get(ctx, types.NamespacedName{Name: apiSecretName, Namespace: cluster.Namespace}, apiSecret); err == nil {
+			if username, ok := apiSecret.Data[constants.SecretKeyAPIUsername]; ok {
+				resolvedCredentials["default:username"] = string(username)
+			}
+			if password, ok := apiSecret.Data[constants.SecretKeyAPIPassword]; ok {
+				resolvedCredentials["default:password"] = string(password)
+			}
+			if len(resolvedCredentials) > 0 {
+				configBuilder.WithResolvedCredentials(resolvedCredentials)
+			}
+		} else {
+			log.V(1).Info("Could not find API credentials secret for dashboard", "secret", apiSecretName)
+		}
+	}
+
 	configMap, err := configBuilder.Build()
 	if err != nil {
 		return fmt.Errorf("failed to build dashboard configmap: %w", err)
