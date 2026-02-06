@@ -229,7 +229,17 @@ func (r *DashboardReconciler) reconcileConfigMap(ctx context.Context, cluster *w
 		return fmt.Errorf("failed to set controller reference for dashboard configmap: %w", err)
 	}
 
-	return r.createOrUpdate(ctx, configMap)
+	if err := r.createOrUpdate(ctx, configMap); err != nil {
+		return err
+	}
+
+	// Reconcile the wazuh.yml Secret (credentials stored in a Secret, not a ConfigMap)
+	wazuhSecret := configBuilder.BuildWazuhConfigSecret()
+	if err := controllerutil.SetControllerReference(cluster, wazuhSecret, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for dashboard wazuh config secret: %w", err)
+	}
+
+	return r.createOrUpdate(ctx, wazuhSecret)
 }
 
 // getConfigHash retrieves the current config hash from the dashboard ConfigMap
@@ -1052,6 +1062,15 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 
 	if err := r.createOrUpdate(ctx, configMap); err != nil {
 		return fmt.Errorf("failed to reconcile configmap: %w", err)
+	}
+
+	// Build wazuh.yml Secret (credentials stored in Secret, not ConfigMap)
+	wazuhSecret := configBuilder.BuildWazuhConfigSecret()
+	if err := controllerutil.SetControllerReference(dashboard, wazuhSecret, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for wazuh config secret: %w", err)
+	}
+	if err := r.createOrUpdate(ctx, wazuhSecret); err != nil {
+		return fmt.Errorf("failed to reconcile wazuh config secret: %w", err)
 	}
 
 	// Build Service

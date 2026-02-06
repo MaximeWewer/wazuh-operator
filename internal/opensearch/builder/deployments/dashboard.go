@@ -451,14 +451,12 @@ func (b *DashboardDeploymentBuilder) buildVolumes() []corev1.Volume {
 				},
 			},
 		},
-		// Wazuh plugin config (wazuh.yml)
+		// Wazuh plugin config (wazuh.yml) - stored in a Secret because it contains API credentials
 		{
 			Name: constants.VolumeNameWazuhConfig,
 			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: constants.DashboardConfigName(b.clusterName),
-					},
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: constants.DashboardWazuhConfigSecretName(b.clusterName),
 					Items: []corev1.KeyToPath{
 						{
 							Key:  "wazuh.yml",

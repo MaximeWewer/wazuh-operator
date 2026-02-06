@@ -148,9 +148,6 @@ func (b *DashboardConfigMapBuilder) Build() (*corev1.ConfigMap, error) {
 		return nil, fmt.Errorf("failed to build dashboard config: %w", err)
 	}
 
-	// Build wazuh.yml configuration
-	wazuhConfig := b.buildWazuhConfig()
-
 	// Build custom wazuh_app_config.sh script
 	wazuhAppConfigScript := b.buildWazuhAppConfigScript()
 
@@ -162,10 +159,38 @@ func (b *DashboardConfigMapBuilder) Build() (*corev1.ConfigMap, error) {
 		},
 		Data: map[string]string{
 			"opensearch_dashboards.yml": dashboardConfig,
-			"wazuh.yml":                 wazuhConfig,
 			"wazuh_app_config.sh":       wazuhAppConfigScript,
 		},
 	}, nil
+}
+
+// BuildWazuhConfigSecret creates a Secret containing wazuh.yml.
+// This is kept in a Secret (not a ConfigMap) because wazuh.yml contains
+// Wazuh API credentials and Secrets are encrypted at rest when etcd
+// encryption is enabled.
+func (b *DashboardConfigMapBuilder) BuildWazuhConfigSecret() *corev1.Secret {
+	name := constants.DashboardWazuhConfigSecretName(b.clusterName)
+
+	labels := map[string]string{
+		constants.LabelName:      constants.AppName + "-" + constants.ComponentDashboard,
+		constants.LabelInstance:  b.clusterName,
+		constants.LabelComponent: constants.ComponentDashboard,
+		constants.LabelPartOf:    constants.AppName,
+		constants.LabelManagedBy: constants.OperatorName,
+	}
+
+	wazuhConfig := b.buildWazuhConfig()
+
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: b.namespace,
+			Labels:    labels,
+		},
+		StringData: map[string]string{
+			"wazuh.yml": wazuhConfig,
+		},
+	}
 }
 
 // buildDashboardConfig generates the opensearch_dashboards.yml content

@@ -76,6 +76,9 @@ const (
 	// SuffixDashboardConfig is the suffix for dashboard configmap
 	SuffixDashboardConfig = "-dashboard-config"
 
+	// SuffixDashboardWazuhConfig is the suffix for the Secret holding wazuh.yml (contains credentials)
+	SuffixDashboardWazuhConfig = "-dashboard-wazuh-config"
+
 	// SuffixDashboardCerts is the suffix for dashboard certificates secret
 	SuffixDashboardCerts = "-dashboard-certs"
 
@@ -203,6 +206,11 @@ func DashboardName(clusterName string) string {
 // DashboardConfigName returns the name for dashboard configmap
 func DashboardConfigName(clusterName string) string {
 	return clusterName + SuffixDashboardConfig
+}
+
+// DashboardWazuhConfigSecretName returns the name for the Secret containing wazuh.yml
+func DashboardWazuhConfigSecretName(clusterName string) string {
+	return clusterName + SuffixDashboardWazuhConfig
 }
 
 // DashboardCertsName returns the name for dashboard certificates secret
