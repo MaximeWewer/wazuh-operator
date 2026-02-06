@@ -100,8 +100,6 @@ type WazuhClusterReconciler struct {
 	TCPRouteAvailable  bool
 	UDPRouteAvailable  bool
 
-	// drainInProgress tracks if a drain operation is currently active
-	drainInProgress bool
 }
 
 // +kubebuilder:rbac:groups=resources.wazuh.com,resources=wazuhclusters,verbs=get;list;watch;create;update;patch;delete
@@ -254,6 +252,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Check and update pending rollouts from previous reconciliation
 	hasPendingRollouts := r.checkAndUpdatePendingRollouts(ctx, cluster)
+
 
 	// Check if any rollback is in progress and verify completion
 	if err := r.verifyRollbackComplete(ctx, cluster); err != nil {
@@ -439,7 +438,6 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			log.Info("Indexer drain in progress, waiting for completion",
 				"targetPod", drainResult.TargetPod,
 				"progress", drainResult.Progress)
-			r.drainInProgress = true
 
 			// Update drain status in cluster
 			if cluster.Status.Drain == nil {
@@ -451,11 +449,8 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		} else if drainResult != nil && drainResult.DrainComplete {
 			// Drain is complete, proceed with normal reconciliation
 			log.Info("Indexer drain complete, proceeding with scale-down")
-			r.drainInProgress = false
 			// Reset drain state after scale-down is applied
 			defer r.IndexerReconciler.ResetDrainState(cluster)
-		} else {
-			r.drainInProgress = false
 		}
 	}
 
@@ -543,7 +538,6 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			log.Info("Manager worker drain in progress, waiting for completion",
 				"targetPod", drainResult.TargetPod,
 				"progress", drainResult.Progress)
-			r.drainInProgress = true
 
 			// Update drain status in cluster
 			if cluster.Status.Drain == nil {
@@ -555,12 +549,8 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		} else if drainResult != nil && drainResult.DrainComplete {
 			// Drain is complete, proceed with normal reconciliation
 			log.Info("Manager worker drain complete, proceeding with scale-down")
-			r.drainInProgress = false
 			// Reset drain state after scale-down is applied
 			defer r.WorkerReconciler.ResetDrainState(cluster)
-		} else if r.drainInProgress {
-			// No drain needed or drain not configured
-			r.drainInProgress = false
 		}
 	}
 
@@ -836,13 +826,10 @@ func (r *WazuhClusterReconciler) addPendingRollouts(cluster *wazuhv1.WazuhCluste
 	}
 }
 
-// determineRequeueInterval determines the appropriate requeue interval based on cluster state
+// determineRequeueInterval determines the appropriate requeue interval based on cluster state.
+// Note: drain-in-progress uses early returns with RequeueIntervalDrainInProgress directly,
+// so this function is only reached when no drain is active.
 func (r *WazuhClusterReconciler) determineRequeueInterval(hasPendingRollouts bool) time.Duration {
-	// Drain in progress uses faster requeue
-	if r.drainInProgress {
-		return RequeueIntervalDrainInProgress
-	}
-
 	// Pending rollouts use faster requeue
 	if hasPendingRollouts {
 		return RequeueIntervalPendingRollout
