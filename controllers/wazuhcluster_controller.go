@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -96,6 +97,9 @@ type WazuhClusterReconciler struct {
 	HTTPRouteAvailable bool
 	TCPRouteAvailable  bool
 	UDPRouteAvailable  bool
+
+	// agentMetricsInFlight prevents concurrent agent metrics goroutines
+	agentMetricsInFlight atomic.Bool
 }
 
 // +kubebuilder:rbac:groups=resources.wazuh.com,resources=wazuhclusters,verbs=get;list;watch;create;update;patch;delete
@@ -1069,7 +1073,7 @@ func (r *WazuhClusterReconciler) updateStatus(ctx context.Context, cluster *wazu
 			// Record cluster ready metric
 			metrics.SetWazuhClusterStatus(latestCluster.Name, latestCluster.Namespace, true)
 			// Collect agent metrics when cluster is ready (non-blocking, best-effort)
-			go r.collectWazuhAgentMetrics(ctx, latestCluster)
+			go r.collectWazuhAgentMetrics(latestCluster)
 		} else {
 			latestCluster.Status.Phase = wazuhv1.ClusterPhaseCreating
 			r.updateCondition(latestCluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionTrue, "ComponentsStarting", "Waiting for components to be ready")
@@ -1097,10 +1101,21 @@ func (r *WazuhClusterReconciler) updateStatus(ctx context.Context, cluster *wazu
 	})
 }
 
-// collectWazuhAgentMetrics collects agent statistics from the Wazuh API
-// This runs asynchronously to avoid blocking the reconciliation loop
-func (r *WazuhClusterReconciler) collectWazuhAgentMetrics(ctx context.Context, cluster *wazuhv1.WazuhCluster) {
-	log := logf.FromContext(ctx)
+// collectWazuhAgentMetrics collects agent statistics from the Wazuh API.
+// This runs asynchronously to avoid blocking the reconciliation loop.
+// Only one collection runs at a time; concurrent calls are skipped.
+func (r *WazuhClusterReconciler) collectWazuhAgentMetrics(cluster *wazuhv1.WazuhCluster) {
+	// Skip if a collection is already in flight
+	if !r.agentMetricsInFlight.CompareAndSwap(false, true) {
+		return
+	}
+	defer r.agentMetricsInFlight.Store(false)
+
+	// Use a dedicated context with timeout (independent from the reconcile context)
+	ctx, cancel := context.WithTimeout(context.Background(), constants.TimeoutAPIRequest)
+	defer cancel()
+
+	log := logf.FromContext(ctx).WithValues("cluster", cluster.Name)
 
 	// Get manager service URL
 	managerServiceName := cluster.Name + "-manager"
