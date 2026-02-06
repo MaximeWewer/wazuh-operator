@@ -81,14 +81,19 @@ func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenS
 	actionGroup := r.buildActionGroup(ag)
 
 	if existing == nil {
-		// Create new action group
 		log.Info("Creating action group", "name", ag.Name)
-		if err := securityAPI.CreateActionGroup(ctx, ag.Name, actionGroup); err != nil {
-			if updateErr := r.updateStatus(ctx, ag, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create action group: %v", err)); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			return fmt.Errorf("failed to create action group: %w", err)
+	} else {
+		log.Info("Updating action group", "name", ag.Name)
+	}
+	if err := securityAPI.CreateActionGroup(ctx, ag.Name, actionGroup); err != nil {
+		action := "create"
+		if existing != nil {
+			action = "update"
 		}
+		if updateErr := r.updateStatus(ctx, ag, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s action group: %v", action, err)); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return fmt.Errorf("failed to %s action group: %w", action, err)
 	}
 
 	// Update status

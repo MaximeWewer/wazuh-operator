@@ -81,14 +81,19 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSe
 	osTenant := r.buildTenant(tenant)
 
 	if existing == nil {
-		// Create new tenant
 		log.Info("Creating tenant", "name", tenant.Name)
-		if err := securityAPI.CreateTenant(ctx, tenant.Name, osTenant); err != nil {
-			if updateErr := r.updateStatus(ctx, tenant, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create tenant: %v", err)); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			return fmt.Errorf("failed to create tenant: %w", err)
+	} else {
+		log.Info("Updating tenant", "name", tenant.Name)
+	}
+	if err := securityAPI.CreateTenant(ctx, tenant.Name, osTenant); err != nil {
+		action := "create"
+		if existing != nil {
+			action = "update"
 		}
+		if updateErr := r.updateStatus(ctx, tenant, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s tenant: %v", action, err)); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return fmt.Errorf("failed to %s tenant: %w", action, err)
 	}
 
 	// Update status

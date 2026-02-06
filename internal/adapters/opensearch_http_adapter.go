@@ -315,6 +315,22 @@ func (a *OpenSearchHTTPAdapter) DeleteIndex(ctx context.Context, indexName strin
 	return nil
 }
 
+// UpdateIndexSettings updates dynamic settings on an existing index
+func (a *OpenSearchHTTPAdapter) UpdateIndexSettings(ctx context.Context, indexName string, settings map[string]any) error {
+	resp, err := a.doRequest(ctx, "PUT", "/"+indexName+"/_settings", settings)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to update index settings: %s", string(body))
+	}
+
+	return nil
+}
+
 // IndexExists checks if an index exists
 func (a *OpenSearchHTTPAdapter) IndexExists(ctx context.Context, indexName string) (bool, error) {
 	resp, err := a.doRequest(ctx, "HEAD", "/"+indexName, nil)

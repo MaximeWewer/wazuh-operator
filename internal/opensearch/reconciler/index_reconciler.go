@@ -86,7 +86,16 @@ func (r *IndexReconciler) Reconcile(ctx context.Context, index *wazuhv1.OpenSear
 		r.recordEvent(index, corev1.EventTypeNormal, "Created", "Index successfully created in OpenSearch")
 		log.Info("Created OpenSearch index", "name", indexName)
 	} else {
-		r.recordEvent(index, corev1.EventTypeNormal, "Synced", "Index already exists in OpenSearch")
+		// Update dynamic settings (number_of_replicas)
+		dynamicSettings := r.buildDynamicSettings(index)
+		if len(dynamicSettings) > 0 {
+			if err := osClient.UpdateIndexSettings(ctx, indexName, dynamicSettings); err != nil {
+				r.recordEvent(index, corev1.EventTypeWarning, "UpdateFailed", fmt.Sprintf("Failed to update index settings: %v", err))
+				return fmt.Errorf("failed to update index settings: %w", err)
+			}
+			r.recordEvent(index, corev1.EventTypeNormal, "Updated", "Index settings updated in OpenSearch")
+			log.Info("Updated OpenSearch index settings", "name", indexName)
+		}
 	}
 
 	// Update status
@@ -126,6 +135,23 @@ func (r *IndexReconciler) buildIndexSettings(index *wazuhv1.OpenSearchIndex) map
 	}
 
 	return settings
+}
+
+// buildDynamicSettings builds only the dynamic settings that can be updated on an existing index
+func (r *IndexReconciler) buildDynamicSettings(index *wazuhv1.OpenSearchIndex) map[string]any {
+	indexSettings := make(map[string]any)
+
+	if index.Spec.Settings != nil && index.Spec.Settings.NumberOfReplicas != nil {
+		indexSettings["number_of_replicas"] = *index.Spec.Settings.NumberOfReplicas
+	}
+
+	if len(indexSettings) == 0 {
+		return nil
+	}
+
+	return map[string]any{
+		"index": indexSettings,
+	}
 }
 
 // getOpenSearchClient gets an OpenSearch HTTP adapter using dynamic client resolution

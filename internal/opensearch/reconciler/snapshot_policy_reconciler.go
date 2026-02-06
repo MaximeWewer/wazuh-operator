@@ -104,14 +104,19 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 	snapshotPolicy := r.buildSnapshotPolicy(policy)
 
 	if !exists {
-		// Create new policy
 		log.Info("Creating snapshot policy", "name", policy.Name, "repository", repoName)
-		if err := snapshotAPI.CreatePolicy(ctx, policy.Name, snapshotPolicy); err != nil {
-			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create policy: %v", err)); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			return fmt.Errorf("failed to create snapshot policy: %w", err)
+	} else {
+		log.Info("Updating snapshot policy", "name", policy.Name, "repository", repoName)
+	}
+	if err := snapshotAPI.CreatePolicy(ctx, policy.Name, snapshotPolicy); err != nil {
+		action := "create"
+		if exists {
+			action = "update"
 		}
+		if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s snapshot policy: %v", action, err)); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return fmt.Errorf("failed to %s snapshot policy: %w", action, err)
 	}
 
 	// Update status

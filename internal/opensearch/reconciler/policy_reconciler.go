@@ -80,14 +80,19 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSe
 	ismPolicy := r.buildISMPolicy(policy)
 
 	if !exists {
-		// Create new policy
 		log.Info("Creating ISM policy", "name", policy.Name)
-		if err := ismAPI.Create(ctx, policy.Name, ismPolicy); err != nil {
-			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create policy: %v", err)); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			return fmt.Errorf("failed to create ISM policy: %w", err)
+	} else {
+		log.Info("Updating ISM policy", "name", policy.Name)
+	}
+	if err := ismAPI.Create(ctx, policy.Name, ismPolicy); err != nil {
+		action := "create"
+		if exists {
+			action = "update"
 		}
+		if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s ISM policy: %v", action, err)); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return fmt.Errorf("failed to %s ISM policy: %w", action, err)
 	}
 
 	// Update status

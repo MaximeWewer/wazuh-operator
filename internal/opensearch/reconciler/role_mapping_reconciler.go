@@ -79,14 +79,19 @@ func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.
 	roleMapping := r.buildRoleMapping(mapping)
 
 	if existing == nil {
-		// Create new role mapping
 		log.Info("Creating role mapping", "name", mapping.Name)
-		if err := securityAPI.CreateRoleMapping(ctx, mapping.Name, roleMapping); err != nil {
-			if updateErr := r.updateStatus(ctx, mapping, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create role mapping: %v", err)); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			return fmt.Errorf("failed to create role mapping: %w", err)
+	} else {
+		log.Info("Updating role mapping", "name", mapping.Name)
+	}
+	if err := securityAPI.CreateRoleMapping(ctx, mapping.Name, roleMapping); err != nil {
+		action := "create"
+		if existing != nil {
+			action = "update"
 		}
+		if updateErr := r.updateStatus(ctx, mapping, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s role mapping: %v", action, err)); updateErr != nil {
+			log.Error(updateErr, "Failed to update status")
+		}
+		return fmt.Errorf("failed to %s role mapping: %w", action, err)
 	}
 
 	// Update status
