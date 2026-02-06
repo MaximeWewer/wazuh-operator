@@ -1768,17 +1768,17 @@ func (r *ClusterReconciler) updateStatefulSetWithRetry(ctx context.Context, desi
 }
 
 // getStatefulSetPhase returns the phase of a StatefulSet
-func getStatefulSetPhase(sts *appsv1.StatefulSet) string {
+func getStatefulSetPhase(sts *appsv1.StatefulSet) wazuhv1.ComponentStatusPhase {
 	if sts.Status.ReadyReplicas == 0 {
-		return "Starting"
+		return wazuhv1.ComponentStatusPhaseStarting
 	}
 	if sts.Status.ReadyReplicas < sts.Status.Replicas {
-		return "Degraded"
+		return wazuhv1.ComponentStatusPhaseDegraded
 	}
 	if sts.Status.UpdatedReplicas < sts.Status.Replicas {
-		return "Updating"
+		return wazuhv1.ComponentStatusPhaseScaling
 	}
-	return "Ready"
+	return wazuhv1.ComponentStatusPhaseReady
 }
 
 // resolveSecretKey reads a key from a secret

@@ -57,7 +57,7 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 	log := logf.FromContext(ctx)
 
 	if r.ClientFactory == nil {
-		return r.updateStatus(ctx, policy, "Pending", "Waiting for OpenSearch client factory")
+		return r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
 	}
 
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, policy.Spec.ClusterRef, policy.Namespace)
@@ -75,14 +75,14 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 		repo, err := snapshotsAPI.GetRepository(ctx, repoName)
 		if err != nil {
 			log.Error(err, "Failed to check repository", "repository", repoName)
-			if updateErr := r.updateStatus(ctx, policy, "Error", fmt.Sprintf("Failed to check repository '%s': %v", repoName, err)); updateErr != nil {
+			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check repository '%s': %v", repoName, err)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
 			return fmt.Errorf("failed to check repository '%s': %w", repoName, err)
 		}
 		if repo == nil {
 			log.Info("Repository not found, waiting for repository to be created", "repository", repoName)
-			if updateErr := r.updateStatus(ctx, policy, "Pending", fmt.Sprintf("Repository '%s' not found - waiting for repository creation", repoName)); updateErr != nil {
+			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhasePending, fmt.Sprintf("Repository '%s' not found - waiting for repository creation", repoName)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
 			// Return nil to requeue and check again later
@@ -94,7 +94,7 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 	// Check if policy exists
 	exists, err := snapshotAPI.Exists(ctx, policy.Name)
 	if err != nil {
-		if updateErr := r.updateStatus(ctx, policy, "Error", fmt.Sprintf("Failed to check policy existence: %v", err)); updateErr != nil {
+		if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check policy existence: %v", err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 		return fmt.Errorf("failed to check snapshot policy existence: %w", err)
@@ -107,7 +107,7 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 		// Create new policy
 		log.Info("Creating snapshot policy", "name", policy.Name, "repository", repoName)
 		if err := snapshotAPI.CreatePolicy(ctx, policy.Name, snapshotPolicy); err != nil {
-			if updateErr := r.updateStatus(ctx, policy, "Error", fmt.Sprintf("Failed to create policy: %v", err)); updateErr != nil {
+			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create policy: %v", err)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
 			return fmt.Errorf("failed to create snapshot policy: %w", err)
@@ -115,7 +115,7 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 	}
 
 	// Update status
-	if err := r.updateStatus(ctx, policy, "Ready", "Snapshot policy reconciled successfully"); err != nil {
+	if err := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseReady, "Snapshot policy reconciled successfully"); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
@@ -182,7 +182,7 @@ func (r *SnapshotPolicyReconciler) buildSnapshotPolicy(policy *wazuhv1.OpenSearc
 }
 
 // updateStatus updates the policy status
-func (r *SnapshotPolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.OpenSearchSnapshotPolicy, phase, message string) error {
+func (r *SnapshotPolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.OpenSearchSnapshotPolicy, phase wazuhv1.OpenSearchResourcePhase, message string) error {
 	policy.Status.Phase = phase
 	policy.Status.Message = message
 	now := metav1.Now()

@@ -1129,3 +1129,117 @@ type HPAScalingRules struct {
 	// +kubebuilder:validation:Enum=Max;Min;Disabled
 	SelectPolicy *string `json:"selectPolicy,omitempty"`
 }
+
+// ============================================================================
+// Phase Types
+// ============================================================================
+
+// OpenSearchResourcePhase represents the phase of a generic OpenSearch resource
+// Used by: User, Role, RoleMapping, Tenant, ActionGroup, Index, IndexTemplate,
+// ComponentTemplate, SnapshotPolicy, ISMPolicy, AuthConfig
+// +kubebuilder:validation:Enum=Pending;Ready;Failed
+type OpenSearchResourcePhase string
+
+const (
+	OpenSearchResourcePhasePending OpenSearchResourcePhase = "Pending"
+	OpenSearchResourcePhaseReady   OpenSearchResourcePhase = "Ready"
+	OpenSearchResourcePhaseFailed  OpenSearchResourcePhase = "Failed"
+)
+
+// SnapshotPhase represents the phase of an OpenSearch snapshot
+// +kubebuilder:validation:Enum=Pending;InProgress;Completed;Failed;Partial
+type SnapshotPhase string
+
+const (
+	SnapshotPhasePending    SnapshotPhase = "Pending"
+	SnapshotPhaseInProgress SnapshotPhase = "InProgress"
+	SnapshotPhaseCompleted  SnapshotPhase = "Completed"
+	SnapshotPhaseFailed     SnapshotPhase = "Failed"
+	SnapshotPhasePartial    SnapshotPhase = "Partial"
+)
+
+// OpenSearchRestorePhase represents the phase of an OpenSearch restore operation
+// +kubebuilder:validation:Enum=Pending;Validating;InProgress;Completed;Failed
+type OpenSearchRestorePhase string
+
+const (
+	OpenSearchRestorePhasePending    OpenSearchRestorePhase = "Pending"
+	OpenSearchRestorePhaseValidating OpenSearchRestorePhase = "Validating"
+	OpenSearchRestorePhaseInProgress OpenSearchRestorePhase = "InProgress"
+	OpenSearchRestorePhaseCompleted  OpenSearchRestorePhase = "Completed"
+	OpenSearchRestorePhaseFailed     OpenSearchRestorePhase = "Failed"
+)
+
+// RepositoryPhase represents the phase of a snapshot repository
+// +kubebuilder:validation:Enum=Pending;Creating;Verifying;Ready;Failed;Deleting
+type RepositoryPhase string
+
+const (
+	RepositoryPhasePending   RepositoryPhase = "Pending"
+	RepositoryPhaseCreating  RepositoryPhase = "Creating"
+	RepositoryPhaseVerifying RepositoryPhase = "Verifying"
+	RepositoryPhaseReady     RepositoryPhase = "Ready"
+	RepositoryPhaseFailed    RepositoryPhase = "Failed"
+	RepositoryPhaseDeleting  RepositoryPhase = "Deleting"
+)
+
+// BackupPhase represents the phase of a Wazuh backup
+// +kubebuilder:validation:Enum=Pending;Active;Suspended;Failed
+type BackupPhase string
+
+const (
+	BackupPhasePending   BackupPhase = "Pending"
+	BackupPhaseActive    BackupPhase = "Active"
+	BackupPhaseSuspended BackupPhase = "Suspended"
+	BackupPhaseFailed    BackupPhase = "Failed"
+)
+
+// WazuhRestorePhase represents the phase of a Wazuh restore operation
+// +kubebuilder:validation:Enum=Pending;Validating;Stopping;BackingUp;Restoring;Starting;Completed;Failed
+type WazuhRestorePhase string
+
+const (
+	WazuhRestorePhasePending    WazuhRestorePhase = "Pending"
+	WazuhRestorePhaseValidating WazuhRestorePhase = "Validating"
+	WazuhRestorePhaseStopping   WazuhRestorePhase = "Stopping"
+	WazuhRestorePhaseBackingUp  WazuhRestorePhase = "BackingUp"
+	WazuhRestorePhaseRestoring  WazuhRestorePhase = "Restoring"
+	WazuhRestorePhaseStarting   WazuhRestorePhase = "Starting"
+	WazuhRestorePhaseCompleted  WazuhRestorePhase = "Completed"
+	WazuhRestorePhaseFailed     WazuhRestorePhase = "Failed"
+)
+
+// NodePoolPhase represents the phase of an indexer node pool
+// +kubebuilder:validation:Enum=Pending;Creating;Running;Scaling;Draining;Failed
+type NodePoolPhase string
+
+const (
+	NodePoolPhasePending  NodePoolPhase = "Pending"
+	NodePoolPhaseCreating NodePoolPhase = "Creating"
+	NodePoolPhaseRunning  NodePoolPhase = "Running"
+	NodePoolPhaseScaling  NodePoolPhase = "Scaling"
+	NodePoolPhaseDraining NodePoolPhase = "Draining"
+	NodePoolPhaseFailed   NodePoolPhase = "Failed"
+)
+
+// ExpansionPhase represents the phase of a volume expansion operation
+// +kubebuilder:validation:Enum=Pending;InProgress;Completed;Failed
+type ExpansionPhase string
+
+const (
+	ExpansionPhasePending    ExpansionPhase = "Pending"
+	ExpansionPhaseInProgress ExpansionPhase = "InProgress"
+	ExpansionPhaseCompleted  ExpansionPhase = "Completed"
+	ExpansionPhaseFailed     ExpansionPhase = "Failed"
+)
+
+// ComponentStatusPhase represents the phase of a component status
+// +kubebuilder:validation:Enum=Starting;Ready;Scaling;Degraded
+type ComponentStatusPhase string
+
+const (
+	ComponentStatusPhaseStarting ComponentStatusPhase = "Starting"
+	ComponentStatusPhaseReady    ComponentStatusPhase = "Ready"
+	ComponentStatusPhaseScaling  ComponentStatusPhase = "Scaling"
+	ComponentStatusPhaseDegraded ComponentStatusPhase = "Degraded"
+)

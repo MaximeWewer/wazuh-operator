@@ -398,7 +398,7 @@ type LDAPConnectionPoolSpec struct {
 type OpenSearchAuthConfigStatus struct {
 	// Phase is the current phase (Pending, Ready, Failed)
 	// +optional
-	Phase string `json:"phase,omitempty"`
+	Phase OpenSearchResourcePhase `json:"phase,omitempty"`
 
 	// Message provides additional information about the current phase
 	// +optional

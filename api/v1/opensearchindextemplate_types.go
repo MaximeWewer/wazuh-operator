@@ -114,7 +114,7 @@ type TimestampField struct {
 type OpenSearchIndexTemplateStatus struct {
 	// Phase represents the current phase of the index template
 	// +optional
-	Phase string `json:"phase,omitempty"`
+	Phase OpenSearchResourcePhase `json:"phase,omitempty"`
 
 	// Conditions represent the latest available observations of the index template's state
 	// +listType=map

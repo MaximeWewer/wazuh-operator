@@ -25,7 +25,7 @@ import (
 type WazuhCertificateSpec struct {
 	// Target cluster for certificate management
 	// +kubebuilder:validation:Required
-	ClusterRef string `json:"clusterRef"`
+	ClusterRef WazuhClusterReference `json:"clusterRef"`
 
 	// Certificate type (ca, node, admin, filebeat)
 	// +kubebuilder:validation:Required

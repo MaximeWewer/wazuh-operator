@@ -124,7 +124,7 @@ type NodeStatus struct {
 
 	// Phase
 	// +optional
-	Phase string `json:"phase,omitempty"`
+	Phase ComponentStatusPhase `json:"phase,omitempty"`
 }
 
 // ComponentPhase represents the phase of a component

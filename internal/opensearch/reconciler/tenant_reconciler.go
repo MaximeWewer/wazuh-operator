@@ -56,7 +56,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSe
 	log := logf.FromContext(ctx)
 
 	if r.ClientFactory == nil {
-		return r.updateStatus(ctx, tenant, "Pending", "Waiting for OpenSearch client factory")
+		return r.updateStatus(ctx, tenant, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
 	}
 
 	// Get OpenSearch client dynamically from cluster reference
@@ -71,7 +71,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSe
 	// Check if tenant exists
 	existing, err := securityAPI.GetTenant(ctx, tenant.Name)
 	if err != nil {
-		if updateErr := r.updateStatus(ctx, tenant, "Error", fmt.Sprintf("Failed to check tenant existence: %v", err)); updateErr != nil {
+		if updateErr := r.updateStatus(ctx, tenant, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check tenant existence: %v", err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 		return fmt.Errorf("failed to check tenant existence: %w", err)
@@ -84,7 +84,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSe
 		// Create new tenant
 		log.Info("Creating tenant", "name", tenant.Name)
 		if err := securityAPI.CreateTenant(ctx, tenant.Name, osTenant); err != nil {
-			if updateErr := r.updateStatus(ctx, tenant, "Error", fmt.Sprintf("Failed to create tenant: %v", err)); updateErr != nil {
+			if updateErr := r.updateStatus(ctx, tenant, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create tenant: %v", err)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
 			return fmt.Errorf("failed to create tenant: %w", err)
@@ -92,7 +92,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSe
 	}
 
 	// Update status
-	if err := r.updateStatus(ctx, tenant, "Ready", "Tenant reconciled successfully"); err != nil {
+	if err := r.updateStatus(ctx, tenant, wazuhv1.OpenSearchResourcePhaseReady, "Tenant reconciled successfully"); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
@@ -108,7 +108,7 @@ func (r *TenantReconciler) buildTenant(tenant *wazuhv1.OpenSearchTenant) api.Ten
 }
 
 // updateStatus updates the tenant status
-func (r *TenantReconciler) updateStatus(ctx context.Context, tenant *wazuhv1.OpenSearchTenant, phase, message string) error {
+func (r *TenantReconciler) updateStatus(ctx context.Context, tenant *wazuhv1.OpenSearchTenant, phase wazuhv1.OpenSearchResourcePhase, message string) error {
 	tenant.Status.Phase = phase
 	tenant.Status.Message = message
 	now := metav1.Now()

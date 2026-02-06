@@ -31,7 +31,6 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
-	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // OpenSearchSnapshotReconciler reconciles a OpenSearchSnapshot object
@@ -89,7 +88,7 @@ func (r *OpenSearchSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.R
 	}
 
 	// Requeue if snapshot is still in progress
-	if snapshot.Status.Phase == constants.SnapshotPhaseInProgress || snapshot.Status.Phase == constants.SnapshotPhasePending {
+	if snapshot.Status.Phase == wazuhv1.SnapshotPhaseInProgress || snapshot.Status.Phase == wazuhv1.SnapshotPhasePending {
 		log.Info("Snapshot in progress, requeuing for status check", "name", snapshot.Name)
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}

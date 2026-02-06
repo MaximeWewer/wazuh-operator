@@ -78,7 +78,7 @@ type ComponentAlias struct {
 type OpenSearchComponentTemplateStatus struct {
 	// Phase represents the current phase of the component template
 	// +optional
-	Phase string `json:"phase,omitempty"`
+	Phase OpenSearchResourcePhase `json:"phase,omitempty"`
 
 	// Conditions represent the latest available observations of the component template's state
 	// +listType=map

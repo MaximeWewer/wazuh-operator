@@ -1517,17 +1517,17 @@ func (r *IndexerReconciler) updateStatefulSetWithRetry(ctx context.Context, desi
 }
 
 // getStatefulSetPhase returns the phase of a StatefulSet
-func getStatefulSetPhase(sts *appsv1.StatefulSet) string {
+func getStatefulSetPhase(sts *appsv1.StatefulSet) wazuhv1.ComponentStatusPhase {
 	if sts.Status.ReadyReplicas == 0 {
-		return "Starting"
+		return wazuhv1.ComponentStatusPhaseStarting
 	}
 	if sts.Status.ReadyReplicas < sts.Status.Replicas {
-		return "Degraded"
+		return wazuhv1.ComponentStatusPhaseDegraded
 	}
 	if sts.Status.UpdatedReplicas < sts.Status.Replicas {
-		return "Updating"
+		return wazuhv1.ComponentStatusPhaseScaling
 	}
-	return "Ready"
+	return wazuhv1.ComponentStatusPhaseReady
 }
 
 // ReconcileStandalone reconciles a standalone OpenSearchIndexer resource
@@ -2993,7 +2993,7 @@ func (r *IndexerReconciler) cleanupOrphanedNodePools(ctx context.Context, cluste
 }
 
 // updateNodePoolStatus updates the status for a specific nodePool
-func (r *IndexerReconciler) updateNodePoolStatus(cluster *wazuhv1.WazuhCluster, poolName, phase, message string) {
+func (r *IndexerReconciler) updateNodePoolStatus(cluster *wazuhv1.WazuhCluster, poolName string, phase wazuhv1.NodePoolPhase, message string) {
 	if cluster.Status.Indexer.NodePoolStatuses == nil {
 		cluster.Status.Indexer.NodePoolStatuses = make(map[string]wazuhv1.NodePoolStatus)
 	}
@@ -3010,7 +3010,7 @@ func (r *IndexerReconciler) updateNodePoolStatus(cluster *wazuhv1.WazuhCluster, 
 }
 
 // updateNodePoolStatusFromSts updates nodePool status from StatefulSet state
-func (r *IndexerReconciler) updateNodePoolStatusFromSts(cluster *wazuhv1.WazuhCluster, poolName string, sts *appsv1.StatefulSet, phase string) {
+func (r *IndexerReconciler) updateNodePoolStatusFromSts(cluster *wazuhv1.WazuhCluster, poolName string, sts *appsv1.StatefulSet, phase wazuhv1.NodePoolPhase) {
 	if cluster.Status.Indexer.NodePoolStatuses == nil {
 		cluster.Status.Indexer.NodePoolStatuses = make(map[string]wazuhv1.NodePoolStatus)
 	}
@@ -3035,7 +3035,7 @@ func (r *IndexerReconciler) updateNodePoolStatusFromSts(cluster *wazuhv1.WazuhCl
 }
 
 // getNodePoolPhase determines the phase of a nodePool from its StatefulSet
-func (r *IndexerReconciler) getNodePoolPhase(sts *appsv1.StatefulSet) string {
+func (r *IndexerReconciler) getNodePoolPhase(sts *appsv1.StatefulSet) wazuhv1.NodePoolPhase {
 	if sts.Status.ReadyReplicas == 0 {
 		return wazuhv1.NodePoolPhaseCreating
 	}
@@ -3070,13 +3070,13 @@ func (r *IndexerReconciler) updateIndexerStatusFromNodePools(cluster *wazuhv1.Wa
 
 	// Determine overall phase
 	if totalReady == 0 {
-		cluster.Status.Indexer.Phase = "Starting"
+		cluster.Status.Indexer.Phase = wazuhv1.ComponentStatusPhaseStarting
 	} else if allRunning && totalReady == totalReplicas {
-		cluster.Status.Indexer.Phase = "Ready"
+		cluster.Status.Indexer.Phase = wazuhv1.ComponentStatusPhaseReady
 	} else if totalReady < totalReplicas {
-		cluster.Status.Indexer.Phase = "Scaling"
+		cluster.Status.Indexer.Phase = wazuhv1.ComponentStatusPhaseScaling
 	} else {
-		cluster.Status.Indexer.Phase = "Degraded"
+		cluster.Status.Indexer.Phase = wazuhv1.ComponentStatusPhaseDegraded
 	}
 
 	// Sort phases for consistent output

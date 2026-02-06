@@ -56,7 +56,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSe
 	log := logf.FromContext(ctx)
 
 	if r.ClientFactory == nil {
-		return r.updateStatus(ctx, policy, "Pending", "Waiting for OpenSearch client factory")
+		return r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
 	}
 
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, policy.Spec.ClusterRef, policy.Namespace)
@@ -70,7 +70,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSe
 	// Check if policy exists
 	exists, err := ismAPI.Exists(ctx, policy.Name)
 	if err != nil {
-		if updateErr := r.updateStatus(ctx, policy, "Error", fmt.Sprintf("Failed to check policy existence: %v", err)); updateErr != nil {
+		if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check policy existence: %v", err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 		return fmt.Errorf("failed to check policy existence: %w", err)
@@ -83,7 +83,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSe
 		// Create new policy
 		log.Info("Creating ISM policy", "name", policy.Name)
 		if err := ismAPI.Create(ctx, policy.Name, ismPolicy); err != nil {
-			if updateErr := r.updateStatus(ctx, policy, "Error", fmt.Sprintf("Failed to create policy: %v", err)); updateErr != nil {
+			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create policy: %v", err)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
 			return fmt.Errorf("failed to create ISM policy: %w", err)
@@ -91,7 +91,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSe
 	}
 
 	// Update status
-	if err := r.updateStatus(ctx, policy, "Ready", "ISM policy reconciled successfully"); err != nil {
+	if err := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseReady, "ISM policy reconciled successfully"); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
@@ -156,7 +156,7 @@ func (r *PolicyReconciler) buildISMPolicy(policy *wazuhv1.OpenSearchISMPolicy) a
 }
 
 // updateStatus updates the policy status
-func (r *PolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.OpenSearchISMPolicy, phase, message string) error {
+func (r *PolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.OpenSearchISMPolicy, phase wazuhv1.OpenSearchResourcePhase, message string) error {
 	policy.Status.Phase = phase
 	policy.Status.Message = message
 	now := metav1.Now()

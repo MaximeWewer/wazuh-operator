@@ -56,7 +56,7 @@ func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.
 	log := logf.FromContext(ctx)
 
 	if r.ClientFactory == nil {
-		return r.updateStatus(ctx, mapping, "Pending", "Waiting for OpenSearch client factory")
+		return r.updateStatus(ctx, mapping, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
 	}
 
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, mapping.Spec.ClusterRef, mapping.Namespace)
@@ -69,7 +69,7 @@ func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.
 	// Check if role mapping exists
 	existing, err := securityAPI.GetRoleMapping(ctx, mapping.Name)
 	if err != nil {
-		if updateErr := r.updateStatus(ctx, mapping, "Error", fmt.Sprintf("Failed to check role mapping existence: %v", err)); updateErr != nil {
+		if updateErr := r.updateStatus(ctx, mapping, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check role mapping existence: %v", err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 		return fmt.Errorf("failed to check role mapping existence: %w", err)
@@ -82,7 +82,7 @@ func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.
 		// Create new role mapping
 		log.Info("Creating role mapping", "name", mapping.Name)
 		if err := securityAPI.CreateRoleMapping(ctx, mapping.Name, roleMapping); err != nil {
-			if updateErr := r.updateStatus(ctx, mapping, "Error", fmt.Sprintf("Failed to create role mapping: %v", err)); updateErr != nil {
+			if updateErr := r.updateStatus(ctx, mapping, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create role mapping: %v", err)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
 			return fmt.Errorf("failed to create role mapping: %w", err)
@@ -90,7 +90,7 @@ func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.
 	}
 
 	// Update status
-	if err := r.updateStatus(ctx, mapping, "Ready", "Role mapping reconciled successfully"); err != nil {
+	if err := r.updateStatus(ctx, mapping, wazuhv1.OpenSearchResourcePhaseReady, "Role mapping reconciled successfully"); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
@@ -110,7 +110,7 @@ func (r *RoleMappingReconciler) buildRoleMapping(mapping *wazuhv1.OpenSearchRole
 }
 
 // updateStatus updates the role mapping status
-func (r *RoleMappingReconciler) updateStatus(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping, phase, message string) error {
+func (r *RoleMappingReconciler) updateStatus(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping, phase wazuhv1.OpenSearchResourcePhase, message string) error {
 	mapping.Status.Phase = phase
 	mapping.Status.Message = message
 	now := metav1.Now()

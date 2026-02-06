@@ -77,12 +77,12 @@ func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1.Open
 	}
 
 	// Skip if already completed or failed
-	if restore.Status.Phase == constants.RestorePhaseCompleted || restore.Status.Phase == constants.RestorePhaseFailed {
+	if restore.Status.Phase == wazuhv1.OpenSearchRestorePhaseCompleted || restore.Status.Phase == wazuhv1.OpenSearchRestorePhaseFailed {
 		return nil
 	}
 
 	if r.ClientFactory == nil {
-		return r.updateStatus(ctx, restore, constants.RestorePhasePending, "Waiting for OpenSearch client factory")
+		return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhasePending, "Waiting for OpenSearch client factory")
 	}
 
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, restore.Spec.ClusterRef, restore.Namespace)
@@ -93,45 +93,45 @@ func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1.Open
 	snapshotsAPI := api.NewSnapshotsAPI(apiClient)
 
 	// Phase: Validating
-	if restore.Status.Phase == "" || restore.Status.Phase == constants.RestorePhasePending {
-		if err := r.updateStatus(ctx, restore, constants.RestorePhaseValidating, "Validating snapshot and repository"); err != nil {
+	if restore.Status.Phase == "" || restore.Status.Phase == wazuhv1.OpenSearchRestorePhasePending {
+		if err := r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseValidating, "Validating snapshot and repository"); err != nil {
 			log.Error(err, "Failed to update status")
 		}
 
 		// Validate repository exists
 		repo, err := snapshotsAPI.GetRepository(ctx, restore.Spec.Repository)
 		if err != nil {
-			return r.updateStatus(ctx, restore, constants.RestorePhaseFailed, fmt.Sprintf("Failed to check repository: %v", err))
+			return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseFailed, fmt.Sprintf("Failed to check repository: %v", err))
 		}
 		if repo == nil {
-			return r.updateStatus(ctx, restore, constants.RestorePhaseFailed, fmt.Sprintf("Repository '%s' not found", restore.Spec.Repository))
+			return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseFailed, fmt.Sprintf("Repository '%s' not found", restore.Spec.Repository))
 		}
 
 		// Validate snapshot exists
 		snapshot, err := snapshotsAPI.GetSnapshot(ctx, restore.Spec.Repository, restore.Spec.Snapshot)
 		if err != nil {
-			return r.updateStatus(ctx, restore, constants.RestorePhaseFailed, fmt.Sprintf("Failed to check snapshot: %v", err))
+			return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseFailed, fmt.Sprintf("Failed to check snapshot: %v", err))
 		}
 		if snapshot == nil {
-			return r.updateStatus(ctx, restore, constants.RestorePhaseFailed, fmt.Sprintf("Snapshot '%s' not found in repository '%s'", restore.Spec.Snapshot, restore.Spec.Repository))
+			return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseFailed, fmt.Sprintf("Snapshot '%s' not found in repository '%s'", restore.Spec.Snapshot, restore.Spec.Repository))
 		}
 
 		// Check snapshot state
 		if snapshot.State != constants.OpenSearchSnapshotStateSuccess && snapshot.State != constants.OpenSearchSnapshotStatePartial {
-			return r.updateStatus(ctx, restore, constants.RestorePhaseFailed, fmt.Sprintf("Snapshot is not in a restorable state: %s", snapshot.State))
+			return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseFailed, fmt.Sprintf("Snapshot is not in a restorable state: %s", snapshot.State))
 		}
 
 		log.Info("Validation passed", "repository", restore.Spec.Repository, "snapshot", restore.Spec.Snapshot)
 	}
 
 	// Phase: Execute restore if not already started
-	if restore.Status.Phase == constants.RestorePhaseValidating {
+	if restore.Status.Phase == wazuhv1.OpenSearchRestorePhaseValidating {
 		log.Info("Starting restore", "repository", restore.Spec.Repository, "snapshot", restore.Spec.Snapshot)
 
 		now := metav1.Now()
 		restore.Status.StartTime = &now
 
-		if err := r.updateStatus(ctx, restore, constants.RestorePhaseInProgress, "Restoring indices"); err != nil {
+		if err := r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseInProgress, "Restoring indices"); err != nil {
 			log.Error(err, "Failed to update status")
 		}
 
@@ -156,7 +156,7 @@ func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1.Open
 		// Execute restore
 		result, err := snapshotsAPI.RestoreSnapshot(ctx, restore.Spec.Repository, restore.Spec.Snapshot, opts)
 		if err != nil {
-			return r.updateStatus(ctx, restore, constants.RestorePhaseFailed, fmt.Sprintf("Failed to restore snapshot: %v", err))
+			return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseFailed, fmt.Sprintf("Failed to restore snapshot: %v", err))
 		}
 
 		// Update status with initial result
@@ -182,7 +182,7 @@ func (r *RestoreReconciler) monitorRestoreProgress(ctx context.Context, restore 
 
 	// Check recovery status for restored indices
 	if len(restore.Status.RestoredIndices) == 0 {
-		return r.updateStatus(ctx, restore, constants.RestorePhaseInProgress, "Waiting for restore to start")
+		return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseInProgress, "Waiting for restore to start")
 	}
 
 	// Check recovery status for the first index (as indicator)
@@ -196,7 +196,7 @@ func (r *RestoreReconciler) monitorRestoreProgress(ctx context.Context, restore 
 
 	if recoveryInfo == nil {
 		// No recovery info means restore hasn't started or completed
-		return r.updateStatus(ctx, restore, constants.RestorePhaseInProgress, "Restore in progress")
+		return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseInProgress, "Restore in progress")
 	}
 
 	// Check if all shards are done
@@ -223,10 +223,10 @@ func (r *RestoreReconciler) monitorRestoreProgress(ctx context.Context, restore 
 		}
 
 		log.Info("Restore completed", "indices", restore.Status.RestoredIndices, "duration", restore.Status.Duration)
-		return r.updateStatus(ctx, restore, constants.RestorePhaseCompleted, "Restore completed successfully")
+		return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseCompleted, "Restore completed successfully")
 	}
 
-	return r.updateStatus(ctx, restore, constants.RestorePhaseInProgress, "Restore in progress")
+	return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseInProgress, "Restore in progress")
 }
 
 // handleDeletion handles restore cleanup on CRD deletion
@@ -249,7 +249,7 @@ func (r *RestoreReconciler) handleDeletion(ctx context.Context, restore *wazuhv1
 }
 
 // updateStatus updates the restore status
-func (r *RestoreReconciler) updateStatus(ctx context.Context, restore *wazuhv1.OpenSearchRestore, phase, message string) error {
+func (r *RestoreReconciler) updateStatus(ctx context.Context, restore *wazuhv1.OpenSearchRestore, phase wazuhv1.OpenSearchRestorePhase, message string) error {
 	restore.Status.Phase = phase
 	restore.Status.Message = message
 	restore.Status.ObservedGeneration = restore.Generation
@@ -258,10 +258,10 @@ func (r *RestoreReconciler) updateStatus(ctx context.Context, restore *wazuhv1.O
 	conditionStatus := metav1.ConditionFalse
 	reason := "RestoreInProgress"
 	switch phase {
-	case constants.RestorePhaseCompleted:
+	case wazuhv1.OpenSearchRestorePhaseCompleted:
 		conditionStatus = metav1.ConditionTrue
 		reason = "RestoreComplete"
-	case constants.RestorePhaseFailed:
+	case wazuhv1.OpenSearchRestorePhaseFailed:
 		reason = "RestoreFailed"
 	}
 

@@ -31,7 +31,6 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
-	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // OpenSearchRestoreReconciler reconciles a OpenSearchRestore object
@@ -89,9 +88,9 @@ func (r *OpenSearchRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	// Requeue if restore is still in progress
-	if restore.Status.Phase == constants.RestorePhaseInProgress ||
-		restore.Status.Phase == constants.RestorePhasePending ||
-		restore.Status.Phase == constants.RestorePhaseValidating {
+	if restore.Status.Phase == wazuhv1.OpenSearchRestorePhaseInProgress ||
+		restore.Status.Phase == wazuhv1.OpenSearchRestorePhasePending ||
+		restore.Status.Phase == wazuhv1.OpenSearchRestorePhaseValidating {
 		log.Info("Restore in progress, requeuing for status check", "name", restore.Name)
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}

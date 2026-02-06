@@ -203,7 +203,7 @@ type NotificationConditions struct {
 type OpenSearchSnapshotPolicyStatus struct {
 	// Phase is the current phase (Pending, Ready, Failed, Conflict)
 	// +optional
-	Phase string `json:"phase,omitempty"`
+	Phase OpenSearchResourcePhase `json:"phase,omitempty"`
 
 	// Message provides additional information about the current phase
 	// +optional

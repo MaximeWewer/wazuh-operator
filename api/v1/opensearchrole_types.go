@@ -86,7 +86,7 @@ type TenantPermission struct {
 type OpenSearchRoleStatus struct {
 	// Phase is the current phase of the role (Pending, Ready, Failed, Conflict)
 	// +optional
-	Phase string `json:"phase,omitempty"`
+	Phase OpenSearchResourcePhase `json:"phase,omitempty"`
 
 	// Message provides additional information about the current phase
 	// +optional

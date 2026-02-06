@@ -34,45 +34,6 @@ const (
 	RepositoryTypeFS = "fs"
 )
 
-// Repository phase constants
-const (
-	// RepositoryPhasePending indicates the repository is pending creation
-	RepositoryPhasePending = "Pending"
-
-	// RepositoryPhaseCreating indicates the repository is being created
-	RepositoryPhaseCreating = "Creating"
-
-	// RepositoryPhaseVerifying indicates the repository is being verified
-	RepositoryPhaseVerifying = "Verifying"
-
-	// RepositoryPhaseReady indicates the repository is ready for use
-	RepositoryPhaseReady = "Ready"
-
-	// RepositoryPhaseFailed indicates the repository failed to create or verify
-	RepositoryPhaseFailed = "Failed"
-
-	// RepositoryPhaseDeleting indicates the repository is being deleted
-	RepositoryPhaseDeleting = "Deleting"
-)
-
-// Snapshot phase constants
-const (
-	// SnapshotPhasePending indicates the snapshot is pending
-	SnapshotPhasePending = "Pending"
-
-	// SnapshotPhaseInProgress indicates the snapshot is in progress
-	SnapshotPhaseInProgress = "InProgress"
-
-	// SnapshotPhaseCompleted indicates the snapshot completed successfully
-	SnapshotPhaseCompleted = "Completed"
-
-	// SnapshotPhaseFailed indicates the snapshot failed
-	SnapshotPhaseFailed = "Failed"
-
-	// SnapshotPhasePartial indicates the snapshot completed with some failures
-	SnapshotPhasePartial = "Partial"
-)
-
 // OpenSearch snapshot state constants (from OpenSearch API)
 const (
 	// OpenSearchSnapshotStateInProgress indicates snapshot is in progress
@@ -86,66 +47,6 @@ const (
 
 	// OpenSearchSnapshotStatePartial indicates snapshot completed with some failures
 	OpenSearchSnapshotStatePartial = "PARTIAL"
-)
-
-// Restore phase constants
-const (
-	// RestorePhasePending indicates the restore is pending
-	RestorePhasePending = "Pending"
-
-	// RestorePhaseValidating indicates the restore is validating the snapshot
-	RestorePhaseValidating = "Validating"
-
-	// RestorePhaseInProgress indicates the restore is in progress
-	RestorePhaseInProgress = "InProgress"
-
-	// RestorePhaseCompleted indicates the restore completed successfully
-	RestorePhaseCompleted = "Completed"
-
-	// RestorePhaseFailed indicates the restore failed
-	RestorePhaseFailed = "Failed"
-)
-
-// Wazuh backup phase constants
-const (
-	// WazuhBackupPhasePending indicates the backup configuration is pending
-	WazuhBackupPhasePending = "Pending"
-
-	// WazuhBackupPhaseActive indicates the backup is active and scheduled
-	WazuhBackupPhaseActive = "Active"
-
-	// WazuhBackupPhaseSuspended indicates the backup is suspended
-	WazuhBackupPhaseSuspended = "Suspended"
-
-	// WazuhBackupPhaseFailed indicates the backup configuration failed
-	WazuhBackupPhaseFailed = "Failed"
-)
-
-// Wazuh restore phase constants
-const (
-	// WazuhRestorePhasePending indicates the restore is pending
-	WazuhRestorePhasePending = "Pending"
-
-	// WazuhRestorePhaseValidating indicates validating source backup
-	WazuhRestorePhaseValidating = "Validating"
-
-	// WazuhRestorePhaseStopping indicates stopping the manager
-	WazuhRestorePhaseStopping = "Stopping"
-
-	// WazuhRestorePhaseBackingUp indicates creating pre-restore backup
-	WazuhRestorePhaseBackingUp = "BackingUp"
-
-	// WazuhRestorePhaseRestoring indicates restoring data
-	WazuhRestorePhaseRestoring = "Restoring"
-
-	// WazuhRestorePhaseStarting indicates starting the manager
-	WazuhRestorePhaseStarting = "Starting"
-
-	// WazuhRestorePhaseCompleted indicates the restore completed
-	WazuhRestorePhaseCompleted = "Completed"
-
-	// WazuhRestorePhaseFailed indicates the restore failed
-	WazuhRestorePhaseFailed = "Failed"
 )
 
 // Backup info status constants

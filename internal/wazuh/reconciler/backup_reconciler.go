@@ -81,7 +81,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, backup *wazuhv1.WazuhB
 	}
 	if err := r.Get(ctx, clusterKey, cluster); err != nil {
 		if errors.IsNotFound(err) {
-			return r.updateStatus(ctx, backup, constants.WazuhBackupPhaseFailed,
+			return r.updateStatus(ctx, backup, wazuhv1.BackupPhaseFailed,
 				fmt.Sprintf("WazuhCluster '%s' not found", backup.Spec.ClusterRef.Name))
 		}
 		return fmt.Errorf("failed to get WazuhCluster: %w", err)
@@ -95,7 +95,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, backup *wazuhv1.WazuhB
 	}
 	if err := r.Get(ctx, credsKey, credsSecret); err != nil {
 		if errors.IsNotFound(err) {
-			return r.updateStatus(ctx, backup, constants.WazuhBackupPhaseFailed,
+			return r.updateStatus(ctx, backup, wazuhv1.BackupPhaseFailed,
 				fmt.Sprintf("Credentials Secret '%s' not found", backup.Spec.Storage.CredentialsSecret.Name))
 		}
 		return fmt.Errorf("failed to get credentials Secret: %w", err)
@@ -119,13 +119,13 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, backup *wazuhv1.WazuhB
 	}
 
 	// Update status
-	phase := constants.WazuhBackupPhaseActive
+	phase := wazuhv1.BackupPhaseActive
 	message := "Backup scheduled"
 	if !backup.IsScheduled() {
 		message = "One-shot backup job created"
 	}
 	if backup.Spec.Suspend {
-		phase = constants.WazuhBackupPhaseSuspended
+		phase = wazuhv1.BackupPhaseSuspended
 		message = "Backup suspended"
 	}
 
@@ -314,7 +314,7 @@ func (r *BackupReconciler) handleDeletion(ctx context.Context, backup *wazuhv1.W
 }
 
 // updateStatus updates the WazuhBackup status
-func (r *BackupReconciler) updateStatus(ctx context.Context, backup *wazuhv1.WazuhBackup, phase, message string) error {
+func (r *BackupReconciler) updateStatus(ctx context.Context, backup *wazuhv1.WazuhBackup, phase wazuhv1.BackupPhase, message string) error {
 	backup.Status.Phase = phase
 	backup.Status.Message = message
 	backup.Status.ObservedGeneration = backup.Generation
@@ -323,13 +323,13 @@ func (r *BackupReconciler) updateStatus(ctx context.Context, backup *wazuhv1.Waz
 	conditionStatus := metav1.ConditionTrue
 	reason := "BackupReady"
 	switch phase {
-	case constants.WazuhBackupPhaseFailed:
+	case wazuhv1.BackupPhaseFailed:
 		conditionStatus = metav1.ConditionFalse
 		reason = "BackupFailed"
-	case constants.WazuhBackupPhaseSuspended:
+	case wazuhv1.BackupPhaseSuspended:
 		conditionStatus = metav1.ConditionFalse
 		reason = "BackupSuspended"
-	case constants.WazuhBackupPhasePending:
+	case wazuhv1.BackupPhasePending:
 		conditionStatus = metav1.ConditionFalse
 		reason = "BackupPending"
 	}

@@ -78,7 +78,7 @@ func (r *ManualSnapshotReconciler) Reconcile(ctx context.Context, snapshot *wazu
 	}
 
 	if r.ClientFactory == nil {
-		return r.updateStatus(ctx, snapshot, constants.SnapshotPhasePending, "", "Waiting for OpenSearch client factory")
+		return r.updateStatus(ctx, snapshot, wazuhv1.SnapshotPhasePending, "", "Waiting for OpenSearch client factory")
 	}
 
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, snapshot.Spec.ClusterRef, snapshot.Namespace)
@@ -91,10 +91,10 @@ func (r *ManualSnapshotReconciler) Reconcile(ctx context.Context, snapshot *wazu
 	// Validate repository exists
 	repo, err := snapshotsAPI.GetRepository(ctx, snapshot.Spec.Repository)
 	if err != nil {
-		return r.updateStatus(ctx, snapshot, constants.SnapshotPhaseFailed, "", fmt.Sprintf("Failed to check repository: %v", err))
+		return r.updateStatus(ctx, snapshot, wazuhv1.SnapshotPhaseFailed, "", fmt.Sprintf("Failed to check repository: %v", err))
 	}
 	if repo == nil {
-		return r.updateStatus(ctx, snapshot, constants.SnapshotPhaseFailed, "", fmt.Sprintf("Repository '%s' not found", snapshot.Spec.Repository))
+		return r.updateStatus(ctx, snapshot, wazuhv1.SnapshotPhaseFailed, "", fmt.Sprintf("Repository '%s' not found", snapshot.Spec.Repository))
 	}
 
 	// Generate snapshot name if not already done
@@ -107,7 +107,7 @@ func (r *ManualSnapshotReconciler) Reconcile(ctx context.Context, snapshot *wazu
 	// Check if snapshot already exists
 	existingSnapshot, err := snapshotsAPI.GetSnapshot(ctx, snapshot.Spec.Repository, snapshotName)
 	if err != nil {
-		return r.updateStatus(ctx, snapshot, constants.SnapshotPhaseFailed, "", fmt.Sprintf("Failed to check snapshot: %v", err))
+		return r.updateStatus(ctx, snapshot, wazuhv1.SnapshotPhaseFailed, "", fmt.Sprintf("Failed to check snapshot: %v", err))
 	}
 
 	if existingSnapshot == nil {
@@ -117,7 +117,7 @@ func (r *ManualSnapshotReconciler) Reconcile(ctx context.Context, snapshot *wazu
 		now := metav1.Now()
 		snapshot.Status.StartTime = &now
 
-		if err := r.updateStatus(ctx, snapshot, constants.SnapshotPhaseInProgress, "", "Creating snapshot"); err != nil {
+		if err := r.updateStatus(ctx, snapshot, wazuhv1.SnapshotPhaseInProgress, "", "Creating snapshot"); err != nil {
 			log.Error(err, "Failed to update status")
 		}
 
@@ -128,7 +128,7 @@ func (r *ManualSnapshotReconciler) Reconcile(ctx context.Context, snapshot *wazu
 		}
 
 		if err := snapshotsAPI.CreateSnapshot(ctx, snapshot.Spec.Repository, snapshotName, osSnapshot); err != nil {
-			return r.updateStatus(ctx, snapshot, constants.SnapshotPhaseFailed, "", fmt.Sprintf("Failed to create snapshot: %v", err))
+			return r.updateStatus(ctx, snapshot, wazuhv1.SnapshotPhaseFailed, "", fmt.Sprintf("Failed to create snapshot: %v", err))
 		}
 
 		log.Info("Snapshot creation initiated", "name", snapshotName)
@@ -156,11 +156,11 @@ func (r *ManualSnapshotReconciler) updateSnapshotStatus(ctx context.Context, sna
 	// Get snapshot info
 	snapshotInfo, err := snapshotsAPI.GetSnapshot(ctx, snapshot.Spec.Repository, snapshotName)
 	if err != nil {
-		return r.updateStatus(ctx, snapshot, constants.SnapshotPhaseFailed, "", fmt.Sprintf("Failed to get snapshot status: %v", err))
+		return r.updateStatus(ctx, snapshot, wazuhv1.SnapshotPhaseFailed, "", fmt.Sprintf("Failed to get snapshot status: %v", err))
 	}
 
 	if snapshotInfo == nil {
-		return r.updateStatus(ctx, snapshot, constants.SnapshotPhaseFailed, "", "Snapshot not found in repository")
+		return r.updateStatus(ctx, snapshot, wazuhv1.SnapshotPhaseFailed, "", "Snapshot not found in repository")
 	}
 
 	// Update status based on OpenSearch state
@@ -182,14 +182,14 @@ func (r *ManualSnapshotReconciler) updateSnapshotStatus(ctx context.Context, sna
 	}
 
 	// Determine phase based on state
-	var phase string
+	var phase wazuhv1.SnapshotPhase
 	var message string
 	switch snapshotInfo.State {
 	case constants.OpenSearchSnapshotStateInProgress:
-		phase = constants.SnapshotPhaseInProgress
+		phase = wazuhv1.SnapshotPhaseInProgress
 		message = "Snapshot in progress"
 	case constants.OpenSearchSnapshotStateSuccess:
-		phase = constants.SnapshotPhaseCompleted
+		phase = wazuhv1.SnapshotPhaseCompleted
 		message = "Snapshot completed successfully"
 		now := metav1.Now()
 		snapshot.Status.EndTime = &now
@@ -198,12 +198,12 @@ func (r *ManualSnapshotReconciler) updateSnapshotStatus(ctx context.Context, sna
 			snapshot.Status.Duration = formatDuration(duration)
 		}
 	case constants.OpenSearchSnapshotStateFailed:
-		phase = constants.SnapshotPhaseFailed
+		phase = wazuhv1.SnapshotPhaseFailed
 		message = "Snapshot failed"
 		now := metav1.Now()
 		snapshot.Status.EndTime = &now
 	case constants.OpenSearchSnapshotStatePartial:
-		phase = constants.SnapshotPhasePartial
+		phase = wazuhv1.SnapshotPhasePartial
 		message = "Snapshot completed with some failures"
 		now := metav1.Now()
 		snapshot.Status.EndTime = &now
@@ -212,7 +212,7 @@ func (r *ManualSnapshotReconciler) updateSnapshotStatus(ctx context.Context, sna
 			snapshot.Status.Duration = formatDuration(duration)
 		}
 	default:
-		phase = constants.SnapshotPhaseInProgress
+		phase = wazuhv1.SnapshotPhaseInProgress
 		message = fmt.Sprintf("Unknown state: %s", snapshotInfo.State)
 	}
 
@@ -242,7 +242,7 @@ func (r *ManualSnapshotReconciler) handleDeletion(ctx context.Context, snapshot 
 }
 
 // updateStatus updates the snapshot status
-func (r *ManualSnapshotReconciler) updateStatus(ctx context.Context, snapshot *wazuhv1.OpenSearchSnapshot, phase, state, message string) error {
+func (r *ManualSnapshotReconciler) updateStatus(ctx context.Context, snapshot *wazuhv1.OpenSearchSnapshot, phase wazuhv1.SnapshotPhase, state, message string) error {
 	snapshot.Status.Phase = phase
 	snapshot.Status.Message = message
 	if state != "" {
@@ -254,12 +254,12 @@ func (r *ManualSnapshotReconciler) updateStatus(ctx context.Context, snapshot *w
 	conditionStatus := metav1.ConditionFalse
 	reason := "SnapshotInProgress"
 	switch phase {
-	case constants.SnapshotPhaseCompleted:
+	case wazuhv1.SnapshotPhaseCompleted:
 		conditionStatus = metav1.ConditionTrue
 		reason = "SnapshotComplete"
-	case constants.SnapshotPhaseFailed:
+	case wazuhv1.SnapshotPhaseFailed:
 		reason = "SnapshotFailed"
-	case constants.SnapshotPhasePartial:
+	case wazuhv1.SnapshotPhasePartial:
 		conditionStatus = metav1.ConditionTrue
 		reason = "SnapshotPartial"
 	}

@@ -33,7 +33,6 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
-	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // WazuhRestoreReconciler reconciles a WazuhRestore object
@@ -91,12 +90,12 @@ func (r *WazuhRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Requeue if restore is still in progress
-	if restore.Status.Phase == constants.WazuhRestorePhaseRestoring ||
-		restore.Status.Phase == constants.WazuhRestorePhasePending ||
-		restore.Status.Phase == constants.WazuhRestorePhaseValidating ||
-		restore.Status.Phase == constants.WazuhRestorePhaseStopping ||
-		restore.Status.Phase == constants.WazuhRestorePhaseBackingUp ||
-		restore.Status.Phase == constants.WazuhRestorePhaseStarting {
+	if restore.Status.Phase == wazuhv1.WazuhRestorePhaseRestoring ||
+		restore.Status.Phase == wazuhv1.WazuhRestorePhasePending ||
+		restore.Status.Phase == wazuhv1.WazuhRestorePhaseValidating ||
+		restore.Status.Phase == wazuhv1.WazuhRestorePhaseStopping ||
+		restore.Status.Phase == wazuhv1.WazuhRestorePhaseBackingUp ||
+		restore.Status.Phase == wazuhv1.WazuhRestorePhaseStarting {
 		log.Info("Restore in progress, requeuing for status check", "name", restore.Name, "phase", restore.Status.Phase)
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}

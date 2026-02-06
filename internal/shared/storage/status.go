@@ -22,13 +22,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
-	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // ExpansionStatusUpdate contains the information needed to update expansion status
 type ExpansionStatusUpdate struct {
 	// Phase is the current expansion phase
-	Phase string
+	Phase v1.ExpansionPhase
 
 	// RequestedSize is the target storage size
 	RequestedSize string
@@ -91,7 +90,7 @@ func UpdateComponentExpansionStatus(existing *v1.ComponentExpansionStatus, updat
 // CreatePendingStatus creates a status update for the Pending phase
 func CreatePendingStatus(requestedSize, currentSize string, pvcsPending []string) ExpansionStatusUpdate {
 	return ExpansionStatusUpdate{
-		Phase:         constants.VolumeExpansionPhasePending,
+		Phase:         v1.ExpansionPhasePending,
 		RequestedSize: requestedSize,
 		CurrentSize:   currentSize,
 		Message:       fmt.Sprintf("Waiting to expand %d PVC(s) from %s to %s", len(pvcsPending), currentSize, requestedSize),
@@ -102,7 +101,7 @@ func CreatePendingStatus(requestedSize, currentSize string, pvcsPending []string
 // CreateInProgressStatus creates a status update for the InProgress phase
 func CreateInProgressStatus(requestedSize, currentSize string, pvcsExpanded, pvcsPending []string) ExpansionStatusUpdate {
 	return ExpansionStatusUpdate{
-		Phase:         constants.VolumeExpansionPhaseInProgress,
+		Phase:         v1.ExpansionPhaseInProgress,
 		RequestedSize: requestedSize,
 		CurrentSize:   currentSize,
 		Message:       fmt.Sprintf("Expanding PVCs: %d completed, %d pending", len(pvcsExpanded), len(pvcsPending)),
@@ -114,7 +113,7 @@ func CreateInProgressStatus(requestedSize, currentSize string, pvcsExpanded, pvc
 // CreateCompletedStatus creates a status update for the Completed phase
 func CreateCompletedStatus(requestedSize string, pvcsExpanded []string) ExpansionStatusUpdate {
 	return ExpansionStatusUpdate{
-		Phase:         constants.VolumeExpansionPhaseCompleted,
+		Phase:         v1.ExpansionPhaseCompleted,
 		RequestedSize: requestedSize,
 		CurrentSize:   requestedSize,
 		Message:       fmt.Sprintf("All %d PVC(s) expanded successfully to %s", len(pvcsExpanded), requestedSize),
@@ -125,7 +124,7 @@ func CreateCompletedStatus(requestedSize string, pvcsExpanded []string) Expansio
 // CreateFailedStatus creates a status update for the Failed phase
 func CreateFailedStatus(requestedSize, currentSize, errorMessage string, pvcsExpanded, pvcsPending []string) ExpansionStatusUpdate {
 	return ExpansionStatusUpdate{
-		Phase:         constants.VolumeExpansionPhaseFailed,
+		Phase:         v1.ExpansionPhaseFailed,
 		RequestedSize: requestedSize,
 		CurrentSize:   currentSize,
 		Message:       errorMessage,
@@ -153,7 +152,7 @@ func IsExpansionInProgress(status *v1.VolumeExpansionStatus) bool {
 	} {
 		if component != nil {
 			switch component.Phase {
-			case constants.VolumeExpansionPhasePending, constants.VolumeExpansionPhaseInProgress:
+			case v1.ExpansionPhasePending, v1.ExpansionPhaseInProgress:
 				return true
 			}
 		}
@@ -173,7 +172,7 @@ func IsAnyExpansionFailed(status *v1.VolumeExpansionStatus) bool {
 		status.ManagerMasterExpansion,
 		status.ManagerWorkersExpansion,
 	} {
-		if component != nil && component.Phase == constants.VolumeExpansionPhaseFailed {
+		if component != nil && component.Phase == v1.ExpansionPhaseFailed {
 			return true
 		}
 	}

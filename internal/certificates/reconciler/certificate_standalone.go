@@ -318,12 +318,12 @@ func (r *CertificateReconciler) getOrCreateStandaloneCA(ctx context.Context, cer
 	}
 
 	// For other types, try to find existing CA from cluster reference
-	caSecretName := cert.Spec.ClusterRef + "-ca"
+	caSecretName := cert.Spec.ClusterRef.Name + "-ca"
 	caSecret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: caSecretName, Namespace: cert.Namespace}, caSecret); err != nil {
 		if errors.IsNotFound(err) {
 			// Generate a new CA if none exists
-			caConfig := certificates.DefaultCAConfig(cert.Spec.ClusterRef + "-ca")
+			caConfig := certificates.DefaultCAConfig(cert.Spec.ClusterRef.Name + "-ca")
 			// Apply key algorithm from standalone certificate spec
 			if cert.Spec.KeyConfig != nil {
 				if cert.Spec.KeyConfig.Algorithm != "" {
@@ -357,7 +357,7 @@ func (r *CertificateReconciler) generateSANs(cert *wazuhv1.WazuhCertificate) []s
 		if namespace == "" {
 			namespace = cert.Namespace
 		}
-		clusterName := cert.Spec.ClusterRef
+		clusterName := cert.Spec.ClusterRef.Name
 
 		switch cert.Spec.Type {
 		case wazuhv1.CertificateTypeIndexer, wazuhv1.CertificateTypeNode:

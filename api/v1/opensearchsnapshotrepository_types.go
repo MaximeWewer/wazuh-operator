@@ -112,7 +112,7 @@ type SnapshotRepositorySettings struct {
 type OpenSearchSnapshotRepositoryStatus struct {
 	// Phase is the current phase (Pending, Creating, Verifying, Ready, Failed, Deleting)
 	// +optional
-	Phase string `json:"phase,omitempty"`
+	Phase RepositoryPhase `json:"phase,omitempty"`
 
 	// Message provides additional information about the current phase
 	// +optional

@@ -35,7 +35,6 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/jobs"
-	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 const (
@@ -75,8 +74,8 @@ func (r *WazuhRestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1
 	}
 
 	// Skip if already completed or failed
-	if restore.Status.Phase == constants.WazuhRestorePhaseCompleted ||
-		restore.Status.Phase == constants.WazuhRestorePhaseFailed {
+	if restore.Status.Phase == wazuhv1.WazuhRestorePhaseCompleted ||
+		restore.Status.Phase == wazuhv1.WazuhRestorePhaseFailed {
 		return nil
 	}
 
@@ -88,7 +87,7 @@ func (r *WazuhRestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1
 	}
 	if err := r.Get(ctx, clusterKey, cluster); err != nil {
 		if errors.IsNotFound(err) {
-			return r.updateStatus(ctx, restore, constants.WazuhRestorePhaseFailed,
+			return r.updateStatus(ctx, restore, wazuhv1.WazuhRestorePhaseFailed,
 				fmt.Sprintf("WazuhCluster '%s' not found", restore.Spec.ClusterRef.Name))
 		}
 		return fmt.Errorf("failed to get WazuhCluster: %w", err)
@@ -96,7 +95,7 @@ func (r *WazuhRestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1
 
 	// Validate source configuration
 	if err := r.validateSource(ctx, restore); err != nil {
-		return r.updateStatus(ctx, restore, constants.WazuhRestorePhaseFailed,
+		return r.updateStatus(ctx, restore, wazuhv1.WazuhRestorePhaseFailed,
 			fmt.Sprintf("Invalid source configuration: %v", err))
 	}
 
@@ -236,7 +235,7 @@ func (r *WazuhRestoreReconciler) reconcileJob(ctx context.Context, restore *wazu
 				return fmt.Errorf("failed to create Job: %w", err)
 			}
 			log.Info("Created restore Job", "name", job.Name)
-			return r.updateStatus(ctx, restore, constants.WazuhRestorePhaseRestoring, "Restore job created")
+			return r.updateStatus(ctx, restore, wazuhv1.WazuhRestorePhaseRestoring, "Restore job created")
 		}
 		return err
 	}
@@ -254,7 +253,7 @@ func (r *WazuhRestoreReconciler) reconcileJob(ctx context.Context, restore *wazu
 		}
 
 		log.Info("Restore completed successfully", "name", restore.Name, "duration", restore.Status.Duration)
-		return r.updateStatus(ctx, restore, constants.WazuhRestorePhaseCompleted, "Restore completed successfully")
+		return r.updateStatus(ctx, restore, wazuhv1.WazuhRestorePhaseCompleted, "Restore completed successfully")
 	}
 
 	if existing.Status.Failed > 0 {
@@ -267,11 +266,11 @@ func (r *WazuhRestoreReconciler) reconcileJob(ctx context.Context, restore *wazu
 		}
 
 		log.Error(nil, "Restore job failed", "name", restore.Name)
-		return r.updateStatus(ctx, restore, constants.WazuhRestorePhaseFailed, "Restore job failed")
+		return r.updateStatus(ctx, restore, wazuhv1.WazuhRestorePhaseFailed, "Restore job failed")
 	}
 
 	// Job still running
-	return r.updateStatus(ctx, restore, constants.WazuhRestorePhaseRestoring, "Restore in progress")
+	return r.updateStatus(ctx, restore, wazuhv1.WazuhRestorePhaseRestoring, "Restore in progress")
 }
 
 // createOrUpdate creates or updates a resource
@@ -330,7 +329,7 @@ func (r *WazuhRestoreReconciler) handleDeletion(ctx context.Context, restore *wa
 }
 
 // updateStatus updates the WazuhRestore status
-func (r *WazuhRestoreReconciler) updateStatus(ctx context.Context, restore *wazuhv1.WazuhRestore, phase, message string) error {
+func (r *WazuhRestoreReconciler) updateStatus(ctx context.Context, restore *wazuhv1.WazuhRestore, phase wazuhv1.WazuhRestorePhase, message string) error {
 	restore.Status.Phase = phase
 	restore.Status.Message = message
 	restore.Status.ObservedGeneration = restore.Generation
@@ -339,10 +338,10 @@ func (r *WazuhRestoreReconciler) updateStatus(ctx context.Context, restore *wazu
 	conditionStatus := metav1.ConditionFalse
 	reason := "RestoreInProgress"
 	switch phase {
-	case constants.WazuhRestorePhaseCompleted:
+	case wazuhv1.WazuhRestorePhaseCompleted:
 		conditionStatus = metav1.ConditionTrue
 		reason = "RestoreComplete"
-	case constants.WazuhRestorePhaseFailed:
+	case wazuhv1.WazuhRestorePhaseFailed:
 		reason = "RestoreFailed"
 	}
 

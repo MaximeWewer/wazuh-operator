@@ -16,24 +16,6 @@ limitations under the License.
 
 package constants
 
-// Volume expansion phase constants
-// These represent the phases of a PVC volume expansion operation
-const (
-	// VolumeExpansionPhasePending indicates expansion has been requested but not yet started
-	VolumeExpansionPhasePending = "Pending"
-
-	// VolumeExpansionPhaseInProgress indicates expansion is currently in progress
-	// Some PVCs may have been expanded while others are still pending
-	VolumeExpansionPhaseInProgress = "InProgress"
-
-	// VolumeExpansionPhaseCompleted indicates all PVCs have been successfully expanded
-	VolumeExpansionPhaseCompleted = "Completed"
-
-	// VolumeExpansionPhaseFailed indicates the expansion operation failed
-	// Check the Message field for details about the failure
-	VolumeExpansionPhaseFailed = "Failed"
-)
-
 // Component phase constants
 const (
 	// ComponentPhasePending indicates the component is pending creation

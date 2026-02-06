@@ -160,7 +160,7 @@ func (s *SecurityConfigSynchronizer) SyncUsers(ctx context.Context, cluster *waz
 			logger.Error(err, "Failed to build security user", "user", user.Name)
 			result.UsersFailed++
 			result.Errors = append(result.Errors, fmt.Errorf("user %s: %w", user.Name, err))
-			s.updateUserStatus(ctx, &user, "Failed", err.Error())
+			s.updateUserStatus(ctx, &user, wazuhv1.OpenSearchResourcePhaseFailed, err.Error())
 			continue
 		}
 
@@ -169,12 +169,12 @@ func (s *SecurityConfigSynchronizer) SyncUsers(ctx context.Context, cluster *waz
 			logger.Error(err, "Failed to sync user", "user", user.Name)
 			result.UsersFailed++
 			result.Errors = append(result.Errors, fmt.Errorf("user %s: %w", user.Name, err))
-			s.updateUserStatus(ctx, &user, "Failed", err.Error())
+			s.updateUserStatus(ctx, &user, wazuhv1.OpenSearchResourcePhaseFailed, err.Error())
 			continue
 		}
 
 		// Update status to Ready
-		s.updateUserStatus(ctx, &user, "Ready", "User synced successfully")
+		s.updateUserStatus(ctx, &user, wazuhv1.OpenSearchResourcePhaseReady, "User synced successfully")
 		result.UsersUpdated++ // We use updated since create/update is idempotent
 	}
 
@@ -226,7 +226,7 @@ func (s *SecurityConfigSynchronizer) createOrUpdateUser(ctx context.Context, osC
 }
 
 // updateUserStatus updates the status of an OpenSearchUser CRD
-func (s *SecurityConfigSynchronizer) updateUserStatus(ctx context.Context, user *wazuhv1.OpenSearchUser, phase, message string) {
+func (s *SecurityConfigSynchronizer) updateUserStatus(ctx context.Context, user *wazuhv1.OpenSearchUser, phase wazuhv1.OpenSearchResourcePhase, message string) {
 	user.Status.Phase = phase
 	user.Status.Message = message
 	user.Status.LastSyncTime = &metav1.Time{Time: time.Now()}
@@ -263,7 +263,7 @@ func (s *SecurityConfigSynchronizer) SyncRoles(ctx context.Context, cluster *waz
 			logger.Error(err, "Failed to sync role", "role", role.Name)
 			result.RolesFailed++
 			result.Errors = append(result.Errors, fmt.Errorf("role %s: %w", role.Name, err))
-			s.updateRoleStatus(ctx, &role, "Failed", err.Error())
+			s.updateRoleStatus(ctx, &role, wazuhv1.OpenSearchResourcePhaseFailed, err.Error())
 			continue
 		}
 
@@ -272,12 +272,12 @@ func (s *SecurityConfigSynchronizer) SyncRoles(ctx context.Context, cluster *waz
 			resp.Body.Close()
 			result.RolesFailed++
 			errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
-			s.updateRoleStatus(ctx, &role, "Failed", errMsg)
+			s.updateRoleStatus(ctx, &role, wazuhv1.OpenSearchResourcePhaseFailed, errMsg)
 			continue
 		}
 		resp.Body.Close()
 
-		s.updateRoleStatus(ctx, &role, "Ready", "Role synced successfully")
+		s.updateRoleStatus(ctx, &role, wazuhv1.OpenSearchResourcePhaseReady, "Role synced successfully")
 		result.RolesUpdated++
 	}
 
@@ -311,7 +311,7 @@ func (s *SecurityConfigSynchronizer) buildSecurityRole(role *wazuhv1.OpenSearchR
 }
 
 // updateRoleStatus updates the status of an OpenSearchRole CRD
-func (s *SecurityConfigSynchronizer) updateRoleStatus(ctx context.Context, role *wazuhv1.OpenSearchRole, phase, message string) {
+func (s *SecurityConfigSynchronizer) updateRoleStatus(ctx context.Context, role *wazuhv1.OpenSearchRole, phase wazuhv1.OpenSearchResourcePhase, message string) {
 	role.Status.Phase = phase
 	role.Status.Message = message
 	role.Status.LastSyncTime = &metav1.Time{Time: time.Now()}
@@ -352,7 +352,7 @@ func (s *SecurityConfigSynchronizer) SyncRoleMappings(ctx context.Context, clust
 			logger.Error(err, "Failed to sync role mapping", "mapping", mapping.Name)
 			result.MappingsFailed++
 			result.Errors = append(result.Errors, fmt.Errorf("mapping %s: %w", mapping.Name, err))
-			s.updateRoleMappingStatus(ctx, &mapping, "Failed", err.Error())
+			s.updateRoleMappingStatus(ctx, &mapping, wazuhv1.OpenSearchResourcePhaseFailed, err.Error())
 			continue
 		}
 
@@ -361,12 +361,12 @@ func (s *SecurityConfigSynchronizer) SyncRoleMappings(ctx context.Context, clust
 			resp.Body.Close()
 			result.MappingsFailed++
 			errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
-			s.updateRoleMappingStatus(ctx, &mapping, "Failed", errMsg)
+			s.updateRoleMappingStatus(ctx, &mapping, wazuhv1.OpenSearchResourcePhaseFailed, errMsg)
 			continue
 		}
 		resp.Body.Close()
 
-		s.updateRoleMappingStatus(ctx, &mapping, "Ready", "Role mapping synced successfully")
+		s.updateRoleMappingStatus(ctx, &mapping, wazuhv1.OpenSearchResourcePhaseReady, "Role mapping synced successfully")
 		result.MappingsUpdated++
 	}
 
@@ -374,7 +374,7 @@ func (s *SecurityConfigSynchronizer) SyncRoleMappings(ctx context.Context, clust
 }
 
 // updateRoleMappingStatus updates the status of an OpenSearchRoleMapping CRD
-func (s *SecurityConfigSynchronizer) updateRoleMappingStatus(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping, phase, message string) {
+func (s *SecurityConfigSynchronizer) updateRoleMappingStatus(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping, phase wazuhv1.OpenSearchResourcePhase, message string) {
 	mapping.Status.Phase = phase
 	mapping.Status.Message = message
 	mapping.Status.LastSyncTime = &metav1.Time{Time: time.Now()}
@@ -413,7 +413,7 @@ func (s *SecurityConfigSynchronizer) SyncTenants(ctx context.Context, cluster *w
 			logger.Error(err, "Failed to sync tenant", "tenant", tenant.Name)
 			result.TenantsFailed++
 			result.Errors = append(result.Errors, fmt.Errorf("tenant %s: %w", tenant.Name, err))
-			s.updateTenantStatus(ctx, &tenant, "Failed", err.Error())
+			s.updateTenantStatus(ctx, &tenant, wazuhv1.OpenSearchResourcePhaseFailed, err.Error())
 			continue
 		}
 
@@ -422,12 +422,12 @@ func (s *SecurityConfigSynchronizer) SyncTenants(ctx context.Context, cluster *w
 			resp.Body.Close()
 			result.TenantsFailed++
 			errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
-			s.updateTenantStatus(ctx, &tenant, "Failed", errMsg)
+			s.updateTenantStatus(ctx, &tenant, wazuhv1.OpenSearchResourcePhaseFailed, errMsg)
 			continue
 		}
 		resp.Body.Close()
 
-		s.updateTenantStatus(ctx, &tenant, "Ready", "Tenant synced successfully")
+		s.updateTenantStatus(ctx, &tenant, wazuhv1.OpenSearchResourcePhaseReady, "Tenant synced successfully")
 		result.TenantsUpdated++
 	}
 
@@ -435,7 +435,7 @@ func (s *SecurityConfigSynchronizer) SyncTenants(ctx context.Context, cluster *w
 }
 
 // updateTenantStatus updates the status of an OpenSearchTenant CRD
-func (s *SecurityConfigSynchronizer) updateTenantStatus(ctx context.Context, tenant *wazuhv1.OpenSearchTenant, phase, message string) {
+func (s *SecurityConfigSynchronizer) updateTenantStatus(ctx context.Context, tenant *wazuhv1.OpenSearchTenant, phase wazuhv1.OpenSearchResourcePhase, message string) {
 	tenant.Status.Phase = phase
 	tenant.Status.Message = message
 	tenant.Status.LastSyncTime = &metav1.Time{Time: time.Now()}
@@ -474,7 +474,7 @@ func (s *SecurityConfigSynchronizer) SyncActionGroups(ctx context.Context, clust
 			logger.Error(err, "Failed to sync action group", "actionGroup", ag.Name)
 			result.ActionGroupsFailed++
 			result.Errors = append(result.Errors, fmt.Errorf("actiongroup %s: %w", ag.Name, err))
-			s.updateActionGroupStatus(ctx, &ag, "Failed", err.Error())
+			s.updateActionGroupStatus(ctx, &ag, wazuhv1.OpenSearchResourcePhaseFailed, err.Error())
 			continue
 		}
 
@@ -483,12 +483,12 @@ func (s *SecurityConfigSynchronizer) SyncActionGroups(ctx context.Context, clust
 			resp.Body.Close()
 			result.ActionGroupsFailed++
 			errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
-			s.updateActionGroupStatus(ctx, &ag, "Failed", errMsg)
+			s.updateActionGroupStatus(ctx, &ag, wazuhv1.OpenSearchResourcePhaseFailed, errMsg)
 			continue
 		}
 		resp.Body.Close()
 
-		s.updateActionGroupStatus(ctx, &ag, "Ready", "Action group synced successfully")
+		s.updateActionGroupStatus(ctx, &ag, wazuhv1.OpenSearchResourcePhaseReady, "Action group synced successfully")
 		result.ActionGroupsUpdated++
 	}
 
@@ -496,7 +496,7 @@ func (s *SecurityConfigSynchronizer) SyncActionGroups(ctx context.Context, clust
 }
 
 // updateActionGroupStatus updates the status of an OpenSearchActionGroup CRD
-func (s *SecurityConfigSynchronizer) updateActionGroupStatus(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup, phase, message string) {
+func (s *SecurityConfigSynchronizer) updateActionGroupStatus(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup, phase wazuhv1.OpenSearchResourcePhase, message string) {
 	ag.Status.Phase = phase
 	ag.Status.Message = message
 	ag.Status.LastSyncTime = &metav1.Time{Time: time.Now()}

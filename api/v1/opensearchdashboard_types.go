@@ -30,7 +30,7 @@ type OpenSearchDashboardSpec struct {
 
 	// Reference to a WazuhCluster (optional)
 	// +optional
-	ClusterRef string `json:"clusterRef,omitempty"`
+	ClusterRef *WazuhClusterReference `json:"clusterRef,omitempty"`
 
 	// Reference to the OpenSearchIndexer to connect to
 	// +kubebuilder:validation:Required

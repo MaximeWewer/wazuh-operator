@@ -76,7 +76,7 @@ type OpenSearchRestoreSpec struct {
 type OpenSearchRestoreStatus struct {
 	// Phase is the current phase (Pending, Validating, InProgress, Completed, Failed)
 	// +optional
-	Phase string `json:"phase,omitempty"`
+	Phase OpenSearchRestorePhase `json:"phase,omitempty"`
 
 	// Message provides additional information about the current phase
 	// +optional

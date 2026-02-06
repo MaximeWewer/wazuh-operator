@@ -33,7 +33,6 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
-	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // WazuhBackupReconciler reconciles a WazuhBackup object
@@ -96,7 +95,7 @@ func (r *WazuhBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	}
 
 	// Requeue periodically to check job status for one-shot backups
-	if !backup.IsScheduled() && backup.Status.Phase != constants.WazuhBackupPhaseFailed {
+	if !backup.IsScheduled() && backup.Status.Phase != wazuhv1.BackupPhaseFailed {
 		// Check job status periodically until completed
 		if backup.Status.LastBackup == nil || backup.Status.LastBackup.Status == "" {
 			log.Info("One-shot backup in progress, requeuing for status check", "name", backup.Name)

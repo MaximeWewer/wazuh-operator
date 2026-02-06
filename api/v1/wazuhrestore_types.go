@@ -146,7 +146,7 @@ type RestoreComponents struct {
 type WazuhRestoreStatus struct {
 	// Phase is the current phase
 	// +optional
-	Phase string `json:"phase,omitempty"`
+	Phase WazuhRestorePhase `json:"phase,omitempty"`
 
 	// Message provides additional information about the current phase
 	// +optional

@@ -57,7 +57,7 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.Op
 	log := logf.FromContext(ctx)
 
 	if r.ClientFactory == nil {
-		return r.updateStatus(ctx, template, "Pending", "Waiting for OpenSearch client factory")
+		return r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
 	}
 
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, template.Spec.ClusterRef, template.Namespace)
@@ -71,7 +71,7 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.Op
 	// Check if template exists
 	exists, err := templatesAPI.IndexTemplateExists(ctx, template.Name)
 	if err != nil {
-		if updateErr := r.updateStatus(ctx, template, "Error", fmt.Sprintf("Failed to check template existence: %v", err)); updateErr != nil {
+		if updateErr := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check template existence: %v", err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 		return fmt.Errorf("failed to check template existence: %w", err)
@@ -91,14 +91,14 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.Op
 		if exists {
 			action = "update"
 		}
-		if updateErr := r.updateStatus(ctx, template, "Error", fmt.Sprintf("Failed to %s template: %v", action, err)); updateErr != nil {
+		if updateErr := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s template: %v", action, err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 		return fmt.Errorf("failed to %s index template: %w", action, err)
 	}
 
 	// Update status
-	if err := r.updateStatus(ctx, template, "Ready", "Index template reconciled successfully"); err != nil {
+	if err := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseReady, "Index template reconciled successfully"); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
@@ -156,7 +156,7 @@ func (r *TemplateReconciler) buildIndexTemplate(template *wazuhv1.OpenSearchInde
 }
 
 // updateStatus updates the template status
-func (r *TemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1.OpenSearchIndexTemplate, phase, message string) error {
+func (r *TemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1.OpenSearchIndexTemplate, phase wazuhv1.OpenSearchResourcePhase, message string) error {
 	template.Status.Phase = phase
 	template.Status.Message = message
 	now := metav1.Now()

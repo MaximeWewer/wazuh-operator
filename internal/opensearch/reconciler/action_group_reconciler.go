@@ -56,7 +56,7 @@ func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenS
 	log := logf.FromContext(ctx)
 
 	if r.ClientFactory == nil {
-		return r.updateStatus(ctx, ag, "Pending", "Waiting for OpenSearch client factory")
+		return r.updateStatus(ctx, ag, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
 	}
 
 	// Get OpenSearch client dynamically from cluster reference
@@ -71,7 +71,7 @@ func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenS
 	// Check if action group exists
 	existing, err := securityAPI.GetActionGroup(ctx, ag.Name)
 	if err != nil {
-		if updateErr := r.updateStatus(ctx, ag, "Error", fmt.Sprintf("Failed to check action group existence: %v", err)); updateErr != nil {
+		if updateErr := r.updateStatus(ctx, ag, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check action group existence: %v", err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 		return fmt.Errorf("failed to check action group existence: %w", err)
@@ -84,7 +84,7 @@ func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenS
 		// Create new action group
 		log.Info("Creating action group", "name", ag.Name)
 		if err := securityAPI.CreateActionGroup(ctx, ag.Name, actionGroup); err != nil {
-			if updateErr := r.updateStatus(ctx, ag, "Error", fmt.Sprintf("Failed to create action group: %v", err)); updateErr != nil {
+			if updateErr := r.updateStatus(ctx, ag, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create action group: %v", err)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
 			return fmt.Errorf("failed to create action group: %w", err)
@@ -92,7 +92,7 @@ func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenS
 	}
 
 	// Update status
-	if err := r.updateStatus(ctx, ag, "Ready", "Action group reconciled successfully"); err != nil {
+	if err := r.updateStatus(ctx, ag, wazuhv1.OpenSearchResourcePhaseReady, "Action group reconciled successfully"); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
@@ -110,7 +110,7 @@ func (r *ActionGroupReconciler) buildActionGroup(ag *wazuhv1.OpenSearchActionGro
 }
 
 // updateStatus updates the action group status
-func (r *ActionGroupReconciler) updateStatus(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup, phase, message string) error {
+func (r *ActionGroupReconciler) updateStatus(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup, phase wazuhv1.OpenSearchResourcePhase, message string) error {
 	ag.Status.Phase = phase
 	ag.Status.Message = message
 	now := metav1.Now()

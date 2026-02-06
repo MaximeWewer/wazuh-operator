@@ -56,7 +56,7 @@ func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *w
 	log := logf.FromContext(ctx)
 
 	if r.ClientFactory == nil {
-		return r.updateStatus(ctx, template, "Pending", "Waiting for OpenSearch client factory")
+		return r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
 	}
 
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, template.Spec.ClusterRef, template.Namespace)
@@ -70,7 +70,7 @@ func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *w
 	// Check if component template exists
 	exists, err := templatesAPI.ComponentTemplateExists(ctx, template.Name)
 	if err != nil {
-		if updateErr := r.updateStatus(ctx, template, "Error", fmt.Sprintf("Failed to check template existence: %v", err)); updateErr != nil {
+		if updateErr := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check template existence: %v", err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 		return fmt.Errorf("failed to check component template existence: %w", err)
@@ -90,14 +90,14 @@ func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *w
 		if exists {
 			action = "update"
 		}
-		if updateErr := r.updateStatus(ctx, template, "Error", fmt.Sprintf("Failed to %s template: %v", action, err)); updateErr != nil {
+		if updateErr := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s template: %v", action, err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 		return fmt.Errorf("failed to %s component template: %w", action, err)
 	}
 
 	// Update status
-	if err := r.updateStatus(ctx, template, "Ready", "Component template reconciled successfully"); err != nil {
+	if err := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseReady, "Component template reconciled successfully"); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
@@ -124,7 +124,7 @@ func (r *ComponentTemplateReconciler) buildComponentTemplate(template *wazuhv1.O
 }
 
 // updateStatus updates the template status
-func (r *ComponentTemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1.OpenSearchComponentTemplate, phase, message string) error {
+func (r *ComponentTemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1.OpenSearchComponentTemplate, phase wazuhv1.OpenSearchResourcePhase, message string) error {
 	template.Status.Phase = phase
 	template.Status.Message = message
 	now := metav1.Now()

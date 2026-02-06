@@ -985,17 +985,17 @@ func (r *DashboardReconciler) updateDeploymentWithRetry(ctx context.Context, des
 }
 
 // getDeploymentPhase returns the phase of a Deployment
-func getDeploymentPhase(dep *appsv1.Deployment) string {
+func getDeploymentPhase(dep *appsv1.Deployment) wazuhv1.ComponentStatusPhase {
 	if dep.Status.ReadyReplicas == 0 {
-		return "Starting"
+		return wazuhv1.ComponentStatusPhaseStarting
 	}
 	if dep.Status.ReadyReplicas < dep.Status.Replicas {
-		return "Degraded"
+		return wazuhv1.ComponentStatusPhaseDegraded
 	}
 	if dep.Status.UpdatedReplicas < dep.Status.Replicas {
-		return "Updating"
+		return wazuhv1.ComponentStatusPhaseScaling
 	}
-	return "Ready"
+	return wazuhv1.ComponentStatusPhaseReady
 }
 
 // ReconcileStandalone reconciles a standalone OpenSearchDashboard resource

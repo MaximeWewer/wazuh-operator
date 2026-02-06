@@ -804,7 +804,7 @@ type VolumeExpansionStatus struct {
 type ComponentExpansionStatus struct {
 	// Phase indicates the current expansion phase
 	// +kubebuilder:validation:Enum=Pending;InProgress;Completed;Failed
-	Phase string `json:"phase"`
+	Phase ExpansionPhase `json:"phase"`
 
 	// RequestedSize is the new requested storage size
 	// +optional
@@ -1026,7 +1026,7 @@ const (
 type ComponentStatus struct {
 	// Phase of the component
 	// +optional
-	Phase string `json:"phase,omitempty"`
+	Phase ComponentStatusPhase `json:"phase,omitempty"`
 
 	// Ready replicas
 	// +optional

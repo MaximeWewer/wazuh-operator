@@ -30,7 +30,7 @@ type OpenSearchIndexerSpec struct {
 
 	// Reference to a WazuhCluster (optional)
 	// +optional
-	ClusterRef string `json:"clusterRef,omitempty"`
+	ClusterRef *WazuhClusterReference `json:"clusterRef,omitempty"`
 
 	// Number of indexer replicas
 	// +kubebuilder:validation:Minimum=1

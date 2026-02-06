@@ -57,7 +57,7 @@ type OpenSearchSnapshotSpec struct {
 type OpenSearchSnapshotStatus struct {
 	// Phase is the current phase (Pending, InProgress, Completed, Failed, Partial)
 	// +optional
-	Phase string `json:"phase,omitempty"`
+	Phase SnapshotPhase `json:"phase,omitempty"`
 
 	// SnapshotName is the generated snapshot name in OpenSearch
 	// Format: {crd-name}-{yyyyMMdd}-{HHmmss}

@@ -90,7 +90,7 @@ func (r *IndexReconciler) Reconcile(ctx context.Context, index *wazuhv1.OpenSear
 	}
 
 	// Update status
-	if err := r.updateStatus(ctx, index, "Ready", "Index reconciled successfully"); err != nil {
+	if err := r.updateStatus(ctx, index, wazuhv1.OpenSearchResourcePhaseReady, "Index reconciled successfully"); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
@@ -151,7 +151,7 @@ func (r *IndexReconciler) getOpenSearchClient(ctx context.Context, index *wazuhv
 }
 
 // updateStatus updates the index status
-func (r *IndexReconciler) updateStatus(ctx context.Context, index *wazuhv1.OpenSearchIndex, phase, message string) error {
+func (r *IndexReconciler) updateStatus(ctx context.Context, index *wazuhv1.OpenSearchIndex, phase wazuhv1.OpenSearchResourcePhase, message string) error {
 	index.Status.Phase = phase
 	index.Status.Message = message
 	now := metav1.Now()

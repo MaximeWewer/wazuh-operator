@@ -91,7 +91,7 @@ func (r *UserReconciler) Reconcile(ctx context.Context, user *wazuhv1.OpenSearch
 	r.recordEvent(user, corev1.EventTypeNormal, "Synced", "User successfully synchronized to OpenSearch")
 
 	// Update status
-	if err := r.updateStatus(ctx, user, "Ready", "User reconciled successfully"); err != nil {
+	if err := r.updateStatus(ctx, user, wazuhv1.OpenSearchResourcePhaseReady, "User reconciled successfully"); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
@@ -163,7 +163,7 @@ func (r *UserReconciler) getOpenSearchClient(ctx context.Context, user *wazuhv1.
 }
 
 // updateStatus updates the user status
-func (r *UserReconciler) updateStatus(ctx context.Context, user *wazuhv1.OpenSearchUser, phase, message string) error {
+func (r *UserReconciler) updateStatus(ctx context.Context, user *wazuhv1.OpenSearchUser, phase wazuhv1.OpenSearchResourcePhase, message string) error {
 	user.Status.Phase = phase
 	user.Status.Message = message
 	now := metav1.Now()

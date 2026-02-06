@@ -151,7 +151,7 @@ type ISMTemplateConfig struct {
 type OpenSearchISMPolicyStatus struct {
 	// Phase represents the current phase of the ISM policy
 	// +optional
-	Phase string `json:"phase,omitempty"`
+	Phase OpenSearchResourcePhase `json:"phase,omitempty"`
 
 	// Conditions represent the latest available observations of the ISM policy's state
 	// +listType=map

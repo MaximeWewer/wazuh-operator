@@ -163,7 +163,7 @@ type BackupImage struct {
 type WazuhBackupStatus struct {
 	// Phase is the current phase (Pending, Active, Suspended, Failed)
 	// +optional
-	Phase string `json:"phase,omitempty"`
+	Phase BackupPhase `json:"phase,omitempty"`
 
 	// Message provides additional information about the current phase
 	// +optional

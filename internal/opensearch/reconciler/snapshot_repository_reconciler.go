@@ -79,7 +79,7 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 	}
 
 	if r.ClientFactory == nil {
-		return r.updateStatus(ctx, repo, constants.RepositoryPhasePending, "Waiting for OpenSearch client factory", false)
+		return r.updateStatus(ctx, repo, wazuhv1.RepositoryPhasePending, "Waiting for OpenSearch client factory", false)
 	}
 
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, repo.Spec.ClusterRef, repo.Namespace)
@@ -93,7 +93,7 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 	// Check if repository exists
 	existingRepo, err := snapshotsAPI.GetRepository(ctx, repo.Name)
 	if err != nil {
-		if updateErr := r.updateStatus(ctx, repo, constants.RepositoryPhaseFailed, fmt.Sprintf("Failed to check repository: %v", err), false); updateErr != nil {
+		if updateErr := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseFailed, fmt.Sprintf("Failed to check repository: %v", err), false); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 		return fmt.Errorf("failed to check repository existence: %w", err)
@@ -102,7 +102,7 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 	// Build repository settings
 	repoSettings, err := r.buildRepositorySettings(ctx, repo)
 	if err != nil {
-		if updateErr := r.updateStatus(ctx, repo, constants.RepositoryPhaseFailed, fmt.Sprintf("Failed to build settings: %v", err), false); updateErr != nil {
+		if updateErr := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseFailed, fmt.Sprintf("Failed to build settings: %v", err), false); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
 		return fmt.Errorf("failed to build repository settings: %w", err)
@@ -116,12 +116,12 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 	if existingRepo == nil {
 		// Create new repository
 		log.Info("Creating snapshot repository", "name", repo.Name, "type", repo.Spec.Type)
-		if err := r.updateStatus(ctx, repo, constants.RepositoryPhaseCreating, "Creating repository", false); err != nil {
+		if err := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseCreating, "Creating repository", false); err != nil {
 			log.Error(err, "Failed to update status")
 		}
 
 		if err := snapshotsAPI.CreateRepository(ctx, repo.Name, osRepo); err != nil {
-			if updateErr := r.updateStatus(ctx, repo, constants.RepositoryPhaseFailed, fmt.Sprintf("Failed to create repository: %v", err), false); updateErr != nil {
+			if updateErr := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseFailed, fmt.Sprintf("Failed to create repository: %v", err), false); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
 			return fmt.Errorf("failed to create repository: %w", err)
@@ -130,7 +130,7 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 		// Update existing repository
 		log.Info("Updating snapshot repository", "name", repo.Name)
 		if err := snapshotsAPI.UpdateRepository(ctx, repo.Name, osRepo); err != nil {
-			if updateErr := r.updateStatus(ctx, repo, constants.RepositoryPhaseFailed, fmt.Sprintf("Failed to update repository: %v", err), false); updateErr != nil {
+			if updateErr := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseFailed, fmt.Sprintf("Failed to update repository: %v", err), false); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
 			return fmt.Errorf("failed to update repository: %w", err)
@@ -140,13 +140,13 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 	// Verify repository if enabled
 	verified := false
 	if repo.Spec.Verify {
-		if err := r.updateStatus(ctx, repo, constants.RepositoryPhaseVerifying, "Verifying repository", false); err != nil {
+		if err := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseVerifying, "Verifying repository", false); err != nil {
 			log.Error(err, "Failed to update status")
 		}
 
 		_, err := snapshotsAPI.VerifyRepository(ctx, repo.Name)
 		if err != nil {
-			if updateErr := r.updateStatus(ctx, repo, constants.RepositoryPhaseFailed, fmt.Sprintf("Repository verification failed: %v", err), false); updateErr != nil {
+			if updateErr := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseFailed, fmt.Sprintf("Repository verification failed: %v", err), false); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
 			return fmt.Errorf("repository verification failed: %w", err)
@@ -162,7 +162,7 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 	}
 
 	// Update status to Ready
-	repo.Status.Phase = constants.RepositoryPhaseReady
+	repo.Status.Phase = wazuhv1.RepositoryPhaseReady
 	repo.Status.Message = "Repository is ready"
 	repo.Status.Verified = verified
 	repo.Status.SnapshotCount = snapshotCount
@@ -340,7 +340,7 @@ func (r *SnapshotRepositoryReconciler) loadCredentials(ctx context.Context, name
 // updateStatus updates the repository status
 //
 //nolint:unparam // verified param kept for when repository verification is implemented
-func (r *SnapshotRepositoryReconciler) updateStatus(ctx context.Context, repo *wazuhv1.OpenSearchSnapshotRepository, phase, message string, verified bool) error {
+func (r *SnapshotRepositoryReconciler) updateStatus(ctx context.Context, repo *wazuhv1.OpenSearchSnapshotRepository, phase wazuhv1.RepositoryPhase, message string, verified bool) error {
 	repo.Status.Phase = phase
 	repo.Status.Message = message
 	repo.Status.Verified = verified
