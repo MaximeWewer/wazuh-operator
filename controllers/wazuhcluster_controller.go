@@ -749,6 +749,13 @@ func (r *WazuhClusterReconciler) checkAndUpdatePendingRollouts(ctx context.Conte
 		status := waiter.CheckRolloutStatus(ctx, &pendingRollout)
 
 		if status.Error != nil {
+			if errors.IsNotFound(status.Error) {
+				log.V(1).Info("Rollout workload not found yet", "component", rollout.Component, "name", rollout.WorkloadName)
+				// Keep as pending; likely being recreated
+				updatedRollouts = append(updatedRollouts, rollout)
+				hasPending = true
+				continue
+			}
 			log.Error(status.Error, "Error checking rollout status", "component", rollout.Component)
 			// Keep as pending
 			updatedRollouts = append(updatedRollouts, rollout)
