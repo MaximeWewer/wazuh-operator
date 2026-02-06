@@ -285,7 +285,10 @@ func (r *AuthConfigReconciler) reconcileDashboardConfig(
 	for key, value := range secrets {
 		builder.WithSecret(key, value)
 	}
-	authSection := builder.BuildAuthSection()
+	authSection, err := builder.BuildAuthSection()
+	if err != nil {
+		return fmt.Errorf("failed to build auth section: %w", err)
+	}
 
 	// Create ConfigMap for dashboard auth config
 	configMapName := constants.DashboardAuthConfigName(clusterName)
@@ -307,7 +310,7 @@ func (r *AuthConfigReconciler) reconcileDashboardConfig(
 
 	// Check if ConfigMap exists
 	existing := &corev1.ConfigMap{}
-	err := r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: namespace}, existing)
+	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: namespace}, existing)
 	if err != nil {
 		if client.IgnoreNotFound(err) != nil {
 			return err

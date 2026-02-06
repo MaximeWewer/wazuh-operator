@@ -247,7 +247,11 @@ func (r *IndexerReconciler) reconcileSecrets(ctx context.Context, cluster *wazuh
 	if err != nil && errors.IsNotFound(err) {
 		// If no external credentials provided, generate a random password
 		if adminPassword == "" {
-			adminPassword = utils.GenerateRandomPassword(24)
+			var err error
+			adminPassword, err = utils.GenerateRandomPassword(24)
+			if err != nil {
+				return fmt.Errorf("failed to generate admin password: %w", err)
+			}
 		}
 		credsBuilder := secrets.NewIndexerCredentialsSecretBuilder(cluster.Name, cluster.Namespace)
 		credsBuilder.WithAdminCredentials(adminUsername, adminPassword)

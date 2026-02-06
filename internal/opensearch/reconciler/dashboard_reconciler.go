@@ -220,7 +220,10 @@ func (r *DashboardReconciler) reconcileConfigMap(ctx context.Context, cluster *w
 		}
 	}
 
-	configMap := configBuilder.Build()
+	configMap, err := configBuilder.Build()
+	if err != nil {
+		return fmt.Errorf("failed to build dashboard configmap: %w", err)
+	}
 
 	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for dashboard configmap: %w", err)
@@ -1033,7 +1036,10 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 			configBuilder.WithResolvedCredentials(resolvedCredentials)
 		}
 	}
-	configMap := configBuilder.Build()
+	configMap, err := configBuilder.Build()
+	if err != nil {
+		return fmt.Errorf("failed to build dashboard configmap: %w", err)
+	}
 
 	if err := controllerutil.SetControllerReference(dashboard, configMap, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for configmap: %w", err)

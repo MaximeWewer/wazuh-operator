@@ -19,16 +19,20 @@ package utils //nolint:revive // utils is a common package name
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 )
 
-// GenerateRandomPassword generates a secure random password of the specified length
-func GenerateRandomPassword(length int) string {
+// GenerateRandomPassword generates a secure random password of the specified length.
+// Returns an error if the length is invalid or if cryptographic random generation fails.
+func GenerateRandomPassword(length int) (string, error) {
+	if length <= 0 {
+		return "", fmt.Errorf("password length must be positive, got %d", length)
+	}
 	bytes := make([]byte, length)
 	if _, err := rand.Read(bytes); err != nil {
-		// Fallback to a basic password if random fails
-		return "admin"
+		return "", fmt.Errorf("failed to generate random password: %w", err)
 	}
-	return base64.URLEncoding.EncodeToString(bytes)[:length]
+	return base64.URLEncoding.EncodeToString(bytes)[:length], nil
 }
 
 // GenerateRandomBytes generates cryptographically secure random bytes
@@ -41,17 +45,21 @@ func GenerateRandomBytes(length int) ([]byte, error) {
 	return bytes, nil
 }
 
-// GenerateRandomString generates a random alphanumeric string of the specified length
-func GenerateRandomString(length int) string {
+// GenerateRandomString generates a random alphanumeric string of the specified length.
+// Returns an error if the length is invalid or if cryptographic random generation fails.
+func GenerateRandomString(length int) (string, error) {
+	if length <= 0 {
+		return "", fmt.Errorf("string length must be positive, got %d", length)
+	}
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	bytes := make([]byte, length)
 	if _, err := rand.Read(bytes); err != nil {
-		return ""
+		return "", fmt.Errorf("failed to generate random string: %w", err)
 	}
 	for i := range bytes {
 		bytes[i] = charset[int(bytes[i])%len(charset)]
 	}
-	return string(bytes)
+	return string(bytes), nil
 }
 
 // GenerateWazuhAPIPassword generates a secure random password for Wazuh API
@@ -61,8 +69,9 @@ func GenerateRandomString(length int) string {
 // - At least one uppercase letter (A-Z)
 // - At least one digit (0-9)
 // - At least one special character
-// Length must be at least 8, defaults to 20 if less
-func GenerateWazuhAPIPassword(length int) string {
+// Length must be at least 8, defaults to 20 if less.
+// Returns an error if cryptographic random generation fails.
+func GenerateWazuhAPIPassword(length int) (string, error) {
 	if length < 8 {
 		length = 20
 	}
@@ -73,16 +82,16 @@ func GenerateWazuhAPIPassword(length int) string {
 	const specialChars = ".*+?-@#$%"
 	const allChars = lowercase + uppercase + digits + specialChars
 
-	// Generate random bytes for character selection
-	randomBytes := make([]byte, length+10) // Extra bytes for position selection
+	// Generate random bytes for character selection and shuffle
+	// Need: length bytes for characters + length bytes for Fisher-Yates shuffle
+	randomBytes := make([]byte, length*2)
 	if _, err := rand.Read(randomBytes); err != nil {
-		return "WazuhAdmin.2025!" // Fallback that meets all requirements
+		return "", fmt.Errorf("failed to generate random password: %w", err)
 	}
 
 	password := make([]byte, length)
 
 	// First, ensure at least one character from each required category
-	// Place them at random positions in the first 4 slots
 	password[0] = lowercase[int(randomBytes[0])%len(lowercase)]
 	password[1] = uppercase[int(randomBytes[1])%len(uppercase)]
 	password[2] = digits[int(randomBytes[2])%len(digits)]
@@ -93,12 +102,11 @@ func GenerateWazuhAPIPassword(length int) string {
 		password[i] = allChars[int(randomBytes[i])%len(allChars)]
 	}
 
-	// Shuffle the password to randomize positions of required characters
-	// Fisher-Yates shuffle
+	// Fisher-Yates shuffle using dedicated random bytes (no reuse, no bias)
 	for i := length - 1; i > 0; i-- {
-		j := int(randomBytes[length+i%10]) % (i + 1)
+		j := int(randomBytes[length+i]) % (i + 1)
 		password[i], password[j] = password[j], password[i]
 	}
 
-	return string(password)
+	return string(password), nil
 }

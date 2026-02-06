@@ -34,9 +34,32 @@ func TestGenerateRandomPassword(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			password := GenerateRandomPassword(tt.length)
+			password, err := GenerateRandomPassword(tt.length)
+			if err != nil {
+				t.Fatalf("GenerateRandomPassword(%d) returned unexpected error: %v", tt.length, err)
+			}
 			if len(password) != tt.length {
 				t.Errorf("GenerateRandomPassword(%d) = %q, want length %d, got %d", tt.length, password, tt.length, len(password))
+			}
+		})
+	}
+}
+
+func TestGenerateRandomPassword_InvalidLength(t *testing.T) {
+	tests := []struct {
+		name   string
+		length int
+	}{
+		{"zero length", 0},
+		{"negative length", -1},
+		{"very negative length", -100},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := GenerateRandomPassword(tt.length)
+			if err == nil {
+				t.Errorf("GenerateRandomPassword(%d) should return an error for invalid length", tt.length)
 			}
 		})
 	}
@@ -46,7 +69,10 @@ func TestGenerateRandomPassword_Uniqueness(t *testing.T) {
 	// Generate multiple passwords and ensure they're different
 	passwords := make(map[string]bool)
 	for i := 0; i < 100; i++ {
-		pwd := GenerateRandomPassword(16)
+		pwd, err := GenerateRandomPassword(16)
+		if err != nil {
+			t.Fatalf("GenerateRandomPassword(16) returned unexpected error: %v", err)
+		}
 		if passwords[pwd] {
 			t.Errorf("GenerateRandomPassword generated duplicate password: %s", pwd)
 		}
@@ -73,7 +99,10 @@ func TestGenerateWazuhAPIPassword(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			password := GenerateWazuhAPIPassword(tt.length)
+			password, err := GenerateWazuhAPIPassword(tt.length)
+			if err != nil {
+				t.Fatalf("GenerateWazuhAPIPassword(%d) returned unexpected error: %v", tt.length, err)
+			}
 
 			// Check length
 			if len(password) != tt.expectedLength {
@@ -136,7 +165,10 @@ func TestGenerateWazuhAPIPassword_Uniqueness(t *testing.T) {
 	// Generate multiple passwords and ensure they're different
 	passwords := make(map[string]bool)
 	for i := 0; i < 100; i++ {
-		pwd := GenerateWazuhAPIPassword(20)
+		pwd, err := GenerateWazuhAPIPassword(20)
+		if err != nil {
+			t.Fatalf("GenerateWazuhAPIPassword(20) returned unexpected error: %v", err)
+		}
 		if passwords[pwd] {
 			t.Errorf("GenerateWazuhAPIPassword generated duplicate password: %s", pwd)
 		}
@@ -150,7 +182,10 @@ func TestGenerateWazuhAPIPassword_SpecialCharDistribution(t *testing.T) {
 	// Generate many passwords and check special char distribution
 	charCounts := make(map[rune]int)
 	for i := 0; i < 1000; i++ {
-		pwd := GenerateWazuhAPIPassword(20)
+		pwd, err := GenerateWazuhAPIPassword(20)
+		if err != nil {
+			t.Fatalf("GenerateWazuhAPIPassword(20) returned unexpected error: %v", err)
+		}
 		for _, c := range pwd {
 			if strings.ContainsRune(specialChars, c) {
 				charCounts[c]++
@@ -203,7 +238,10 @@ func TestGenerateRandomString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := GenerateRandomString(tt.length)
+			result, err := GenerateRandomString(tt.length)
+			if err != nil {
+				t.Fatalf("GenerateRandomString(%d) returned unexpected error: %v", tt.length, err)
+			}
 			if len(result) != tt.length {
 				t.Errorf("GenerateRandomString(%d) = %q, want length %d, got %d", tt.length, result, tt.length, len(result))
 			}
@@ -213,6 +251,25 @@ func TestGenerateRandomString(t *testing.T) {
 				if !strings.ContainsRune(charset, c) {
 					t.Errorf("GenerateRandomString(%d) = %q contains invalid character %q", tt.length, result, string(c))
 				}
+			}
+		})
+	}
+}
+
+func TestGenerateRandomString_InvalidLength(t *testing.T) {
+	tests := []struct {
+		name   string
+		length int
+	}{
+		{"zero length", 0},
+		{"negative length", -1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := GenerateRandomString(tt.length)
+			if err == nil {
+				t.Errorf("GenerateRandomString(%d) should return an error for invalid length", tt.length)
 			}
 		})
 	}

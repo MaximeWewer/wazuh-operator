@@ -1876,7 +1876,10 @@ func (r *ClusterReconciler) ensureAPICredentialsSecret(ctx context.Context, clus
 	if errors.IsNotFound(err) {
 		// Create API credentials secret with generated password
 		// Password is generated with special characters required by Wazuh API
-		generatedPassword := utils.GenerateWazuhAPIPassword(20)
+		generatedPassword, err := utils.GenerateWazuhAPIPassword(20)
+		if err != nil {
+			return fmt.Errorf("failed to generate Wazuh API password: %w", err)
+		}
 		apiCredentialsBuilder := secrets.NewAPICredentialsSecretBuilder(cluster.Name, cluster.Namespace)
 		apiCredentialsBuilder.WithCredentials(constants.DefaultWazuhAPIUsername, generatedPassword)
 		if cluster.Spec.Version != "" {

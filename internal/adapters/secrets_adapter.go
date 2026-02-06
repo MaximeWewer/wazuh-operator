@@ -18,8 +18,6 @@ package adapters
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -29,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -141,7 +140,7 @@ func (a *SecretsAdapter) EnsureCredentialsSecret(ctx context.Context, namespace,
 	}
 
 	// Generate password
-	password, err := GenerateRandomPassword(passwordLength)
+	password, err := utils.GenerateRandomPassword(passwordLength)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate password: %w", err)
 	}
@@ -181,7 +180,7 @@ func (a *SecretsAdapter) EnsureClusterKeySecret(ctx context.Context, namespace, 
 	}
 
 	// Generate cluster key
-	clusterKey, err := GenerateRandomPassword(32)
+	clusterKey, err := utils.GenerateRandomPassword(32)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate cluster key: %w", err)
 	}
@@ -241,22 +240,4 @@ func (a *SecretsAdapter) NeedsCertificateRenewal(ctx context.Context, namespace,
 
 	renewalTime := expiry.Add(-renewBefore)
 	return time.Now().After(renewalTime), nil
-}
-
-// GenerateRandomPassword generates a random password
-func GenerateRandomPassword(length int) (string, error) {
-	bytes := make([]byte, length)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return base64.URLEncoding.EncodeToString(bytes)[:length], nil
-}
-
-// GenerateRandomBytes generates random bytes
-func GenerateRandomBytes(n int) ([]byte, error) {
-	bytes := make([]byte, n)
-	if _, err := rand.Read(bytes); err != nil {
-		return nil, err
-	}
-	return bytes, nil
 }

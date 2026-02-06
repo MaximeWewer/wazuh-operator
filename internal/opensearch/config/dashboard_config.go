@@ -26,7 +26,7 @@ import (
 )
 
 // ============================================================================
-// Dashboard Config Builder (T013)
+// Dashboard Config Builder
 // ============================================================================
 
 // DashboardAuthConfigBuilder builds opensearch_dashboards.yml authentication settings
@@ -74,7 +74,7 @@ func (b *DashboardAuthConfigBuilder) WithOpenSearchURL(url string) *DashboardAut
 }
 
 // BuildAuthSection generates the authentication section of opensearch_dashboards.yml
-func (b *DashboardAuthConfigBuilder) BuildAuthSection() string {
+func (b *DashboardAuthConfigBuilder) BuildAuthSection() (string, error) {
 	var sb strings.Builder
 
 	sb.WriteString("# Security Plugin Configuration\n")
@@ -87,7 +87,11 @@ func (b *DashboardAuthConfigBuilder) BuildAuthSection() string {
 
 	// Build auth-specific configuration
 	if b.authConfig.OIDC != nil && b.authConfig.OIDC.Enabled {
-		sb.WriteString(b.buildOIDCDashboardConfig())
+		oidcConfig, err := b.buildOIDCDashboardConfig()
+		if err != nil {
+			return "", fmt.Errorf("failed to build OIDC dashboard config: %w", err)
+		}
+		sb.WriteString(oidcConfig)
 	}
 
 	if b.authConfig.SAML != nil && b.authConfig.SAML.Enabled {
@@ -99,7 +103,7 @@ func (b *DashboardAuthConfigBuilder) BuildAuthSection() string {
 		sb.WriteString(b.buildMultiAuthConfig())
 	}
 
-	return sb.String()
+	return sb.String(), nil
 }
 
 // determineAuthType returns the primary auth type for dashboard
@@ -147,11 +151,11 @@ func (b *DashboardAuthConfigBuilder) isMultiAuthEnabled() bool {
 }
 
 // ============================================================================
-// OIDC Dashboard Config (T014)
+// OIDC Dashboard Config
 // ============================================================================
 
 // buildOIDCDashboardConfig generates OIDC-specific dashboard configuration
-func (b *DashboardAuthConfigBuilder) buildOIDCDashboardConfig() string {
+func (b *DashboardAuthConfigBuilder) buildOIDCDashboardConfig() (string, error) {
 	var sb strings.Builder
 	spec := b.authConfig.OIDC
 
@@ -202,7 +206,11 @@ func (b *DashboardAuthConfigBuilder) buildOIDCDashboardConfig() string {
 			sb.WriteString(fmt.Sprintf("opensearch_security.openid.cookie.password: \"%s\"\n", secret))
 		} else {
 			// Generate a random cookie password
-			sb.WriteString(fmt.Sprintf("opensearch_security.openid.cookie.password: \"%s\"\n", utils.GenerateRandomPassword(32)))
+			cookiePassword, err := utils.GenerateRandomPassword(32)
+			if err != nil {
+				return "", fmt.Errorf("failed to generate OIDC cookie password: %w", err)
+			}
+			sb.WriteString(fmt.Sprintf("opensearch_security.openid.cookie.password: \"%s\"\n", cookiePassword))
 		}
 
 		// Additional cookies
@@ -212,11 +220,11 @@ func (b *DashboardAuthConfigBuilder) buildOIDCDashboardConfig() string {
 		}
 	}
 
-	return sb.String()
+	return sb.String(), nil
 }
 
 // ============================================================================
-// SAML Dashboard Config (T015)
+// SAML Dashboard Config
 // ============================================================================
 
 // buildSAMLDashboardConfig generates SAML-specific dashboard configuration
@@ -263,7 +271,7 @@ func (b *DashboardAuthConfigBuilder) buildSAMLDashboardConfig() string {
 }
 
 // ============================================================================
-// Multi-Auth Dashboard Config (T016)
+// Multi-Auth Dashboard Config
 // ============================================================================
 
 // buildMultiAuthConfig generates multi-authentication configuration
