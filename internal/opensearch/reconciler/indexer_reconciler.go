@@ -33,6 +33,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -1065,6 +1066,24 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 				fmt.Sprintf("Indexer spec changed, updating StatefulSet %s", sts.Name))
 		}
 	}
+	if !apiequality.Semantic.DeepEqual(found.Spec.Template.Spec.Tolerations, sts.Spec.Template.Spec.Tolerations) {
+		log.Info("Indexer tolerations changed", "name", sts.Name)
+		needsUpdate = true
+		if updateReason == "" {
+			updateReason = "tolerations-change"
+		} else {
+			updateReason += ",tolerations-change"
+		}
+	}
+	if !apiequality.Semantic.DeepEqual(found.Spec.Template.Spec.Affinity, sts.Spec.Template.Spec.Affinity) {
+		log.Info("Indexer affinity changed", "name", sts.Name)
+		needsUpdate = true
+		if updateReason == "" {
+			updateReason = "affinity-change"
+		} else {
+			updateReason += ",affinity-change"
+		}
+	}
 
 	// Check cert hash (certificate renewal)
 	existingCertHash := ""
@@ -1641,6 +1660,12 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 	if indexer.Spec.Resources != nil {
 		stsBuilder.WithResources(indexer.Spec.Resources)
 	}
+	if indexer.Spec.Tolerations != nil {
+		stsBuilder.WithTolerations(indexer.Spec.Tolerations)
+	}
+	if indexer.Spec.Affinity != nil {
+		stsBuilder.WithAffinity(indexer.Spec.Affinity)
+	}
 	if len(indexer.Spec.Annotations) > 0 {
 		stsBuilder.WithAnnotations(indexer.Spec.Annotations)
 	}
@@ -1670,6 +1695,14 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 		}
 		if utils.HashMap(sts.Spec.Template.Annotations) != utils.HashMap(foundSts.Spec.Template.Annotations) {
 			log.Info("Updating standalone Indexer StatefulSet due to pod annotation change", "name", sts.Name)
+			needsUpdate = true
+		}
+		if !apiequality.Semantic.DeepEqual(sts.Spec.Template.Spec.Tolerations, foundSts.Spec.Template.Spec.Tolerations) {
+			log.Info("Updating standalone Indexer StatefulSet due to tolerations change", "name", sts.Name)
+			needsUpdate = true
+		}
+		if !apiequality.Semantic.DeepEqual(sts.Spec.Template.Spec.Affinity, foundSts.Spec.Template.Spec.Affinity) {
+			log.Info("Updating standalone Indexer StatefulSet due to affinity change", "name", sts.Name)
 			needsUpdate = true
 		}
 		if needsUpdate {

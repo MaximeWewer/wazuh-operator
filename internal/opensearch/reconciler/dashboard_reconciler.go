@@ -27,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -875,6 +876,24 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 				fmt.Sprintf("Dashboard spec changed (version=%s, replicas=%d)", version, replicas))
 		}
 	}
+	if !apiequality.Semantic.DeepEqual(found.Spec.Template.Spec.Tolerations, deployment.Spec.Template.Spec.Tolerations) {
+		log.Info("Dashboard tolerations changed", "name", deployment.Name)
+		needsUpdate = true
+		if updateReason == "" {
+			updateReason = "tolerations-change"
+		} else {
+			updateReason += ",tolerations-change"
+		}
+	}
+	if !apiequality.Semantic.DeepEqual(found.Spec.Template.Spec.Affinity, deployment.Spec.Template.Spec.Affinity) {
+		log.Info("Dashboard affinity changed", "name", deployment.Name)
+		needsUpdate = true
+		if updateReason == "" {
+			updateReason = "affinity-change"
+		} else {
+			updateReason += ",affinity-change"
+		}
+	}
 
 	// Check cert hash (requires pod restart)
 	if certHash != "" && certHash != existingCertHash {
@@ -1136,6 +1155,12 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 	if dashboard.Spec.Resources != nil {
 		deployBuilder.WithResources(dashboard.Spec.Resources)
 	}
+	if dashboard.Spec.Tolerations != nil {
+		deployBuilder.WithTolerations(dashboard.Spec.Tolerations)
+	}
+	if dashboard.Spec.Affinity != nil {
+		deployBuilder.WithAffinity(dashboard.Spec.Affinity)
+	}
 	if len(dashboard.Spec.Annotations) > 0 {
 		deployBuilder.WithAnnotations(dashboard.Spec.Annotations)
 	}
@@ -1165,6 +1190,14 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 		}
 		if utils.HashMap(deploy.Spec.Template.Annotations) != utils.HashMap(foundDeploy.Spec.Template.Annotations) {
 			log.Info("Updating standalone Dashboard Deployment due to pod annotation change", "name", deploy.Name)
+			needsUpdate = true
+		}
+		if !apiequality.Semantic.DeepEqual(deploy.Spec.Template.Spec.Tolerations, foundDeploy.Spec.Template.Spec.Tolerations) {
+			log.Info("Updating standalone Dashboard Deployment due to tolerations change", "name", deploy.Name)
+			needsUpdate = true
+		}
+		if !apiequality.Semantic.DeepEqual(deploy.Spec.Template.Spec.Affinity, foundDeploy.Spec.Template.Spec.Affinity) {
+			log.Info("Updating standalone Dashboard Deployment due to affinity change", "name", deploy.Name)
 			needsUpdate = true
 		}
 		if needsUpdate {

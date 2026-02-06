@@ -29,6 +29,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -636,6 +637,24 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 			"oldHash", utils.ShortHash(existingSpecHash),
 			"newHash", utils.ShortHash(specHash))
 	}
+	if !apiequality.Semantic.DeepEqual(found.Spec.Template.Spec.Tolerations, sts.Spec.Template.Spec.Tolerations) {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+tolerations-change"
+		} else {
+			updateReason = "tolerations-change"
+		}
+		log.Info("Master StatefulSet needs update due to tolerations change", "name", sts.Name)
+	}
+	if !apiequality.Semantic.DeepEqual(found.Spec.Template.Spec.Affinity, sts.Spec.Template.Spec.Affinity) {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+affinity-change"
+		} else {
+			updateReason = "affinity-change"
+		}
+		log.Info("Master StatefulSet needs update due to affinity change", "name", sts.Name)
+	}
 	if ruleHash != existingRuleHash {
 		needsUpdate = true
 		if updateReason != "" {
@@ -1035,6 +1054,24 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingSpecHash),
 			"newHash", utils.ShortHash(specHash))
+	}
+	if !apiequality.Semantic.DeepEqual(found.Spec.Template.Spec.Tolerations, sts.Spec.Template.Spec.Tolerations) {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+tolerations-change"
+		} else {
+			updateReason = "tolerations-change"
+		}
+		log.Info("Worker StatefulSet needs update due to tolerations change", "name", sts.Name)
+	}
+	if !apiequality.Semantic.DeepEqual(found.Spec.Template.Spec.Affinity, sts.Spec.Template.Spec.Affinity) {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+affinity-change"
+		} else {
+			updateReason = "affinity-change"
+		}
+		log.Info("Worker StatefulSet needs update due to affinity change", "name", sts.Name)
 	}
 	if ruleHash != existingRuleHash {
 		needsUpdate = true
