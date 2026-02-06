@@ -4193,7 +4193,9 @@ spec:
                         description: Annotations for the service
                         type: object
                       loadBalancerIP:
-                        description: LoadBalancer IP for LoadBalancer services
+                        description: |-
+                          Deprecated: LoadBalancerIP is deprecated in Kubernetes 1.24+.
+                          Use service annotations for your cloud provider instead.
                         type: string
                       nodePort:
                         description: NodePort for NodePort services
@@ -4248,6 +4250,13 @@ spec:
                     default: 50Gi
                     description: Storage size for master node
                     type: string
+                  terminationGracePeriodSeconds:
+                    description: |-
+                      Termination grace period in seconds for pods
+                      Wazuh manager needs time to flush and stop services before shutdown
+                    format: int64
+                    minimum: 0
+                    type: integer
                   tolerations:
                     description: Tolerations
                     items:
@@ -8365,7 +8374,9 @@ spec:
                         description: Annotations for the service
                         type: object
                       loadBalancerIP:
-                        description: LoadBalancer IP for LoadBalancer services
+                        description: |-
+                          Deprecated: LoadBalancerIP is deprecated in Kubernetes 1.24+.
+                          Use service annotations for your cloud provider instead.
                         type: string
                       nodePort:
                         description: NodePort for NodePort services
@@ -8420,6 +8431,13 @@ spec:
                     default: 50Gi
                     description: Storage size for worker nodes
                     type: string
+                  terminationGracePeriodSeconds:
+                    description: |-
+                      Termination grace period in seconds for pods
+                      Wazuh manager needs time to flush and stop services before shutdown
+                    format: int64
+                    minimum: 0
+                    type: integer
                   tolerations:
                     description: Tolerations
                     items:

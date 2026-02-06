@@ -114,6 +114,8 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&leaderElectionID, "leader-election-id", "wazuh-operator-leader",
 		"The name of the resource that leader election will use for holding the leader lock.")
+	flag.Bool("non-blocking-rollouts", true,
+		"Enable non-blocking rollouts for parallel certificate renewals.")
 	flag.Parse()
 
 	// Setup logging from environment variables (LOG_FORMAT, LOG_LEVEL)
