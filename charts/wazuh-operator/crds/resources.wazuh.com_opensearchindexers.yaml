@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.17.0
+    controller-gen.kubebuilder.io/version: v0.19.0
   name: opensearchindexers.resources.wazuh.com
 spec:
   group: resources.wazuh.com
@@ -984,7 +984,18 @@ spec:
                 type: string
               clusterRef:
                 description: Reference to a WazuhCluster (optional)
-                type: string
+                properties:
+                  name:
+                    description: Name of the WazuhCluster resource
+                    type: string
+                  namespace:
+                    description: |-
+                      Namespace of the WazuhCluster resource
+                      If empty, assumes the same namespace as the referencing resource
+                    type: string
+                required:
+                - name
+                type: object
               clusterSettings:
                 description: |-
                   ClusterSettings defines cluster-level settings to apply via the Cluster Settings API
@@ -3792,7 +3803,9 @@ spec:
                     description: Annotations for the service
                     type: object
                   loadBalancerIP:
-                    description: LoadBalancer IP for LoadBalancer services
+                    description: |-
+                      Deprecated: LoadBalancerIP is deprecated in Kubernetes 1.24+.
+                      Use service annotations for your cloud provider instead.
                     type: string
                   nodePort:
                     description: NodePort for NodePort services
@@ -4305,6 +4318,9 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               dataNodesCount:
                 description: Data nodes count
                 format: int32

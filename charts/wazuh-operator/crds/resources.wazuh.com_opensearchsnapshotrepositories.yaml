@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.17.0
+    controller-gen.kubebuilder.io/version: v0.19.0
   name: opensearchsnapshotrepositories.resources.wazuh.com
 spec:
   group: resources.wazuh.com
@@ -235,6 +235,9 @@ spec:
                   - type
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
               lastSyncTime:
                 description: LastSyncTime is when the resource was last synced to
                   OpenSearch
@@ -255,6 +258,13 @@ spec:
               phase:
                 description: Phase is the current phase (Pending, Creating, Verifying,
                   Ready, Failed, Deleting)
+                enum:
+                - Pending
+                - Creating
+                - Verifying
+                - Ready
+                - Failed
+                - Deleting
                 type: string
               snapshotCount:
                 description: SnapshotCount is the number of snapshots in the repository
