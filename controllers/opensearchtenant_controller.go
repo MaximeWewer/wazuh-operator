@@ -50,7 +50,7 @@ type OpenSearchTenantReconciler struct {
 // +kubebuilder:rbac:groups=resources.wazuh.com,resources=opensearchtenants/finalizers,verbs=update
 
 // Reconcile is the main reconciliation loop for OpenSearchTenant
-func (r *OpenSearchTenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *OpenSearchTenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, reconcileErr error) {
 	// Start tracing span
 	ctx, span := telemetry.Tracer().Start(ctx, "OpenSearchTenant.Reconcile",
 		telemetry.WithAttributes(
@@ -61,8 +61,11 @@ func (r *OpenSearchTenantReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Track reconciliation metrics
 	startTime := time.Now()
-	var reconcileResult = "success"
 	defer func() {
+		reconcileResult := "success"
+		if reconcileErr != nil {
+			reconcileResult = "error"
+		}
 		duration := time.Since(startTime).Seconds()
 		metrics.RecordReconciliation("OpenSearchTenant", req.Namespace, reconcileResult, duration)
 	}()

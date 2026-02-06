@@ -50,7 +50,7 @@ type OpenSearchComponentTemplateReconciler struct {
 // +kubebuilder:rbac:groups=resources.wazuh.com,resources=opensearchcomponenttemplates/finalizers,verbs=update
 
 // Reconcile is the main reconciliation loop for OpenSearchComponentTemplate
-func (r *OpenSearchComponentTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *OpenSearchComponentTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, reconcileErr error) {
 	// Start tracing span
 	ctx, span := telemetry.Tracer().Start(ctx, "OpenSearchComponentTemplate.Reconcile",
 		telemetry.WithAttributes(
@@ -61,8 +61,11 @@ func (r *OpenSearchComponentTemplateReconciler) Reconcile(ctx context.Context, r
 
 	// Track reconciliation metrics
 	startTime := time.Now()
-	var reconcileResult = "success"
 	defer func() {
+		reconcileResult := "success"
+		if reconcileErr != nil {
+			reconcileResult = "error"
+		}
 		duration := time.Since(startTime).Seconds()
 		metrics.RecordReconciliation("OpenSearchComponentTemplate", req.Namespace, reconcileResult, duration)
 	}()

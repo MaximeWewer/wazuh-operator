@@ -121,7 +121,7 @@ type WazuhClusterReconciler struct {
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes;tcproutes;udproutes;referencegrants,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is the main reconciliation loop for WazuhCluster
-func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, reconcileErr error) {
 	// Start tracing span
 	ctx, span := telemetry.Tracer().Start(ctx, "WazuhCluster.Reconcile",
 		telemetry.WithAttributes(
@@ -132,8 +132,11 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Track reconciliation metrics
 	startTime := time.Now()
-	var reconcileResult = "success"
 	defer func() {
+		reconcileResult := "success"
+		if reconcileErr != nil {
+			reconcileResult = "error"
+		}
 		duration := time.Since(startTime).Seconds()
 		metrics.RecordReconciliation("WazuhCluster", req.Namespace, reconcileResult, duration)
 	}()
@@ -148,7 +151,6 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get WazuhCluster")
-		reconcileResult = "error"
 		telemetry.RecordError(span, err)
 		metrics.RecordReconciliationError("WazuhCluster", req.Namespace, "get_failed")
 		return ctrl.Result{}, err

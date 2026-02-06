@@ -52,7 +52,7 @@ type OpenSearchIndexerReconciler struct {
 // +kubebuilder:rbac:groups=resources.wazuh.com,resources=opensearchindexers/finalizers,verbs=update
 
 // Reconcile is the main reconciliation loop for OpenSearchIndexer
-func (r *OpenSearchIndexerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *OpenSearchIndexerReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, reconcileErr error) {
 	// Start tracing span
 	ctx, span := telemetry.Tracer().Start(ctx, "OpenSearchIndexer.Reconcile",
 		telemetry.WithAttributes(
@@ -63,8 +63,11 @@ func (r *OpenSearchIndexerReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Track reconciliation metrics
 	startTime := time.Now()
-	var reconcileResult = "success"
 	defer func() {
+		reconcileResult := "success"
+		if reconcileErr != nil {
+			reconcileResult = "error"
+		}
 		duration := time.Since(startTime).Seconds()
 		metrics.RecordReconciliation("OpenSearchIndexer", req.Namespace, reconcileResult, duration)
 	}()

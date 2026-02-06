@@ -53,7 +53,7 @@ type WazuhCertificateReconciler struct {
 // +kubebuilder:rbac:groups="",resources=pods/exec,verbs=create
 
 // Reconcile is the main reconciliation loop for WazuhCertificate
-func (r *WazuhCertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *WazuhCertificateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, reconcileErr error) {
 	// Start tracing span
 	ctx, span := telemetry.Tracer().Start(ctx, "WazuhCertificate.Reconcile",
 		telemetry.WithAttributes(
@@ -64,8 +64,11 @@ func (r *WazuhCertificateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// Track reconciliation metrics
 	startTime := time.Now()
-	var reconcileResult = "success"
 	defer func() {
+		reconcileResult := "success"
+		if reconcileErr != nil {
+			reconcileResult = "error"
+		}
 		duration := time.Since(startTime).Seconds()
 		metrics.RecordReconciliation("WazuhCertificate", req.Namespace, reconcileResult, duration)
 	}()
