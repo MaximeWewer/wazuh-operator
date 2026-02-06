@@ -92,7 +92,6 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
-	var nonBlockingRollouts bool
 	var enableLeaderElection bool
 	var leaderElectionID string
 	var tlsOpts []func(*tls.Config)
@@ -101,8 +100,6 @@ func main() {
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&secureMetrics, "metrics-secure", true,
 		"If set, the metrics endpoint is served securely via HTTPS. Use --metrics-secure=false to use HTTP instead.")
-	flag.BoolVar(&nonBlockingRollouts, "non-blocking-rollouts", true,
-		"If set, certificate renewals will not block waiting for pod rollouts. Recommended for production.")
 	flag.StringVar(&webhookCertPath, "webhook-cert-path", "", "The directory that contains the webhook certificate.")
 	flag.StringVar(&webhookCertName, "webhook-cert-name", "tls.crt", "The name of the webhook certificate file.")
 	flag.StringVar(&webhookCertKey, "webhook-cert-key", "tls.key", "The name of the webhook key file.")
@@ -306,23 +303,19 @@ func main() {
 		ClusterReconciler: wazuhreconciler.NewClusterReconciler(mgr.GetClient(), mgr.GetScheme()).
 			WithRuleReconciler(ruleReconciler).
 			WithDecoderReconciler(decoderReconciler),
-		CertificateReconciler:  certReconciler,
-		IndexerReconciler:      opensearchreconciler.NewIndexerReconciler(mgr.GetClient(), mgr.GetScheme()),
-		DashboardReconciler:    opensearchreconciler.NewDashboardReconciler(mgr.GetClient(), mgr.GetScheme()),
-		WorkerReconciler:       wazuhreconciler.NewWorkerReconciler(mgr.GetClient(), mgr.GetScheme()),
-		MonitoringReconciler:   monitoring.NewMonitoringReconciler(mgr.GetClient(), mgr.GetScheme()),
-		GatewayReconciler:      networkingreconciler.NewGatewayReconciler(mgr.GetClient(), mgr.GetScheme()),
-		IngressReconciler:      networkingreconciler.NewIngressReconciler(mgr.GetClient(), mgr.GetScheme()),
-		RollbackManager:        drain.NewRollbackManager(mgr.GetClient(), ctrl.Log.WithName("rollback-manager")),
-		RetryManager:           drain.NewRetryManager(ctrl.Log.WithName("retry-manager")),
-		UseNonBlockingRollouts: nonBlockingRollouts,
-		GatewayAPIEnabled:      gatewayAPIEnabled,
-		HTTPRouteAvailable:     gatewayAPIStatus.HTTPRouteAvailable,
-		TCPRouteAvailable:      gatewayAPIStatus.TCPRouteAvailable,
-		UDPRouteAvailable:      gatewayAPIStatus.UDPRouteAvailable,
-	}
-	if nonBlockingRollouts {
-		setupLog.Info("Non-blocking certificate rollouts ENABLED")
+		CertificateReconciler: certReconciler,
+		IndexerReconciler:     opensearchreconciler.NewIndexerReconciler(mgr.GetClient(), mgr.GetScheme()),
+		DashboardReconciler:   opensearchreconciler.NewDashboardReconciler(mgr.GetClient(), mgr.GetScheme()),
+		WorkerReconciler:      wazuhreconciler.NewWorkerReconciler(mgr.GetClient(), mgr.GetScheme()),
+		MonitoringReconciler:  monitoring.NewMonitoringReconciler(mgr.GetClient(), mgr.GetScheme()),
+		GatewayReconciler:     networkingreconciler.NewGatewayReconciler(mgr.GetClient(), mgr.GetScheme()),
+		IngressReconciler:     networkingreconciler.NewIngressReconciler(mgr.GetClient(), mgr.GetScheme()),
+		RollbackManager:       drain.NewRollbackManager(mgr.GetClient(), ctrl.Log.WithName("rollback-manager")),
+		RetryManager:          drain.NewRetryManager(ctrl.Log.WithName("retry-manager")),
+		GatewayAPIEnabled:     gatewayAPIEnabled,
+		HTTPRouteAvailable:    gatewayAPIStatus.HTTPRouteAvailable,
+		TCPRouteAvailable:     gatewayAPIStatus.TCPRouteAvailable,
+		UDPRouteAvailable:     gatewayAPIStatus.UDPRouteAvailable,
 	}
 	if err := wazuhClusterReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WazuhCluster")

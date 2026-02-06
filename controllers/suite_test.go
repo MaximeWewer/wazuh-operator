@@ -120,19 +120,18 @@ var _ = BeforeSuite(func() {
 	}()
 
 	reconciler = &WazuhClusterReconciler{
-		Client:                 k8sClient,
-		Scheme:                 scheme.Scheme,
-		Recorder:               eventRecorder,
-		ClusterReconciler:      clusterReconciler,
-		CertificateReconciler:  certificateReconciler,
-		IndexerReconciler:      indexerReconciler,
-		DashboardReconciler:    dashboardReconciler,
-		WorkerReconciler:       workerReconciler,
-		MonitoringReconciler:   monitoringReconciler,
-		GatewayReconciler:      gatewayReconciler,
-		RollbackManager:        rollbackManager,
-		RetryManager:           retryManager,
-		UseNonBlockingRollouts: true,
+		Client:                k8sClient,
+		Scheme:                scheme.Scheme,
+		Recorder:              eventRecorder,
+		ClusterReconciler:     clusterReconciler,
+		CertificateReconciler: certificateReconciler,
+		IndexerReconciler:     indexerReconciler,
+		DashboardReconciler:   dashboardReconciler,
+		WorkerReconciler:      workerReconciler,
+		MonitoringReconciler:  monitoringReconciler,
+		GatewayReconciler:     gatewayReconciler,
+		RollbackManager:       rollbackManager,
+		RetryManager:          retryManager,
 	}
 })
 

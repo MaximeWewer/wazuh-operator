@@ -89,9 +89,6 @@ type WazuhClusterReconciler struct {
 	RollbackManager *drain.RollbackManagerImpl
 	RetryManager    *drain.RetryManagerImpl
 
-	// UseNonBlockingRollouts enables non-blocking certificate rollouts
-	UseNonBlockingRollouts bool
-
 	// GatewayAPIEnabled indicates if Gateway API support is enabled in operator config
 	GatewayAPIEnabled bool
 
@@ -474,22 +471,14 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			}
 		}
 	}
-	if r.UseNonBlockingRollouts {
-		result := r.IndexerReconciler.ReconcileNonBlocking(ctx, cluster, indexerCertHash)
-		if result.Error != nil {
-			log.Error(result.Error, "Failed to reconcile Indexer (non-blocking)")
-			r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "IndexerFailed", result.Error.Error())
-			return ctrl.Result{}, result.Error
-		}
-		if result.PendingRollout != nil {
-			newPendingRollouts = append(newPendingRollouts, *result.PendingRollout)
-		}
-	} else {
-		if err := r.IndexerReconciler.ReconcileWithCertHash(ctx, cluster, indexerCertHash); err != nil {
-			log.Error(err, "Failed to reconcile Indexer")
-			r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "IndexerFailed", err.Error())
-			return ctrl.Result{}, err
-		}
+	indexerResult := r.IndexerReconciler.ReconcileNonBlocking(ctx, cluster, indexerCertHash)
+	if indexerResult.Error != nil {
+		log.Error(indexerResult.Error, "Failed to reconcile Indexer")
+		r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "IndexerFailed", indexerResult.Error.Error())
+		return ctrl.Result{}, indexerResult.Error
+	}
+	if indexerResult.PendingRollout != nil {
+		newPendingRollouts = append(newPendingRollouts, *indexerResult.PendingRollout)
 	}
 
 	// 4. Check Security Initialization (after indexer is up)
@@ -549,30 +538,18 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// 6. Reconcile Manager with certificate hashes for pod restart on cert renewal
+	masterCertHash, workerCertHash := "", ""
 	if certHashes != nil {
-		if r.UseNonBlockingRollouts {
-			result := r.ClusterReconciler.ReconcileManagerNonBlocking(ctx, cluster, certHashes.ManagerMasterCertHash, certHashes.ManagerWorkerCertHash)
-			if result.Error != nil {
-				log.Error(result.Error, "Failed to reconcile Manager (non-blocking)")
-				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "ManagerFailed", result.Error.Error())
-				return ctrl.Result{}, result.Error
-			}
-			newPendingRollouts = append(newPendingRollouts, result.PendingRollouts...)
-		} else {
-			if err := r.ClusterReconciler.ReconcileManagerWithCertHashes(ctx, cluster, certHashes.ManagerMasterCertHash, certHashes.ManagerWorkerCertHash); err != nil {
-				log.Error(err, "Failed to reconcile Manager with cert hashes")
-				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "ManagerFailed", err.Error())
-				return ctrl.Result{}, err
-			}
-		}
-	} else {
-		// Fallback to regular reconciliation without cert hashes
-		if err := r.ClusterReconciler.ReconcileManager(ctx, cluster); err != nil {
-			log.Error(err, "Failed to reconcile Manager")
-			r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "ManagerFailed", err.Error())
-			return ctrl.Result{}, err
-		}
+		masterCertHash = certHashes.ManagerMasterCertHash
+		workerCertHash = certHashes.ManagerWorkerCertHash
 	}
+	managerResult := r.ClusterReconciler.ReconcileManagerNonBlocking(ctx, cluster, masterCertHash, workerCertHash)
+	if managerResult.Error != nil {
+		log.Error(managerResult.Error, "Failed to reconcile Manager")
+		r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "ManagerFailed", managerResult.Error.Error())
+		return ctrl.Result{}, managerResult.Error
+	}
+	newPendingRollouts = append(newPendingRollouts, managerResult.PendingRollouts...)
 
 	// 7. Reconcile Log Rotation CronJob (if enabled)
 	if err := r.ClusterReconciler.ReconcileLogRotation(ctx, cluster); err != nil {
@@ -581,31 +558,18 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// 8. Reconcile Dashboard with certificate hash for pod restart on cert renewal
+	dashboardCertHash := ""
 	if certHashes != nil {
-		if r.UseNonBlockingRollouts {
-			result := r.DashboardReconciler.ReconcileNonBlocking(ctx, cluster, certHashes.DashboardCertHash)
-			if result.Error != nil {
-				log.Error(result.Error, "Failed to reconcile Dashboard (non-blocking)")
-				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "DashboardFailed", result.Error.Error())
-				return ctrl.Result{}, result.Error
-			}
-			if result.PendingRollout != nil {
-				newPendingRollouts = append(newPendingRollouts, *result.PendingRollout)
-			}
-		} else {
-			if err := r.DashboardReconciler.ReconcileWithCertHash(ctx, cluster, certHashes.DashboardCertHash); err != nil {
-				log.Error(err, "Failed to reconcile Dashboard with cert hash")
-				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "DashboardFailed", err.Error())
-				return ctrl.Result{}, err
-			}
-		}
-	} else {
-		// Fallback to regular reconciliation without cert hash
-		if err := r.DashboardReconciler.Reconcile(ctx, cluster); err != nil {
-			log.Error(err, "Failed to reconcile Dashboard")
-			r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "DashboardFailed", err.Error())
-			return ctrl.Result{}, err
-		}
+		dashboardCertHash = certHashes.DashboardCertHash
+	}
+	dashboardResult := r.DashboardReconciler.ReconcileNonBlocking(ctx, cluster, dashboardCertHash)
+	if dashboardResult.Error != nil {
+		log.Error(dashboardResult.Error, "Failed to reconcile Dashboard")
+		r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "DashboardFailed", dashboardResult.Error.Error())
+		return ctrl.Result{}, dashboardResult.Error
+	}
+	if dashboardResult.PendingRollout != nil {
+		newPendingRollouts = append(newPendingRollouts, *dashboardResult.PendingRollout)
 	}
 
 	// 9. Reconcile Monitoring resources (ServiceMonitors) if enabled
@@ -1082,6 +1046,10 @@ func (r *WazuhClusterReconciler) updateStatus(ctx context.Context, cluster *wazu
 				allReady = false
 			}
 		}
+
+		// Copy conditions from working cluster (preserves SecurityReady and other
+		// conditions set during the reconciliation loop before updateStatus is called)
+		latestCluster.Status.Conditions = cluster.Status.Conditions
 
 		// Copy certificate rollout status from working cluster
 		latestCluster.Status.CertificateRollouts = cluster.Status.CertificateRollouts
