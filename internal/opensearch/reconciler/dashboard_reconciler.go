@@ -350,13 +350,13 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 		deployBuilder.WithVersion(cluster.Spec.Version)
 	}
 
-	if cluster.Spec.Dashboard.Replicas > 0 {
-		deployBuilder.WithReplicas(cluster.Spec.Dashboard.Replicas)
-	}
-	if cluster.Spec.Dashboard.Resources != nil {
-		deployBuilder.WithResources(cluster.Spec.Dashboard.Resources)
-	}
 	if cluster.Spec.Dashboard != nil {
+		if cluster.Spec.Dashboard.Replicas > 0 {
+			deployBuilder.WithReplicas(cluster.Spec.Dashboard.Replicas)
+		}
+		if cluster.Spec.Dashboard.Resources != nil {
+			deployBuilder.WithResources(cluster.Spec.Dashboard.Resources)
+		}
 		if len(cluster.Spec.Dashboard.Annotations) > 0 {
 			deployBuilder.WithAnnotations(cluster.Spec.Dashboard.Annotations)
 		}
@@ -408,7 +408,10 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 	}
 
 	// Check if replicas changed
-	desiredReplicas := cluster.Spec.Dashboard.Replicas
+	var desiredReplicas int32
+	if cluster.Spec.Dashboard != nil {
+		desiredReplicas = cluster.Spec.Dashboard.Replicas
+	}
 	if found.Spec.Replicas != nil && *found.Spec.Replicas != desiredReplicas {
 		log.Info("Updating Dashboard Deployment due to replica count change",
 			"name", deployment.Name,
@@ -674,9 +677,9 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 
 	// Extract spec values for hash computation
 	var (
-		replicas       = cluster.Spec.Dashboard.Replicas
+		replicas       int32
 		version        = cluster.Spec.Version
-		resources      = cluster.Spec.Dashboard.Resources
+		resources      *corev1.ResourceRequirements
 		image          string
 		nodeSelector   map[string]string
 		tolerations    []corev1.Toleration
@@ -688,6 +691,8 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 	)
 
 	if cluster.Spec.Dashboard != nil {
+		replicas = cluster.Spec.Dashboard.Replicas
+		resources = cluster.Spec.Dashboard.Resources
 		nodeSelector = cluster.Spec.Dashboard.NodeSelector
 		tolerations = cluster.Spec.Dashboard.Tolerations
 		affinity = cluster.Spec.Dashboard.Affinity
@@ -725,11 +730,11 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		deployBuilder.WithVersion(cluster.Spec.Version)
 	}
 
-	if cluster.Spec.Dashboard.Replicas > 0 {
-		deployBuilder.WithReplicas(cluster.Spec.Dashboard.Replicas)
+	if replicas > 0 {
+		deployBuilder.WithReplicas(replicas)
 	}
-	if cluster.Spec.Dashboard.Resources != nil {
-		deployBuilder.WithResources(cluster.Spec.Dashboard.Resources)
+	if resources != nil {
+		deployBuilder.WithResources(resources)
 	}
 	if nodeSelector != nil {
 		deployBuilder.WithNodeSelector(nodeSelector)

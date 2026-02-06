@@ -683,7 +683,10 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 	}
 
 	// Check if replicas changed
-	desiredReplicas := cluster.Spec.Indexer.Replicas
+	var desiredReplicas int32
+	if cluster.Spec.Indexer != nil {
+		desiredReplicas = cluster.Spec.Indexer.Replicas
+	}
 	if found.Spec.Replicas != nil && *found.Spec.Replicas != desiredReplicas {
 		log.Info("Updating Indexer StatefulSet due to replica count change",
 			"name", sts.Name,
