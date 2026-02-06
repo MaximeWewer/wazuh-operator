@@ -100,8 +100,7 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhasePending, fmt.Sprintf("Repository '%s' not found - waiting for repository creation", repoName)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
-			// Return nil to requeue and check again later
-			return nil
+			return fmt.Errorf("repository '%s' not found, will retry", repoName)
 		}
 		log.V(1).Info("Repository validated", "repository", repoName)
 	}
