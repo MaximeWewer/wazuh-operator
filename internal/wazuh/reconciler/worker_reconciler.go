@@ -201,6 +201,10 @@ func (r *WorkerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, w
 		stsBuilder.WithVolumeMounts(worker.Spec.ExtraVolumeMounts)
 	}
 
+	// Set termination grace period default
+	terminationGracePeriod := constants.DefaultManagerTerminationGracePeriod
+	stsBuilder.WithTerminationGracePeriodSeconds(&terminationGracePeriod)
+
 	sts := stsBuilder.Build()
 	if err := controllerutil.SetControllerReference(worker, sts, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference: %w", err)

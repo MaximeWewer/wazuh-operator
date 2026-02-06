@@ -130,6 +130,10 @@ type WazuhManagerClusterSpec struct {
 	// This helps ensure high availability by preventing all managers from running on the same node
 	// +optional
 	AntiAffinity *AntiAffinitySpec `json:"antiAffinity,omitempty"`
+
+	// Network policy for manager pods
+	// +optional
+	NetworkPolicy *NetworkPolicySpec `json:"networkPolicy,omitempty"`
 }
 
 // GetTotalReplicas returns the total number of manager nodes (1 master + N workers)
@@ -332,6 +336,12 @@ type WazuhIndexerClusterSpec struct {
 	// needs shard rebalancing after scaling. Use with caution.
 	// +optional
 	HPA *HPASpec `json:"hpa,omitempty"`
+
+	// Termination grace period in seconds for pods
+	// OpenSearch needs time to flush and transfer shards before shutdown
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 }
 
 // WazuhDashboardClusterSpec defines the dashboard configuration (inline in WazuhCluster)
@@ -430,6 +440,11 @@ type WazuhDashboardClusterSpec struct {
 	// When enabled, the Dashboard will scale based on CPU/memory utilization
 	// +optional
 	HPA *HPASpec `json:"hpa,omitempty"`
+
+	// Termination grace period in seconds for pods
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 }
 
 // TLSConfig defines TLS configuration

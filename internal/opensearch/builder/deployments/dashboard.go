@@ -30,27 +30,28 @@ import (
 
 // DashboardDeploymentBuilder builds a Deployment for OpenSearch Dashboard
 type DashboardDeploymentBuilder struct {
-	name                      string
-	namespace                 string
-	clusterName               string
-	version                   string
-	replicas                  int32
-	resources                 *corev1.ResourceRequirements
-	image                     string
-	nodeSelector              map[string]string
-	tolerations               []corev1.Toleration
-	affinity                  *corev1.Affinity
-	imagePullSecrets          []corev1.LocalObjectReference
-	topologySpreadConstraints []corev1.TopologySpreadConstraint
-	labels                    map[string]string
-	annotations               map[string]string
-	podAnnotations            map[string]string
-	env                       []corev1.EnvVar
-	envFrom                   []corev1.EnvFromSource
-	volumes                   []corev1.Volume
-	volumeMounts              []corev1.VolumeMount
-	indexerURL                string
-	wazuhPlugin               bool
+	name                          string
+	namespace                     string
+	clusterName                   string
+	version                       string
+	replicas                      int32
+	resources                     *corev1.ResourceRequirements
+	image                         string
+	nodeSelector                  map[string]string
+	tolerations                   []corev1.Toleration
+	affinity                      *corev1.Affinity
+	imagePullSecrets              []corev1.LocalObjectReference
+	topologySpreadConstraints     []corev1.TopologySpreadConstraint
+	labels                        map[string]string
+	annotations                   map[string]string
+	podAnnotations                map[string]string
+	env                           []corev1.EnvVar
+	envFrom                       []corev1.EnvFromSource
+	volumes                       []corev1.Volume
+	volumeMounts                  []corev1.VolumeMount
+	indexerURL                    string
+	wazuhPlugin                   bool
+	terminationGracePeriodSeconds *int64
 }
 
 // NewDashboardDeploymentBuilder creates a new DashboardDeploymentBuilder
@@ -215,6 +216,12 @@ func (b *DashboardDeploymentBuilder) WithConfigHash(hash string) *DashboardDeplo
 	return b
 }
 
+// WithTerminationGracePeriodSeconds sets the termination grace period for pods
+func (b *DashboardDeploymentBuilder) WithTerminationGracePeriodSeconds(seconds *int64) *DashboardDeploymentBuilder {
+	b.terminationGracePeriodSeconds = seconds
+	return b
+}
+
 // Build creates the Deployment
 func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 	labels := b.buildLabels()
@@ -284,11 +291,12 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 					Annotations: b.podAnnotations,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector:              b.nodeSelector,
-					Tolerations:               b.tolerations,
-					Affinity:                  b.affinity,
-					ImagePullSecrets:          b.imagePullSecrets,
-					TopologySpreadConstraints: b.topologySpreadConstraints,
+					TerminationGracePeriodSeconds: b.terminationGracePeriodSeconds,
+					NodeSelector:                  b.nodeSelector,
+					Tolerations:                   b.tolerations,
+					Affinity:                      b.affinity,
+					ImagePullSecrets:              b.imagePullSecrets,
+					TopologySpreadConstraints:     b.topologySpreadConstraints,
 					// SecurityContext at pod level - dashboard runs as non-root user
 					SecurityContext: &corev1.PodSecurityContext{
 						RunAsNonRoot: func() *bool { b := true; return &b }(),
@@ -414,7 +422,9 @@ func (b *DashboardDeploymentBuilder) buildVolumes() []corev1.Volume {
 		{
 			Name: constants.VolumeNameDashboardConfigProcessed,
 			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
+				EmptyDir: &corev1.EmptyDirVolumeSource{
+					SizeLimit: func() *resource.Quantity { q := resource.MustParse("10Mi"); return &q }(),
+				},
 			},
 		},
 		// Combined certs volume that mounts dashboard certs with correct filenames

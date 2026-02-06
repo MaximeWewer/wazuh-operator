@@ -58,6 +58,8 @@ type IndexerStatefulSetBuilder struct {
 	javaOpts                  string
 	// Monitoring configuration
 	cluster *wazuhv1.WazuhCluster
+	// Termination grace period
+	terminationGracePeriodSeconds *int64
 }
 
 // NewIndexerStatefulSetBuilder creates a new IndexerStatefulSetBuilder
@@ -234,6 +236,12 @@ func (b *IndexerStatefulSetBuilder) WithCluster(cluster *wazuhv1.WazuhCluster) *
 	return b
 }
 
+// WithTerminationGracePeriodSeconds sets the termination grace period for pods
+func (b *IndexerStatefulSetBuilder) WithTerminationGracePeriodSeconds(seconds *int64) *IndexerStatefulSetBuilder {
+	b.terminationGracePeriodSeconds = seconds
+	return b
+}
+
 // Build creates the StatefulSet
 func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	labels := b.buildLabels()
@@ -308,11 +316,12 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 					Annotations: b.podAnnotations,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector:              b.nodeSelector,
-					Tolerations:               b.tolerations,
-					Affinity:                  b.affinity,
-					ImagePullSecrets:          b.imagePullSecrets,
-					TopologySpreadConstraints: b.topologySpreadConstraints,
+					TerminationGracePeriodSeconds: b.terminationGracePeriodSeconds,
+					NodeSelector:                  b.nodeSelector,
+					Tolerations:                   b.tolerations,
+					Affinity:                      b.affinity,
+					ImagePullSecrets:              b.imagePullSecrets,
+					TopologySpreadConstraints:     b.topologySpreadConstraints,
 					SecurityContext: &corev1.PodSecurityContext{
 						FSGroup:   &fsGroup,
 						RunAsUser: &runAsUser,
@@ -451,7 +460,9 @@ func (b *IndexerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 		{
 			Name: constants.VolumeNameConfigProcessed,
 			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
+				EmptyDir: &corev1.EmptyDirVolumeSource{
+					SizeLimit: func() *resource.Quantity { q := resource.MustParse("10Mi"); return &q }(),
+				},
 			},
 		},
 	}

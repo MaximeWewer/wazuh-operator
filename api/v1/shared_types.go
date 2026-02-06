@@ -104,6 +104,12 @@ type WazuhMasterSpec struct {
 	// Annotations for the StatefulSet
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// Termination grace period in seconds for pods
+	// Wazuh manager needs time to flush and stop services before shutdown
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 }
 
 // WazuhWorkerSpec defines the worker nodes configuration
@@ -208,6 +214,12 @@ type WazuhWorkerSpec struct {
 	// HorizontalPodAutoscaler configuration for automatic scaling of workers
 	// +optional
 	HPA *HPASpec `json:"hpa,omitempty"`
+
+	// Termination grace period in seconds for pods
+	// Wazuh manager needs time to flush and stop services before shutdown
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 }
 
 // GetReplicas returns the number of worker replicas, defaulting to DefaultManagerWorkerReplicas if not set
@@ -263,7 +275,8 @@ type ServiceSpec struct {
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
 
-	// LoadBalancer IP for LoadBalancer services
+	// Deprecated: LoadBalancerIP is deprecated in Kubernetes 1.24+.
+	// Use service annotations for your cloud provider instead.
 	// +optional
 	LoadBalancerIP string `json:"loadBalancerIP,omitempty"`
 
@@ -474,9 +487,9 @@ type PodDisruptionBudgetSpec struct {
 // AntiAffinitySpec defines pod anti-affinity configuration for spreading pods across topology domains
 type AntiAffinitySpec struct {
 	// Enabled enables pod anti-affinity for spreading pods across topology domains
-	// When false (default), no anti-affinity rules are added to pods
+	// When true (default), anti-affinity rules are added to spread pods across topology domains
 	// +optional
-	// +kubebuilder:default=false
+	// +kubebuilder:default=true
 	Enabled bool `json:"enabled,omitempty"`
 
 	// TopologyKey is the key for node labels used to define topology domains
@@ -491,7 +504,7 @@ type AntiAffinitySpec struct {
 	// "preferred": Scheduler PREFERS different topology domains but can co-locate if necessary
 	// +optional
 	// +kubebuilder:validation:Enum=required;preferred
-	// +kubebuilder:default="required"
+	// +kubebuilder:default="preferred"
 	Type string `json:"type,omitempty"`
 
 	// Weight is the weight (1-100) for preferred anti-affinity rules

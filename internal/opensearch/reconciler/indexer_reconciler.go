@@ -615,6 +615,13 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 	// Set cluster reference for monitoring (Prometheus plugin and metrics)
 	stsBuilder.WithCluster(cluster)
 
+	// Set termination grace period (default + user override)
+	terminationGracePeriod := constants.DefaultIndexerTerminationGracePeriod
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.TerminationGracePeriodSeconds != nil {
+		terminationGracePeriod = *cluster.Spec.Indexer.TerminationGracePeriodSeconds
+	}
+	stsBuilder.WithTerminationGracePeriodSeconds(&terminationGracePeriod)
+
 	sts := stsBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for indexer statefulset: %w", err)
@@ -965,6 +972,13 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 	}
 	// Set cluster reference for monitoring (Prometheus plugin and metrics)
 	stsBuilder.WithCluster(cluster)
+
+	// Set termination grace period (default + user override)
+	terminationGracePeriod := constants.DefaultIndexerTerminationGracePeriod
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.TerminationGracePeriodSeconds != nil {
+		terminationGracePeriod = *cluster.Spec.Indexer.TerminationGracePeriodSeconds
+	}
+	stsBuilder.WithTerminationGracePeriodSeconds(&terminationGracePeriod)
 
 	sts := stsBuilder.Build()
 
@@ -2583,6 +2597,13 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 		configHash := patch.ComputeConfigHash(configMap.Data)
 		stsBuilder.WithConfigHash(configHash)
 	}
+
+	// Set termination grace period (default + user override from indexer spec)
+	terminationGracePeriod := constants.DefaultIndexerTerminationGracePeriod
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.TerminationGracePeriodSeconds != nil {
+		terminationGracePeriod = *cluster.Spec.Indexer.TerminationGracePeriodSeconds
+	}
+	stsBuilder.WithTerminationGracePeriodSeconds(&terminationGracePeriod)
 
 	sts := stsBuilder.Build()
 

@@ -99,6 +99,18 @@ const (
 	DefaultDashboardReplicas int32 = 1
 )
 
+// Default termination grace periods (seconds)
+const (
+	// DefaultIndexerTerminationGracePeriod allows time for shard flushing and transfer
+	DefaultIndexerTerminationGracePeriod int64 = 120
+
+	// DefaultManagerTerminationGracePeriod allows time for Wazuh manager graceful shutdown
+	DefaultManagerTerminationGracePeriod int64 = 90
+
+	// DefaultDashboardTerminationGracePeriod for dashboard pod shutdown
+	DefaultDashboardTerminationGracePeriod int64 = 30
+)
+
 // Default storage sizes
 const (
 	// DefaultManagerStorageSize is the default storage for manager nodes

@@ -303,19 +303,20 @@ func main() {
 		ClusterReconciler: wazuhreconciler.NewClusterReconciler(mgr.GetClient(), mgr.GetScheme()).
 			WithRuleReconciler(ruleReconciler).
 			WithDecoderReconciler(decoderReconciler),
-		CertificateReconciler: certReconciler,
-		IndexerReconciler:     opensearchreconciler.NewIndexerReconciler(mgr.GetClient(), mgr.GetScheme()).WithClientFactory(osClientFactory),
-		DashboardReconciler:   opensearchreconciler.NewDashboardReconciler(mgr.GetClient(), mgr.GetScheme()),
-		WorkerReconciler:      wazuhreconciler.NewWorkerReconciler(mgr.GetClient(), mgr.GetScheme()),
-		MonitoringReconciler:  monitoring.NewMonitoringReconciler(mgr.GetClient(), mgr.GetScheme()),
-		GatewayReconciler:     networkingreconciler.NewGatewayReconciler(mgr.GetClient(), mgr.GetScheme()),
-		IngressReconciler:     networkingreconciler.NewIngressReconciler(mgr.GetClient(), mgr.GetScheme()),
-		RollbackManager:       drain.NewRollbackManager(mgr.GetClient(), ctrl.Log.WithName("rollback-manager")),
-		RetryManager:          drain.NewRetryManager(ctrl.Log.WithName("retry-manager")),
-		GatewayAPIEnabled:     gatewayAPIEnabled,
-		HTTPRouteAvailable:    gatewayAPIStatus.HTTPRouteAvailable,
-		TCPRouteAvailable:     gatewayAPIStatus.TCPRouteAvailable,
-		UDPRouteAvailable:     gatewayAPIStatus.UDPRouteAvailable,
+		CertificateReconciler:   certReconciler,
+		IndexerReconciler:       opensearchreconciler.NewIndexerReconciler(mgr.GetClient(), mgr.GetScheme()).WithClientFactory(osClientFactory),
+		DashboardReconciler:     opensearchreconciler.NewDashboardReconciler(mgr.GetClient(), mgr.GetScheme()),
+		WorkerReconciler:        wazuhreconciler.NewWorkerReconciler(mgr.GetClient(), mgr.GetScheme()),
+		MonitoringReconciler:    monitoring.NewMonitoringReconciler(mgr.GetClient(), mgr.GetScheme()),
+		GatewayReconciler:       networkingreconciler.NewGatewayReconciler(mgr.GetClient(), mgr.GetScheme()),
+		IngressReconciler:       networkingreconciler.NewIngressReconciler(mgr.GetClient(), mgr.GetScheme()),
+		NetworkPolicyReconciler: networkingreconciler.NewNetworkPolicyReconciler(mgr.GetClient(), mgr.GetScheme()),
+		RollbackManager:         drain.NewRollbackManager(mgr.GetClient(), ctrl.Log.WithName("rollback-manager")),
+		RetryManager:            drain.NewRetryManager(ctrl.Log.WithName("retry-manager")),
+		GatewayAPIEnabled:       gatewayAPIEnabled,
+		HTTPRouteAvailable:      gatewayAPIStatus.HTTPRouteAvailable,
+		TCPRouteAvailable:       gatewayAPIStatus.TCPRouteAvailable,
+		UDPRouteAvailable:       gatewayAPIStatus.UDPRouteAvailable,
 	}
 	if err := wazuhClusterReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WazuhCluster")

@@ -29,12 +29,6 @@ const (
 
 	// PortManagerCluster is the port for cluster communication between nodes
 	PortManagerCluster int32 = 1516
-
-	// PortManagerRegistration is the port for agent registration
-	PortManagerRegistration int32 = 1515
-
-	// PortManagerAgents is the port for agent connections
-	PortManagerAgents int32 = 1514
 )
 
 // Wazuh Manager port names

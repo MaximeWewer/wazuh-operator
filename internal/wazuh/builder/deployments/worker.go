@@ -56,6 +56,8 @@ type WorkerStatefulSetBuilder struct {
 	ruleConfigMaps []RuleConfigMapRef
 	// Decoder ConfigMaps to mount
 	decoderConfigMaps []DecoderConfigMapRef
+	// Termination grace period
+	terminationGracePeriodSeconds *int64
 }
 
 // NewWorkerStatefulSetBuilder creates a new WorkerStatefulSetBuilder
@@ -266,6 +268,12 @@ func (b *WorkerStatefulSetBuilder) WithDecoderHash(hash string) *WorkerStatefulS
 	return b
 }
 
+// WithTerminationGracePeriodSeconds sets the termination grace period for pods
+func (b *WorkerStatefulSetBuilder) WithTerminationGracePeriodSeconds(seconds *int64) *WorkerStatefulSetBuilder {
+	b.terminationGracePeriodSeconds = seconds
+	return b
+}
+
 // Build creates the StatefulSet
 func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	labels := b.buildLabels()
@@ -344,11 +352,12 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 					Annotations: b.podAnnotations,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector:              b.nodeSelector,
-					Tolerations:               b.tolerations,
-					Affinity:                  b.affinity,
-					ImagePullSecrets:          b.imagePullSecrets,
-					TopologySpreadConstraints: b.topologySpreadConstraints,
+					TerminationGracePeriodSeconds: b.terminationGracePeriodSeconds,
+					NodeSelector:                  b.nodeSelector,
+					Tolerations:                   b.tolerations,
+					Affinity:                      b.affinity,
+					ImagePullSecrets:              b.imagePullSecrets,
+					TopologySpreadConstraints:     b.topologySpreadConstraints,
 					// SecurityContext at pod level - fsGroup 999 is the wazuh group in the official image
 					// SeccompProfile Unconfined is needed on some environments (WSL2, certain kernels)
 					// to allow Filebeat's Go runtime to create threads (pthread_create)
@@ -374,10 +383,10 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 								},
 							},
 							Ports: []corev1.ContainerPort{
-								{Name: "registration", ContainerPort: constants.PortManagerRegistration, Protocol: corev1.ProtocolTCP},
+								{Name: "registration", ContainerPort: constants.PortManagerAgentAuth, Protocol: corev1.ProtocolTCP},
 								{Name: "cluster", ContainerPort: constants.PortManagerCluster, Protocol: corev1.ProtocolTCP},
 								{Name: "api", ContainerPort: constants.PortManagerAPI, Protocol: corev1.ProtocolTCP},
-								{Name: "agents", ContainerPort: constants.PortManagerAgents, Protocol: corev1.ProtocolTCP},
+								{Name: "agents", ContainerPort: constants.PortManagerAgentEvents, Protocol: corev1.ProtocolTCP},
 							},
 							Env:          env,
 							EnvFrom:      b.envFrom,
@@ -470,7 +479,9 @@ func (b *WorkerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 		{
 			Name: constants.VolumeNameWazuhConfigMount,
 			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
+				EmptyDir: &corev1.EmptyDirVolumeSource{
+					SizeLimit: func() *resource.Quantity { q := resource.MustParse("10Mi"); return &q }(),
+				},
 			},
 		},
 		{

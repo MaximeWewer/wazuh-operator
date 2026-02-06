@@ -20,7 +20,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"path/filepath"
+	"path"
 	"strings"
 	"time"
 
@@ -153,7 +153,7 @@ func (h *HotReloader) getIndexerNodeCertificate(ctx context.Context, namespace, 
 // execReadCertificate execs into a pod and reads the certificate file content
 func (h *HotReloader) execReadCertificate(ctx context.Context, namespace, podName, certPath string) (string, error) {
 	// Read the tls.crt file from the certificate directory
-	certFile := filepath.Join(certPath, constants.SecretKeyTLSCert)
+	certFile := path.Join(certPath, constants.SecretKeyTLSCert)
 
 	cmd := []string{"cat", certFile}
 

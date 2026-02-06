@@ -77,14 +77,15 @@ type WazuhClusterReconciler struct {
 	Recorder record.EventRecorder
 
 	// Helper reconcilers
-	ClusterReconciler     *wazuhreconciler.ClusterReconciler
-	CertificateReconciler *certreconciler.CertificateReconciler
-	IndexerReconciler     *opensearchreconciler.IndexerReconciler
-	DashboardReconciler   *opensearchreconciler.DashboardReconciler
-	WorkerReconciler      *wazuhreconciler.WorkerReconciler
-	MonitoringReconciler  *monitoring.MonitoringReconciler
-	GatewayReconciler     *networkingreconciler.GatewayReconciler
-	IngressReconciler     *networkingreconciler.IngressReconciler
+	ClusterReconciler       *wazuhreconciler.ClusterReconciler
+	CertificateReconciler   *certreconciler.CertificateReconciler
+	IndexerReconciler       *opensearchreconciler.IndexerReconciler
+	DashboardReconciler     *opensearchreconciler.DashboardReconciler
+	WorkerReconciler        *wazuhreconciler.WorkerReconciler
+	MonitoringReconciler    *monitoring.MonitoringReconciler
+	GatewayReconciler       *networkingreconciler.GatewayReconciler
+	IngressReconciler       *networkingreconciler.IngressReconciler
+	NetworkPolicyReconciler *networkingreconciler.NetworkPolicyReconciler
 
 	// Drain management
 	RollbackManager *drain.RollbackManagerImpl
@@ -122,6 +123,7 @@ type WazuhClusterReconciler struct {
 // +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes;tcproutes;udproutes;referencegrants,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is the main reconciliation loop for WazuhCluster
@@ -629,6 +631,24 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 	}
 	log.V(1).Info("Ingress reconciliation completed")
+
+	// 12. Reconcile NetworkPolicy resources if any component has NetworkPolicy enabled
+	if hasNetworkPolicyEnabled(cluster) {
+		if r.NetworkPolicyReconciler != nil {
+			if err := r.NetworkPolicyReconciler.Reconcile(ctx, cluster); err != nil {
+				log.Error(err, "Failed to reconcile NetworkPolicy resources")
+				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "NetworkPolicyFailed", err.Error())
+				return ctrl.Result{}, err
+			}
+		}
+	} else if r.NetworkPolicyReconciler != nil {
+		// NetworkPolicy is not configured on this cluster
+		// Still call reconciler to clean up any orphaned network policies
+		if err := r.NetworkPolicyReconciler.Reconcile(ctx, cluster); err != nil {
+			log.V(1).Info("Failed to reconcile NetworkPolicy resources (non-fatal)", "error", err)
+		}
+	}
+	log.V(1).Info("NetworkPolicy reconciliation completed")
 
 	// 13. Check for indexer restart and re-sync if needed
 	if restarted, err := r.IndexerReconciler.DetectIndexerRestart(ctx, cluster); err != nil {
@@ -1837,6 +1857,29 @@ func hasGatewayAPIEnabled(cluster *wazuhv1.WazuhCluster) bool {
 	// Check Indexer
 	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.GatewayAPI != nil &&
 		cluster.Spec.Indexer.GatewayAPI.Enabled {
+		return true
+	}
+
+	return false
+}
+
+// hasNetworkPolicyEnabled checks if any component has NetworkPolicy explicitly enabled
+func hasNetworkPolicyEnabled(cluster *wazuhv1.WazuhCluster) bool {
+	// Check Indexer
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.NetworkPolicy != nil &&
+		cluster.Spec.Indexer.NetworkPolicy.Enabled {
+		return true
+	}
+
+	// Check Manager
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.NetworkPolicy != nil &&
+		cluster.Spec.Manager.NetworkPolicy.Enabled {
+		return true
+	}
+
+	// Check Dashboard
+	if cluster.Spec.Dashboard != nil && cluster.Spec.Dashboard.NetworkPolicy != nil &&
+		cluster.Spec.Dashboard.NetworkPolicy.Enabled {
 		return true
 	}
 

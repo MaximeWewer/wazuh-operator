@@ -272,6 +272,12 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 		if manager.Spec.Master.NodeSelector != nil {
 			stsBuilder.WithNodeSelector(manager.Spec.Master.NodeSelector)
 		}
+		// Set termination grace period (default + user override)
+		terminationGracePeriod := constants.DefaultManagerTerminationGracePeriod
+		if manager.Spec.Master.TerminationGracePeriodSeconds != nil {
+			terminationGracePeriod = *manager.Spec.Master.TerminationGracePeriodSeconds
+		}
+		stsBuilder.WithTerminationGracePeriodSeconds(&terminationGracePeriod)
 		sts = stsBuilder.Build()
 	} else {
 		stsBuilder := deployments.NewWorkerStatefulSetBuilder(manager.Name, manager.Namespace)
@@ -298,6 +304,12 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 		if manager.Spec.Workers.NodeSelector != nil {
 			stsBuilder.WithNodeSelector(manager.Spec.Workers.NodeSelector)
 		}
+		// Set termination grace period (default + user override)
+		terminationGracePeriod := constants.DefaultManagerTerminationGracePeriod
+		if manager.Spec.Workers.TerminationGracePeriodSeconds != nil {
+			terminationGracePeriod = *manager.Spec.Workers.TerminationGracePeriodSeconds
+		}
+		stsBuilder.WithTerminationGracePeriodSeconds(&terminationGracePeriod)
 		sts = stsBuilder.Build()
 	}
 

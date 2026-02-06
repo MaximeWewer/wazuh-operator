@@ -20,6 +20,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -123,6 +124,8 @@ func (b *DashboardServiceBuilder) Build() *corev1.Service {
 
 	// Handle LoadBalancer IP
 	if b.serviceType == corev1.ServiceTypeLoadBalancer && b.loadBalancerIP != "" {
+		log.Log.Info("WARNING: spec.loadBalancerIP is deprecated in Kubernetes 1.24+, use service annotations for your cloud provider instead",
+			"service", b.name, "component", "dashboard")
 		svc.Spec.LoadBalancerIP = b.loadBalancerIP
 	}
 

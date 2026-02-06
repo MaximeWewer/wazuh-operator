@@ -380,6 +380,13 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 		deployBuilder.WithCertHash(certHash)
 	}
 
+	// Set termination grace period (default + user override)
+	terminationGracePeriod := constants.DefaultDashboardTerminationGracePeriod
+	if cluster.Spec.Dashboard != nil && cluster.Spec.Dashboard.TerminationGracePeriodSeconds != nil {
+		terminationGracePeriod = *cluster.Spec.Dashboard.TerminationGracePeriodSeconds
+	}
+	deployBuilder.WithTerminationGracePeriodSeconds(&terminationGracePeriod)
+
 	deployment := deployBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, deployment, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for dashboard deployment: %w", err)
