@@ -99,7 +99,6 @@ type WazuhClusterReconciler struct {
 	HTTPRouteAvailable bool
 	TCPRouteAvailable  bool
 	UDPRouteAvailable  bool
-
 }
 
 // +kubebuilder:rbac:groups=resources.wazuh.com,resources=wazuhclusters,verbs=get;list;watch;create;update;patch;delete
@@ -197,12 +196,8 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		log.Error(err, "Mixed mode configuration detected")
 		r.Recorder.Event(cluster, corev1.EventTypeWarning, "InvalidMode", err.Error())
 
-		r.updateCondition(cluster, wazuhv1.ConditionTypeReady, metav1.ConditionFalse,
+		r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeReady,
 			"InvalidMode", err.Error())
-
-		if statusErr := r.Status().Update(ctx, cluster); statusErr != nil {
-			log.Error(statusErr, "Failed to update status for mixed mode validation")
-		}
 
 		return ctrl.Result{}, err
 	}
@@ -218,7 +213,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			r.emitDrainEvent(cluster, constants.DrainComponentIndexer, "ValidationFailed",
 				fmt.Sprintf("NodePool validation failed: %s", validationResult.Errors[0].Message))
 
-			r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse,
+			r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing,
 				"NodePoolValidationFailed", validationResult.Errors[0].Message)
 
 			// Don't proceed with reconciliation if validation fails
@@ -253,7 +248,6 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// Check and update pending rollouts from previous reconciliation
 	hasPendingRollouts := r.checkAndUpdatePendingRollouts(ctx, cluster)
 
-
 	// Check if any rollback is in progress and verify completion
 	if err := r.verifyRollbackComplete(ctx, cluster); err != nil {
 		log.Error(err, "Failed to verify rollback completion")
@@ -276,7 +270,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			manager, err := r.resolveManagerRef(ctx, cluster)
 			if err != nil {
 				log.Error(err, "Failed to resolve WazuhManager reference")
-				r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse,
+				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing,
 					"ManagerRefResolutionFailed", err.Error())
 				return ctrl.Result{}, err
 			}
@@ -301,7 +295,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			indexer, err := r.resolveIndexerRef(ctx, cluster)
 			if err != nil {
 				log.Error(err, "Failed to resolve OpenSearchIndexer reference")
-				r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse,
+				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing,
 					"IndexerRefResolutionFailed", err.Error())
 				return ctrl.Result{}, err
 			}
@@ -330,7 +324,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			dashboard, err := r.resolveDashboardRef(ctx, cluster)
 			if err != nil {
 				log.Error(err, "Failed to resolve OpenSearchDashboard reference")
-				r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse,
+				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing,
 					"DashboardRefResolutionFailed", err.Error())
 				return ctrl.Result{}, err
 			}
@@ -384,14 +378,14 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		certHashes, certErr = r.CertificateReconciler.ReconcileWithHashes(ctx, cluster)
 		if certErr != nil {
 			log.Error(certErr, "Failed to reconcile certificates with CertificateReconciler")
-			r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse, "CertificatesFailed", certErr.Error())
+			r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "CertificatesFailed", certErr.Error())
 			return ctrl.Result{}, certErr
 		}
 	} else {
 		// Fallback to ClusterReconciler for basic certificate creation
 		if err := r.ClusterReconciler.ReconcileCertificates(ctx, cluster); err != nil {
 			log.Error(err, "Failed to reconcile certificates")
-			r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse, "CertificatesFailed", err.Error())
+			r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "CertificatesFailed", err.Error())
 			return ctrl.Result{}, err
 		}
 	}
@@ -484,7 +478,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		result := r.IndexerReconciler.ReconcileNonBlocking(ctx, cluster, indexerCertHash)
 		if result.Error != nil {
 			log.Error(result.Error, "Failed to reconcile Indexer (non-blocking)")
-			r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse, "IndexerFailed", result.Error.Error())
+			r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "IndexerFailed", result.Error.Error())
 			return ctrl.Result{}, result.Error
 		}
 		if result.PendingRollout != nil {
@@ -493,7 +487,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	} else {
 		if err := r.IndexerReconciler.ReconcileWithCertHash(ctx, cluster, indexerCertHash); err != nil {
 			log.Error(err, "Failed to reconcile Indexer")
-			r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse, "IndexerFailed", err.Error())
+			r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "IndexerFailed", err.Error())
 			return ctrl.Result{}, err
 		}
 	}
@@ -560,14 +554,14 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			result := r.ClusterReconciler.ReconcileManagerNonBlocking(ctx, cluster, certHashes.ManagerMasterCertHash, certHashes.ManagerWorkerCertHash)
 			if result.Error != nil {
 				log.Error(result.Error, "Failed to reconcile Manager (non-blocking)")
-				r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse, "ManagerFailed", result.Error.Error())
+				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "ManagerFailed", result.Error.Error())
 				return ctrl.Result{}, result.Error
 			}
 			newPendingRollouts = append(newPendingRollouts, result.PendingRollouts...)
 		} else {
 			if err := r.ClusterReconciler.ReconcileManagerWithCertHashes(ctx, cluster, certHashes.ManagerMasterCertHash, certHashes.ManagerWorkerCertHash); err != nil {
 				log.Error(err, "Failed to reconcile Manager with cert hashes")
-				r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse, "ManagerFailed", err.Error())
+				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "ManagerFailed", err.Error())
 				return ctrl.Result{}, err
 			}
 		}
@@ -575,7 +569,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		// Fallback to regular reconciliation without cert hashes
 		if err := r.ClusterReconciler.ReconcileManager(ctx, cluster); err != nil {
 			log.Error(err, "Failed to reconcile Manager")
-			r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse, "ManagerFailed", err.Error())
+			r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "ManagerFailed", err.Error())
 			return ctrl.Result{}, err
 		}
 	}
@@ -592,7 +586,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			result := r.DashboardReconciler.ReconcileNonBlocking(ctx, cluster, certHashes.DashboardCertHash)
 			if result.Error != nil {
 				log.Error(result.Error, "Failed to reconcile Dashboard (non-blocking)")
-				r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse, "DashboardFailed", result.Error.Error())
+				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "DashboardFailed", result.Error.Error())
 				return ctrl.Result{}, result.Error
 			}
 			if result.PendingRollout != nil {
@@ -601,7 +595,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		} else {
 			if err := r.DashboardReconciler.ReconcileWithCertHash(ctx, cluster, certHashes.DashboardCertHash); err != nil {
 				log.Error(err, "Failed to reconcile Dashboard with cert hash")
-				r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse, "DashboardFailed", err.Error())
+				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "DashboardFailed", err.Error())
 				return ctrl.Result{}, err
 			}
 		}
@@ -609,7 +603,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		// Fallback to regular reconciliation without cert hash
 		if err := r.DashboardReconciler.Reconcile(ctx, cluster); err != nil {
 			log.Error(err, "Failed to reconcile Dashboard")
-			r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse, "DashboardFailed", err.Error())
+			r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "DashboardFailed", err.Error())
 			return ctrl.Result{}, err
 		}
 	}
@@ -634,7 +628,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		} else if r.GatewayReconciler != nil {
 			if err := r.GatewayReconciler.Reconcile(ctx, cluster); err != nil {
 				log.Error(err, "Failed to reconcile Gateway API routes")
-				r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse, "GatewayAPIFailed", err.Error())
+				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "GatewayAPIFailed", err.Error())
 				return ctrl.Result{}, err
 			}
 		}
@@ -652,7 +646,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if r.IngressReconciler != nil {
 			if err := r.IngressReconciler.Reconcile(ctx, cluster); err != nil {
 				log.Error(err, "Failed to reconcile Ingress resources")
-				r.updateCondition(cluster, wazuhv1.ConditionTypeProgressing, metav1.ConditionFalse, "IngressFailed", err.Error())
+				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "IngressFailed", err.Error())
 				return ctrl.Result{}, err
 			}
 		}
@@ -1033,6 +1027,15 @@ func (r *WazuhClusterReconciler) updateCondition(cluster *wazuhv1.WazuhCluster, 
 
 	if !found {
 		cluster.Status.Conditions = append(cluster.Status.Conditions, condition)
+	}
+}
+
+// persistCondition updates a condition to False in memory and persists it to the API server (best-effort).
+// Use this on error paths where the main updateStatus() won't be reached.
+func (r *WazuhClusterReconciler) persistCondition(ctx context.Context, cluster *wazuhv1.WazuhCluster, conditionType, reason, message string) {
+	r.updateCondition(cluster, conditionType, metav1.ConditionFalse, reason, message)
+	if err := r.Status().Update(ctx, cluster); err != nil {
+		logf.FromContext(ctx).Error(err, "Failed to persist status condition", "conditionType", conditionType, "reason", reason)
 	}
 }
 
