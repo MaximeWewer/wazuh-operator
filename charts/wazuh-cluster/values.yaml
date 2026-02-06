@@ -324,9 +324,9 @@ cluster:
         # @default -- `false`
         autoRestart: false
         # -- Maintenance windows when CA renewal restart is allowed (cron format)
-        allowedRestartWindows: []
+        maintenanceWindows: []
         # Example:
-        # allowedRestartWindows:
+        # maintenanceWindows:
         #   - schedule: "0 2 * * 0"  # Sundays at 2 AM
         #     duration: "4h"
         #     timezone: "UTC"
