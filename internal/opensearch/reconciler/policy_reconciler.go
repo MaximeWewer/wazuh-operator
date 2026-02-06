@@ -23,11 +23,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // PolicyReconciler handles reconciliation of OpenSearch ISM policies
@@ -54,6 +56,19 @@ func (r *PolicyReconciler) WithClientFactory(factory *security.OpenSearchClientF
 // Reconcile reconciles an OpenSearch ISM policy
 func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSearchISMPolicy) error {
 	log := logf.FromContext(ctx)
+
+	// Handle finalizer
+	if !controllerutil.ContainsFinalizer(policy, constants.ISMPolicyFinalizer) {
+		controllerutil.AddFinalizer(policy, constants.ISMPolicyFinalizer)
+		if err := r.Update(ctx, policy); err != nil {
+			return fmt.Errorf("failed to add finalizer: %w", err)
+		}
+	}
+
+	// Check if being deleted
+	if !policy.DeletionTimestamp.IsZero() {
+		return r.handleDeletion(ctx, policy)
+	}
 
 	if r.ClientFactory == nil {
 		return r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
@@ -168,6 +183,18 @@ func (r *PolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.Ope
 	policy.Status.LastSyncTime = &now
 
 	return r.Status().Update(ctx, policy)
+}
+
+// handleDeletion handles ISM policy cleanup on deletion
+func (r *PolicyReconciler) handleDeletion(ctx context.Context, policy *wazuhv1.OpenSearchISMPolicy) error {
+	log := logf.FromContext(ctx)
+
+	if err := r.Delete(ctx, policy); err != nil {
+		log.Error(err, "Failed to delete ISM policy from OpenSearch, proceeding with finalizer removal")
+	}
+
+	controllerutil.RemoveFinalizer(policy, constants.ISMPolicyFinalizer)
+	return r.Update(ctx, policy)
 }
 
 // Delete handles cleanup when a policy is deleted

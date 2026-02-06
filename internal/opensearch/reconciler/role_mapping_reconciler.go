@@ -23,11 +23,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // RoleMappingReconciler handles reconciliation of OpenSearch role mappings
@@ -54,6 +56,19 @@ func (r *RoleMappingReconciler) WithClientFactory(factory *security.OpenSearchCl
 // Reconcile reconciles an OpenSearch role mapping
 func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping) error {
 	log := logf.FromContext(ctx)
+
+	// Handle finalizer
+	if !controllerutil.ContainsFinalizer(mapping, constants.RoleMappingFinalizer) {
+		controllerutil.AddFinalizer(mapping, constants.RoleMappingFinalizer)
+		if err := r.Update(ctx, mapping); err != nil {
+			return fmt.Errorf("failed to add finalizer: %w", err)
+		}
+	}
+
+	// Check if being deleted
+	if !mapping.DeletionTimestamp.IsZero() {
+		return r.handleDeletion(ctx, mapping)
+	}
 
 	if r.ClientFactory == nil {
 		return r.updateStatus(ctx, mapping, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
@@ -122,6 +137,18 @@ func (r *RoleMappingReconciler) updateStatus(ctx context.Context, mapping *wazuh
 	mapping.Status.LastSyncTime = &now
 
 	return r.Status().Update(ctx, mapping)
+}
+
+// handleDeletion handles role mapping cleanup on deletion
+func (r *RoleMappingReconciler) handleDeletion(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping) error {
+	log := logf.FromContext(ctx)
+
+	if err := r.Delete(ctx, mapping); err != nil {
+		log.Error(err, "Failed to delete role mapping from OpenSearch, proceeding with finalizer removal")
+	}
+
+	controllerutil.RemoveFinalizer(mapping, constants.RoleMappingFinalizer)
+	return r.Update(ctx, mapping)
 }
 
 // Delete handles cleanup when a role mapping is deleted

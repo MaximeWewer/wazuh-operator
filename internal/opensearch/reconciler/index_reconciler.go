@@ -25,11 +25,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // IndexReconciler handles reconciliation of OpenSearch indices
@@ -58,6 +60,19 @@ func (r *IndexReconciler) WithClientFactory(factory *security.OpenSearchClientFa
 // Reconcile reconciles an OpenSearch index
 func (r *IndexReconciler) Reconcile(ctx context.Context, index *wazuhv1.OpenSearchIndex) error {
 	log := logf.FromContext(ctx)
+
+	// Handle finalizer
+	if !controllerutil.ContainsFinalizer(index, constants.IndexFinalizer) {
+		controllerutil.AddFinalizer(index, constants.IndexFinalizer)
+		if err := r.Update(ctx, index); err != nil {
+			return fmt.Errorf("failed to add finalizer: %w", err)
+		}
+	}
+
+	// Check if being deleted
+	if !index.DeletionTimestamp.IsZero() {
+		return r.handleDeletion(ctx, index)
+	}
 
 	// Get OpenSearch client
 	osClient, err := r.getOpenSearchClient(ctx, index)
@@ -184,6 +199,18 @@ func (r *IndexReconciler) updateStatus(ctx context.Context, index *wazuhv1.OpenS
 	index.Status.LastSyncTime = &now
 
 	return r.Status().Update(ctx, index)
+}
+
+// handleDeletion handles index cleanup on deletion
+func (r *IndexReconciler) handleDeletion(ctx context.Context, index *wazuhv1.OpenSearchIndex) error {
+	log := logf.FromContext(ctx)
+
+	if err := r.Delete(ctx, index); err != nil {
+		log.Error(err, "Failed to delete index from OpenSearch, proceeding with finalizer removal")
+	}
+
+	controllerutil.RemoveFinalizer(index, constants.IndexFinalizer)
+	return r.Update(ctx, index)
 }
 
 // Delete handles cleanup when an index is deleted

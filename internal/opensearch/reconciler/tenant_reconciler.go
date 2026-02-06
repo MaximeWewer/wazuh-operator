@@ -23,11 +23,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // TenantReconciler handles reconciliation of OpenSearch tenants
@@ -54,6 +56,19 @@ func (r *TenantReconciler) WithClientFactory(factory *security.OpenSearchClientF
 // Reconcile reconciles an OpenSearch tenant
 func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSearchTenant) error {
 	log := logf.FromContext(ctx)
+
+	// Handle finalizer
+	if !controllerutil.ContainsFinalizer(tenant, constants.TenantFinalizer) {
+		controllerutil.AddFinalizer(tenant, constants.TenantFinalizer)
+		if err := r.Update(ctx, tenant); err != nil {
+			return fmt.Errorf("failed to add finalizer: %w", err)
+		}
+	}
+
+	// Check if being deleted
+	if !tenant.DeletionTimestamp.IsZero() {
+		return r.handleDeletion(ctx, tenant)
+	}
 
 	if r.ClientFactory == nil {
 		return r.updateStatus(ctx, tenant, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
@@ -120,6 +135,18 @@ func (r *TenantReconciler) updateStatus(ctx context.Context, tenant *wazuhv1.Ope
 	tenant.Status.LastSyncTime = &now
 
 	return r.Status().Update(ctx, tenant)
+}
+
+// handleDeletion handles tenant cleanup on deletion
+func (r *TenantReconciler) handleDeletion(ctx context.Context, tenant *wazuhv1.OpenSearchTenant) error {
+	log := logf.FromContext(ctx)
+
+	if err := r.Delete(ctx, tenant); err != nil {
+		log.Error(err, "Failed to delete tenant from OpenSearch, proceeding with finalizer removal")
+	}
+
+	controllerutil.RemoveFinalizer(tenant, constants.TenantFinalizer)
+	return r.Update(ctx, tenant)
 }
 
 // Delete handles cleanup when a tenant is deleted

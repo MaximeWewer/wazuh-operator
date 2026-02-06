@@ -23,11 +23,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // ActionGroupReconciler handles reconciliation of OpenSearch action groups
@@ -54,6 +56,19 @@ func (r *ActionGroupReconciler) WithClientFactory(factory *security.OpenSearchCl
 // Reconcile reconciles an OpenSearch action group
 func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup) error {
 	log := logf.FromContext(ctx)
+
+	// Handle finalizer
+	if !controllerutil.ContainsFinalizer(ag, constants.ActionGroupFinalizer) {
+		controllerutil.AddFinalizer(ag, constants.ActionGroupFinalizer)
+		if err := r.Update(ctx, ag); err != nil {
+			return fmt.Errorf("failed to add finalizer: %w", err)
+		}
+	}
+
+	// Check if being deleted
+	if !ag.DeletionTimestamp.IsZero() {
+		return r.handleDeletion(ctx, ag)
+	}
 
 	if r.ClientFactory == nil {
 		return r.updateStatus(ctx, ag, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
@@ -122,6 +137,18 @@ func (r *ActionGroupReconciler) updateStatus(ctx context.Context, ag *wazuhv1.Op
 	ag.Status.LastSyncTime = &now
 
 	return r.Status().Update(ctx, ag)
+}
+
+// handleDeletion handles action group cleanup on deletion
+func (r *ActionGroupReconciler) handleDeletion(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup) error {
+	log := logf.FromContext(ctx)
+
+	if err := r.Delete(ctx, ag); err != nil {
+		log.Error(err, "Failed to delete action group from OpenSearch, proceeding with finalizer removal")
+	}
+
+	controllerutil.RemoveFinalizer(ag, constants.ActionGroupFinalizer)
+	return r.Update(ctx, ag)
 }
 
 // Delete handles cleanup when an action group is deleted

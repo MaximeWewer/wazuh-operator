@@ -24,11 +24,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // TemplateReconciler handles reconciliation of OpenSearch index templates
@@ -55,6 +57,19 @@ func (r *TemplateReconciler) WithClientFactory(factory *security.OpenSearchClien
 // Reconcile reconciles an OpenSearch index template
 func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.OpenSearchIndexTemplate) error {
 	log := logf.FromContext(ctx)
+
+	// Handle finalizer
+	if !controllerutil.ContainsFinalizer(template, constants.IndexTemplateFinalizer) {
+		controllerutil.AddFinalizer(template, constants.IndexTemplateFinalizer)
+		if err := r.Update(ctx, template); err != nil {
+			return fmt.Errorf("failed to add finalizer: %w", err)
+		}
+	}
+
+	// Check if being deleted
+	if !template.DeletionTimestamp.IsZero() {
+		return r.handleDeletion(ctx, template)
+	}
 
 	if r.ClientFactory == nil {
 		return r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
@@ -163,6 +178,18 @@ func (r *TemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1
 	template.Status.LastSyncTime = &now
 
 	return r.Status().Update(ctx, template)
+}
+
+// handleDeletion handles index template cleanup on deletion
+func (r *TemplateReconciler) handleDeletion(ctx context.Context, template *wazuhv1.OpenSearchIndexTemplate) error {
+	log := logf.FromContext(ctx)
+
+	if err := r.Delete(ctx, template); err != nil {
+		log.Error(err, "Failed to delete index template from OpenSearch, proceeding with finalizer removal")
+	}
+
+	controllerutil.RemoveFinalizer(template, constants.IndexTemplateFinalizer)
+	return r.Update(ctx, template)
 }
 
 // Delete handles cleanup when a template is deleted

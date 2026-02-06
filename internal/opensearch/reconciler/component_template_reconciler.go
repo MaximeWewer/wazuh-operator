@@ -23,11 +23,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // ComponentTemplateReconciler handles reconciliation of OpenSearch component templates
@@ -54,6 +56,19 @@ func (r *ComponentTemplateReconciler) WithClientFactory(factory *security.OpenSe
 // Reconcile reconciles an OpenSearch component template
 func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.OpenSearchComponentTemplate) error {
 	log := logf.FromContext(ctx)
+
+	// Handle finalizer
+	if !controllerutil.ContainsFinalizer(template, constants.ComponentTemplateFinalizer) {
+		controllerutil.AddFinalizer(template, constants.ComponentTemplateFinalizer)
+		if err := r.Update(ctx, template); err != nil {
+			return fmt.Errorf("failed to add finalizer: %w", err)
+		}
+	}
+
+	// Check if being deleted
+	if !template.DeletionTimestamp.IsZero() {
+		return r.handleDeletion(ctx, template)
+	}
 
 	if r.ClientFactory == nil {
 		return r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
@@ -131,6 +146,18 @@ func (r *ComponentTemplateReconciler) updateStatus(ctx context.Context, template
 	template.Status.LastSyncTime = &now
 
 	return r.Status().Update(ctx, template)
+}
+
+// handleDeletion handles component template cleanup on deletion
+func (r *ComponentTemplateReconciler) handleDeletion(ctx context.Context, template *wazuhv1.OpenSearchComponentTemplate) error {
+	log := logf.FromContext(ctx)
+
+	if err := r.Delete(ctx, template); err != nil {
+		log.Error(err, "Failed to delete component template from OpenSearch, proceeding with finalizer removal")
+	}
+
+	controllerutil.RemoveFinalizer(template, constants.ComponentTemplateFinalizer)
+	return r.Update(ctx, template)
 }
 
 // Delete handles cleanup when a component template is deleted

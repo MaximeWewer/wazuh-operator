@@ -24,11 +24,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 // SnapshotPolicyReconciler handles reconciliation of OpenSearch snapshot policies
@@ -55,6 +57,19 @@ func (r *SnapshotPolicyReconciler) WithClientFactory(factory *security.OpenSearc
 // Reconcile reconciles an OpenSearch snapshot policy
 func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSearchSnapshotPolicy) error {
 	log := logf.FromContext(ctx)
+
+	// Handle finalizer
+	if !controllerutil.ContainsFinalizer(policy, constants.SnapshotPolicyFinalizer) {
+		controllerutil.AddFinalizer(policy, constants.SnapshotPolicyFinalizer)
+		if err := r.Update(ctx, policy); err != nil {
+			return fmt.Errorf("failed to add finalizer: %w", err)
+		}
+	}
+
+	// Check if being deleted
+	if !policy.DeletionTimestamp.IsZero() {
+		return r.handleDeletion(ctx, policy)
+	}
 
 	if r.ClientFactory == nil {
 		return r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
@@ -194,6 +209,18 @@ func (r *SnapshotPolicyReconciler) updateStatus(ctx context.Context, policy *waz
 	policy.Status.LastSyncTime = &now
 
 	return r.Status().Update(ctx, policy)
+}
+
+// handleDeletion handles snapshot policy cleanup on deletion
+func (r *SnapshotPolicyReconciler) handleDeletion(ctx context.Context, policy *wazuhv1.OpenSearchSnapshotPolicy) error {
+	log := logf.FromContext(ctx)
+
+	if err := r.Delete(ctx, policy); err != nil {
+		log.Error(err, "Failed to delete snapshot policy from OpenSearch, proceeding with finalizer removal")
+	}
+
+	controllerutil.RemoveFinalizer(policy, constants.SnapshotPolicyFinalizer)
+	return r.Update(ctx, policy)
 }
 
 // Delete handles cleanup when a snapshot policy is deleted
