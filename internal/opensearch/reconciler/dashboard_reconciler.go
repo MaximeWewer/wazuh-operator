@@ -205,6 +205,9 @@ func (r *DashboardReconciler) reconcileConfigMap(ctx context.Context, cluster *w
 
 	// Build dashboard configuration (already generates opensearch_dashboards.yml)
 	configBuilder := configmaps.NewDashboardConfigMapBuilder(cluster.Name, cluster.Namespace)
+	if cluster.Spec.Dashboard != nil {
+		configBuilder.WithEnableSSL(cluster.Spec.Dashboard.EnableSSL)
+	}
 
 	// Pass wazuhPlugin configuration if defined
 	if cluster.Spec.Dashboard != nil && cluster.Spec.Dashboard.WazuhPlugin != nil {
@@ -1072,6 +1075,7 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 
 	// Build ConfigMap
 	configBuilder := configmaps.NewDashboardConfigMapBuilder(dashboard.Name, dashboard.Namespace)
+	configBuilder.WithEnableSSL(dashboard.Spec.EnableSSL)
 	// Use IndexerRef to determine the indexer host
 	if dashboard.Spec.IndexerRef != "" {
 		indexerHost := constants.IndexerServiceFQDN(dashboard.Spec.IndexerRef, dashboard.Namespace)
