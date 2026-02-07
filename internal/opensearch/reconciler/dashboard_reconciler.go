@@ -205,6 +205,9 @@ func (r *DashboardReconciler) reconcileConfigMap(ctx context.Context, cluster *w
 
 	// Build dashboard configuration (already generates opensearch_dashboards.yml)
 	configBuilder := configmaps.NewDashboardConfigMapBuilder(cluster.Name, cluster.Namespace)
+	if cluster.Spec.Dashboard != nil {
+		configBuilder.WithEnableSSL(cluster.Spec.Dashboard.EnableSSL)
+	}
 
 	// Pass wazuhPlugin configuration if defined
 	if cluster.Spec.Dashboard != nil && cluster.Spec.Dashboard.WazuhPlugin != nil {
@@ -388,6 +391,7 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 		if cluster.Spec.Dashboard.Resources != nil {
 			deployBuilder.WithResources(cluster.Spec.Dashboard.Resources)
 		}
+		deployBuilder.WithEnableSSL(cluster.Spec.Dashboard.EnableSSL)
 		if len(cluster.Spec.Dashboard.Annotations) > 0 {
 			deployBuilder.WithAnnotations(cluster.Spec.Dashboard.Annotations)
 		}
@@ -768,6 +772,11 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 	configHash := r.getConfigHash(ctx, cluster)
 
 	deployBuilder := deployments.NewDashboardDeploymentBuilder(cluster.Name, cluster.Namespace)
+	enableSSL := true
+	if cluster.Spec.Dashboard != nil {
+		enableSSL = cluster.Spec.Dashboard.EnableSSL
+	}
+	deployBuilder.WithEnableSSL(enableSSL)
 
 	if cluster.Spec.Version != "" {
 		deployBuilder.WithVersion(cluster.Spec.Version)
@@ -998,17 +1007,28 @@ func (r *DashboardReconciler) createOrUpdate(ctx context.Context, obj client.Obj
 		return err
 	}
 
-	// Preserve immutable fields for Services
-	if svc, ok := obj.(*corev1.Service); ok {
-		if existingSvc, ok := existing.(*corev1.Service); ok {
-			svc.Spec.ClusterIP = existingSvc.Spec.ClusterIP
-			svc.Spec.ClusterIPs = existingSvc.Spec.ClusterIPs
+	return utils.RetryOnConflict(ctx, func() error {
+		current, ok := obj.DeepCopyObject().(client.Object)
+		if !ok {
+			return fmt.Errorf("failed to deep copy object")
 		}
-	}
 
-	log.V(1).Info("Updating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
-	obj.SetResourceVersion(existing.GetResourceVersion())
-	return r.Update(ctx, obj)
+		if err := r.Get(ctx, key, current); err != nil {
+			return err
+		}
+
+		// Preserve immutable fields for Services
+		if svc, ok := obj.(*corev1.Service); ok {
+			if currentSvc, ok := current.(*corev1.Service); ok {
+				svc.Spec.ClusterIP = currentSvc.Spec.ClusterIP
+				svc.Spec.ClusterIPs = currentSvc.Spec.ClusterIPs
+			}
+		}
+
+		log.V(1).Info("Updating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
+		obj.SetResourceVersion(current.GetResourceVersion())
+		return r.Update(ctx, obj)
+	})
 }
 
 // updateDeploymentWithRetry updates a Deployment with retry-on-conflict, always using the latest resourceVersion.
@@ -1072,6 +1092,7 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 
 	// Build ConfigMap
 	configBuilder := configmaps.NewDashboardConfigMapBuilder(dashboard.Name, dashboard.Namespace)
+	configBuilder.WithEnableSSL(dashboard.Spec.EnableSSL)
 	// Use IndexerRef to determine the indexer host
 	if dashboard.Spec.IndexerRef != "" {
 		indexerHost := constants.IndexerServiceFQDN(dashboard.Spec.IndexerRef, dashboard.Namespace)
@@ -1135,6 +1156,13 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 	}
 	if dashboard.Spec.Resources != nil {
 		deployBuilder.WithResources(dashboard.Spec.Resources)
+	}
+	deployBuilder.WithEnableSSL(dashboard.Spec.EnableSSL)
+	if dashboard.Spec.Tolerations != nil {
+		deployBuilder.WithTolerations(dashboard.Spec.Tolerations)
+	}
+	if dashboard.Spec.Affinity != nil {
+		deployBuilder.WithAffinity(dashboard.Spec.Affinity)
 	}
 	if len(dashboard.Spec.Annotations) > 0 {
 		deployBuilder.WithAnnotations(dashboard.Spec.Annotations)

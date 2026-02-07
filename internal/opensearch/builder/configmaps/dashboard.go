@@ -37,6 +37,7 @@ type DashboardConfigMapBuilder struct {
 	indexerPort  int32
 	serverHost   string
 	serverPort   int32
+	enableSSL    bool
 	customConfig string
 	// Wazuh plugin configuration
 	wazuhPlugin *wazuhv1.WazuhPluginConfig
@@ -58,6 +59,7 @@ func NewDashboardConfigMapBuilder(clusterName, namespace string) *DashboardConfi
 		indexerPort: constants.PortIndexerHTTP,
 		serverHost:  "0.0.0.0",
 		serverPort:  constants.PortDashboardHTTP,
+		enableSSL:   true,
 	}
 }
 
@@ -82,6 +84,12 @@ func (b *DashboardConfigMapBuilder) WithServerHost(host string) *DashboardConfig
 // WithServerPort sets the Dashboard server port
 func (b *DashboardConfigMapBuilder) WithServerPort(port int32) *DashboardConfigMapBuilder {
 	b.serverPort = port
+	return b
+}
+
+// WithEnableSSL sets whether the dashboard server should use SSL
+func (b *DashboardConfigMapBuilder) WithEnableSSL(enabled bool) *DashboardConfigMapBuilder {
+	b.enableSSL = enabled
 	return b
 }
 
@@ -233,16 +241,25 @@ opensearch.requestHeadersAllowlist:
   - securitytenant
   - Authorization
 
-# Dashboard server SSL
-server.ssl.enabled: true
-server.ssl.certificate: /usr/share/wazuh-dashboard/config/certs/dashboard.pem
-server.ssl.key: /usr/share/wazuh-dashboard/config/certs/dashboard-key.pem
-
 # Authentication
 opensearch.username: "${INDEXER_USERNAME}"
 opensearch.password: "${INDEXER_PASSWORD}"
 
 `, b.serverHost, b.serverPort, b.clusterName, indexerHost, b.indexerPort)
+
+	if b.enableSSL {
+		baseConfig += `# Dashboard server SSL
+server.ssl.enabled: true
+server.ssl.certificate: /usr/share/wazuh-dashboard/config/certs/dashboard.pem
+server.ssl.key: /usr/share/wazuh-dashboard/config/certs/dashboard-key.pem
+
+`
+	} else {
+		baseConfig += `# Dashboard server SSL
+server.ssl.enabled: false
+
+`
+	}
 
 	authSection, err := b.buildAuthSection()
 	if err != nil {
