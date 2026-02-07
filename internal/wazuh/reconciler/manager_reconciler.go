@@ -19,6 +19,7 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"reflect"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -272,6 +273,12 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 		if manager.Spec.Master.NodeSelector != nil {
 			stsBuilder.WithNodeSelector(manager.Spec.Master.NodeSelector)
 		}
+		if manager.Spec.Master.Tolerations != nil {
+			stsBuilder.WithTolerations(manager.Spec.Master.Tolerations)
+		}
+		if manager.Spec.Master.Affinity != nil {
+			stsBuilder.WithAffinity(manager.Spec.Master.Affinity)
+		}
 		// Set termination grace period (default + user override)
 		terminationGracePeriod := constants.DefaultManagerTerminationGracePeriod
 		if manager.Spec.Master.TerminationGracePeriodSeconds != nil {
@@ -303,6 +310,12 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 		}
 		if manager.Spec.Workers.NodeSelector != nil {
 			stsBuilder.WithNodeSelector(manager.Spec.Workers.NodeSelector)
+		}
+		if manager.Spec.Workers.Tolerations != nil {
+			stsBuilder.WithTolerations(manager.Spec.Workers.Tolerations)
+		}
+		if manager.Spec.Workers.Affinity != nil {
+			stsBuilder.WithAffinity(manager.Spec.Workers.Affinity)
 		}
 		// Set termination grace period (default + user override)
 		terminationGracePeriod := constants.DefaultManagerTerminationGracePeriod
@@ -340,6 +353,14 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 	}
 	if utils.HashMap(sts.Spec.Template.Annotations) != utils.HashMap(found.Spec.Template.Annotations) {
 		log.Info("Updating StatefulSet due to pod annotation change", "name", sts.Name)
+		needsUpdate = true
+	}
+	if !reflect.DeepEqual(sts.Spec.Template.Spec.Tolerations, found.Spec.Template.Spec.Tolerations) {
+		log.Info("Updating StatefulSet due to tolerations change", "name", sts.Name)
+		needsUpdate = true
+	}
+	if !reflect.DeepEqual(sts.Spec.Template.Spec.Affinity, found.Spec.Template.Spec.Affinity) {
+		log.Info("Updating StatefulSet due to affinity change", "name", sts.Name)
 		needsUpdate = true
 	}
 	if needsUpdate {
