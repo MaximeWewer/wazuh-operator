@@ -52,6 +52,7 @@ type DashboardDeploymentBuilder struct {
 	indexerURL                    string
 	wazuhPlugin                   bool
 	terminationGracePeriodSeconds *int64
+	enableSSL                     bool
 }
 
 // NewDashboardDeploymentBuilder creates a new DashboardDeploymentBuilder
@@ -66,6 +67,7 @@ func NewDashboardDeploymentBuilder(clusterName, namespace string) *DashboardDepl
 		replicas:    constants.DefaultDashboardReplicas,
 		indexerURL:  indexerURL,
 		wazuhPlugin: true,
+		enableSSL:   true,
 		labels:      make(map[string]string),
 		annotations: make(map[string]string),
 	}
@@ -180,6 +182,12 @@ func (b *DashboardDeploymentBuilder) WithIndexerURL(url string) *DashboardDeploy
 // WithWazuhPlugin enables or disables the Wazuh plugin
 func (b *DashboardDeploymentBuilder) WithWazuhPlugin(enabled bool) *DashboardDeploymentBuilder {
 	b.wazuhPlugin = enabled
+	return b
+}
+
+// WithEnableSSL sets whether the dashboard server should use SSL
+func (b *DashboardDeploymentBuilder) WithEnableSSL(enabled bool) *DashboardDeploymentBuilder {
+	b.enableSSL = enabled
 	return b
 }
 
@@ -357,7 +365,12 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 									HTTPGet: &corev1.HTTPGetAction{
 										Path:   "/app/login",
 										Port:   intstr.FromInt(int(constants.PortDashboardHTTP)),
-										Scheme: corev1.URISchemeHTTPS,
+										Scheme: func() corev1.URIScheme {
+											if b.enableSSL {
+												return corev1.URISchemeHTTPS
+											}
+											return corev1.URISchemeHTTP
+										}(),
 									},
 								},
 								InitialDelaySeconds: 60,
@@ -370,7 +383,12 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 									HTTPGet: &corev1.HTTPGetAction{
 										Path:   "/app/login",
 										Port:   intstr.FromInt(int(constants.PortDashboardHTTP)),
-										Scheme: corev1.URISchemeHTTPS,
+										Scheme: func() corev1.URIScheme {
+											if b.enableSSL {
+												return corev1.URISchemeHTTPS
+											}
+											return corev1.URISchemeHTTP
+										}(),
 									},
 								},
 								InitialDelaySeconds: 30,
