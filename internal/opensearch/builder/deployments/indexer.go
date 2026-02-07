@@ -689,11 +689,13 @@ if [ "$DESIRED" -gt "$CURRENT" ]; then
 fi`, config.VMMaxMapCount()),
 			},
 			SecurityContext: &corev1.SecurityContext{
-				Privileged: boolPtr(true),
-				// Override pod-level seccomp profile to allow sysctl syscall
-				SeccompProfile: &corev1.SeccompProfile{
-					Type: corev1.SeccompProfileTypeUnconfined,
+				Capabilities: &corev1.Capabilities{
+					Add: []corev1.Capability{
+						"SYS_ADMIN",
+					},
 				},
+				Privileged: boolPtr(true),
+				RunAsUser:  int64Ptr(0),
 			},
 		},
 	}

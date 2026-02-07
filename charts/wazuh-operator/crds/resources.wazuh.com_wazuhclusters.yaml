@@ -1186,7 +1186,7 @@ spec:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
                   enableSSL:
-                    default: false
+                    default: true
                     description: Enable SSL
                     type: boolean
                   env:

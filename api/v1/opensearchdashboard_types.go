@@ -52,7 +52,7 @@ type OpenSearchDashboardSpec struct {
 
 	// Enable SSL
 	// +optional
-	// +kubebuilder:default=false
+	// +kubebuilder:default=true
 	EnableSSL bool `json:"enableSSL,omitempty"`
 
 	// Service configuration
