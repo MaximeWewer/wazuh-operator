@@ -16,6 +16,8 @@ limitations under the License.
 
 package reconciler
 
+// +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
+
 import (
 	"context"
 	"fmt"
