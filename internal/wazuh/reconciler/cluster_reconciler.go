@@ -299,6 +299,14 @@ func (r *ClusterReconciler) ReconcileManagerNonBlocking(ctx context.Context, clu
 		return ManagerReconcileResult{Error: fmt.Errorf("failed to reconcile manager PDB: %w", err)}
 	}
 
+	// Reconcile manager volume expansion (master + workers)
+	if err := r.reconcileMasterVolumeExpansion(ctx, cluster); err != nil {
+		log.Error(err, "Failed to reconcile manager master volume expansion")
+	}
+	if err := r.reconcileWorkerVolumeExpansion(ctx, cluster); err != nil {
+		log.Error(err, "Failed to reconcile manager worker volume expansion")
+	}
+
 	log.Info("Manager reconciliation completed (non-blocking)", "pendingRollouts", len(pendingRollouts))
 	return ManagerReconcileResult{PendingRollouts: pendingRollouts}
 }

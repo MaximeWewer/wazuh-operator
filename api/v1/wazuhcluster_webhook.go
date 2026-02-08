@@ -439,8 +439,16 @@ func validateDashboardSpec(spec *WazuhDashboardClusterSpec) []string {
 func validateTLSConfig(tls *TLSConfig) []string {
 	var errors []string
 
+	// Validate mutual exclusion: certManager and customCerts cannot both be set
+	certManagerEnabled := tls.CertManager != nil && tls.CertManager.Enabled
+	customCertsSet := tls.CustomCerts != nil
+
+	if certManagerEnabled && customCertsSet {
+		errors = append(errors, "spec.tls: certManager and customCerts are mutually exclusive; use one or the other")
+	}
+
 	// Validate cert-manager configuration
-	if tls.CertManager != nil && tls.CertManager.Enabled {
+	if certManagerEnabled {
 		if tls.CertManager.IssuerName == "" {
 			errors = append(errors, "spec.tls.certManager.issuerName: is required when cert-manager is enabled")
 		}
@@ -448,6 +456,15 @@ func validateTLSConfig(tls *TLSConfig) []string {
 			tls.CertManager.IssuerKind != "Issuer" &&
 			tls.CertManager.IssuerKind != "ClusterIssuer" {
 			errors = append(errors, "spec.tls.certManager.issuerKind: must be 'Issuer' or 'ClusterIssuer'")
+		}
+	}
+
+	// Validate custom certs configuration
+	if customCertsSet {
+		if tls.CustomCerts.CASecretRef == nil {
+			errors = append(errors, "spec.tls.customCerts.caSecretRef: is required when customCerts is configured")
+		} else if tls.CustomCerts.CASecretRef.Name == "" {
+			errors = append(errors, "spec.tls.customCerts.caSecretRef.name: cannot be empty")
 		}
 	}
 

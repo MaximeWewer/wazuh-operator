@@ -211,6 +211,11 @@ func (r *CertificateReconciler) Reconcile(ctx context.Context, cluster *wazuhv1.
 func (r *CertificateReconciler) ReconcileWithHashes(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*CertHashResult, error) {
 	log := logf.FromContext(ctx)
 
+	// Dispatch to custom certs reconciler if configured
+	if cluster.Spec.TLS != nil && cluster.Spec.TLS.CustomCerts != nil {
+		return r.reconcileCustomCerts(ctx, cluster)
+	}
+
 	// Get certificate options from CRD configuration
 	certOpts := r.getCertOptions(cluster)
 	log.V(1).Info("Using certificate options",
