@@ -114,8 +114,11 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&leaderElectionID, "leader-election-id", "wazuh-operator-leader",
 		"The name of the resource that leader election will use for holding the leader lock.")
+	var maxConcurrentReconciles int
 	flag.Bool("non-blocking-rollouts", true,
 		"Enable non-blocking rollouts for parallel certificate renewals.")
+	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 1,
+		"The maximum number of concurrent Reconciles which can be run for the WazuhCluster controller.")
 	flag.Parse()
 
 	// Setup logging from environment variables (LOG_FORMAT, LOG_LEVEL)
@@ -319,6 +322,7 @@ func main() {
 		HTTPRouteAvailable:      gatewayAPIStatus.HTTPRouteAvailable,
 		TCPRouteAvailable:       gatewayAPIStatus.TCPRouteAvailable,
 		UDPRouteAvailable:       gatewayAPIStatus.UDPRouteAvailable,
+		MaxConcurrentReconciles: maxConcurrentReconciles,
 	}
 	if err := wazuhClusterReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WazuhCluster")

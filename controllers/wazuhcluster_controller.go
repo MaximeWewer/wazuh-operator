@@ -1835,17 +1835,26 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// This prevents the controller from failing to start if Gateway API CRDs are not installed
 	if r.GatewayAPIEnabled {
 		if r.HTTPRouteAvailable {
-			builder = builder.Owns(&gatewayv1.HTTPRoute{})
+			ctrlBuilder = ctrlBuilder.Owns(&gatewayv1.HTTPRoute{})
 		}
 		if r.TCPRouteAvailable {
-			builder = builder.Owns(&gatewayv1alpha2.TCPRoute{})
+			ctrlBuilder = ctrlBuilder.Owns(&gatewayv1alpha2.TCPRoute{})
 		}
 		if r.UDPRouteAvailable {
-			builder = builder.Owns(&gatewayv1alpha2.UDPRoute{})
+			ctrlBuilder = ctrlBuilder.Owns(&gatewayv1alpha2.UDPRoute{})
 		}
 	}
 
-	return builder.
+	// Configure controller options
+	maxConcurrent := r.MaxConcurrentReconciles
+	if maxConcurrent <= 0 {
+		maxConcurrent = 1
+	}
+
+	return ctrlBuilder.
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: maxConcurrent,
+		}).
 		Named("wazuhcluster").
 		Complete(r)
 }
