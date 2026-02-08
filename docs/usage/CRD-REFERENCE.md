@@ -316,7 +316,7 @@ Includes all fields from MasterSpec, plus:
 | `podAnnotations`           | map[string]string                             | No       | -                  | Pod annotations                                                    |
 | `ingress`                  | [IngressSpec](#ingressspec)                   | No       | -                  | Ingress config                                                     |
 | `gatewayAPI`               | [GatewayAPISpec](#gatewayapispec)             | No       | -                  | Gateway API config                                                 |
-| `updateStrategy`           | string                                        | No       | `RollingUpdate`    | Update strategy                                                    |
+| `updateStrategy`           | string                                        | No       | `RollingUpdate`    | Update strategy (StatefulSets use OnDelete internally for quorum-safe restarts) |
 | `initContainers`           | []Container                                   | No       | -                  | Init containers                                                    |
 | `env`                      | []EnvVar                                      | No       | -                  | Environment variables                                              |
 | `envFrom`                  | []EnvFromSource                               | No       | -                  | Env from sources                                                   |

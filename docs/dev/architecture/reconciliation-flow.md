@@ -136,7 +136,10 @@ ReconcileWithHashes()
 
 Each component uses a **spec hash** to detect configuration changes and trigger rolling updates.
 When any tracked field changes, the hash changes and the StatefulSet/Deployment pod template
-annotation is updated, causing Kubernetes to perform a rolling restart.
+annotation is updated. For StatefulSets (which use `OnDelete` update strategy), the operator's
+rolling restart orchestrator then detects the revision mismatch and performs a quorum-safe
+pod-by-pod restart with health checks between each deletion. For Deployments (dashboard),
+Kubernetes performs a standard rolling restart.
 
 ### Tracked Fields by Component
 

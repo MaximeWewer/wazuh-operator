@@ -167,28 +167,34 @@ kubectl rollout status statefulset/wazuh-cluster-manager-master -n wazuh
 kubectl get wazuhcluster wazuh-cluster -n wazuh -o yaml | grep -A 20 'conditions:'
 ```
 
-## Rolling Update Behavior
+## Quorum-Safe Rolling Restart Behavior
 
-The operator performs rolling updates automatically:
+The operator uses an **OnDelete** StatefulSet update strategy and manages pod-by-pod restarts
+itself, with cluster health verification between each pod replacement. This prevents split-brain
+for OpenSearch and total service disruption for Wazuh.
 
-1. **Indexer**: One pod at a time, waits for green cluster health
-2. **Manager Workers**: One pod at a time, drains queue first
-3. **Manager Master**: Updated last, after all workers
-4. **Dashboard**: Standard rolling deployment
+When a configuration or certificate change is detected, the operator:
 
-### Customizing Update Strategy
+1. **Indexer**: Deletes one pod at a time (highest ordinal first), verifying OpenSearch cluster health
+   (not RED, no relocating/initializing shards, all nodes present) before each deletion
+2. **Manager Workers**: Restarts one worker at a time (highest ordinal first), verifying all pods
+   are ready before proceeding
+3. **Manager Master**: Restarted last, only after all workers are fully updated
+4. **Dashboard**: Standard rolling deployment (Deployment, not StatefulSet)
+
+Rolling restart progress is tracked in `.status.rollingRestart` and visible via:
+
+```bash
+kubectl get wazuhcluster wazuh-cluster -n wazuh -o jsonpath='{.status.rollingRestart}'
+```
+
+### Drain Configuration
 
 ```yaml
 apiVersion: resources.wazuh.com/v1
 kind: WazuhCluster
 spec:
-  # Update strategy for StatefulSets
-  updateStrategy:
-    type: RollingUpdate
-    rollingUpdate:
-      partition: 0  # Update all pods
-
-  # Drain configuration for safe updates
+  # Drain configuration for safe scale-down operations
   drain:
     indexer:
       timeout: 30m
