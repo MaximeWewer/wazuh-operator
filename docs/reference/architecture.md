@@ -13,7 +13,7 @@ The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framewor
 - **Kubernetes API**: client-go v0.35.0, k8s.io/api v0.35.0
 - **Gateway API**: sigs.k8s.io/gateway-api v1.4.1
 - **Testing**: Ginkgo v2.28.1 + Gomega v1.39.1
-- **Monitoring**: Prometheus (prometheus-operator v0.88.1 APIs, prometheus/client_golang v1.23.2)
+- **Monitoring**: Prometheus (prometheus-operator v0.89.0 APIs, prometheus/client_golang v1.23.2)
 - **Tracing**: OpenTelemetry (OTLP gRPC exporter v1.40.0, otelhttp transport)
 - **Cryptography**: golang.org/x/crypto v0.47.0
 
@@ -22,7 +22,7 @@ The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framewor
 - **Build Tool**: Make
 - **Container**: Multi-stage Docker (golang:1.25-alpine → distroless/static:nonroot)
 - **Package Manager**: Helm (charts published to GHCR)
-- **Code Generation**: controller-gen v0.17.0
+- **Code Generation**: controller-gen v0.19.0
 
 ## Architecture Pattern
 
@@ -661,8 +661,9 @@ Restore Job (scale manager to 0, extract, scale back)
 - Register with controller-runtime manager
 - Add to main.go setup
 
-### Webhooks (Planned)
+### Webhooks
 
-- Validation webhooks for admission control
-- Defaulting webhooks for field defaults
-- Conversion webhooks for API version migration
+Two webhooks are implemented:
+
+- **WazuhCluster** (`api/v1/wazuhcluster_webhook.go`): Validation webhook (spec validation, mode exclusion, TLS config) and defaulting webhook (TLS defaults, replica defaults)
+- **OpenSearchAuthConfig** (`api/v1/opensearchauthconfig_webhook.go`): Validation webhook for authentication configuration

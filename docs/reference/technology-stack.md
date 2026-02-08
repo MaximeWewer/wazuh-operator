@@ -9,7 +9,7 @@ The Wazuh Operator is a Kubernetes operator built with Go and Kubebuilder, follo
 | Category                     | Technology                       | Version                  | Justification                                                                                               |
 | ---------------------------- | -------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------- |
 | **Core Language**            | Go                               | 1.25.7                   | Primary language for Kubernetes operators, native support for concurrency and efficient resource management |
-| **Operator Framework**       | Kubebuilder                      | controller-tools v0.17.0 | Industry-standard framework for building Kubernetes operators with code generation and scaffolding          |
+| **Operator Framework**       | Kubebuilder                      | controller-tools v0.19.0 | Industry-standard framework for building Kubernetes operators with code generation and scaffolding          |
 | **Controller Runtime**       | controller-runtime               | v0.23.1                  | Core library for building Kubernetes controllers with reconciliation loops and caching                      |
 | **Kubernetes Client**        | client-go                        | v0.35.0                  | Official Kubernetes Go client for API interactions                                                          |
 | **Kubernetes API**           | k8s.io/api                       | v0.35.0                  | Kubernetes API types and definitions                                                                        |
@@ -17,7 +17,7 @@ The Wazuh Operator is a Kubernetes operator built with Go and Kubebuilder, follo
 | **Gateway API**              | sigs.k8s.io/gateway-api          | v1.4.1                   | Kubernetes Gateway API for advanced traffic routing (HTTPRoute, TCPRoute, UDPRoute)                         |
 | **Testing Framework**        | Ginkgo                           | v2.28.1                  | BDD-style testing framework for Go                                                                          |
 | **Testing Assertions**       | Gomega                           | v1.39.1                  | Matcher library for expressive test assertions                                                              |
-| **Monitoring Integration**   | Prometheus Operator APIs         | v0.88.1                  | Integration with Prometheus for ServiceMonitor/PodMonitor CRDs                                              |
+| **Monitoring Integration**   | Prometheus Operator APIs         | v0.89.0                  | Integration with Prometheus for ServiceMonitor/PodMonitor CRDs                                              |
 | **Metrics Client**           | prometheus/client_golang         | v1.23.2                  | Prometheus metrics collection and exposition                                                                |
 | **Cryptography**             | golang.org/x/crypto              | v0.47.0                  | TLS certificate generation and cryptographic operations                                                     |
 | **Logging**                  | zap (via controller-runtime)     | v1.27.1                  | High-performance structured logging                                                                         |
@@ -127,7 +127,7 @@ make test       # Run unit tests
 ## API Group
 
 - **Group**: `resources.wazuh.com`
-- **Version**: `v1` (storage version), `v1alpha1` (served for backward compatibility)
+- **Version**: `v1` (storage version)
 - **Short Names**: Defined for all CRDs (e.g., `wc`, `wmgr`, `osuser`, `osrole`)
 
 ## Target Environment

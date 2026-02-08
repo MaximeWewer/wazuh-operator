@@ -176,7 +176,7 @@ func StringPtr(s string) *string {
 
 // IsCRDNotInstalledError checks if the error is due to a CRD not being installed.
 // This is useful for handling optional CRD dependencies gracefully (e.g., Gateway API,
-// Prometheus Operator, cert-manager, etc.).
+// Prometheus Operator, Gateway API, etc.).
 //
 // Returns true if the error indicates that the CRD/Kind is not registered in the cluster.
 func IsCRDNotInstalledError(err error) bool {

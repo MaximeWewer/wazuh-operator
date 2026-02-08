@@ -68,7 +68,7 @@ The main CRD for deploying a complete Wazuh stack (Manager, Indexer, Dashboard).
 | `certConfig` | [CertificateConfig](#certificateconfig) | No       | -       | Auto-generated certificate settings |
 | `hotReload`  | [HotReloadConfig](#hotreloadconfig)     | No       | -       | Hot reload settings                 |
 
-> **Note**: Cert-manager integration and custom certificates are planned features but not yet implemented.
+> **Note**: Custom certificates (BYO certs) are supported. See [TLS Configuration](features/tls.md#custom-certificates) for details.
 
 ### CertificateConfig
 

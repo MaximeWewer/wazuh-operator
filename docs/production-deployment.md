@@ -541,7 +541,7 @@ The webhook validates:
 - **Version format:** Must be semver (e.g., `4.9.2`)
 - **Configuration mode:** Cannot mix inline and reference modes
 - **Component specifications:** Manager, Indexer, Dashboard configs
-- **TLS configuration:** cert-manager integration
+- **TLS configuration:** custom certificates and auto-generated certs
 - **Topology changes:** Prevents invalid mode transitions
 
 ### Example Validation Errors
@@ -557,18 +557,13 @@ Error: spec.version: must be in semver format (e.g., 4.9.2)
 
 ### Webhook Configuration
 
-Webhooks are automatically configured when using cert-manager:
+Webhooks require a CA bundle for TLS. Configure it in the Helm values:
 
 ```yaml
-apiVersion: resources.wazuh.com/v1
-kind: WazuhCluster
-spec:
-  tls:
-    certManager:
-      enabled: true
-      issuerRef:
-        name: selfsigned-issuer
-        kind: ClusterIssuer
+webhook:
+  enabled: true
+  failurePolicy: Fail
+  caBundle: "<base64-encoded-CA-bundle>"
 ```
 
 ---
@@ -659,9 +654,9 @@ Health checks run automatically during reconciliation. The operator:
 
 2. **Certificate errors:**
 
-   - Verify cert-manager is running
-   - Check Certificate resources: `kubectl get certificates`
-   - Check cert-manager logs
+   - Verify TLS secrets exist: `kubectl get secrets -l app.kubernetes.io/managed-by=wazuh-operator`
+   - Check certificate expiry in operator logs
+   - Verify certificate files in pods: `kubectl exec <pod> -- ls /etc/ssl/certs/`
 
 3. **Indexer cluster health red:**
    - Check shard allocation: `curl -k https://indexer:9200/_cluster/allocation/explain`

@@ -21,17 +21,11 @@ metadata:
   name: {{ include "wazuh-operator.fullname" . }}-mutating-webhook
   labels:
     {{- include "wazuh-operator.labels" . | nindent 4 }}
-  {{- if .Values.certManager.enabled }}
-  annotations:
-    cert-manager.io/inject-ca-from: {{ include "wazuh-operator.namespace" . }}/{{ include "wazuh-operator.fullname" . }}-webhook-cert
-  {{- end }}
 webhooks:
   - admissionReviewVersions:
       - v1
     clientConfig:
-      {{- if not .Values.certManager.enabled }}
       caBundle: {{ .Values.webhook.caBundle | default "" | quote }}
-      {{- end }}
       service:
         name: {{ include "wazuh-operator.fullname" . }}-webhook-service
         namespace: {{ include "wazuh-operator.namespace" . }}
@@ -60,17 +54,11 @@ metadata:
   name: {{ include "wazuh-operator.fullname" . }}-validating-webhook
   labels:
     {{- include "wazuh-operator.labels" . | nindent 4 }}
-  {{- if .Values.certManager.enabled }}
-  annotations:
-    cert-manager.io/inject-ca-from: {{ include "wazuh-operator.namespace" . }}/{{ include "wazuh-operator.fullname" . }}-webhook-cert
-  {{- end }}
 webhooks:
   - admissionReviewVersions:
       - v1
     clientConfig:
-      {{- if not .Values.certManager.enabled }}
       caBundle: {{ .Values.webhook.caBundle | default "" | quote }}
-      {{- end }}
       service:
         name: {{ include "wazuh-operator.fullname" . }}-webhook-service
         namespace: {{ include "wazuh-operator.namespace" . }}

@@ -118,7 +118,7 @@ The operator creates and manages:
 
 ## Development Status
 
-**Current Version**: v1 (storage version), v1alpha1 (backward compatible)
+**Current Version**: v1 (storage version)
 
 **Completed Features**:
 
@@ -135,14 +135,10 @@ The operator creates and manages:
 - API v1 migration (stable storage version)
 - Gateway API support (HTTPRoute, TCPRoute, UDPRoute)
 - Ingress support (networkingv1.Ingress)
-
-**Planned Features**:
-
-- Multiple cluster support
-- Extended test coverage
 - NetworkPolicies
-- Validation webhooks
-- OLM/OperatorHub support
+- Admission webhooks (validation + mutation)
+- Custom certificates (BYO certs)
+- Multiple WazuhCluster support (across namespaces or within same namespace)
 
 ## Getting Started
 

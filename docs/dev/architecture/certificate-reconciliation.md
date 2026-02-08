@@ -78,7 +78,7 @@ Default settings: 3650 days CA (10 years), 365 days node certs, 30 days renewal 
 
 ### CertificateReconciler
 
-**Location**: `internal/wazuh/reconciler/certificate_reconciler.go`
+**Location**: `internal/certificates/reconciler/certificate_reconciler.go`
 
 Responsible for:
 
@@ -109,7 +109,7 @@ Provides wait functions for pod rollouts:
 
 ### CertHashResult
 
-**Location**: `internal/wazuh/reconciler/certificate_reconciler.go`
+**Location**: `internal/certificates/reconciler/certificate_reconciler.go`
 
 Structure containing certificate hashes:
 
@@ -238,14 +238,14 @@ The operator uses the `/config` subdirectory for all indexer paths:
 
 Certificate paths in `opensearch.yml` are **absolute** (e.g., `/usr/share/wazuh-indexer/config/certs/tls.crt`) rather than relative. This ensures compatibility across all Wazuh versions regardless of where `opensearch.path.conf` points.
 
-### Dual Mount Strategy
+### Version-Based Configuration Paths
 
-Different Wazuh/OpenSearch versions read configuration from different base directories. The operator mounts configuration files at two locations:
+Different Wazuh/OpenSearch versions read configuration from different base directories. The operator uses `UsesIndexerConfigDir(wazuhVersion)` with a threshold of Wazuh 4.14.0 to select a **single** mount path per version:
 
-- `opensearch.yml`: mounted at both `/usr/share/wazuh-indexer/config/opensearch.yml` (4.12+) and `/usr/share/wazuh-indexer/opensearch.yml` (4.9-4.11)
-- Security config files (`internal_users.yml`, `roles_mapping.yml`): mounted at both `/usr/share/wazuh-indexer/config/opensearch-security/` (4.12+) and `/usr/share/wazuh-indexer/opensearch-security/` (4.9-4.11)
+- Wazuh >= 4.14.0: config base is `/usr/share/wazuh-indexer/config/`
+- Wazuh < 4.14.0: config base is `/usr/share/wazuh-indexer/`
 
-This is implemented in `indexer.go` and `indexer_nodepool.go`.
+This is implemented in `pkg/constants/indexer_paths.go`, with mount logic in `indexer.go` and `indexer_nodepool.go`.
 
 ## Filebeat Configuration Strategy
 

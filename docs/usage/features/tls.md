@@ -7,8 +7,7 @@ The Wazuh Operator provides comprehensive TLS management for secure communicatio
 TLS is enabled by default and supports three modes:
 
 1. **Auto-generated certificates** (default): Operator generates and manages certificates
-2. **Cert-manager integration**: Use cert-manager for certificate lifecycle
-3. **Custom certificates**: Bring your own certificates
+2. **Custom certificates**: Bring your own certificates
 
 ## Configuration
 
@@ -158,7 +157,7 @@ The operator uses absolute paths for all certificate references in `opensearch.y
 
 ### Version-Based Configuration Paths
 
-Different Wazuh/OpenSearch versions read configuration from different base directories. The operator uses `UsesIndexerConfigDir()` (threshold: Wazuh 4.14.0 / OpenSearch 2.18) to select the correct single mount path for each version:
+Different Wazuh/OpenSearch versions read configuration from different base directories. The operator uses `UsesIndexerConfigDir()` (threshold: Wazuh 4.14.0 / OpenSearch 2.19) to select the correct single mount path for each version:
 
 | Version               | Config Base Directory                              |
 | --------------------- | -------------------------------------------------- |
@@ -182,43 +181,6 @@ The operator generates a complete `filebeat.yml` via ConfigMap with all values e
 **Reason:** The Wazuh container image includes an s6 init script (`1-config-filebeat`) that uses `sed` to modify `filebeat.yml` when these environment variables are set. However, the sed patterns expect the default image format (inline YAML arrays) and will corrupt the operator-generated YAML (which uses multi-line lists). By leaving these env vars unset, the init script skips modifications and the operator-generated configuration is preserved intact.
 
 The operator uses an init container to copy the generated `filebeat.yml` from the ConfigMap to an emptyDir volume mounted at `/etc/filebeat/`. This ensures the s6 init script `1-config-filebeat` finds the file but does not modify it.
-
-## Cert-Manager Integration
-
-Use cert-manager for certificate lifecycle management:
-
-```yaml
-tls:
-  certManager:
-    enabled: true
-    issuerName: "wazuh-ca-issuer"
-    issuerKind: "ClusterIssuer"
-```
-
-### Configuration Options
-
-| Field        | Type   | Default  | Description                      |
-| ------------ | ------ | -------- | -------------------------------- |
-| `enabled`    | bool   | `false`  | Enable cert-manager integration  |
-| `issuerName` | string | -        | Name of the Issuer/ClusterIssuer |
-| `issuerKind` | string | `Issuer` | `Issuer` or `ClusterIssuer`      |
-
-### Prerequisites
-
-1. Install cert-manager in your cluster
-2. Create an Issuer or ClusterIssuer
-
-Example ClusterIssuer:
-
-```yaml
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-  name: wazuh-ca-issuer
-spec:
-  ca:
-    secretName: wazuh-ca-secret
-```
 
 ## Custom Certificates
 

@@ -17766,22 +17766,6 @@ spec:
                         pattern: ^\d+[dhm]$
                         type: string
                     type: object
-                  certManager:
-                    description: Use cert-manager for certificate management
-                    properties:
-                      enabled:
-                        description: Enable cert-manager integration
-                        type: boolean
-                      issuerKind:
-                        description: Issuer kind
-                        enum:
-                        - Issuer
-                        - ClusterIssuer
-                        type: string
-                      issuerName:
-                        description: Issuer name
-                        type: string
-                    type: object
                   customCerts:
                     description: Custom certificates
                     properties:

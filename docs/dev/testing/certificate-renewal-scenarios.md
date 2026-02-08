@@ -395,34 +395,31 @@ kubectl logs -n wazuh-test wazuh-test-indexer-0 | grep -i "certificate\|reload\|
 
 **Expected Result**: Indexer pod restart count is **unchanged** (0 restarts). Indexer logs show certificate reload via file change detection.
 
-## Scenario 11: Cross-Version Compatibility
+## Scenario 11: Cross-Version Configuration Paths
 
-**Objective**: Verify the dual mount strategy works for both old and new Wazuh versions.
+**Objective**: Verify that `UsesIndexerConfigDir()` selects the correct single mount path per version (threshold: Wazuh 4.14.0).
 
 **Steps**:
 
-1. Deploy cluster with Wazuh 4.9.0
-2. Verify opensearch.yml is present at both mount locations
-3. Verify security config files are present at both mount locations
-4. Upgrade cluster to Wazuh 4.14.1
-5. Verify configuration is still accessible
+1. Deploy cluster with Wazuh 4.9.0 (below threshold)
+2. Verify opensearch.yml is mounted at `/usr/share/wazuh-indexer/opensearch.yml`
+3. Upgrade cluster to Wazuh 4.14.1 (above threshold)
+4. Verify opensearch.yml is now mounted at `/usr/share/wazuh-indexer/config/opensearch.yml`
 
 **Verification**:
 
 ```bash
-# Check dual mount for opensearch.yml
+# For Wazuh < 4.14.0: config lives at the root indexer directory
 kubectl exec -n wazuh-test wazuh-test-indexer-0 -- ls -la /usr/share/wazuh-indexer/opensearch.yml
-kubectl exec -n wazuh-test wazuh-test-indexer-0 -- ls -la /usr/share/wazuh-indexer/config/opensearch.yml
 
-# Check dual mount for security config
-kubectl exec -n wazuh-test wazuh-test-indexer-0 -- ls -la /usr/share/wazuh-indexer/opensearch-security/
-kubectl exec -n wazuh-test wazuh-test-indexer-0 -- ls -la /usr/share/wazuh-indexer/config/opensearch-security/
+# For Wazuh >= 4.14.0: config lives under /config/
+kubectl exec -n wazuh-test wazuh-test-indexer-0 -- ls -la /usr/share/wazuh-indexer/config/opensearch.yml
 
 # Verify absolute certificate paths in opensearch.yml
 kubectl exec -n wazuh-test wazuh-test-indexer-0 -- cat /usr/share/wazuh-indexer/config/opensearch.yml | grep "/usr/share/wazuh-indexer/config/certs"
 ```
 
-**Expected Result**: Configuration files are accessible at both paths. Certificate paths in opensearch.yml are absolute.
+**Expected Result**: Configuration is mounted at the version-appropriate single path. Certificate paths in opensearch.yml are absolute.
 
 ## Monitoring Commands
 

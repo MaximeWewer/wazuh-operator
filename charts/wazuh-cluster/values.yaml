@@ -363,12 +363,6 @@ cluster:
       #   dashboard:
       #     secretName: "my-dashboard-certs"
 
-      # @extra cluster.spec.tls.certManager Use cert-manager for certificate management
-      # certManager:
-      #   enabled: true
-      #   issuerRef:
-      #     name: "wazuh-ca-issuer"
-      #     kind: "Issuer"
 
 # @section Backup Configuration
 # Configure backups for OpenSearch indices and Wazuh Manager data.

@@ -11,7 +11,7 @@ A Helm chart for Wazuh Kubernetes Operator
 - Kubernetes 1.25+
 - Helm 3.10+
 - (Optional) Prometheus Operator for ServiceMonitor support
-- (Optional) cert-manager v1.0+ for webhook TLS
+- (Optional) Custom CA bundle for webhook TLS
 
 ## Documentation
 
@@ -282,24 +282,10 @@ helm uninstall wazuh-operator --namespace wazuh-system
 
 | Key                       | Type   | Default  | Description                                              |
 | ------------------------- | ------ | -------- | -------------------------------------------------------- |
-| webhook.caBundle          | string | `""`     | CA bundle for webhook TLS (not needed with cert-manager) |
+| webhook.caBundle          | string | `""`     | CA bundle for webhook TLS |
 | webhook.enabled           | bool   | `false`  | Enable admission webhooks for CR validation              |
 | webhook.failurePolicy     | string | `"Fail"` | Failure policy: Fail or Ignore                           |
 | webhook.namespaceSelector | object | `{}`     | Namespace selector to limit webhook scope                |
-
-### cert-manager Integration
-
-| Key                             | Type   | Default    | Description                                        |
-| ------------------------------- | ------ | ---------- | -------------------------------------------------- |
-| certManager.ca.duration         | string | `"87600h"` | CA certificate duration (default: 10 years)        |
-| certManager.ca.renewBefore      | string | `"2160h"`  | Renew before expiration (default: 90 days)         |
-| certManager.enabled             | bool   | `false`    | Enable cert-manager for TLS certificate management |
-| certManager.metrics.duration    | string | `"8760h"`  | Certificate duration (default: 1 year)             |
-| certManager.metrics.enabled     | bool   | `false`    | Enable metrics certificate for secure scraping     |
-| certManager.metrics.renewBefore | string | `"720h"`   | Renew before expiration (default: 30 days)         |
-| certManager.webhook.duration    | string | `"8760h"`  | Certificate duration (default: 1 year)             |
-| certManager.webhook.enabled     | bool   | `true`     | Enable webhook certificate                         |
-| certManager.webhook.renewBefore | string | `"720h"`   | Renew before expiration (default: 30 days)         |
 
 ## Examples
 
@@ -388,24 +374,6 @@ networkPolicy:
     - wazuh-prod
 ```
 
-### With cert-manager for Webhooks
-
-```yaml
-webhook:
-  enabled: true
-  failurePolicy: Fail
-
-certManager:
-  enabled: true
-  ca:
-    duration: "87600h"
-    renewBefore: "2160h"
-  webhook:
-    enabled: true
-    duration: "8760h"
-    renewBefore: "720h"
-```
-
 ### Namespace-Scoped RBAC (Multi-Tenant)
 
 ```yaml
@@ -428,7 +396,7 @@ rbac:
 
 ## Architecture
 
-- **One Operator** per namespace manages **One WazuhCluster**
+- **One Operator** manages multiple **WazuhCluster** resources across namespaces
 - **High Availability** via `replicaCount > 1` + `leaderElection.enabled`
 - **Leader Election** ensures only one active replica (others standby)
 - **Automatic Namespace Detection** from WazuhCluster resource location

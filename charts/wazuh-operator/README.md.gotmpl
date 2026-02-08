@@ -13,7 +13,7 @@
 - Kubernetes 1.25+
 - Helm 3.10+
 - (Optional) Prometheus Operator for ServiceMonitor support
-- (Optional) cert-manager v1.0+ for webhook TLS
+- (Optional) Custom CA bundle for webhook TLS
 
 ## Documentation
 
@@ -234,16 +234,6 @@ helm uninstall wazuh-operator --namespace wazuh-system
 {{- end }}
 {{- end }}
 
-### cert-manager Integration
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-{{- range .Values }}
-{{- if hasPrefix "certManager" .Key }}
-{{ template "chart.valuesTableRow" . }}
-{{- end }}
-{{- end }}
-
 ## Examples
 
 ### High Availability Deployment
@@ -331,24 +321,6 @@ networkPolicy:
     - wazuh-prod
 ```
 
-### With cert-manager for Webhooks
-
-```yaml
-webhook:
-  enabled: true
-  failurePolicy: Fail
-
-certManager:
-  enabled: true
-  ca:
-    duration: "87600h"
-    renewBefore: "2160h"
-  webhook:
-    enabled: true
-    duration: "8760h"
-    renewBefore: "720h"
-```
-
 ### Namespace-Scoped RBAC (Multi-Tenant)
 
 ```yaml
@@ -371,7 +343,7 @@ rbac:
 
 ## Architecture
 
-- **One Operator** per namespace manages **One WazuhCluster**
+- **One Operator** manages multiple **WazuhCluster** resources across namespaces
 - **High Availability** via `replicaCount > 1` + `leaderElection.enabled`
 - **Leader Election** ensures only one active replica (others standby)
 - **Automatic Namespace Detection** from WazuhCluster resource location

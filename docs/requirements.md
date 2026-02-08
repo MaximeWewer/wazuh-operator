@@ -91,15 +91,6 @@ Required for ServiceMonitor/PodMonitor support:
 kubectl get crd servicemonitors.monitoring.coreos.com
 ```
 
-### Cert-Manager
-
-Required for cert-manager TLS integration:
-
-```bash
-# Check if cert-manager is installed
-kubectl get crd certificates.cert-manager.io
-```
-
 ## Next Steps
 
 - [Installation Guide](usage/getting-started/installation.md) - Install the operator

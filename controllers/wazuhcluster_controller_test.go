@@ -1869,7 +1869,7 @@ var _ = Describe("WazuhCluster Controller", func() {
 			// For this test, we'll simulate cert rotation by manually updating the annotation
 
 			// Simulate certificate rotation by updating the TLS secret
-			// In real scenario, cert-manager or manual cert update would trigger this
+			// In real scenario, custom certs update or auto-renewal would trigger this
 			certSecret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      clusterName + "-manager-tls",

@@ -453,7 +453,7 @@ webhook:
   # -- Failure policy: Fail or Ignore
   failurePolicy: Fail
 
-  # -- CA bundle for webhook TLS (not needed with cert-manager)
+  # -- CA bundle for webhook TLS
   caBundle: ""
 
   # -- Namespace selector to limit webhook scope
@@ -463,33 +463,3 @@ webhook:
   #   matchLabels:
   #     wazuh-webhook: enabled
 
-# @section cert-manager Integration
-
-certManager:
-  # -- Enable cert-manager for TLS certificate management
-  enabled: false
-
-  # @extra certManager.ca CA certificate settings
-  ca:
-    # -- CA certificate duration (default: 10 years)
-    duration: "87600h"
-    # -- Renew before expiration (default: 90 days)
-    renewBefore: "2160h"
-
-  # @extra certManager.webhook Webhook certificate settings
-  webhook:
-    # -- Enable webhook certificate
-    enabled: true
-    # -- Certificate duration (default: 1 year)
-    duration: "8760h"
-    # -- Renew before expiration (default: 30 days)
-    renewBefore: "720h"
-
-  # @extra certManager.metrics Metrics server certificate settings
-  metrics:
-    # -- Enable metrics certificate for secure scraping
-    enabled: false
-    # -- Certificate duration (default: 1 year)
-    duration: "8760h"
-    # -- Renew before expiration (default: 30 days)
-    renewBefore: "720h"

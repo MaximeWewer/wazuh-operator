@@ -59,35 +59,6 @@ spec:
     replicas: 1
 ---
 # ==========================================================================
-# Alternative: cert-manager integration
-# Requires cert-manager to be installed in the cluster
-# ==========================================================================
-# apiVersion: resources.wazuh.com/v1
-# kind: WazuhCluster
-# metadata:
-#   name: wazuh-certmanager
-#   namespace: wazuh
-# spec:
-#   version: "4.9.2"
-#
-#   tls:
-#     enabled: true
-#     certManager:
-#       enabled: true
-#       issuerName: "wazuh-ca-issuer"
-#       issuerKind: "ClusterIssuer"  # or "Issuer" for namespace-scoped
-#
-#   manager:
-#     master:
-#       storageSize: "10Gi"
-#     workers:
-#       replicas: 0
-#   indexer:
-#     replicas: 1
-#   dashboard:
-#     replicas: 1
----
-# ==========================================================================
 # Alternative: Custom/External certificates
 # For enterprises with existing PKI infrastructure
 # ==========================================================================

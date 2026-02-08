@@ -1186,7 +1186,7 @@ spec:
                     type: object
                     x-kubernetes-preserve-unknown-fields: true
                   enableSSL:
-                    default: false
+                    default: true
                     description: Enable SSL
                     type: boolean
                   env:
@@ -17764,22 +17764,6 @@ spec:
                           Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
                           Examples: "365d" (1 year), "24h" (1 day), "30m" (30 minutes)
                         pattern: ^\d+[dhm]$
-                        type: string
-                    type: object
-                  certManager:
-                    description: Use cert-manager for certificate management
-                    properties:
-                      enabled:
-                        description: Enable cert-manager integration
-                        type: boolean
-                      issuerKind:
-                        description: Issuer kind
-                        enum:
-                        - Issuer
-                        - ClusterIssuer
-                        type: string
-                      issuerName:
-                        description: Issuer name
                         type: string
                     type: object
                   customCerts:

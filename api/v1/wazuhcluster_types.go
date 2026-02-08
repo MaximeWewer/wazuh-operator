@@ -458,10 +458,6 @@ type TLSConfig struct {
 	// +optional
 	CertConfig *CertificateConfig `json:"certConfig,omitempty"`
 
-	// Use cert-manager for certificate management
-	// +optional
-	CertManager *CertManagerConfig `json:"certManager,omitempty"`
-
 	// Custom certificates
 	// +optional
 	CustomCerts *CustomCertsConfig `json:"customCerts,omitempty"`
@@ -678,22 +674,6 @@ type CertificateConfig struct {
 	// +kubebuilder:default="P256"
 	// +kubebuilder:validation:Enum=P256;P384;P521
 	ECDSACurve string `json:"ecdsaCurve,omitempty"`
-}
-
-// CertManagerConfig defines cert-manager configuration
-type CertManagerConfig struct {
-	// Enable cert-manager integration
-	// +optional
-	Enabled bool `json:"enabled,omitempty"`
-
-	// Issuer name
-	// +optional
-	IssuerName string `json:"issuerName,omitempty"`
-
-	// Issuer kind
-	// +optional
-	// +kubebuilder:validation:Enum=Issuer;ClusterIssuer
-	IssuerKind string `json:"issuerKind,omitempty"`
 }
 
 // CustomCertsConfig defines custom certificate configuration
