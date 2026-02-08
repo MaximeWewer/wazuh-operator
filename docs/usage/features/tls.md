@@ -156,17 +156,16 @@ The operator supports Wazuh versions 4.9.x through 4.14.x+ with automatic compat
 
 The operator uses absolute paths for all certificate references in `opensearch.yml` (e.g., `/usr/share/wazuh-indexer/config/certs/tls.crt`). This ensures compatibility across all Wazuh versions regardless of where `opensearch.path.conf` points.
 
-### Dual Mount Strategy
+### Version-Based Configuration Paths
 
-Different Wazuh/OpenSearch versions read configuration from different base directories. The operator mounts configuration files at **two** locations to ensure compatibility:
+Different Wazuh/OpenSearch versions read configuration from different base directories. The operator uses `UsesIndexerConfigDir()` (threshold: Wazuh 4.14.0 / OpenSearch 2.18) to select the correct single mount path for each version:
 
-| File                  | Mount Path (Wazuh 4.12+/OpenSearch 2.19+)                            | Mount Path (Wazuh 4.9-4.11/OpenSearch 2.13-2.18)          |
-| --------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `opensearch.yml`      | `/usr/share/wazuh-indexer/config/opensearch.yml`                     | `/usr/share/wazuh-indexer/opensearch.yml`                  |
-| `internal_users.yml`  | `/usr/share/wazuh-indexer/config/opensearch-security/`               | `/usr/share/wazuh-indexer/opensearch-security/`            |
-| `roles_mapping.yml`   | `/usr/share/wazuh-indexer/config/opensearch-security/`               | `/usr/share/wazuh-indexer/opensearch-security/`            |
+| Version               | Config Base Directory                              |
+| --------------------- | -------------------------------------------------- |
+| Wazuh >= 4.14.0       | `/usr/share/wazuh-indexer/config/`                 |
+| Wazuh < 4.14.0        | `/usr/share/wazuh-indexer/`                        |
 
-This dual mount means you do not need to adjust any configuration when upgrading between Wazuh versions -- the operator handles it automatically.
+The operator mounts configuration files at the appropriate location based on the cluster version. This means you do not need to adjust any configuration when upgrading between Wazuh versions -- the operator handles it automatically.
 
 ### Filebeat Configuration Strategy
 
