@@ -1794,8 +1794,11 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		r.ClusterReconciler.Recorder = r.Recorder
 	}
 
-	builder := ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1.WazuhCluster{}).
+	// Use GenerationChangedPredicate on the primary resource to skip reconciles
+	// triggered by status-only updates. Owned resources keep default predicates
+	// so we still react to their status changes.
+	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
+		For(&wazuhv1.WazuhCluster{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
