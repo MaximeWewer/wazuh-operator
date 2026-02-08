@@ -227,6 +227,7 @@ cluster:
     # @default -- `{}` (auto-configured by sizing profile)
     dashboard:
       {}
+      # enableSSL: true  # Enable HTTPS for dashboard (default: true). Set to false to use HTTP.
       # replicas: 1
       # resources:
       #   requests: { cpu: "500m", memory: 1Gi }

@@ -366,7 +366,7 @@ Valid values for OpenSearch node roles:
 | Field                      | Type                              | Required | Default | Description               |
 | -------------------------- | --------------------------------- | -------- | ------- | ------------------------- |
 | `replicas`                 | int32                             | No       | `2`     | Number of replicas        |
-| `enableSSL`                | bool                              | No       | `false` | Enable SSL                |
+| `enableSSL`                | bool                              | No       | `true`  | Enable SSL for dashboard  |
 | `image`                    | [ImageSpec](#imagespec)           | No       | -       | Image override            |
 | `resources`                | ResourceRequirements              | No       | -       | Resources                 |
 | `wazuhPlugin`              | object                            | No       | -       | Wazuh plugin config       |
@@ -636,7 +636,7 @@ Standalone CRD for managing OpenSearch Dashboard configuration. Used in referenc
 | `replicas`     | int32                       | No       | `1`     | Number of replicas    |
 | `resources`    | ResourceRequirements        | No       | -       | Container resources   |
 | `image`        | [ImageSpec](#imagespec)     | No       | -       | Image override        |
-| `enableSSL`    | bool                        | No       | `false` | Enable SSL            |
+| `enableSSL`    | bool                        | No       | `true`  | Enable SSL for dashboard |
 | `nodeSelector` | map[string]string           | No       | -       | Node selector         |
 | `tolerations`  | []Toleration                | No       | -       | Tolerations           |
 | `affinity`     | Affinity                    | No       | -       | Affinity rules        |
