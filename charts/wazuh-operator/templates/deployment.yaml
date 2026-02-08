@@ -140,14 +140,14 @@ spec:
           httpGet:
             path: /healthz
             port: {{ .Values.operator.healthProbe.port }}
-          initialDelaySeconds: {{ .Values.operator.healthProbe.initialDelaySeconds }}
-          periodSeconds: {{ .Values.operator.healthProbe.periodSeconds }}
+          initialDelaySeconds: {{ .Values.operator.healthProbe.livenessProbe.initialDelaySeconds | default 15 }}
+          periodSeconds: {{ .Values.operator.healthProbe.livenessProbe.periodSeconds | default 20 }}
         readinessProbe:
           httpGet:
             path: /readyz
             port: {{ .Values.operator.healthProbe.port }}
-          initialDelaySeconds: 5
-          periodSeconds: 10
+          initialDelaySeconds: {{ .Values.operator.healthProbe.readinessProbe.initialDelaySeconds | default 5 }}
+          periodSeconds: {{ .Values.operator.healthProbe.readinessProbe.periodSeconds | default 10 }}
         {{- with .Values.operator.resources }}
         resources:
           {{- toYaml . | nindent 10 }}

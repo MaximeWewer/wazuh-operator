@@ -14,6 +14,9 @@ Custom values take precedence over profile defaults
 {{- $customWorkers := default dict (default dict $spec.manager).workers -}}
 {{- $customDashboard := default dict $spec.dashboard -}}
 
+{{- /* Preserve manager-level fields (image, config, antiAffinity, etc.) across sizing */ -}}
+{{- $customManager := default dict $spec.manager -}}
+
 {{- if eq $profile "XS" -}}
   {{- /* XS: Minimal profile for testing - no workers, single replica each */ -}}
   {{- /* Note: OpenSearch requires minimum 1GB JVM heap to start. Memory limit should be ~2x heap for overhead */ -}}
@@ -22,7 +25,9 @@ Custom values take precedence over profile defaults
   {{- $profileWorkers := dict "replicas" 0 "storageSize" "5Gi" "resources" (dict "requests" (dict "cpu" "100m" "memory" "256Mi") "limits" (dict "cpu" "500m" "memory" "512Mi")) -}}
   {{- $profileDashboard := dict "replicas" 1 "resources" (dict "requests" (dict "cpu" "100m" "memory" "256Mi") "limits" (dict "cpu" "500m" "memory" "512Mi")) -}}
   {{- $_ := set $spec "indexer" (mergeOverwrite $profileIndexer $customIndexer) -}}
-  {{- $_ := set $spec "manager" (dict "master" (mergeOverwrite $profileMaster $customMaster) "workers" (mergeOverwrite $profileWorkers $customWorkers)) -}}
+  {{- $_ := set $customManager "master" (mergeOverwrite $profileMaster $customMaster) -}}
+  {{- $_ := set $customManager "workers" (mergeOverwrite $profileWorkers $customWorkers) -}}
+  {{- $_ := set $spec "manager" $customManager -}}
   {{- $_ := set $spec "dashboard" (mergeOverwrite $profileDashboard $customDashboard) -}}
 
 {{- else if eq $profile "S" -}}
@@ -32,7 +37,9 @@ Custom values take precedence over profile defaults
   {{- $profileWorkers := dict "replicas" 1 "storageSize" "10Gi" "resources" (dict "requests" (dict "cpu" "500m" "memory" "1Gi") "limits" (dict "cpu" "1" "memory" "2Gi")) -}}
   {{- $profileDashboard := dict "replicas" 1 "resources" (dict "requests" (dict "cpu" "250m" "memory" "512Mi") "limits" (dict "cpu" "500m" "memory" "1Gi")) -}}
   {{- $_ := set $spec "indexer" (mergeOverwrite $profileIndexer $customIndexer) -}}
-  {{- $_ := set $spec "manager" (dict "master" (mergeOverwrite $profileMaster $customMaster) "workers" (mergeOverwrite $profileWorkers $customWorkers)) -}}
+  {{- $_ := set $customManager "master" (mergeOverwrite $profileMaster $customMaster) -}}
+  {{- $_ := set $customManager "workers" (mergeOverwrite $profileWorkers $customWorkers) -}}
+  {{- $_ := set $spec "manager" $customManager -}}
   {{- $_ := set $spec "dashboard" (mergeOverwrite $profileDashboard $customDashboard) -}}
 
 {{- else if eq $profile "M" -}}
@@ -42,7 +49,9 @@ Custom values take precedence over profile defaults
   {{- $profileWorkers := dict "replicas" 2 "storageSize" "20Gi" "resources" (dict "requests" (dict "cpu" "1" "memory" "2Gi") "limits" (dict "cpu" "2" "memory" "4Gi")) -}}
   {{- $profileDashboard := dict "replicas" 1 "resources" (dict "requests" (dict "cpu" "500m" "memory" "1Gi") "limits" (dict "cpu" "1" "memory" "2Gi")) -}}
   {{- $_ := set $spec "indexer" (mergeOverwrite $profileIndexer $customIndexer) -}}
-  {{- $_ := set $spec "manager" (dict "master" (mergeOverwrite $profileMaster $customMaster) "workers" (mergeOverwrite $profileWorkers $customWorkers)) -}}
+  {{- $_ := set $customManager "master" (mergeOverwrite $profileMaster $customMaster) -}}
+  {{- $_ := set $customManager "workers" (mergeOverwrite $profileWorkers $customWorkers) -}}
+  {{- $_ := set $spec "manager" $customManager -}}
   {{- $_ := set $spec "dashboard" (mergeOverwrite $profileDashboard $customDashboard) -}}
 
 {{- else if eq $profile "L" -}}
@@ -52,7 +61,9 @@ Custom values take precedence over profile defaults
   {{- $profileWorkers := dict "replicas" 3 "storageSize" "50Gi" "resources" (dict "requests" (dict "cpu" "2" "memory" "4Gi") "limits" (dict "cpu" "4" "memory" "8Gi")) -}}
   {{- $profileDashboard := dict "replicas" 2 "resources" (dict "requests" (dict "cpu" "1" "memory" "2Gi") "limits" (dict "cpu" "2" "memory" "4Gi")) -}}
   {{- $_ := set $spec "indexer" (mergeOverwrite $profileIndexer $customIndexer) -}}
-  {{- $_ := set $spec "manager" (dict "master" (mergeOverwrite $profileMaster $customMaster) "workers" (mergeOverwrite $profileWorkers $customWorkers)) -}}
+  {{- $_ := set $customManager "master" (mergeOverwrite $profileMaster $customMaster) -}}
+  {{- $_ := set $customManager "workers" (mergeOverwrite $profileWorkers $customWorkers) -}}
+  {{- $_ := set $spec "manager" $customManager -}}
   {{- $_ := set $spec "dashboard" (mergeOverwrite $profileDashboard $customDashboard) -}}
 
 {{- else if eq $profile "XL" -}}
@@ -62,7 +73,9 @@ Custom values take precedence over profile defaults
   {{- $profileWorkers := dict "replicas" 5 "storageSize" "100Gi" "resources" (dict "requests" (dict "cpu" "4" "memory" "8Gi") "limits" (dict "cpu" "8" "memory" "16Gi")) -}}
   {{- $profileDashboard := dict "replicas" 3 "resources" (dict "requests" (dict "cpu" "2" "memory" "4Gi") "limits" (dict "cpu" "4" "memory" "8Gi")) -}}
   {{- $_ := set $spec "indexer" (mergeOverwrite $profileIndexer $customIndexer) -}}
-  {{- $_ := set $spec "manager" (dict "master" (mergeOverwrite $profileMaster $customMaster) "workers" (mergeOverwrite $profileWorkers $customWorkers)) -}}
+  {{- $_ := set $customManager "master" (mergeOverwrite $profileMaster $customMaster) -}}
+  {{- $_ := set $customManager "workers" (mergeOverwrite $profileWorkers $customWorkers) -}}
+  {{- $_ := set $spec "manager" $customManager -}}
   {{- $_ := set $spec "dashboard" (mergeOverwrite $profileDashboard $customDashboard) -}}
 
 {{- end -}}

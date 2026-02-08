@@ -3,6 +3,9 @@
 
 # @section Global Parameters
 
+# -- Override the name of the chart
+nameOverride: ""
+
 # -- Namespace where the Wazuh cluster will be deployed
 namespace: wazuh
 
@@ -124,193 +127,664 @@ cluster:
     version: "4.9.0"
 
     # -- Image pull secrets for private container registries (applied to all components)
-    # imagePullSecrets:
+    imagePullSecrets: []
+    # Example:
     #   - name: my-registry-secret
 
-    # Note: If sizing.profile is set, replicas/resources/storage are auto-configured.
-    # Values below are ONLY used if sizing.profile is empty ("").
+    # Note: If sizing.profile is set, replicas/resources/storage/javaOpts are auto-configured.
+    # Custom values below take precedence over profile defaults (mergeOverwrite).
+
+    # @section Indexer Configuration
 
     # @extra cluster.spec.indexer OpenSearch Indexer configuration
-    # @default -- `{}` (auto-configured by sizing profile)
     indexer:
-      {}
+      # -- Indexer cluster name
+      # @default -- `"wazuh"`
+      clusterName: ""
+
+      # -- Indexer update strategy (RollingUpdate or OnDelete)
+      # @default -- `"RollingUpdate"`
+      updateStrategy: ""
+
+      # -- Termination grace period for indexer pods (seconds)
+      # @default -- `120`
+      terminationGracePeriodSeconds: 0
+
+      # Sizing-managed fields (auto-configured by sizing profile, override here if needed):
       # replicas: 3
-      # storageSize: 50Gi
+      # storageSize: "50Gi"
       # javaOpts: "-Xms2g -Xmx2g -Dlog4j2.formatMsgNoLookups=true"
       # resources:
-      #   requests: { cpu: "2", memory: 4Gi }
-      #   limits: { cpu: "4", memory: 8Gi }
-      # antiAffinity:
-      #   enabled: true
-      #   type: required  # or "preferred"
-      #   topologyKey: kubernetes.io/hostname
-      # topologySpreadConstraints:
+      #   requests: { cpu: "2", memory: "4Gi" }
+      #   limits: { cpu: "4", memory: "8Gi" }
+
+      # @extra cluster.spec.indexer.image Indexer image override
+      image:
+        # -- Indexer image repository (leave empty for operator default)
+        repository: ""
+        # -- Indexer image tag (leave empty for operator default)
+        tag: ""
+        # -- Indexer image pull policy
+        pullPolicy: ""
+
+      # @extra cluster.spec.indexer.service Indexer service configuration
+      service:
+        # -- Indexer service type
+        type: ""
+        # -- Indexer service annotations
+        annotations: {}
+
+      # -- Indexer node selector
+      nodeSelector: {}
+      # -- Indexer tolerations
+      tolerations: []
+      # -- Indexer pod affinity rules
+      affinity: {}
+
+      # -- Indexer StatefulSet annotations
+      annotations: {}
+      # -- Indexer pod annotations
+      podAnnotations: {}
+
+      # @extra cluster.spec.indexer.antiAffinity Indexer pod anti-affinity configuration
+      antiAffinity:
+        # -- Enable pod anti-affinity for indexer
+        enabled: false
+        # -- Anti-affinity type: "preferred" or "required"
+        type: "preferred"
+        # -- Topology key for anti-affinity
+        topologyKey: "kubernetes.io/hostname"
+        # -- Weight for preferred anti-affinity (1-100)
+        weight: 100
+
+      # -- Indexer topology spread constraints
+      topologySpreadConstraints: []
+      # Example:
       #   - maxSkew: 1
       #     topologyKey: kubernetes.io/hostname
       #     whenUnsatisfiable: DoNotSchedule
-      #     labelSelector:
-      #       matchLabels:
-      #         app: wazuh-indexer
-      # hpa:
-      #   enabled: true
-      #   minReplicas: 3
-      #   maxReplicas: 9
-      #   targetCPUUtilizationPercentage: 70
-      # gatewayAPI:
-      #   enabled: true
-      #   gatewayRef: { name: wazuh-gateway }
-      # ingress:
-      #   enabled: true
-      #   ingressClassName: nginx
-      #   annotations:
-      #     nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
-      #   hosts:
-      #     - host: indexer.wazuh.example.com
-      #       paths:
-      #         - path: /
-      #           pathType: Prefix
-      #   tls:
-      #     - secretName: indexer-tls
-      #       hosts:
-      #         - indexer.wazuh.example.com
-      # extraVolumes:
-      #   - name: my-config
-      #     configMap:
-      #       name: my-configmap
-      # extraVolumeMounts:
-      #   - name: my-config
-      #     mountPath: /usr/share/opensearch/config/my-config
-      # extraInitContainers:
-      #   - name: my-init
-      #     image: busybox:latest
-      #     command: ["sh", "-c", "echo init"]
-      # extraContainers:
-      #   - name: my-sidecar
-      #     image: my-sidecar:latest
+
+      # @extra cluster.spec.indexer.podDisruptionBudget Indexer PodDisruptionBudget
+      podDisruptionBudget:
+        # -- Enable PDB for indexer
+        enabled: false
+        # -- Maximum unavailable indexer pods
+        maxUnavailable: 1
+        # -- Minimum available indexer pods (alternative to maxUnavailable)
+        # minAvailable: 2
+
+      # @extra cluster.spec.indexer.hpa Indexer Horizontal Pod Autoscaler
+      hpa:
+        # -- Enable HPA for indexer
+        enabled: false
+        # -- Minimum indexer replicas
+        minReplicas: 3
+        # -- Maximum indexer replicas
+        maxReplicas: 9
+        # -- Target CPU utilization percentage
+        targetCPUUtilizationPercentage: 70
+        # -- Target memory utilization percentage
+        targetMemoryUtilizationPercentage: 80
+        # -- HPA scaling behavior
+        behavior: {}
+        # Example:
+        #   scaleDown:
+        #     stabilizationWindowSeconds: 300
+        #   scaleUp:
+        #     stabilizationWindowSeconds: 60
+
+      # -- Indexer environment variables
+      env: []
+      # -- Indexer environment variables from ConfigMaps/Secrets
+      envFrom: []
+
+      # -- Indexer pod security context
+      securityContext: {}
+      # -- Indexer container security context
+      containerSecurityContext: {}
+
+      # @extra cluster.spec.indexer.clusterSettings OpenSearch cluster settings applied on bootstrap
+      clusterSettings: {}
+      # Example:
+      #   persistent:
+      #     cluster.routing.allocation.awareness.attributes: zone
+      #   transient: {}
+
+      # @extra cluster.spec.indexer.ingress Indexer Ingress configuration
+      ingress:
+        # -- Enable Ingress for indexer
+        enabled: false
+        # -- Ingress class name
+        ingressClassName: ""
+        # -- Ingress annotations
+        annotations: {}
+        # -- Ingress hosts
+        hosts: []
+        # -- Ingress TLS configuration
+        tls: []
+
+      # @extra cluster.spec.indexer.gatewayAPI Indexer Gateway API configuration
+      gatewayAPI:
+        # -- Enable Gateway API for indexer
+        enabled: false
+
+      # -- Indexer extra volumes
+      extraVolumes: []
+      # -- Indexer extra volume mounts
+      extraVolumeMounts: []
+      # -- Indexer extra init containers
+      extraInitContainers: []
+      # -- Indexer extra sidecar containers
+      extraContainers: []
+
+      # Advanced: use nodePools instead of replicas for different node roles (mutually exclusive with replicas)
+      # nodePools:
+      #   - name: master
+      #     replicas: 3
+      #     roles: [cluster_manager]
+      #     storageSize: 20Gi
+      #     javaOpts: "-Xms2g -Xmx2g"
+      #     resources:
+      #       requests: { cpu: "1", memory: "4Gi" }
+      #       limits: { cpu: "2", memory: "8Gi" }
+      #   - name: data
+      #     replicas: 3
+      #     roles: [data, ingest]
+      #     storageSize: 100Gi
+
+    # @section Manager Configuration
 
     # @extra cluster.spec.manager Wazuh Manager configuration
     manager:
+      # @extra cluster.spec.manager.image Manager image override
+      image:
+        # -- Manager image repository (leave empty for operator default)
+        repository: ""
+        # -- Manager image tag (leave empty for operator default)
+        tag: ""
+        # -- Manager image pull policy
+        pullPolicy: ""
+
+      # @extra cluster.spec.manager.config Wazuh ossec.conf configuration
+      config:
+        # -- Raw XML to append to master ossec.conf
+        masterConfig: ""
+        # -- Raw XML to append to worker ossec.conf
+        workerConfig: ""
+        # -- Local internal options
+        localInternalOptions: ""
+
+        # @extra cluster.spec.manager.config.global Global ossec.conf settings
+        global:
+          # -- Enable JSON output
+          jsonoutOutput: true
+          # -- Enable alerts log
+          alertsLog: true
+          # -- Log all events
+          logAll: false
+          # -- Log all events in JSON format
+          logAllJson: false
+          # -- Enable email notifications
+          emailNotification: false
+          # -- SMTP server address
+          smtpServer: "smtp.example.wazuh.com"
+          # -- Email sender address
+          emailFrom: "wazuh@example.wazuh.com"
+          # -- Email recipient address
+          emailTo: "recipient@example.wazuh.com"
+          # -- Maximum emails per hour
+          emailMaxPerHour: 12
+          # -- Agent disconnection time threshold
+          agentsDisconnectionTime: "10m"
+          # -- Agent disconnection alert time (0 = disabled)
+          agentsDisconnectionAlertTime: "0"
+
+        # @extra cluster.spec.manager.config.alerts Alerts configuration
+        alerts:
+          # -- Minimum level for logging alerts
+          logAlertLevel: 3
+          # -- Minimum level for email alerts
+          emailAlertLevel: 12
+
+        # @extra cluster.spec.manager.config.logging Logging configuration
+        logging:
+          # -- Log format: "plain" or "json"
+          logFormat: "plain"
+
+        # @extra cluster.spec.manager.config.remote Remote connection settings
+        remote:
+          # -- Connection type: "secure" or "syslog"
+          connection: "secure"
+          # -- Remote listening port
+          port: 1514
+          # -- Protocol: "tcp" or "udp"
+          protocol: "tcp"
+          # -- Message queue size
+          queueSize: 131072
+
+        # @extra cluster.spec.manager.config.auth Authentication daemon (wazuh-authd) settings
+        auth:
+          # -- Disable authd
+          disabled: false
+          # -- Authd listening port
+          port: 1515
+          # -- Use source IP for agent registration
+          useSourceIP: false
+          # -- Purge agents on registration conflict
+          purge: true
+          # -- Require password for registration
+          usePassword: false
+          # -- TLS ciphers for authd
+          ciphers: "HIGH:!ADH:!EXP:!MD5:!RC4:!3DES:!CAMELLIA:@STRENGTH"
+          # -- Only allow registration on master node
+          enabledOnMasterOnly: true
+
+      # -- Filebeat SSL verification mode: full, none, certificate
+      filebeatSSLVerificationMode: "full"
+
+      # @extra cluster.spec.manager.logRotation Log rotation CronJob configuration
+      logRotation:
+        # -- Enable log rotation
+        enabled: false
+        # -- Log rotation cron schedule
+        schedule: "0 0 * * 1"
+        # -- Retention period in days
+        retentionDays: 7
+        # -- Max file size in MB (0 = disabled)
+        maxFileSizeMB: 0
+        # -- Combination mode for retention criteria: "or" or "and"
+        combinationMode: "or"
+        # -- Paths to rotate
+        paths:
+          - "/var/ossec/logs/alerts/"
+          - "/var/ossec/logs/archives/"
+        # -- Image for log rotation job
+        image: "bitnami/kubectl:latest"
+
+      # @extra cluster.spec.manager.podDisruptionBudget Manager PodDisruptionBudget
+      podDisruptionBudget:
+        # -- Enable PDB for manager
+        enabled: false
+        # -- Maximum unavailable manager pods
+        maxUnavailable: 1
+
+      # @extra cluster.spec.manager.antiAffinity Manager pod anti-affinity configuration
+      antiAffinity:
+        # -- Enable pod anti-affinity for manager
+        enabled: false
+        # -- Anti-affinity type: "preferred" or "required"
+        type: "preferred"
+        # -- Topology key for anti-affinity
+        topologyKey: "kubernetes.io/hostname"
+        # -- Weight for preferred anti-affinity (1-100)
+        weight: 100
+
       # @extra cluster.spec.manager.master Master node configuration
-      # @default -- `{}` (auto-configured by sizing profile)
       master:
-        {}
-        # storageSize: 20Gi
+        # Sizing-managed fields (auto-configured by sizing profile, override here if needed):
+        # storageSize: "20Gi"
         # resources:
-        #   requests: { cpu: "1", memory: 2Gi }
-        # topologySpreadConstraints:
-        #   - maxSkew: 1
-        #     topologyKey: kubernetes.io/hostname
-        #     whenUnsatisfiable: DoNotSchedule
-        # ingress:
-        #   enabled: true
-        #   ingressClassName: nginx
-        #   hosts:
-        #     - host: manager-master.wazuh.example.com
-        #       paths:
-        #         - path: /
-        #           pathType: Prefix
-        # extraVolumes:
-        #   - name: my-config
-        #     configMap:
-        #       name: my-configmap
-        # extraVolumeMounts:
-        #   - name: my-config
-        #     mountPath: /var/ossec/etc/custom
-        # extraInitContainers:
-        #   - name: my-init
-        #     image: busybox:latest
-        #     command: ["sh", "-c", "echo init"]
-        # extraContainers:
-        #   - name: my-sidecar
-        #     image: my-sidecar:latest
+        #   requests: { cpu: "1", memory: "2Gi" }
+        #   limits: { cpu: "2", memory: "4Gi" }
+
+        # -- Master termination grace period (seconds)
+        # @default -- `90`
+        terminationGracePeriodSeconds: 0
+
+        # @extra cluster.spec.manager.master.service Master service configuration
+        service:
+          # -- Master service type
+          type: ""
+          # -- Master service annotations
+          annotations: {}
+
+        # -- Master node selector
+        nodeSelector: {}
+        # -- Master tolerations
+        tolerations: []
+        # -- Master pod affinity rules
+        affinity: {}
+
+        # -- Master StatefulSet annotations
+        annotations: {}
+        # -- Master pod annotations
+        podAnnotations: {}
+
+        # -- Master pod security context
+        securityContext: {}
+        # -- Master container security context
+        containerSecurityContext: {}
+
+        # -- Master environment variables
+        env: []
+        # -- Master environment variables from ConfigMaps/Secrets
+        envFrom: []
+
+        # -- Extra XML config to inject into ossec.conf (master only)
+        extraConfig: ""
+        # Example:
+        #   extraConfig: |
+        #     <integration>
+        #       <name>slack</name>
+        #       <hook_url>https://hooks.slack.com/...</hook_url>
+        #       <level>10</level>
+        #     </integration>
+
+        # -- Master topology spread constraints
+        topologySpreadConstraints: []
+
+        # @extra cluster.spec.manager.master.ingress Master Ingress configuration
+        ingress:
+          # -- Enable Ingress for master
+          enabled: false
+          # -- Ingress class name
+          ingressClassName: ""
+          # -- Ingress annotations
+          annotations: {}
+          # -- Ingress hosts
+          hosts: []
+          # -- Ingress TLS configuration
+          tls: []
+
+        # @extra cluster.spec.manager.master.gatewayAPI Master Gateway API configuration
+        gatewayAPI:
+          # -- Enable Gateway API for master
+          enabled: false
+
+        # -- Master extra volumes
+        extraVolumes: []
+        # -- Master extra volume mounts
+        extraVolumeMounts: []
+        # -- Master extra init containers
+        extraInitContainers: []
+        # -- Master extra sidecar containers
+        extraContainers: []
 
       # @extra cluster.spec.manager.workers Worker nodes configuration
-      # @default -- `{}` (auto-configured by sizing profile)
       workers:
-        {}
+        # Sizing-managed fields (auto-configured by sizing profile, override here if needed):
         # replicas: 2
-        # storageSize: 20Gi
-        # topologySpreadConstraints:
-        #   - maxSkew: 1
-        #     topologyKey: kubernetes.io/hostname
-        #     whenUnsatisfiable: DoNotSchedule
-        # hpa:
-        #   enabled: true
-        #   minReplicas: 2
-        #   maxReplicas: 10
-        #   targetCPUUtilizationPercentage: 80
-        # gatewayAPI:
-        #   enabled: true
-        #   tcp: { enabled: true, enrollmentEnabled: true, eventsEnabled: true }
-        # ingress:
-        #   enabled: true
-        #   ingressClassName: nginx
-        #   hosts:
-        #     - host: manager-workers.wazuh.example.com
-        #       paths:
-        #         - path: /
-        #           pathType: Prefix
-        # extraVolumes:
-        #   - name: my-config
-        #     configMap:
-        #       name: my-configmap
-        # extraVolumeMounts:
-        #   - name: my-config
-        #     mountPath: /var/ossec/etc/custom
-        # extraInitContainers:
-        #   - name: my-init
-        #     image: busybox:latest
-        #     command: ["sh", "-c", "echo init"]
-        # extraContainers:
-        #   - name: my-sidecar
-        #     image: my-sidecar:latest
+        # storageSize: "20Gi"
+        # resources:
+        #   requests: { cpu: "1", memory: "2Gi" }
+        #   limits: { cpu: "2", memory: "4Gi" }
+
+        # -- Workers termination grace period (seconds)
+        # @default -- `90`
+        terminationGracePeriodSeconds: 0
+
+        # @extra cluster.spec.manager.workers.service Workers service configuration
+        service:
+          # -- Workers service type
+          type: ""
+          # -- Workers service annotations
+          annotations: {}
+
+        # -- Workers node selector
+        nodeSelector: {}
+        # -- Workers tolerations
+        tolerations: []
+        # -- Workers pod affinity rules
+        affinity: {}
+
+        # -- Workers StatefulSet annotations
+        annotations: {}
+        # -- Workers pod annotations
+        podAnnotations: {}
+
+        # -- Workers pod security context
+        securityContext: {}
+        # -- Workers container security context
+        containerSecurityContext: {}
+
+        # -- Workers environment variables
+        env: []
+        # -- Workers environment variables from ConfigMaps/Secrets
+        envFrom: []
+
+        # -- Extra XML config to inject into ossec.conf (all workers)
+        extraConfig: ""
+        # Example:
+        #   extraConfig: |
+        #     <localfile>
+        #       <log_format>syslog</log_format>
+        #       <location>/var/log/custom.log</location>
+        #     </localfile>
+
+        # -- Per-worker configuration overrides for specific worker indices
+        overrides: []
+        # Example:
+        #   - index: 0
+        #     description: "Cloud log collection worker"
+        #     extraConfig: |
+        #       <wodle name="aws-s3">
+        #         <disabled>no</disabled>
+        #       </wodle>
+
+        # @extra cluster.spec.manager.workers.podDisruptionBudget Workers PodDisruptionBudget
+        podDisruptionBudget:
+          # -- Enable PDB for workers
+          enabled: false
+          # -- Maximum unavailable worker pods
+          maxUnavailable: 1
+
+        # -- Workers topology spread constraints
+        topologySpreadConstraints: []
+
+        # @extra cluster.spec.manager.workers.hpa Workers Horizontal Pod Autoscaler
+        hpa:
+          # -- Enable HPA for workers
+          enabled: false
+          # -- Minimum worker replicas
+          minReplicas: 2
+          # -- Maximum worker replicas
+          maxReplicas: 10
+          # -- Target CPU utilization percentage
+          targetCPUUtilizationPercentage: 80
+          # -- Target memory utilization percentage
+          targetMemoryUtilizationPercentage: 80
+          # -- HPA scaling behavior
+          behavior: {}
+
+        # @extra cluster.spec.manager.workers.ingress Workers Ingress configuration
+        ingress:
+          # -- Enable Ingress for workers
+          enabled: false
+          # -- Ingress class name
+          ingressClassName: ""
+          # -- Ingress annotations
+          annotations: {}
+          # -- Ingress hosts
+          hosts: []
+          # -- Ingress TLS configuration
+          tls: []
+
+        # @extra cluster.spec.manager.workers.gatewayAPI Workers Gateway API configuration
+        gatewayAPI:
+          # -- Enable Gateway API for workers
+          enabled: false
+
+        # -- Workers extra volumes
+        extraVolumes: []
+        # -- Workers extra volume mounts
+        extraVolumeMounts: []
+        # -- Workers extra init containers
+        extraInitContainers: []
+        # -- Workers extra sidecar containers
+        extraContainers: []
+
+    # @section Dashboard Configuration
 
     # @extra cluster.spec.dashboard OpenSearch Dashboard configuration
-    # @default -- `{}` (auto-configured by sizing profile)
     dashboard:
-      {}
-      # enableSSL: true  # Enable HTTPS for dashboard (default: true). Set to false to use HTTP.
+      # -- Enable HTTPS for dashboard (set to false for HTTP)
+      enableSSL: true
+
+      # Sizing-managed fields (auto-configured by sizing profile, override here if needed):
       # replicas: 1
       # resources:
-      #   requests: { cpu: "500m", memory: 1Gi }
-      # topologySpreadConstraints:
-      #   - maxSkew: 1
-      #     topologyKey: kubernetes.io/hostname
-      #     whenUnsatisfiable: DoNotSchedule
-      # hpa:
-      #   enabled: true
-      #   minReplicas: 2
-      #   maxReplicas: 10
-      #   targetCPUUtilizationPercentage: 80
-      # gatewayAPI:
-      #   enabled: true
-      #   hostnames: ["dashboard.wazuh.example.com"]
-      # ingress:
-      #   enabled: true
-      #   ingressClassName: nginx
-      #   hosts:
-      #     - host: dashboard.wazuh.example.com
-      #       paths:
-      #         - path: /
-      #           pathType: Prefix
-      #   tls:
-      #     - secretName: dashboard-tls
-      #       hosts:
-      #         - dashboard.wazuh.example.com
-      # extraVolumes:
-      #   - name: my-config
-      #     configMap:
-      #       name: my-configmap
-      # extraVolumeMounts:
-      #   - name: my-config
-      #     mountPath: /usr/share/opensearch-dashboards/config/my-config
-      # extraInitContainers:
-      #   - name: my-init
-      #     image: busybox:latest
-      #     command: ["sh", "-c", "echo init"]
-      # extraContainers:
-      #   - name: my-sidecar
-      #     image: my-sidecar:latest
+      #   requests: { cpu: "500m", memory: "1Gi" }
+      #   limits: { cpu: "1", memory: "2Gi" }
+
+      # -- Dashboard termination grace period (seconds)
+      # @default -- `30`
+      terminationGracePeriodSeconds: 0
+
+      # @extra cluster.spec.dashboard.image Dashboard image override
+      image:
+        # -- Dashboard image repository (leave empty for operator default)
+        repository: ""
+        # -- Dashboard image tag (leave empty for operator default)
+        tag: ""
+        # -- Dashboard image pull policy
+        pullPolicy: ""
+
+      # @extra cluster.spec.dashboard.service Dashboard service configuration
+      service:
+        # -- Dashboard service type
+        type: ""
+        # -- Dashboard service annotations
+        annotations: {}
+
+      # -- Dashboard node selector
+      nodeSelector: {}
+      # -- Dashboard tolerations
+      tolerations: []
+      # -- Dashboard pod affinity rules
+      affinity: {}
+
+      # -- Dashboard Deployment annotations
+      annotations: {}
+      # -- Dashboard pod annotations
+      podAnnotations: {}
+
+      # -- Dashboard pod security context
+      securityContext: {}
+      # -- Dashboard container security context
+      containerSecurityContext: {}
+
+      # -- Dashboard environment variables
+      env: []
+      # -- Dashboard environment variables from ConfigMaps/Secrets
+      envFrom: []
+
+      # @extra cluster.spec.dashboard.podDisruptionBudget Dashboard PodDisruptionBudget
+      podDisruptionBudget:
+        # -- Enable PDB for dashboard
+        enabled: false
+        # -- Maximum unavailable dashboard pods
+        maxUnavailable: 1
+
+      # @extra cluster.spec.dashboard.wazuhPlugin Wazuh plugin configuration for the dashboard (wazuh.yml)
+      wazuhPlugin:
+        # -- Enable custom Wazuh plugin configuration
+        enabled: false
+        # -- Index pattern for Wazuh alerts
+        pattern: "wazuh-alerts-*"
+        # -- API timeout in milliseconds
+        timeout: 20000
+        # -- Enable IP selector in the UI
+        ipSelector: true
+        # -- Hide manager alerts from dashboard
+        hideManagerAlerts: false
+        # -- Alert sample prefix
+        alertsSamplePrefix: "wazuh-alerts-4.x-"
+        # -- Cron job prefix for Wazuh indices
+        cronPrefix: "wazuh"
+        # -- Disable update checks
+        updatesDisabled: false
+
+        # @extra cluster.spec.dashboard.wazuhPlugin.monitoring Wazuh monitoring configuration
+        monitoring:
+          # -- Enable Wazuh monitoring
+          enabled: true
+          # -- Monitoring check frequency (seconds)
+          frequency: 900
+          # -- Monitoring index pattern
+          pattern: "wazuh-monitoring-*"
+          # -- Index creation frequency: "h" (hourly), "d" (daily), "w" (weekly), "m" (monthly)
+          creation: "w"
+          # -- Number of primary shards
+          shards: 1
+          # -- Number of replicas
+          replicas: 0
+
+        # @extra cluster.spec.dashboard.wazuhPlugin.checks Wazuh health checks configuration
+        checks:
+          # -- Check index pattern
+          pattern: true
+          # -- Check template
+          template: true
+          # -- Check API connection
+          api: true
+          # -- Check setup
+          setup: true
+          # -- Check fields
+          fields: true
+          # -- Check meta fields
+          metaFields: true
+          # -- Check time filter
+          timeFilter: true
+          # -- Check max buckets
+          maxBuckets: true
+
+        # @extra cluster.spec.dashboard.wazuhPlugin.cronStatistics Wazuh cron statistics configuration
+        cronStatistics:
+          # -- Enable cron statistics
+          status: true
+          # -- Cron schedule expression
+          interval: "0 */5 * * * *"
+          # -- Statistics index name
+          indexName: "statistics"
+          # -- Index creation frequency
+          indexCreation: "w"
+          # -- Number of primary shards
+          shards: 1
+          # -- Number of replicas
+          replicas: 0
+
+      # -- Dashboard topology spread constraints
+      topologySpreadConstraints: []
+
+      # @extra cluster.spec.dashboard.hpa Dashboard Horizontal Pod Autoscaler
+      hpa:
+        # -- Enable HPA for dashboard
+        enabled: false
+        # -- Minimum dashboard replicas
+        minReplicas: 2
+        # -- Maximum dashboard replicas
+        maxReplicas: 5
+        # -- Target CPU utilization percentage
+        targetCPUUtilizationPercentage: 80
+
+      # @extra cluster.spec.dashboard.ingress Dashboard Ingress configuration
+      ingress:
+        # -- Enable Ingress for dashboard
+        enabled: false
+        # -- Ingress class name
+        ingressClassName: ""
+        # -- Ingress annotations
+        annotations: {}
+        # -- Ingress hosts
+        hosts: []
+        # -- Ingress TLS configuration
+        tls: []
+
+      # @extra cluster.spec.dashboard.gatewayAPI Dashboard Gateway API configuration
+      gatewayAPI:
+        # -- Enable Gateway API for dashboard
+        enabled: false
+
+      # -- Dashboard extra volumes
+      extraVolumes: []
+      # -- Dashboard extra volume mounts
+      extraVolumeMounts: []
+      # -- Dashboard extra init containers
+      extraInitContainers: []
+      # -- Dashboard extra sidecar containers
+      extraContainers: []
+
+    # @section TLS Configuration
 
     # @extra cluster.spec.tls TLS/Certificate configuration
     # Configure TLS certificates for secure communication between components.
@@ -363,14 +837,8 @@ cluster:
         # @default -- `"P256"`
         ecdsaCurve: "P256"
 
-        # @extra cluster.spec.tls.certConfig X.509 Distinguished Name fields
-        # These values are used in the Subject field of generated certificates.
-        # Note: CommonName (CN) is auto-generated based on certificate type:
-        #   - CA: "<cluster>-ca"
-        #   - Indexer: "<cluster>-indexer"
-        #   - Admin: "admin" (required by OpenSearch security plugin)
-        #   - Dashboard: "<cluster>-dashboard"
-        #   - Filebeat: "<cluster>-filebeat"
+        # X.509 Distinguished Name fields
+        # Note: CommonName (CN) is auto-generated based on certificate type.
         # -- Country code (2-letter ISO 3166-1 alpha-2)
         # @default -- `"US"`
         country: "US"
@@ -406,19 +874,124 @@ cluster:
         # -- Maintenance windows when CA renewal restart is allowed (cron format)
         maintenanceWindows: []
         # Example:
-        # maintenanceWindows:
         #   - schedule: "0 2 * * 0"  # Sundays at 2 AM
         #     duration: "4h"
         #     timezone: "UTC"
 
       # @extra cluster.spec.tls.customCerts Use custom certificates instead of auto-generated
-      # customCerts:
-      #   ca:
-      #     secretName: "my-ca-secret"
-      #   indexer:
-      #     secretName: "my-indexer-certs"
-      #   dashboard:
-      #     secretName: "my-dashboard-certs"
+      customCerts:
+        # -- Enable custom certificates
+        enabled: false
+        # @extra cluster.spec.tls.customCerts.caSecretRef CA certificate secret reference
+        caSecretRef:
+          # -- Secret name containing CA certificate
+          name: ""
+          # -- Key in the secret
+          key: "ca.crt"
+        # @extra cluster.spec.tls.customCerts.nodeSecretRef Node certificate secret reference
+        nodeSecretRef:
+          # -- Secret name containing node certificates
+          name: ""
+          # -- Key in the secret
+          key: "tls.crt"
+        # @extra cluster.spec.tls.customCerts.adminSecretRef Admin certificate secret reference
+        adminSecretRef:
+          # -- Secret name containing admin certificates
+          name: ""
+          # -- Key in the secret
+          key: "tls.crt"
+        # @extra cluster.spec.tls.customCerts.filebeatSecretRef Filebeat certificate secret reference
+        filebeatSecretRef:
+          # -- Secret name containing filebeat certificates
+          name: ""
+          # -- Key in the secret
+          key: "tls.crt"
+
+    # @section Monitoring Configuration
+
+    # @extra cluster.spec.monitoring Monitoring configuration (Prometheus exporters and ServiceMonitor)
+    monitoring:
+      # -- Enable Prometheus monitoring exporters
+      enabled: false
+
+      # @extra cluster.spec.monitoring.wazuhExporter Wazuh Prometheus exporter sidecar
+      wazuhExporter:
+        # -- Enable Wazuh exporter
+        enabled: true
+        # -- Wazuh exporter image
+        image: "pytoshka/wazuh-prometheus-exporter:latest"
+        # -- Wazuh exporter metrics port
+        port: 9090
+        # -- API protocol for connecting to Wazuh API
+        apiProtocol: "https"
+        # -- Verify SSL when connecting to Wazuh API
+        apiVerifySSL: false
+        # -- Exporter log level
+        logLevel: "INFO"
+        # -- Skip last logs metric
+        skipLastLogs: false
+        # -- Skip last registered agent metric
+        skipLastRegisteredAgent: false
+        # -- Skip Wazuh API info metric
+        skipWazuhAPIInfo: false
+
+      # @extra cluster.spec.monitoring.indexerExporter OpenSearch indexer exporter configuration
+      indexerExporter:
+        # -- Enable indexer exporter
+        enabled: true
+        # -- Indexer exporter version (defaults to OpenSearch version)
+        version: ""
+
+      # @extra cluster.spec.monitoring.serviceMonitor Prometheus ServiceMonitor configuration
+      serviceMonitor:
+        # -- Enable ServiceMonitor creation
+        enabled: false
+        # -- Additional labels for ServiceMonitor
+        labels: {}
+        # -- Scrape interval
+        interval: "30s"
+        # -- Scrape timeout
+        scrapeTimeout: "10s"
+
+    # @section Drain Configuration
+
+    # @extra cluster.spec.drain Drain strategy for safe scale-down operations
+    drain:
+      # @extra cluster.spec.drain.indexer Indexer drain settings
+      indexer:
+        # -- Enable indexer drain on scale-down
+        enabled: false
+        # -- Drain timeout
+        timeout: "30m"
+        # -- Health check interval during drain
+        healthCheckInterval: "10s"
+        # -- Minimum time cluster must be green before completing drain
+        minGreenHealthTimeout: "5m"
+
+      # @extra cluster.spec.drain.manager Manager drain settings
+      manager:
+        # -- Enable manager drain on scale-down
+        enabled: false
+        # -- Drain timeout
+        timeout: "15m"
+        # -- Queue check interval during drain
+        queueCheckInterval: "5s"
+        # -- Grace period before drain
+        gracePeriod: "30s"
+
+      # @extra cluster.spec.drain.retry Retry configuration for drain operations
+      retry:
+        # -- Maximum retry attempts
+        maxAttempts: 3
+        # -- Initial delay between retries
+        initialDelay: "5m"
+        # -- Backoff multiplier for retry delays
+        backoffMultiplier: "2.0"
+        # -- Maximum delay between retries
+        maxDelay: "30m"
+
+      # -- Dry run mode (simulate drain without executing)
+      dryRun: false
 
 
 # @section Backup Configuration

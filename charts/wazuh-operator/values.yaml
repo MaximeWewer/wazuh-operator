@@ -76,10 +76,18 @@ operator:
   healthProbe:
     # -- Health probe port
     port: 8081
-    # -- Initial delay before probing
-    initialDelaySeconds: 15
-    # -- Probe interval
-    periodSeconds: 20
+    # @extra operator.healthProbe.livenessProbe Liveness probe settings
+    livenessProbe:
+      # -- Initial delay before liveness probing
+      initialDelaySeconds: 15
+      # -- Liveness probe interval
+      periodSeconds: 20
+    # @extra operator.healthProbe.readinessProbe Readiness probe settings
+    readinessProbe:
+      # -- Initial delay before readiness probing
+      initialDelaySeconds: 5
+      # -- Readiness probe interval
+      periodSeconds: 10
 
   # @extra operator.metrics Metrics configuration
   metrics:

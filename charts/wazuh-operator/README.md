@@ -82,210 +82,212 @@ helm uninstall wazuh-operator --namespace wazuh-system
 
 ### Name Overrides
 
-| Key              | Type   | Default | Description                           |
-| ---------------- | ------ | ------- | ------------------------------------- |
-| fullnameOverride | string | `""`    | Override the full name of the release |
-| nameOverride     | string | `""`    | Override the name of the chart        |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| fullnameOverride | string | `""` | Override the full name of the release |
+| nameOverride | string | `""` | Override the name of the chart |
 
 ### Deployment Mode
 
-| Key            | Type   | Default | Description                                                                              |
-| -------------- | ------ | ------- | ---------------------------------------------------------------------------------------- |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
 | deploymentMode | string | `"all"` | Deployment mode: "all" (CRDs + operator), "crds" (CRDs only), "operator" (operator only) |
 
 ### CRD Configuration
 
-| Key          | Type | Default | Description                                                                     |
-| ------------ | ---- | ------- | ------------------------------------------------------------------------------- |
-| crds.install | bool | `true`  | Install CRDs as part of the chart. Set to false if CRDs are managed separately. |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| crds.install | bool | `true` | Install CRDs as part of the chart. Set to false if CRDs are managed separately. |
 
 ### Operator Configuration
 
-| Key                                                          | Type   | Default                                | Description                                                                                          |
-| ------------------------------------------------------------ | ------ | -------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| operator.affinity                                            | object | `{}`                                   | Affinity for operator pod                                                                            |
-| operator.clusterDomain                                       | string | `"cluster.local"`                      | Kubernetes cluster DNS domain. Change if using custom CoreDNS configuration.                         |
-| operator.enabled                                             | bool   | `true`                                 | Enable operator deployment. Set to false for CRD-only deployment.                                    |
-| operator.env                                                 | list   | `[]`                                   | Environment variables for operator container                                                         |
-| operator.extraVolumeMounts                                   | list   | `[]`                                   | Extra volume mounts                                                                                  |
-| operator.extraVolumes                                        | list   | `[]`                                   | Extra volumes                                                                                        |
-| operator.healthProbe.initialDelaySeconds                     | int    | `15`                                   | Initial delay before probing                                                                         |
-| operator.healthProbe.periodSeconds                           | int    | `20`                                   | Probe interval                                                                                       |
-| operator.healthProbe.port                                    | int    | `8081`                                 | Health probe port                                                                                    |
-| operator.image.pullPolicy                                    | string | `"IfNotPresent"`                       | Image pull policy                                                                                    |
-| operator.image.repository                                    | string | `"ghcr.io/maximewewer/wazuh-operator"` | Operator image repository                                                                            |
-| operator.image.tag                                           | string | `""`                                   | Image tag (defaults to chart appVersion)                                                             |
-| operator.imagePullSecrets                                    | list   | `[]`                                   | Image pull secrets for private registries                                                            |
-| operator.logging.format                                      | string | `"json"`                               | Log format: "json" (production) or "console" (human-readable)                                        |
-| operator.logging.level                                       | string | `"info"`                               | Log level: "debug", "info", "warn", "error"                                                          |
-| operator.metrics.enabled                                     | bool   | `true`                                 | Enable Prometheus metrics                                                                            |
-| operator.metrics.port                                        | int    | `8080`                                 | Metrics port                                                                                         |
-| operator.metrics.service.annotations                         | object | `{}`                                   | Metrics service annotations                                                                          |
-| operator.metrics.service.type                                | string | `"ClusterIP"`                          | Metrics service type                                                                                 |
-| operator.name                                                | string | `"wazuh-operator"`                     | Operator name                                                                                        |
-| operator.nodeSelector                                        | object | `{}`                                   | Node selector for operator pod                                                                       |
-| operator.podAnnotations                                      | object | `{}`                                   | Pod annotations                                                                                      |
-| operator.podSecurityContext.runAsNonRoot                     | bool   | `true`                                 | Run as non-root user                                                                                 |
-| operator.podSecurityContext.seccompProfile.type              | string | `"RuntimeDefault"`                     | Seccomp profile type                                                                                 |
-| operator.prometheusRules.alerts.certExpired.for              | string | `"5m"`                                 |                                                                                                      |
-| operator.prometheusRules.alerts.certExpired.severity         | string | `"critical"`                           |                                                                                                      |
-| operator.prometheusRules.alerts.certExpiringSoon.for         | string | `"1h"`                                 |                                                                                                      |
-| operator.prometheusRules.alerts.certExpiringSoon.severity    | string | `"warning"`                            |                                                                                                      |
-| operator.prometheusRules.alerts.certExpiringSoon.threshold   | int    | `30`                                   |                                                                                                      |
-| operator.prometheusRules.alerts.certExpiryCritical.for       | string | `"1h"`                                 |                                                                                                      |
-| operator.prometheusRules.alerts.certExpiryCritical.severity  | string | `"critical"`                           |                                                                                                      |
-| operator.prometheusRules.alerts.certExpiryCritical.threshold | int    | `7`                                    |                                                                                                      |
-| operator.prometheusRules.alerts.clusterCritical.for          | string | `"2m"`                                 |                                                                                                      |
-| operator.prometheusRules.alerts.clusterCritical.labels       | object | `{}`                                   |                                                                                                      |
-| operator.prometheusRules.alerts.clusterCritical.runbookUrl   | string | `""`                                   |                                                                                                      |
-| operator.prometheusRules.alerts.clusterCritical.severity     | string | `"critical"`                           |                                                                                                      |
-| operator.prometheusRules.alerts.clusterUnhealthy.for         | string | `"5m"`                                 |                                                                                                      |
-| operator.prometheusRules.alerts.clusterUnhealthy.labels      | object | `{}`                                   |                                                                                                      |
-| operator.prometheusRules.alerts.clusterUnhealthy.runbookUrl  | string | `""`                                   |                                                                                                      |
-| operator.prometheusRules.alerts.clusterUnhealthy.severity    | string | `"warning"`                            |                                                                                                      |
-| operator.prometheusRules.alerts.componentUnhealthy.for       | string | `"5m"`                                 |                                                                                                      |
-| operator.prometheusRules.alerts.componentUnhealthy.severity  | string | `"warning"`                            |                                                                                                      |
-| operator.prometheusRules.alerts.operatorDown.for             | string | `"5m"`                                 |                                                                                                      |
-| operator.prometheusRules.alerts.operatorDown.severity        | string | `"critical"`                           |                                                                                                      |
-| operator.prometheusRules.alerts.reconcileDuration.for        | string | `"15m"`                                |                                                                                                      |
-| operator.prometheusRules.alerts.reconcileDuration.severity   | string | `"warning"`                            |                                                                                                      |
-| operator.prometheusRules.alerts.reconcileDuration.threshold  | int    | `60`                                   |                                                                                                      |
-| operator.prometheusRules.alerts.reconcileErrors.for          | string | `"10m"`                                |                                                                                                      |
-| operator.prometheusRules.alerts.reconcileErrors.severity     | string | `"warning"`                            |                                                                                                      |
-| operator.prometheusRules.alerts.reconcileErrors.threshold    | float  | `0.1`                                  |                                                                                                      |
-| operator.prometheusRules.alerts.replicasMismatch.for         | string | `"10m"`                                |                                                                                                      |
-| operator.prometheusRules.alerts.replicasMismatch.severity    | string | `"warning"`                            |                                                                                                      |
-| operator.prometheusRules.enabled                             | bool   | `false`                                | Enable PrometheusRule resource                                                                       |
-| operator.prometheusRules.labels                              | object | `{}`                                   | Additional labels for PrometheusRule                                                                 |
-| operator.rateLimiting.baseDelay                              | string | `"5ms"`                                | Base delay for exponential backoff on failures                                                       |
-| operator.rateLimiting.burst                                  | int    | `100`                                  | Burst size for rate limiter bucket                                                                   |
-| operator.rateLimiting.enabled                                | bool   | `true`                                 | Enable rate limiting                                                                                 |
-| operator.rateLimiting.maxConcurrentReconciles                | int    | `3`                                    | Maximum concurrent reconciliations per controller                                                    |
-| operator.rateLimiting.maxDelay                               | string | `"1000s"`                              | Maximum delay for exponential backoff                                                                |
-| operator.rateLimiting.qps                                    | int    | `10`                                   | Queries per second limit                                                                             |
-| operator.resources.limits.cpu                                | string | `"500m"`                               | CPU limit                                                                                            |
-| operator.resources.limits.memory                             | string | `"512Mi"`                              | Memory limit                                                                                         |
-| operator.resources.requests.cpu                              | string | `"100m"`                               | CPU request                                                                                          |
-| operator.resources.requests.memory                           | string | `"128Mi"`                              | Memory request                                                                                       |
-| operator.securityContext.allowPrivilegeEscalation            | bool   | `false`                                | Prevent privilege escalation                                                                         |
-| operator.securityContext.capabilities.drop                   | list   | `["ALL"]`                              | Drop all capabilities                                                                                |
-| operator.securityContext.readOnlyRootFilesystem              | bool   | `true`                                 | Read-only root filesystem                                                                            |
-| operator.serviceAccount.annotations                          | object | `{}`                                   | Service account annotations                                                                          |
-| operator.serviceAccount.create                               | bool   | `true`                                 | Create service account                                                                               |
-| operator.serviceAccount.name                                 | string | `""`                                   | Service account name (auto-generated if empty)                                                       |
-| operator.serviceMonitor.enabled                              | bool   | `false`                                | Enable ServiceMonitor for Prometheus Operator                                                        |
-| operator.serviceMonitor.interval                             | string | `"30s"`                                | Scrape interval                                                                                      |
-| operator.serviceMonitor.labels                               | object | `{}`                                   | Additional labels for ServiceMonitor                                                                 |
-| operator.serviceMonitor.scrapeTimeout                        | string | `"10s"`                                | Scrape timeout                                                                                       |
-| operator.tolerations                                         | list   | `[]`                                   | Tolerations for operator pod                                                                         |
-| operator.vmMaxMapCount                                       | int    | `262144`                               | vm.max_map_count kernel parameter for OpenSearch. Init container sets this if system value is lower. |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| operator.affinity | object | `{}` | Affinity for operator pod |
+| operator.clusterDomain | string | `"cluster.local"` | Kubernetes cluster DNS domain. Change if using custom CoreDNS configuration. |
+| operator.enabled | bool | `true` | Enable operator deployment. Set to false for CRD-only deployment. |
+| operator.env | list | `[]` | Environment variables for operator container |
+| operator.extraVolumeMounts | list | `[]` | Extra volume mounts |
+| operator.extraVolumes | list | `[]` | Extra volumes |
+| operator.healthProbe.livenessProbe.initialDelaySeconds | int | `15` | Initial delay before liveness probing |
+| operator.healthProbe.livenessProbe.periodSeconds | int | `20` | Liveness probe interval |
+| operator.healthProbe.port | int | `8081` | Health probe port |
+| operator.healthProbe.readinessProbe.initialDelaySeconds | int | `5` | Initial delay before readiness probing |
+| operator.healthProbe.readinessProbe.periodSeconds | int | `10` | Readiness probe interval |
+| operator.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |
+| operator.image.repository | string | `"ghcr.io/maximewewer/wazuh-operator"` | Operator image repository |
+| operator.image.tag | string | `""` | Image tag (defaults to chart appVersion) |
+| operator.imagePullSecrets | list | `[]` | Image pull secrets for private registries |
+| operator.logging.format | string | `"json"` | Log format: "json" (production) or "console" (human-readable) |
+| operator.logging.level | string | `"info"` | Log level: "debug", "info", "warn", "error" |
+| operator.metrics.enabled | bool | `true` | Enable Prometheus metrics |
+| operator.metrics.port | int | `8080` | Metrics port |
+| operator.metrics.service.annotations | object | `{}` | Metrics service annotations |
+| operator.metrics.service.type | string | `"ClusterIP"` | Metrics service type |
+| operator.name | string | `"wazuh-operator"` | Operator name |
+| operator.nodeSelector | object | `{}` | Node selector for operator pod |
+| operator.podAnnotations | object | `{}` | Pod annotations |
+| operator.podSecurityContext.runAsNonRoot | bool | `true` | Run as non-root user |
+| operator.podSecurityContext.seccompProfile.type | string | `"RuntimeDefault"` | Seccomp profile type |
+| operator.prometheusRules.alerts.certExpired.for | string | `"5m"` |  |
+| operator.prometheusRules.alerts.certExpired.severity | string | `"critical"` |  |
+| operator.prometheusRules.alerts.certExpiringSoon.for | string | `"1h"` |  |
+| operator.prometheusRules.alerts.certExpiringSoon.severity | string | `"warning"` |  |
+| operator.prometheusRules.alerts.certExpiringSoon.threshold | int | `30` |  |
+| operator.prometheusRules.alerts.certExpiryCritical.for | string | `"1h"` |  |
+| operator.prometheusRules.alerts.certExpiryCritical.severity | string | `"critical"` |  |
+| operator.prometheusRules.alerts.certExpiryCritical.threshold | int | `7` |  |
+| operator.prometheusRules.alerts.clusterCritical.for | string | `"2m"` |  |
+| operator.prometheusRules.alerts.clusterCritical.labels | object | `{}` |  |
+| operator.prometheusRules.alerts.clusterCritical.runbookUrl | string | `""` |  |
+| operator.prometheusRules.alerts.clusterCritical.severity | string | `"critical"` |  |
+| operator.prometheusRules.alerts.clusterUnhealthy.for | string | `"5m"` |  |
+| operator.prometheusRules.alerts.clusterUnhealthy.labels | object | `{}` |  |
+| operator.prometheusRules.alerts.clusterUnhealthy.runbookUrl | string | `""` |  |
+| operator.prometheusRules.alerts.clusterUnhealthy.severity | string | `"warning"` |  |
+| operator.prometheusRules.alerts.componentUnhealthy.for | string | `"5m"` |  |
+| operator.prometheusRules.alerts.componentUnhealthy.severity | string | `"warning"` |  |
+| operator.prometheusRules.alerts.operatorDown.for | string | `"5m"` |  |
+| operator.prometheusRules.alerts.operatorDown.severity | string | `"critical"` |  |
+| operator.prometheusRules.alerts.reconcileDuration.for | string | `"15m"` |  |
+| operator.prometheusRules.alerts.reconcileDuration.severity | string | `"warning"` |  |
+| operator.prometheusRules.alerts.reconcileDuration.threshold | int | `60` |  |
+| operator.prometheusRules.alerts.reconcileErrors.for | string | `"10m"` |  |
+| operator.prometheusRules.alerts.reconcileErrors.severity | string | `"warning"` |  |
+| operator.prometheusRules.alerts.reconcileErrors.threshold | float | `0.1` |  |
+| operator.prometheusRules.alerts.replicasMismatch.for | string | `"10m"` |  |
+| operator.prometheusRules.alerts.replicasMismatch.severity | string | `"warning"` |  |
+| operator.prometheusRules.enabled | bool | `false` | Enable PrometheusRule resource |
+| operator.prometheusRules.labels | object | `{}` | Additional labels for PrometheusRule |
+| operator.rateLimiting.baseDelay | string | `"5ms"` | Base delay for exponential backoff on failures |
+| operator.rateLimiting.burst | int | `100` | Burst size for rate limiter bucket |
+| operator.rateLimiting.enabled | bool | `true` | Enable rate limiting |
+| operator.rateLimiting.maxConcurrentReconciles | int | `3` | Maximum concurrent reconciliations per controller |
+| operator.rateLimiting.maxDelay | string | `"1000s"` | Maximum delay for exponential backoff |
+| operator.rateLimiting.qps | int | `10` | Queries per second limit |
+| operator.resources.limits.cpu | string | `"500m"` | CPU limit |
+| operator.resources.limits.memory | string | `"512Mi"` | Memory limit |
+| operator.resources.requests.cpu | string | `"100m"` | CPU request |
+| operator.resources.requests.memory | string | `"128Mi"` | Memory request |
+| operator.securityContext.allowPrivilegeEscalation | bool | `false` | Prevent privilege escalation |
+| operator.securityContext.capabilities.drop | list | `["ALL"]` | Drop all capabilities |
+| operator.securityContext.readOnlyRootFilesystem | bool | `true` | Read-only root filesystem |
+| operator.serviceAccount.annotations | object | `{}` | Service account annotations |
+| operator.serviceAccount.create | bool | `true` | Create service account |
+| operator.serviceAccount.name | string | `""` | Service account name (auto-generated if empty) |
+| operator.serviceMonitor.enabled | bool | `false` | Enable ServiceMonitor for Prometheus Operator |
+| operator.serviceMonitor.interval | string | `"30s"` | Scrape interval |
+| operator.serviceMonitor.labels | object | `{}` | Additional labels for ServiceMonitor |
+| operator.serviceMonitor.scrapeTimeout | string | `"10s"` | Scrape timeout |
+| operator.tolerations | list | `[]` | Tolerations for operator pod |
+| operator.vmMaxMapCount | int | `262144` | vm.max_map_count kernel parameter for OpenSearch. Init container sets this if system value is lower. |
 
 ### RBAC Configuration
 
-| Key                             | Type   | Default | Description                                                                    |
-| ------------------------------- | ------ | ------- | ------------------------------------------------------------------------------ |
-| rbac.create                     | bool   | `true`  | Create RBAC resources                                                          |
-| rbac.extraRules                 | list   | `[]`    | Additional rules for the operator role                                         |
-| rbac.namespaceScoped.enabled    | bool   | `false` | Enable namespace-scoped RBAC (creates Role/RoleBinding per namespace)          |
-| rbac.namespaceScoped.namespaces | list   | `[]`    | List of namespaces the operator should manage (empty = release namespace only) |
-| rbac.roleName                   | string | `""`    | Role name (auto-generated if empty)                                            |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| rbac.create | bool | `true` | Create RBAC resources |
+| rbac.extraRules | list | `[]` | Additional rules for the operator role |
+| rbac.namespaceScoped.enabled | bool | `false` | Enable namespace-scoped RBAC (creates Role/RoleBinding per namespace) |
+| rbac.namespaceScoped.namespaces | list | `[]` | List of namespaces the operator should manage (empty = release namespace only) |
+| rbac.roleName | string | `""` | Role name (auto-generated if empty) |
 
 ### Namespace Configuration
 
-| Key                   | Type   | Default | Description                                    |
-| --------------------- | ------ | ------- | ---------------------------------------------- |
-| namespace.annotations | object | `{}`    | Namespace annotations                          |
-| namespace.create      | bool   | `false` | Create namespace for operator                  |
-| namespace.labels      | object | `{}`    | Namespace labels                               |
-| namespace.name        | string | `""`    | Namespace name (defaults to Release.Namespace) |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| namespace.annotations | object | `{}` | Namespace annotations |
+| namespace.create | bool | `false` | Create namespace for operator |
+| namespace.labels | object | `{}` | Namespace labels |
+| namespace.name | string | `""` | Namespace name (defaults to Release.Namespace) |
 
 ### Common Labels & Annotations
 
-| Key               | Type   | Default | Description                                    |
-| ----------------- | ------ | ------- | ---------------------------------------------- |
-| commonAnnotations | object | `{}`    | Additional annotations to add to all resources |
-| commonLabels      | object | `{}`    | Additional labels to add to all resources      |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| commonAnnotations | object | `{}` | Additional annotations to add to all resources |
+| commonLabels | object | `{}` | Additional labels to add to all resources |
 
 ### OpenTelemetry Configuration
 
-| Key                      | Type   | Default            | Description                                                                                                      |
-| ------------------------ | ------ | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| telemetry.enabled        | bool   | `false`            | Enable OpenTelemetry distributed tracing                                                                         |
-| telemetry.endpoint       | string | `""`               | OTLP exporter endpoint (gRPC). Examples: "jaeger-collector.observability:4317", "otel-collector.monitoring:4317" |
-| telemetry.insecure       | bool   | `true`             | Use insecure connection (no TLS). Set to true for local development or service mesh.                             |
-| telemetry.serviceName    | string | `"wazuh-operator"` | Service name reported in traces                                                                                  |
-| telemetry.serviceVersion | string | `""`               | Service version reported in traces (defaults to chart appVersion)                                                |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| telemetry.enabled | bool | `false` | Enable OpenTelemetry distributed tracing |
+| telemetry.endpoint | string | `""` | OTLP exporter endpoint (gRPC). Examples: "jaeger-collector.observability:4317", "otel-collector.monitoring:4317" |
+| telemetry.insecure | bool | `true` | Use insecure connection (no TLS). Set to true for local development or service mesh. |
+| telemetry.serviceName | string | `"wazuh-operator"` | Service name reported in traces |
+| telemetry.serviceVersion | string | `""` | Service version reported in traces (defaults to chart appVersion) |
 
 ### Gateway API Configuration
 
-| Key                | Type | Default | Description                                                                                         |
-| ------------------ | ---- | ------- | --------------------------------------------------------------------------------------------------- |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
 | gatewayAPI.enabled | bool | `false` | Enable Gateway API support. When enabled, operator watches HTTPRoute, TCPRoute, UDPRoute resources. |
 
 ### Advanced Configuration
 
-| Key                           | Type | Default | Description                                                    |
-| ----------------------------- | ---- | ------- | -------------------------------------------------------------- |
-| extraArgs                     | list | `[]`    |                                                                |
-| nonBlockingRollouts           | bool | `true`  | Enable non-blocking rollouts for parallel certificate renewals |
-| terminationGracePeriodSeconds | int  | `10`    | Termination grace period in seconds                            |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| extraArgs | list | `[]` |  |
+| nonBlockingRollouts | bool | `true` | Enable non-blocking rollouts for parallel certificate renewals |
+| terminationGracePeriodSeconds | int | `10` | Termination grace period in seconds |
 
 ### High Availability Configuration
 
-| Key                    | Type   | Default                   | Description                                                             |
-| ---------------------- | ------ | ------------------------- | ----------------------------------------------------------------------- |
-| leaderElection.enabled | bool   | `false`                   | Enable leader election (REQUIRED when replicaCount > 1)                 |
-| leaderElection.id      | string | `"wazuh-operator-leader"` | Leader election lease name                                              |
-| replicaCount           | int    | `1`                       | Number of operator replicas. For HA, set > 1 AND enable leaderElection. |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| leaderElection.enabled | bool | `false` | Enable leader election (REQUIRED when replicaCount > 1) |
+| leaderElection.id | string | `"wazuh-operator-leader"` | Leader election lease name |
+| replicaCount | int | `1` | Number of operator replicas. For HA, set > 1 AND enable leaderElection. |
 
 ### Update Strategy Configuration
 
-| Key                                         | Type   | Default           | Description                        |
-| ------------------------------------------- | ------ | ----------------- | ---------------------------------- |
-| updateStrategy.rollingUpdate.maxSurge       | int    | `1`               | Max extra pods during update       |
-| updateStrategy.rollingUpdate.maxUnavailable | int    | `0`               | Max unavailable pods during update |
-| updateStrategy.type                         | string | `"RollingUpdate"` | Update strategy type               |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| updateStrategy.rollingUpdate.maxSurge | int | `1` | Max extra pods during update |
+| updateStrategy.rollingUpdate.maxUnavailable | int | `0` | Max unavailable pods during update |
+| updateStrategy.type | string | `"RollingUpdate"` | Update strategy type |
 
 ### Network Policy Configuration
 
-| Key                                        | Type   | Default       | Description                                                                               |
-| ------------------------------------------ | ------ | ------------- | ----------------------------------------------------------------------------------------- |
-| networkPolicy.apiServer.cidr               | string | `"0.0.0.0/0"` | CIDR for API server access                                                                |
-| networkPolicy.enabled                      | bool   | `false`       | Enable NetworkPolicy for operator namespace                                               |
-| networkPolicy.managedNamespaces            | list   | `[]`          | Managed namespaces (where Wazuh clusters run). If empty, allows egress to all namespaces. |
-| networkPolicy.prometheus.namespaceSelector | object | `{}`          | Namespace selector for Prometheus pods                                                    |
-| networkPolicy.prometheus.podSelector       | object | `{}`          | Pod selector for Prometheus pods                                                          |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| networkPolicy.apiServer.cidr | string | `"0.0.0.0/0"` | CIDR for API server access |
+| networkPolicy.enabled | bool | `false` | Enable NetworkPolicy for operator namespace |
+| networkPolicy.managedNamespaces | list | `[]` | Managed namespaces (where Wazuh clusters run). If empty, allows egress to all namespaces. |
+| networkPolicy.prometheus.namespaceSelector | object | `{}` | Namespace selector for Prometheus pods |
+| networkPolicy.prometheus.podSelector | object | `{}` | Pod selector for Prometheus pods |
 
 ### Resource Quota Configuration
 
-| Key                                            | Type   | Default   | Description                                                |
-| ---------------------------------------------- | ------ | --------- | ---------------------------------------------------------- |
-| resourceQuota.configmaps                       | string | `"20"`    | Maximum ConfigMaps in namespace                            |
-| resourceQuota.enabled                          | bool   | `false`   | Enable ResourceQuota and LimitRange for operator namespace |
-| resourceQuota.limitRange.default.cpu           | string | `"500m"`  | Default CPU limit                                          |
-| resourceQuota.limitRange.default.memory        | string | `"512Mi"` | Default memory limit                                       |
-| resourceQuota.limitRange.defaultRequest.cpu    | string | `"100m"`  | Default CPU request                                        |
-| resourceQuota.limitRange.defaultRequest.memory | string | `"128Mi"` | Default memory request                                     |
-| resourceQuota.limitRange.max.cpu               | string | `"2"`     | Maximum CPU per container                                  |
-| resourceQuota.limitRange.max.memory            | string | `"4Gi"`   | Maximum memory per container                               |
-| resourceQuota.limitRange.min.cpu               | string | `"50m"`   | Minimum CPU per container                                  |
-| resourceQuota.limitRange.min.memory            | string | `"64Mi"`  | Minimum memory per container                               |
-| resourceQuota.limits.cpu                       | string | `"4"`     | Total CPU limits                                           |
-| resourceQuota.limits.memory                    | string | `"8Gi"`   | Total memory limits                                        |
-| resourceQuota.pods                             | string | `"10"`    | Maximum number of pods in namespace                        |
-| resourceQuota.requests.cpu                     | string | `"2"`     | Total CPU requests limit                                   |
-| resourceQuota.requests.memory                  | string | `"4Gi"`   | Total memory requests limit                                |
-| resourceQuota.secrets                          | string | `"20"`    | Maximum Secrets in namespace                               |
-| resourceQuota.services                         | string | `"10"`    | Maximum Services in namespace                              |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| resourceQuota.configmaps | string | `"20"` | Maximum ConfigMaps in namespace |
+| resourceQuota.enabled | bool | `false` | Enable ResourceQuota and LimitRange for operator namespace |
+| resourceQuota.limitRange.default.cpu | string | `"500m"` | Default CPU limit |
+| resourceQuota.limitRange.default.memory | string | `"512Mi"` | Default memory limit |
+| resourceQuota.limitRange.defaultRequest.cpu | string | `"100m"` | Default CPU request |
+| resourceQuota.limitRange.defaultRequest.memory | string | `"128Mi"` | Default memory request |
+| resourceQuota.limitRange.max.cpu | string | `"2"` | Maximum CPU per container |
+| resourceQuota.limitRange.max.memory | string | `"4Gi"` | Maximum memory per container |
+| resourceQuota.limitRange.min.cpu | string | `"50m"` | Minimum CPU per container |
+| resourceQuota.limitRange.min.memory | string | `"64Mi"` | Minimum memory per container |
+| resourceQuota.limits.cpu | string | `"4"` | Total CPU limits |
+| resourceQuota.limits.memory | string | `"8Gi"` | Total memory limits |
+| resourceQuota.pods | string | `"10"` | Maximum number of pods in namespace |
+| resourceQuota.requests.cpu | string | `"2"` | Total CPU requests limit |
+| resourceQuota.requests.memory | string | `"4Gi"` | Total memory requests limit |
+| resourceQuota.secrets | string | `"20"` | Maximum Secrets in namespace |
+| resourceQuota.services | string | `"10"` | Maximum Services in namespace |
 
 ### Admission Webhook Configuration
 
-| Key                       | Type   | Default  | Description                                              |
-| ------------------------- | ------ | -------- | -------------------------------------------------------- |
-| webhook.caBundle          | string | `""`     | CA bundle for webhook TLS |
-| webhook.enabled           | bool   | `false`  | Enable admission webhooks for CR validation              |
-| webhook.failurePolicy     | string | `"Fail"` | Failure policy: Fail or Ignore                           |
-| webhook.namespaceSelector | object | `{}`     | Namespace selector to limit webhook scope                |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| webhook.caBundle | string | `""` | CA bundle for webhook TLS |
+| webhook.enabled | bool | `false` | Enable admission webhooks for CR validation |
+| webhook.failurePolicy | string | `"Fail"` | Failure policy: Fail or Ignore |
+| webhook.namespaceSelector | object | `{}` | Namespace selector to limit webhook scope |
 
 ## Examples
 

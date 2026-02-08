@@ -10,7 +10,7 @@
 
 ## Prerequisites
 
-- Kubernetes 1.19+
+- Kubernetes 1.25+
 - Helm 3.0+
 - Wazuh Operator installed (use the `wazuh-operator` chart)
 
@@ -65,7 +65,7 @@ helm uninstall my-wazuh-cluster
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 {{- range .Values }}
-{{- if or (eq .Key "namespace") (eq .Key "createNamespace") }}
+{{- if or (eq .Key "nameOverride") (eq .Key "namespace") (eq .Key "createNamespace") }}
 {{ template "chart.valuesTableRow" . }}
 {{- end }}
 {{- end }}
@@ -100,12 +100,92 @@ helm uninstall my-wazuh-cluster
 {{- end }}
 {{- end }}
 
-### WazuhCluster Configuration
+### Cluster General
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 {{- range .Values }}
-{{- if hasPrefix "cluster" .Key }}
+{{- if or (eq .Key "cluster.enabled") (eq .Key "cluster.name") (eq .Key "cluster.spec.version") (eq .Key "cluster.spec.imagePullSecrets") }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Indexer Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "cluster.spec.indexer" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Manager Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if and (hasPrefix "cluster.spec.manager" .Key) (not (hasPrefix "cluster.spec.manager.master" .Key)) (not (hasPrefix "cluster.spec.manager.workers" .Key)) }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Manager Master Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "cluster.spec.manager.master" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Manager Workers Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "cluster.spec.manager.workers" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Dashboard Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "cluster.spec.dashboard" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### TLS Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "cluster.spec.tls" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Monitoring Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "cluster.spec.monitoring" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Drain Configuration
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "cluster.spec.drain" .Key }}
 {{ template "chart.valuesTableRow" . }}
 {{- end }}
 {{- end }}
