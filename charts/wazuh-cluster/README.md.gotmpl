@@ -39,7 +39,7 @@ helm install wazuh-operator ./charts/wazuh-operator
 ```bash
 helm install my-wazuh-cluster ./charts/wazuh-cluster \
   --set sizing.profile=M \
-  --namespace wazuh --create-namespace
+  --namespace wazuh-system
 ```
 
 ## Upgrading

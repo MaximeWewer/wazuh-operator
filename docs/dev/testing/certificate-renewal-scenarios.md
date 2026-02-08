@@ -46,8 +46,7 @@ helm upgrade --install wazuh-operator charts/wazuh-operator \
 ```bash
 # Deploy minimal test cluster
 helm upgrade --install wazuh-test charts/wazuh-cluster \
-  --namespace wazuh-test \
-  --create-namespace \
+  --namespace wazuh-system \
   -f charts/wazuh-cluster/examples/values-minimal.yaml
 ```
 

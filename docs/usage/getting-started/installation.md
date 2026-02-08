@@ -136,8 +136,7 @@ kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager -f
 ```bash
 # Using Helm
 helm install wazuh-cluster ./charts/wazuh-cluster \
-  --namespace wazuh \
-  --create-namespace
+  --namespace wazuh-system
 
 # Or using kubectl
 kubectl create namespace wazuh

@@ -47,7 +47,7 @@ Next steps:
 
    helm install my-wazuh ./charts/wazuh-cluster \
      --set sizing.profile=M \
-     --namespace wazuh
+     --namespace wazuh-system
 
 {{ else if eq .Values.deploymentMode "operator" }}
 ===============================================
@@ -81,7 +81,7 @@ Deploy a Wazuh cluster using the wazuh-cluster chart:
 
   helm install my-wazuh ./charts/wazuh-cluster \
     --set sizing.profile=M \
-    --namespace wazuh
+    --namespace wazuh-system
 
 {{ else }}
 ===============================================
@@ -117,7 +117,7 @@ Deploy a Wazuh cluster using the wazuh-cluster chart (recommended):
 
   helm install my-wazuh ./charts/wazuh-cluster \
     --set sizing.profile=M \
-    --namespace wazuh --create-namespace
+    --namespace wazuh-system
 
 Or create a WazuhCluster resource directly:
 

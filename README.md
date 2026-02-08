@@ -46,7 +46,7 @@ helm install wazuh-operator oci://ghcr.io/maximewewer/charts/wazuh-operator \
 
 # Deploy a Wazuh cluster
 helm install wazuh-cluster oci://ghcr.io/maximewewer/charts/wazuh-cluster \
-  -n wazuh --create-namespace
+  -n wazuh-system
 
 # Check status
 kubectl get wazuhcluster -n wazuh

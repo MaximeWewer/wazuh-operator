@@ -114,7 +114,7 @@ secrets:
 
 ```bash
 helm install wazuh-cluster oci://ghcr.io/maximewewer/charts/wazuh-cluster \
-  --namespace wazuh \
+  --namespace wazuh-system \
   -f values.yaml
 ```
 

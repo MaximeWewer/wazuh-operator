@@ -78,7 +78,7 @@ docker-push: ## Push docker image with the manager.
 HELM_RELEASE_OPERATOR ?= wazuh-operator
 HELM_RELEASE_CLUSTER ?= wazuh-cluster
 HELM_NAMESPACE_OPERATOR ?= wazuh-system
-HELM_NAMESPACE_CLUSTER ?= wazuh
+HELM_NAMESPACE_CLUSTER ?= wazuh-system
 
 .PHONY: install
 install: manifests ## Install CRDs into the K8s cluster.
@@ -100,7 +100,7 @@ undeploy: ## Undeploy operator using Helm.
 .PHONY: deploy-cluster
 deploy-cluster: ## Deploy a Wazuh cluster using Helm.
 	helm upgrade --install $(HELM_RELEASE_CLUSTER) ./charts/wazuh-cluster \
-		--namespace $(HELM_NAMESPACE_CLUSTER) --create-namespace \
+		--namespace $(HELM_NAMESPACE_CLUSTER) \
 		--set sizing.profile=S
 
 .PHONY: undeploy-cluster

@@ -34,7 +34,7 @@ Minimal profile for testing purposes only. **Not recommended for production.**
 ```bash
 helm install wazuh-cluster ./charts/wazuh-cluster \
   --set sizing.profile=XS \
-  --namespace wazuh --create-namespace
+  --namespace wazuh-system
 ```
 
 ### S (Small) - Development/Test
@@ -59,7 +59,7 @@ Suitable for development environments and small test deployments.
 ```bash
 helm install wazuh-cluster ./charts/wazuh-cluster \
   --set sizing.profile=S \
-  --namespace wazuh --create-namespace
+  --namespace wazuh-system
 ```
 
 ### M (Medium) - Small Production
@@ -84,7 +84,7 @@ Balanced profile for small production environments with high availability.
 ```bash
 helm install wazuh-cluster ./charts/wazuh-cluster \
   --set sizing.profile=M \
-  --namespace wazuh --create-namespace
+  --namespace wazuh-system
 ```
 
 ### L (Large) - Production
@@ -109,7 +109,7 @@ High-capacity profile for production environments with high availability.
 ```bash
 helm install wazuh-cluster ./charts/wazuh-cluster \
   --set sizing.profile=L \
-  --namespace wazuh --create-namespace
+  --namespace wazuh-system
 ```
 
 ### XL (Extra Large) - Enterprise
@@ -134,7 +134,7 @@ Enterprise-grade profile for large-scale deployments.
 ```bash
 helm install wazuh-cluster ./charts/wazuh-cluster \
   --set sizing.profile=XL \
-  --namespace wazuh --create-namespace
+  --namespace wazuh-system
 ```
 
 ## Profile Comparison
@@ -170,7 +170,7 @@ cluster:
 helm install wazuh-cluster ./charts/wazuh-cluster \
   --set sizing.profile=M \
   --set sizing.storageClassName=gp3 \
-  --namespace wazuh --create-namespace
+  --namespace wazuh-system
 ```
 
 ### Override Specific Values
@@ -180,7 +180,7 @@ helm install wazuh-cluster ./charts/wazuh-cluster \
   --set sizing.profile=M \
   --set cluster.spec.indexer.replicas=5 \
   --set cluster.spec.indexer.storageSize=100Gi \
-  --namespace wazuh --create-namespace
+  --namespace wazuh-system
 ```
 
 ## Without Profiles
