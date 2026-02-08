@@ -17,16 +17,13 @@ A Kubernetes operator for managing Wazuh clusters, providing a declarative way t
 
 ## Architecture
 
-```
-┌───────────────────────────────────────────────────┐
-│                  WazuhCluster                     │
-│  ┌────────────┐  ┌─────────────┐  ┌────────────┐  │
-│  │  Manager   │  │  Indexer    │  │ Dashboard  │  │
-│  │ Master+    │  │  (Modified  │  │ (Modified  │  │
-│  │ Workers    │  │ OpenSearch) │  │ OpenSearch │  │
-│  └────────────┘  └─────────────┘  │ Dashboard) │  │
-│                                   └────────────┘  │
-└───────────────────────────────────────────────────┘
+```mermaid
+graph LR
+    subgraph WazuhCluster
+        manager["Wazuh manager<br/>Master + Workers"]
+        indexer["Wazuh indexer<br/>(Modified OpenSearch)"]
+        dashboard["Wazuh dashboard<br/>(Modified OpenSearch dashboard)"]
+    end
 ```
 
 ## Quick Start

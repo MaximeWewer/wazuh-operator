@@ -22,57 +22,35 @@ The operator supports both RSA and ECDSA key algorithms:
 
 ## Reconciliation Flow
 
+```mermaid
+flowchart TD
+    WCC["WazuhCluster Controller<br/>(controllers/wazuhcluster_controller.go)"]
+
+    subgraph CertRecon["1. Certificate Reconciliation — CertificateReconciler.ReconcileWithHashes"]
+        CA["CA Cert (10 yrs)"] --> IC["Indexer Cert (1 year)"]
+        IC --> MC["Manager Cert (1 year)"]
+        MC --> DC["Dashboard Cert (1 year)"]
+        CA -.-> CE1["Check Expiry · Renew if needed"]
+        IC -.-> CE2["Check Expiry · Renew if needed"]
+        MC -.-> CE3["Check Expiry · Renew if needed"]
+        DC -.-> CE4["Check Expiry · Renew if needed"]
+    end
+
+    HASH["Returns: CertHashResult<br/>IndexerCertHash, ManagerMasterCertHash, ..."]
+
+    subgraph CompRecon["2. Component Reconciliation"]
+        IR["IndexerReconciler.ReconcileWithCertHash<br/>Certs mounted as directory · Hot reload: API (4.9-4.11) or inotify (4.12+)<br/>Falls back to rolling update via cert-hash annotation"]
+        CR["ClusterReconciler.ReconcileManagerWithCertHashes<br/>Updates Master and Worker StatefulSets with cert-hash annotation"]
+        DR["DashboardReconciler.ReconcileWithCertHash<br/>Updates Deployment with cert-hash annotation · Triggers rolling update"]
+        IR --> CR --> DR
+    end
+
+    WCC --> CertRecon
+    CertRecon --> HASH
+    HASH --> CompRecon
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         WazuhCluster Controller                                 │
-│                    (controllers/wazuhcluster_controller.go)                     │
-└─────────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                      1. Certificate Reconciliation                              │
-│                (CertificateReconciler.ReconcileWithHashes)                      │
-│                                                                                 │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌────────────┐     │
-│  │  CA Cert     │──▶ │ Indexer Cert │──▶ │ Manager Cert │──▶ │ Dashboard  │     │
-│  │  (10 yrs)    │    │  (1 year)    │    │  (1 year)    │    │ (1 year)   │     │
-│  └──────────────┘    └──────────────┘    └──────────────┘    └────────────┘     │
-│         │                   │                   │                   │           │
-│         ▼                   ▼                   ▼                   ▼           │
-│    Check Expiry        Check Expiry        Check Expiry        Check Expiry     │
-│    Renew if needed     Renew if needed     Renew if needed     Renew if needed  │
-│                                                                                 │
-│  Returns: CertHashResult { IndexerCertHash, ManagerMasterCertHash, ... }        │
-└─────────────────────────────────────────────────────────────────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                      2. Component Reconciliation                                │
-│                                                                                 │
-│     ┌──────────────────────────────────────────────────────────────────────┐    │
-│     │ IndexerReconciler.ReconcileWithCertHash(cluster, indexerCertHash)    │    │
-│     │   - Certs mounted as directory (no subPath) for kubelet auto-update  │    │
-│     │   - Hot reload: API call (4.9-4.11) or inotify (4.12+) — no restart  │    │
-│     │   - Falls back to rolling update via cert-hash annotation if needed  │    │
-│     └──────────────────────────────────────────────────────────────────────┘    │
-│                                      │                                          │
-│                                      ▼                                          │
-│     ┌──────────────────────────────────────────────────────────────────────────┐│
-│     │ ClusterReconciler.ReconcileManagerWithCertHashes(cluster, master, worker)││
-│     │   - Updates Master StatefulSet with cert-hash annotation                 ││
-│     │   - Updates Worker StatefulSet with cert-hash annotation                 ││
-│     └──────────────────────────────────────────────────────────────────────────┘│
-│                                      │                                          │
-│                                      ▼                                          │
-│     ┌──────────────────────────────────────────────────────────────────────┐    │
-│     │ DashboardReconciler.ReconcileWithCertHash(cluster, dashboardCertHash)│    │
-│     │   - Updates Deployment with cert-hash annotation                     │    │
-│     │   - Triggers rolling update if hash changed                          │    │
-│     └──────────────────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────────────────────┘
 
 Default settings: 3650 days CA (10 years), 365 days node certs, 30 days renewal threshold
-```
 
 ## Key Components
 

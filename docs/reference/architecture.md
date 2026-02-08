@@ -38,69 +38,34 @@ The operator implements the standard Kubernetes operator pattern:
 
 ### Reconciliation Loop
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                  Kubernetes API Server                  │
-└─────────────────┬───────────────────────────────────────┘
-                  │
-                  │ Watch CRs
-                  ↓
-┌─────────────────────────────────────────────────────────┐
-│           Wazuh Operator (Manager Process)              │
-│                                                         │
-│  ┌────────────────────────────────────────────────────┐ │
-│  │        Controller Runtime Manager                  │ │
-│  │  - Manages controller lifecycle                    │ │
-│  │  - Shared caches and informers                     │ │
-│  │  - Leader election                                 │ │
-│  │  - Metrics server                                  │ │
-│  │  - Health checks                                   │ │
-│  └────────────────────────────────────────────────────┘ │
-│                                                         │
-│  ┌────────────────────────────────────────────────────┐ │
-│  │  25 Reconciliation Controllers                     │ │
-│  │  ┌──────────────────────────────────────────────┐  │ │
-│  │  │  WazuhClusterReconciler (Main Controller)    │  │ │
-│  │  │  - Orchestrates all components               │  │ │
-│  │  │  - Delegates to helper reconcilers           │  │ │
-│  │  └──────────────────────────────────────────────┘  │ │
-│  │  ┌──────────────────────────────────────────────┐  │ │
-│  │  │  Component Controllers (4)                   │  │ │
-│  │  │  - WazuhManager, WazuhIndexer, etc.          │  │ │
-│  │  └──────────────────────────────────────────────┘  │ │
-│  │  ┌──────────────────────────────────────────────┐  │ │
-│  │  │  Config Controllers (4)                      │  │ │
-│  │  │  - Rules, Decoders, Certificates, Filebeat   │  │ │
-│  │  └──────────────────────────────────────────────┘  │ │
-│  │  ┌──────────────────────────────────────────────┐  │ │
-│  │  │  OpenSearch Security Controllers (5)         │  │ │
-│  │  │  - Users, Roles, RoleMappings, etc.          │  │ │
-│  │  └──────────────────────────────────────────────┘  │ │
-│  │  ┌──────────────────────────────────────────────┐  │ │
-│  │  │  OpenSearch Index Controllers (5)            │  │ │
-│  │  │  - Indices, Templates, ISM Policies          │  │ │
-│  │  └──────────────────────────────────────────────┘  │ │
-│  │  ┌──────────────────────────────────────────────┐  │ │
-│  │  │  Backup/Restore Controllers (4)              │  │ │
-│  │  │  - Wazuh & OpenSearch backups                │  │ │
-│  │  └──────────────────────────────────────────────┘  │ │
-│  │  ┌──────────────────────────────────────────────┐  │ │
-│  │  │  Auth Config Controller (1)                  │  │ │
-│  │  │  - LDAP, OIDC, SAML configuration            │  │ │
-│  │  └──────────────────────────────────────────────┘  │ │
-│  └────────────────────────────────────────────────────┘ │
-└─────────────────┬───────────────────────────────────────┘
-                  │
-                  │ Apply Resources
-                  ↓
-┌─────────────────────────────────────────────────────────┐
-│             Kubernetes Resources                        │
-│  - StatefulSets (Manager, Indexer)                      │
-│  - Deployments (Dashboard)                              │
-│  - Services, ConfigMaps, Secrets                        │
-│  - PVCs, Jobs, CronJobs                                 │
-│  - ServiceMonitors, PodDisruptionBudgets                │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A[Kubernetes API Server]
+
+    subgraph Operator["Wazuh Operator (Manager Process)"]
+        subgraph CRM[Controller Runtime Manager]
+            CRM1["Manages controller lifecycle · Shared caches and informers<br/>Leader election · Metrics server · Health checks"]
+        end
+        subgraph Controllers[25 Reconciliation Controllers]
+            WCR["WazuhClusterReconciler (Main)<br/>Orchestrates all components · Delegates to helper reconcilers"]
+            COMP["Component Controllers (4)<br/>WazuhManager, WazuhIndexer, etc."]
+            CONFIG["Config Controllers (4)<br/>Rules, Decoders, Certificates, Filebeat"]
+            SEC["OpenSearch Security Controllers (5)<br/>Users, Roles, RoleMappings, etc."]
+            IDX["OpenSearch Index Controllers (5)<br/>Indices, Templates, ISM Policies"]
+            BACKUP["Backup/Restore Controllers (4)<br/>Wazuh and OpenSearch backups"]
+            AUTH["Auth Config Controller (1)<br/>LDAP, OIDC, SAML configuration"]
+        end
+    end
+
+    subgraph Resources[Kubernetes Resources]
+        R1["StatefulSets (Manager, Indexer) · Deployments (Dashboard)"]
+        R2["Services · ConfigMaps · Secrets"]
+        R3["PVCs · Jobs · CronJobs"]
+        R4["ServiceMonitors · PodDisruptionBudgets"]
+    end
+
+    A -->|"Watch CRs"| Operator
+    Operator -->|"Apply Resources"| Resources
 ```
 
 ## Layered Architecture
@@ -336,18 +301,12 @@ type Condition struct {
 
 The WazuhCluster CR orchestrates three main components:
 
-```
-┌──────────────────────────────────────────────────┐
-│                    WazuhCluster                  │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐  │
-│  │  Manager   │  │  Indexer   │  │ Dashboard  │  │
-│  │            │  │            │  │            │  │
-│  │  Master    │──┤ OpenSearch ├──┤ OpenSearch │  │
-│  │  Workers   │  │  Cluster   │  │ Dashboards │  │
-│  │            │  │            │  │            │  │
-│  │  (StatefulSet) (StatefulSet)  (Deployment) │  │
-│  └────────────┘  └────────────┘  └────────────┘  │
-└──────────────────────────────────────────────────┘
+```mermaid
+graph LR
+    subgraph WazuhCluster
+        Manager["Manager<br/>Master · Workers<br/>(StatefulSet)"] --- Indexer["Indexer<br/>OpenSearch Cluster<br/>(StatefulSet)"]
+        Indexer --- Dashboard["Dashboard<br/>OpenSearch Dashboards<br/>(Deployment)"]
+    end
 ```
 
 **Manager**:
@@ -373,32 +332,28 @@ The WazuhCluster CR orchestrates three main components:
 
 ### Certificate Management Architecture
 
-```
-┌─────────────────────────────────────────────────────────┐
-│          WazuhCertificate CR (or inline)                │
-└────────────┬────────────────────────────────────────────┘
-             │
-             ↓
-┌─────────────────────────────────────────────────────────┐
-│        CertificateReconciler                            │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  1. Check existing certs & expiry                 │  │
-│  │  2. Generate CA if missing                        │  │
-│  │  3. Generate component certs (node, admin, fb)    │  │
-│  │  4. Store in Secrets                              │  │
-│  │  5. Mount to pods                                 │  │
-│  │  6. Hot reload (Wazuh 4.9+) or rolling restart    │  │
-│  └───────────────────────────────────────────────────┘  │
-└────────────┬────────────────────────────────────────────┘
-             │
-             ↓
-┌─────────────────────────────────────────────────────────┐
-│  Secrets (TLS Certificates)                             │
-│  - Root CA (ca.crt, ca.key)                             │
-│  - Admin cert (admin.crt, admin.key)                    │
-│  - Node certs (node.crt, node.key) per component        │
-│  - Filebeat cert (filebeat.crt, filebeat.key)           │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    CR["WazuhCertificate CR (or inline)"]
+
+    subgraph CertRecon[CertificateReconciler]
+        S1["1. Check existing certs and expiry"]
+        S2["2. Generate CA if missing"]
+        S3["3. Generate component certs (node, admin, fb)"]
+        S4["4. Store in Secrets"]
+        S5["5. Mount to pods"]
+        S6["6. Hot reload (Wazuh 4.9+) or rolling restart"]
+        S1 --> S2 --> S3 --> S4 --> S5 --> S6
+    end
+
+    subgraph Secrets["Secrets (TLS Certificates)"]
+        CA["Root CA (ca.crt, ca.key)"]
+        Admin["Admin cert (admin.crt, admin.key)"]
+        Node["Node certs per component"]
+        FB["Filebeat cert (filebeat.crt, filebeat.key)"]
+    end
+
+    CR --> CertRecon --> Secrets
 ```
 
 **Features**:
@@ -411,119 +366,81 @@ The WazuhCluster CR orchestrates three main components:
 
 ### OpenSearch Security Integration
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  OpenSearchUser/Role/RoleMapping/... CRs                │
-└────────────┬────────────────────────────────────────────┘
-             │
-             ↓
-┌─────────────────────────────────────────────────────────┐
-│  Security Reconcilers                                   │
-│  - Transform CR spec to OpenSearch Security API format  │
-│  - Call OpenSearch Security Plugin API                  │
-│  - Handle conflicts and drift                           │
-│  - Update status                                        │
-└────────────┬────────────────────────────────────────────┘
-             │
-             │ HTTP REST API
-             ↓
-┌─────────────────────────────────────────────────────────┐
-│  OpenSearch Security Plugin                             │
-│  /_plugins/_security/api/                               │
-│  - internalusers/                                       │
-│  - roles/                                               │
-│  - rolesmapping/                                        │
-│  - actiongroups/                                        │
-│  - tenants/                                             │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    CRS["OpenSearchUser / Role / RoleMapping / ... CRs"]
+
+    subgraph Reconcilers[Security Reconcilers]
+        T["Transform CR spec to OpenSearch Security API format"]
+        C["Call OpenSearch Security Plugin API"]
+        H["Handle conflicts and drift"]
+        U["Update status"]
+    end
+
+    subgraph Plugin["OpenSearch Security Plugin — /_plugins/_security/api/"]
+        IU[internalusers]
+        R[roles]
+        RM[rolesmapping]
+        AG[actiongroups]
+        TN[tenants]
+    end
+
+    CRS --> Reconcilers
+    Reconcilers -->|"HTTP REST API"| Plugin
 ```
 
 ### Backup & Restore Architecture
 
 **OpenSearch Snapshots** (via OpenSearch Snapshot API):
 
-```
-OpenSearchSnapshotRepository (S3/MinIO/Azure/FS)
-    ↓
-OpenSearchSnapshot (manual trigger) / OpenSearchSnapshotPolicy (scheduled)
-    ↓
-OpenSearch Snapshot API (/_snapshot/{repo}/{snapshot})
-    ↓
-S3/MinIO Bucket
-    ↓
-OpenSearchRestore (restore indices)
+```mermaid
+flowchart TD
+    OSR["OpenSearchSnapshotRepository<br/>(S3/MinIO/Azure/FS)"]
+    OSS["OpenSearchSnapshot (manual) /<br/>OpenSearchSnapshotPolicy (scheduled)"]
+    API["OpenSearch Snapshot API<br/>/_snapshot/repo/snapshot"]
+    S3["S3/MinIO Bucket"]
+    REST[OpenSearchRestore]
+
+    OSR --> OSS --> API --> S3 --> REST
 ```
 
 **Wazuh Manager Backups** (via Jobs to S3/MinIO):
 
-```
-WazuhBackup CR (schedule or one-shot)
-    ↓
-CronJob/Job (tar + S3 upload)
-    ↓
-S3/MinIO Bucket (tar.gz files)
-    ↓
-WazuhRestore CR (download + extract)
-    ↓
-Restore Job (scale manager to 0, extract, scale back)
+```mermaid
+flowchart TD
+    WB["WazuhBackup CR<br/>(schedule or one-shot)"]
+    CJ["CronJob/Job<br/>(tar + S3 upload)"]
+    S3["S3/MinIO Bucket<br/>(tar.gz files)"]
+    WR["WazuhRestore CR<br/>(download + extract)"]
+    RJ["Restore Job<br/>(scale manager to 0, extract, scale back)"]
+
+    WB --> CJ --> S3 --> WR --> RJ
 ```
 
 ## Deployment Architecture
 
 ### Operator Deployment
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  Kubernetes Cluster (wazuh-system namespace)            │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  Deployment: wazuh-operator                       │  │
-│  │  - 1 replica (leader election for HA)             │  │
-│  │  - Watches CRs cluster-wide                       │  │
-│  │  - Metrics endpoint (:8443)                       │  │
-│  │  - Health probes (:8081)                          │  │
-│  └───────────────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  ClusterRole: wazuh-operator-role                 │  │
-│  │  - Permissions for all CRs and K8s resources      │  │
-│  └───────────────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  ServiceAccount: wazuh-operator                   │  │
-│  └───────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph NS["Kubernetes Cluster (wazuh-system namespace)"]
+        DEP["Deployment: wazuh-operator<br/>1 replica (leader election for HA)<br/>Watches CRs cluster-wide<br/>Metrics endpoint :8443 · Health probes :8081"]
+        CR["ClusterRole: wazuh-operator-role<br/>Permissions for all CRs and K8s resources"]
+        SA["ServiceAccount: wazuh-operator"]
+    end
 ```
 
 ### Managed Cluster Deployment
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  Kubernetes Cluster (wazuh namespace)                   │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  StatefulSet: wazuh-manager-master (1 replica)    │  │
-│  │  - PVC: wazuh-data (50Gi)                         │  │
-│  │  - Service: wazuh-manager-master (ClusterIP)      │  │
-│  └───────────────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  StatefulSet: wazuh-manager-worker (2 replicas)   │  │
-│  │  - PVC: wazuh-data per pod                        │  │
-│  │  - Service: wazuh-manager-workers (Headless)      │  │
-│  └───────────────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  StatefulSet: wazuh-indexer (3 replicas)          │  │
-│  │  - PVC: opensearch-data per pod                   │  │
-│  │  - Service: wazuh-indexer (ClusterIP + Headless)  │  │
-│  └───────────────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  Deployment: wazuh-dashboard (2 replicas)         │  │
-│  │  - Service: wazuh-dashboard (ClusterIP)           │  │
-│  │  - Ingress: wazuh.example.com (optional)          │  │
-│  └───────────────────────────────────────────────────┘  │
-│  ┌───────────────────────────────────────────────────┐  │
-│  │  ConfigMaps: wazuh configs, opensearch configs    │  │
-│  │  Secrets: TLS certs, credentials                  │  │
-│  │  CronJobs: log rotation, scheduled backups        │  │
-│  │  Jobs: init, backups, restores                    │  │
-│  └───────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph NS["Kubernetes Cluster (wazuh namespace)"]
+        MM["StatefulSet: wazuh-manager-master (1 replica)<br/>PVC: wazuh-data 50Gi · Service: ClusterIP"]
+        MW["StatefulSet: wazuh-manager-worker (2 replicas)<br/>PVC: wazuh-data per pod · Service: Headless"]
+        IDX["StatefulSet: wazuh-indexer (3 replicas)<br/>PVC: opensearch-data per pod · Service: ClusterIP + Headless"]
+        DASH["Deployment: wazuh-dashboard (2 replicas)<br/>Service: ClusterIP · Ingress: optional"]
+        MISC["ConfigMaps · Secrets · CronJobs · Jobs"]
+    end
 ```
 
 ## Testing Strategy

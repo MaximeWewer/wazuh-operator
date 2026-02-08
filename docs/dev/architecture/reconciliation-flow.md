@@ -12,124 +12,37 @@ The reconciliation loop is triggered when:
 
 ## Main Reconciliation Flow
 
-```
-┌────────────────────────────────────────────────────────────────────────────┐
-│                        Reconcile() Entry Point                             │
-│                   (wazuhcluster_controller.go)                             │
-└────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│ 1. Fetch WazuhCluster                                                      │
-│    - Get from cache                                                        │
-│    - Handle not found (deleted)                                            │
-└────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│ 2. Handle Deletion                                                         │
-│    - Check DeletionTimestamp                                               │
-│    - Run finalizers if needed                                              │
-│    - Clean up owned resources                                              │
-└────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│ 3. Reconcile Certificates                                                  │
-│    - Check CA expiry, renew if needed                                      │
-│    - Check node certs expiry, renew if needed                              │
-│    - Return cert hashes for pod annotations                                │
-└────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│ 4. Reconcile Indexer                                                       │
-│    - Build ConfigMap, Secrets, Service, StatefulSet                        │
-│    - Create or Update resources                                            │
-│    - Wait for StatefulSet ready (optional)                                 │
-└────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│ 5. Reconcile Manager Master                                                │
-│    - Build ConfigMap, Secrets, Service, StatefulSet                        │
-│    - Create or Update resources                                            │
-│    - Wait for StatefulSet ready (optional)                                 │
-└────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│ 6. Reconcile Manager Workers                                               │
-│    - Build ConfigMap, Secrets, Service, StatefulSet                        │
-│    - Create or Update resources                                            │
-│    - Wait for StatefulSet ready (optional)                                 │
-└────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│ 7. Reconcile Dashboard                                                     │
-│    - Build ConfigMap, Service, Deployment                                  │
-│    - Create or Update resources                                            │
-└────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│ 8. Reconcile Log Rotation CronJob                                          │
-│    - Check if logRotation.enabled                                          │
-│    - Build CronJob                                                         │
-│    - Create or Update                                                      │
-└────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│ 9. Update Status                                                           │
-│    - Set phase (Pending, Creating, Running, Failed)                        │
-│    - Update component statuses                                             │
-│    - Set conditions                                                        │
-└────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│ 10. Return Result                                                          │
-│     - Requeue after 30s (default)                                          │
-│     - Immediate requeue on error                                           │
-└────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A["Reconcile() Entry Point<br/>(wazuhcluster_controller.go)"]
+    B["1. Fetch WazuhCluster<br/>Get from cache · Handle not found"]
+    C["2. Handle Deletion<br/>Check DeletionTimestamp · Run finalizers · Clean up resources"]
+    D["3. Reconcile Certificates<br/>Check CA/node certs expiry · Return cert hashes"]
+    E["4. Reconcile Indexer<br/>Build ConfigMap, Secrets, Service, StatefulSet"]
+    F["5. Reconcile Manager Master<br/>Build ConfigMap, Secrets, Service, StatefulSet"]
+    G["6. Reconcile Manager Workers<br/>Build ConfigMap, Secrets, Service, StatefulSet"]
+    H["7. Reconcile Dashboard<br/>Build ConfigMap, Service, Deployment"]
+    I["8. Reconcile Log Rotation CronJob<br/>Check if logRotation.enabled"]
+    J["9. Update Status<br/>Set phase · Update component statuses · Set conditions"]
+    K["10. Return Result<br/>Requeue after 30s default · Immediate requeue on error"]
+
+    A --> B --> C --> D --> E --> F --> G --> H --> I --> J --> K
 ```
 
 ## Certificate Reconciliation Sub-flow
 
-```
-ReconcileWithHashes()
-    │
-    ├─► reconcileCA()
-    │       - Check if CA secret exists
-    │       - Check CA expiry
-    │       - Generate new CA if needed
-    │       - Update secret
-    │
-    ├─► reconcileIndexerCerts()
-    │       - Check if secret exists
-    │       - Check cert expiry
-    │       - Generate new certs signed by CA
-    │       - Update secret
-    │
-    ├─► reconcileManagerMasterCerts()
-    │       - Same pattern as indexer
-    │
-    ├─► reconcileManagerWorkerCerts()
-    │       - Same pattern as indexer
-    │
-    ├─► reconcileDashboardCerts()
-    │       - Same pattern as indexer
-    │
-    ├─► reconcileFilebeatCerts()
-    │       - Same pattern as indexer
-    │
-    └─► Return CertHashResult
-            - IndexerCertHash
-            - ManagerMasterCertHash
-            - ManagerWorkerCertHash
-            - DashboardCertHash
+```mermaid
+flowchart TD
+    RWH[ReconcileWithHashes]
+    CA["reconcileCA()<br/>Check if CA secret exists · Check CA expiry<br/>Generate new CA if needed · Update secret"]
+    IC["reconcileIndexerCerts()<br/>Check if secret exists · Check cert expiry<br/>Generate new certs signed by CA · Update secret"]
+    MMC["reconcileManagerMasterCerts()<br/>Same pattern as indexer"]
+    MWC["reconcileManagerWorkerCerts()<br/>Same pattern as indexer"]
+    DC["reconcileDashboardCerts()<br/>Same pattern as indexer"]
+    FC["reconcileFilebeatCerts()<br/>Same pattern as indexer"]
+    RES["Return CertHashResult<br/>IndexerCertHash · ManagerMasterCertHash<br/>ManagerWorkerCertHash · DashboardCertHash"]
+
+    RWH --> CA --> IC --> MMC --> MWC --> DC --> FC --> RES
 ```
 
 ## Spec Hash Change Detection

@@ -8,40 +8,32 @@ The Wazuh Operator is a Kubernetes operator built with Kubebuilder v4 that manag
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           Kubernetes API Server                         │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                           Wazuh Operator                                │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐          │
-│  │ WazuhCluster    │  │ OpenSearch CRD  │  │ Wazuh Config    │          │
-│  │ Controller      │  │ Controllers     │  │ Controllers     │          │
-│  └────────┬────────┘  └────────┬────────┘  └────────┬────────┘          │
-│           │                    │                    │                   │
-│           ▼                    ▼                    ▼                   │
-│  ┌─────────────────────────────────────────────────────────────┐        │
-│  │                    Reconciliation Engine                    │        │
-│  │  - Certificate Management                                   │        │
-│  │  - Resource Building                                        │        │
-│  │  - Status Updates                                           │        │
-│  └─────────────────────────────────────────────────────────────┘        │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         Managed Resources                               │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐         │
-│  │ StatefulSet│  │ Deployment │  │  Service   │  │   Secret   │         │
-│  │ (Indexer)  │  │ (Dashboard)│  │            │  │ (Certs)    │         │
-│  └────────────┘  └────────────┘  └────────────┘  └────────────┘         │
-│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐         │
-│  │ StatefulSet│  │  ConfigMap │  │    PVC     │  │  CronJob   │         │
-│  │ (Manager)  │  │            │  │            │  │ (LogRot)   │         │
-│  └────────────┘  └────────────┘  └────────────┘  └────────────┘         │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A[Kubernetes API Server]
+
+    subgraph Operator[Wazuh Operator]
+        B1[WazuhCluster Controller]
+        B2[OpenSearch CRD Controllers]
+        B3[Wazuh Config Controllers]
+        B4["Reconciliation Engine<br/>Certificate Management · Resource Building · Status Updates"]
+        B1 --> B4
+        B2 --> B4
+        B3 --> B4
+    end
+
+    subgraph Resources[Managed Resources]
+        C1["StatefulSet (Indexer)"]
+        C2["Deployment (Dashboard)"]
+        C3[Service]
+        C4["Secret"]
+        C5["StatefulSet (Manager)"]
+        C6[ConfigMap]
+        C7[PVC]
+        C8["CronJob (LogRot)"]
+    end
+
+    A --> Operator --> Resources
 ```
 
 ## Controllers
