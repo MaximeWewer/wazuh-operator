@@ -18549,6 +18549,113 @@ spec:
                 - Deleting
                 - Upgrading
                 type: string
+              rollingRestart:
+                description: RollingRestart tracks quorum-safe rolling restart progress
+                properties:
+                  inProgress:
+                    description: InProgress indicates if any component has an active
+                      rolling restart
+                    type: boolean
+                  indexer:
+                    description: Indexer rolling restart status
+                    properties:
+                      currentPod:
+                        description: CurrentPod is the name of the pod currently being
+                          restarted
+                        type: string
+                      lastTransitionTime:
+                        description: LastTransitionTime is when the phase last changed
+                        format: date-time
+                        type: string
+                      message:
+                        description: Message is a human-readable status message
+                        type: string
+                      phase:
+                        description: Phase is the current rolling restart phase (Idle,
+                          InProgress, Complete)
+                        type: string
+                      startTime:
+                        description: StartTime is when the rolling restart started
+                        format: date-time
+                        type: string
+                      totalPods:
+                        description: TotalPods is the total number of pods in the
+                          component
+                        format: int32
+                        type: integer
+                      updatedPods:
+                        description: UpdatedPods is the number of pods already on
+                          the target revision
+                        format: int32
+                        type: integer
+                    type: object
+                  managerMaster:
+                    description: ManagerMaster rolling restart status
+                    properties:
+                      currentPod:
+                        description: CurrentPod is the name of the pod currently being
+                          restarted
+                        type: string
+                      lastTransitionTime:
+                        description: LastTransitionTime is when the phase last changed
+                        format: date-time
+                        type: string
+                      message:
+                        description: Message is a human-readable status message
+                        type: string
+                      phase:
+                        description: Phase is the current rolling restart phase (Idle,
+                          InProgress, Complete)
+                        type: string
+                      startTime:
+                        description: StartTime is when the rolling restart started
+                        format: date-time
+                        type: string
+                      totalPods:
+                        description: TotalPods is the total number of pods in the
+                          component
+                        format: int32
+                        type: integer
+                      updatedPods:
+                        description: UpdatedPods is the number of pods already on
+                          the target revision
+                        format: int32
+                        type: integer
+                    type: object
+                  managerWorker:
+                    description: ManagerWorker rolling restart status
+                    properties:
+                      currentPod:
+                        description: CurrentPod is the name of the pod currently being
+                          restarted
+                        type: string
+                      lastTransitionTime:
+                        description: LastTransitionTime is when the phase last changed
+                        format: date-time
+                        type: string
+                      message:
+                        description: Message is a human-readable status message
+                        type: string
+                      phase:
+                        description: Phase is the current rolling restart phase (Idle,
+                          InProgress, Complete)
+                        type: string
+                      startTime:
+                        description: StartTime is when the rolling restart started
+                        format: date-time
+                        type: string
+                      totalPods:
+                        description: TotalPods is the total number of pods in the
+                          component
+                        format: int32
+                        type: integer
+                      updatedPods:
+                        description: UpdatedPods is the number of pods already on
+                          the target revision
+                        format: int32
+                        type: integer
+                    type: object
+                type: object
               security:
                 description: Security holds security-related status
                 properties:

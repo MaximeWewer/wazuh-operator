@@ -326,10 +326,6 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	// Build env vars
 	env := b.buildEnvVars()
 
-	// Configure RollingUpdate strategy for graceful rollout
-	// Partition 0 means all pods will be updated, but OrderedReady ensures one at a time
-	partition := int32(0)
-
 	// Wazuh manager requires root (uid 0) to run s6, filebeat, and other services
 	runAsRoot := int64(0)
 
@@ -409,13 +405,11 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			// This prevents premature progression during rolling updates
 			MinReadySeconds: 30,
 			// Parallel allows all pods to start simultaneously during initial deployment
-			// RollingUpdate strategy still ensures one-at-a-time updates for version changes
 			PodManagementPolicy: appsv1.ParallelPodManagement,
+			// OnDelete strategy gives the operator control over pod-by-pod restarts
+			// with cluster health verification between each pod replacement
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-				Type: appsv1.RollingUpdateStatefulSetStrategyType,
-				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
-					Partition: &partition,
-				},
+				Type: appsv1.OnDeleteStatefulSetStrategyType,
 			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,

@@ -281,10 +281,6 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	fsGroup := int64(1000)
 	runAsUser := int64(1000)
 
-	// Configure RollingUpdate strategy for graceful rollout
-	// Partition 0 means all pods will be updated
-	partition := int32(0)
-
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        b.name,
@@ -301,11 +297,10 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			// Parallel allows all pods to start simultaneously, which is required for
 			// OpenSearch cluster formation - nodes need to discover each other at startup
 			PodManagementPolicy: appsv1.ParallelPodManagement,
+			// OnDelete strategy gives the operator control over pod-by-pod restarts
+			// with cluster health verification between each pod replacement
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-				Type: appsv1.RollingUpdateStatefulSetStrategyType,
-				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
-					Partition: &partition,
-				},
+				Type: appsv1.OnDeleteStatefulSetStrategyType,
 			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,

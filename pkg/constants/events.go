@@ -245,6 +245,21 @@ const (
 	EventReasonWorkloadRecreating = "WorkloadRecreating"
 )
 
+// Rolling restart event reasons
+const (
+	// EventReasonRollingRestartStarted indicates a quorum-safe rolling restart has started
+	EventReasonRollingRestartStarted = "RollingRestartStarted"
+
+	// EventReasonRollingRestartProgress indicates rolling restart progress (pod deleted)
+	EventReasonRollingRestartProgress = "RollingRestartProgress"
+
+	// EventReasonRollingRestartComplete indicates a rolling restart has completed
+	EventReasonRollingRestartComplete = "RollingRestartComplete"
+
+	// EventReasonRollingRestartHealthWait indicates waiting for cluster health before restarting next pod
+	EventReasonRollingRestartHealthWait = "RollingRestartHealthWait"
+)
+
 // Certificate propagation event reasons
 const (
 	// EventReasonCertificatePropagationWait indicates waiting for certificate propagation to pods

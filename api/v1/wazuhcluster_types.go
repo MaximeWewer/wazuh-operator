@@ -836,6 +836,56 @@ type ComponentExpansionStatus struct {
 	PVCsPending []string `json:"pvcsPending,omitempty"`
 }
 
+// RollingRestartStatus tracks quorum-safe rolling restart progress across components
+type RollingRestartStatus struct {
+	// Indexer rolling restart status
+	// +optional
+	Indexer *ComponentRollingRestart `json:"indexer,omitempty"`
+
+	// ManagerMaster rolling restart status
+	// +optional
+	ManagerMaster *ComponentRollingRestart `json:"managerMaster,omitempty"`
+
+	// ManagerWorker rolling restart status
+	// +optional
+	ManagerWorker *ComponentRollingRestart `json:"managerWorker,omitempty"`
+
+	// InProgress indicates if any component has an active rolling restart
+	// +optional
+	InProgress bool `json:"inProgress,omitempty"`
+}
+
+// ComponentRollingRestart tracks rolling restart progress for a single component
+type ComponentRollingRestart struct {
+	// Phase is the current rolling restart phase (Idle, InProgress, Complete)
+	// +optional
+	Phase string `json:"phase,omitempty"`
+
+	// TotalPods is the total number of pods in the component
+	// +optional
+	TotalPods int32 `json:"totalPods,omitempty"`
+
+	// UpdatedPods is the number of pods already on the target revision
+	// +optional
+	UpdatedPods int32 `json:"updatedPods,omitempty"`
+
+	// CurrentPod is the name of the pod currently being restarted
+	// +optional
+	CurrentPod string `json:"currentPod,omitempty"`
+
+	// Message is a human-readable status message
+	// +optional
+	Message string `json:"message,omitempty"`
+
+	// LastTransitionTime is when the phase last changed
+	// +optional
+	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+
+	// StartTime is when the rolling restart started
+	// +optional
+	StartTime *metav1.Time `json:"startTime,omitempty"`
+}
+
 // WazuhClusterStatus defines the observed state of WazuhCluster
 type WazuhClusterStatus struct {
 	// Phase of the cluster
@@ -879,6 +929,10 @@ type WazuhClusterStatus struct {
 	// Drain tracks drain operation status for scale-down operations
 	// +optional
 	Drain *DrainStatus `json:"drain,omitempty"`
+
+	// RollingRestart tracks quorum-safe rolling restart progress
+	// +optional
+	RollingRestart *RollingRestartStatus `json:"rollingRestart,omitempty"`
 
 	// Observed generation
 	// +optional

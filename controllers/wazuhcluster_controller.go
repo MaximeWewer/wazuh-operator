@@ -51,6 +51,7 @@ import (
 	networkingreconciler "github.com/MaximeWewer/wazuh-operator/internal/networking/reconciler"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/validation"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/rolling"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
@@ -70,6 +71,9 @@ const (
 
 	// RequeueIntervalDrainInProgress is the requeue interval when a drain is in progress
 	RequeueIntervalDrainInProgress = 10 * time.Second
+
+	// RequeueIntervalRollingRestart is the requeue interval when a rolling restart is in progress
+	RequeueIntervalRollingRestart = 10 * time.Second
 )
 
 // WazuhClusterReconciler reconciles a WazuhCluster object
@@ -685,6 +689,31 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 	metrics.SetCertificateRolloutsPending(cluster.Name, cluster.Namespace, float64(pendingCount))
 
+	// 15. Orchestrate quorum-safe rolling restarts
+	hasRollingRestart := false
+
+	indexerRestart, err := r.IndexerReconciler.OrchestrateRollingRestart(ctx, cluster)
+	if err != nil {
+		log.Error(err, "Failed to orchestrate indexer rolling restart")
+	}
+	if indexerRestart != nil && indexerRestart.Phase == rolling.RestartPhaseInProgress {
+		hasRollingRestart = true
+	}
+
+	masterRestart, workerRestart, err := r.ClusterReconciler.OrchestrateManagerRollingRestart(ctx, cluster)
+	if err != nil {
+		log.Error(err, "Failed to orchestrate manager rolling restart")
+	}
+	if masterRestart != nil && masterRestart.Phase == rolling.RestartPhaseInProgress {
+		hasRollingRestart = true
+	}
+	if workerRestart != nil && workerRestart.Phase == rolling.RestartPhaseInProgress {
+		hasRollingRestart = true
+	}
+
+	// Update rolling restart status
+	r.updateRollingRestartStatus(cluster, indexerRestart, masterRestart, workerRestart, hasRollingRestart)
+
 	// Update status
 	if err := r.updateStatus(ctx, cluster); err != nil {
 		log.Error(err, "Failed to update WazuhCluster status")
@@ -692,8 +721,11 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Determine requeue interval based on state
-	requeueInterval := r.determineRequeueInterval(hasPendingRollouts)
-	log.V(1).Info("Reconciliation complete", "requeueAfter", requeueInterval, "hasPendingRollouts", hasPendingRollouts)
+	requeueInterval := r.determineRequeueInterval(hasPendingRollouts, hasRollingRestart)
+	log.V(1).Info("Reconciliation complete",
+		"requeueAfter", requeueInterval,
+		"hasPendingRollouts", hasPendingRollouts,
+		"hasRollingRestart", hasRollingRestart)
 
 	return ctrl.Result{RequeueAfter: requeueInterval}, nil
 }
@@ -821,14 +853,92 @@ func (r *WazuhClusterReconciler) addPendingRollouts(cluster *wazuhv1.WazuhCluste
 // determineRequeueInterval determines the appropriate requeue interval based on cluster state.
 // Note: drain-in-progress uses early returns with RequeueIntervalDrainInProgress directly,
 // so this function is only reached when no drain is active.
-func (r *WazuhClusterReconciler) determineRequeueInterval(hasPendingRollouts bool) time.Duration {
+func (r *WazuhClusterReconciler) determineRequeueInterval(hasPendingRollouts, hasRollingRestart bool) time.Duration {
 	// Pending rollouts use faster requeue
 	if hasPendingRollouts {
 		return RequeueIntervalPendingRollout
 	}
 
+	// Rolling restarts use moderate requeue interval
+	if hasRollingRestart {
+		return RequeueIntervalRollingRestart
+	}
+
 	// Normal operation
 	return RequeueIntervalNormal
+}
+
+// updateRollingRestartStatus updates the cluster's rolling restart status from orchestrator results.
+func (r *WazuhClusterReconciler) updateRollingRestartStatus(
+	cluster *wazuhv1.WazuhCluster,
+	indexerRestart *rolling.RestartResult,
+	masterRestart, workerRestart *rolling.RestartResult,
+	hasRollingRestart bool,
+) {
+	// If nothing is happening and no status exists, skip
+	if !hasRollingRestart && indexerRestart == nil && masterRestart == nil && workerRestart == nil {
+		// Clear status if it was previously set and everything is now idle
+		if cluster.Status.RollingRestart != nil {
+			cluster.Status.RollingRestart = nil
+		}
+		return
+	}
+
+	now := metav1.Now()
+	if cluster.Status.RollingRestart == nil {
+		cluster.Status.RollingRestart = &wazuhv1.RollingRestartStatus{}
+	}
+
+	if indexerRestart != nil && indexerRestart.Phase != rolling.RestartPhaseIdle {
+		if cluster.Status.RollingRestart.Indexer == nil {
+			cluster.Status.RollingRestart.Indexer = &wazuhv1.ComponentRollingRestart{StartTime: &now}
+		}
+		cluster.Status.RollingRestart.Indexer.Phase = string(indexerRestart.Phase)
+		cluster.Status.RollingRestart.Indexer.TotalPods = indexerRestart.TotalPods
+		cluster.Status.RollingRestart.Indexer.UpdatedPods = indexerRestart.UpdatedPods
+		cluster.Status.RollingRestart.Indexer.CurrentPod = indexerRestart.CurrentPod
+		cluster.Status.RollingRestart.Indexer.Message = indexerRestart.Message
+		cluster.Status.RollingRestart.Indexer.LastTransitionTime = &now
+	} else {
+		cluster.Status.RollingRestart.Indexer = nil
+	}
+
+	if masterRestart != nil && masterRestart.Phase != rolling.RestartPhaseIdle {
+		if cluster.Status.RollingRestart.ManagerMaster == nil {
+			cluster.Status.RollingRestart.ManagerMaster = &wazuhv1.ComponentRollingRestart{StartTime: &now}
+		}
+		cluster.Status.RollingRestart.ManagerMaster.Phase = string(masterRestart.Phase)
+		cluster.Status.RollingRestart.ManagerMaster.TotalPods = masterRestart.TotalPods
+		cluster.Status.RollingRestart.ManagerMaster.UpdatedPods = masterRestart.UpdatedPods
+		cluster.Status.RollingRestart.ManagerMaster.CurrentPod = masterRestart.CurrentPod
+		cluster.Status.RollingRestart.ManagerMaster.Message = masterRestart.Message
+		cluster.Status.RollingRestart.ManagerMaster.LastTransitionTime = &now
+	} else {
+		cluster.Status.RollingRestart.ManagerMaster = nil
+	}
+
+	if workerRestart != nil && workerRestart.Phase != rolling.RestartPhaseIdle {
+		if cluster.Status.RollingRestart.ManagerWorker == nil {
+			cluster.Status.RollingRestart.ManagerWorker = &wazuhv1.ComponentRollingRestart{StartTime: &now}
+		}
+		cluster.Status.RollingRestart.ManagerWorker.Phase = string(workerRestart.Phase)
+		cluster.Status.RollingRestart.ManagerWorker.TotalPods = workerRestart.TotalPods
+		cluster.Status.RollingRestart.ManagerWorker.UpdatedPods = workerRestart.UpdatedPods
+		cluster.Status.RollingRestart.ManagerWorker.CurrentPod = workerRestart.CurrentPod
+		cluster.Status.RollingRestart.ManagerWorker.Message = workerRestart.Message
+		cluster.Status.RollingRestart.ManagerWorker.LastTransitionTime = &now
+	} else {
+		cluster.Status.RollingRestart.ManagerWorker = nil
+	}
+
+	cluster.Status.RollingRestart.InProgress = hasRollingRestart
+
+	// Clear the entire status if no component has an active restart
+	if cluster.Status.RollingRestart.Indexer == nil &&
+		cluster.Status.RollingRestart.ManagerMaster == nil &&
+		cluster.Status.RollingRestart.ManagerWorker == nil {
+		cluster.Status.RollingRestart = nil
+	}
 }
 
 // handleDeletion handles cleanup when the WazuhCluster is deleted
@@ -1091,6 +1201,9 @@ func (r *WazuhClusterReconciler) updateStatus(ctx context.Context, cluster *wazu
 
 		// Copy drain status from working cluster
 		latestCluster.Status.Drain = cluster.Status.Drain
+
+		// Copy rolling restart status from working cluster
+		latestCluster.Status.RollingRestart = cluster.Status.RollingRestart
 
 		// Update overall phase
 		if allReady && latestCluster.Status.Indexer != nil && latestCluster.Status.Manager != nil && latestCluster.Status.Dashboard != nil {

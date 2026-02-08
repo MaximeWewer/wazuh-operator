@@ -286,9 +286,6 @@ func (b *NodePoolStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	fsGroup := int64(1000)
 	runAsUser := int64(1000)
 
-	// Configure RollingUpdate strategy
-	partition := int32(0)
-
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
@@ -304,11 +301,10 @@ func (b *NodePoolStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			MinReadySeconds: 30,
 			// Parallel allows all pods to start simultaneously for cluster formation
 			PodManagementPolicy: appsv1.ParallelPodManagement,
+			// OnDelete strategy gives the operator control over pod-by-pod restarts
+			// with cluster health verification between each pod replacement
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-				Type: appsv1.RollingUpdateStatefulSetStrategyType,
-				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
-					Partition: &partition,
-				},
+				Type: appsv1.OnDeleteStatefulSetStrategyType,
 			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,
