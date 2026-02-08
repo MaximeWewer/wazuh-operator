@@ -125,6 +125,26 @@ type IndexerNodePoolSpec struct {
 	// PodAnnotations for pods in this pool
 	// +optional
 	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
+
+	// Additional volumes
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
+
+	// Additional volume mounts
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+
+	// Additional init containers to inject into the pod
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraInitContainers []corev1.Container `json:"extraInitContainers,omitempty"`
+
+	// Additional sidecar containers to inject into the pod
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
 }
 
 // NodePoolStatus represents the observed state of a nodePool

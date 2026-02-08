@@ -301,10 +301,25 @@ type WazuhIndexerClusterSpec struct {
 	// +kubebuilder:default="RollingUpdate"
 	UpdateStrategy string `json:"updateStrategy,omitempty"`
 
-	// Init containers
+	// Additional volumes
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
-	InitContainers []corev1.Container `json:"initContainers,omitempty"`
+	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
+
+	// Additional volume mounts
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+
+	// Additional init containers to inject into the pod
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraInitContainers []corev1.Container `json:"extraInitContainers,omitempty"`
+
+	// Additional sidecar containers to inject into the pod
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
 
 	// Environment variables
 	// +optional
@@ -435,6 +450,26 @@ type WazuhDashboardClusterSpec struct {
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
 	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
+
+	// Additional volumes
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
+
+	// Additional volume mounts
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+
+	// Additional init containers to inject into the pod
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraInitContainers []corev1.Container `json:"extraInitContainers,omitempty"`
+
+	// Additional sidecar containers to inject into the pod
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
 
 	// HorizontalPodAutoscaler configuration for automatic scaling
 	// When enabled, the Dashboard will scale based on CPU/memory utilization

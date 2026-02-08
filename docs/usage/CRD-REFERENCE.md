@@ -267,6 +267,8 @@ Configuration for safe scale-down operations. See [Drain Strategy](features/drai
 | `extraConfig`              | string                            | No       | -       | Extra ossec.conf XML    |
 | `extraVolumes`             | []Volume                          | No       | -       | Extra volumes           |
 | `extraVolumeMounts`        | []VolumeMount                     | No       | -       | Extra mounts            |
+| `extraInitContainers`      | []Container                       | No       | -       | Extra init containers   |
+| `extraContainers`          | []Container                       | No       | -       | Extra sidecar containers|
 | `podAnnotations`           | map[string]string                 | No       | -       | Pod annotations         |
 | `annotations`              | map[string]string                 | No       | -       | StatefulSet annotations |
 | `ingress`                  | [IngressSpec](#ingressspec)       | No       | -       | Ingress config          |
@@ -278,7 +280,7 @@ Configuration for safe scale-down operations. See [Drain Strategy](features/drai
 
 ### WorkerSpec
 
-Includes all fields from MasterSpec, plus:
+Includes all fields from [MasterSpec](#masterspec) (including `extraVolumes`, `extraVolumeMounts`, `extraInitContainers`, `extraContainers`), plus:
 
 | Field                 | Type                                | Required | Default | Description               |
 | --------------------- | ----------------------------------- | -------- | ------- | ------------------------- |
@@ -317,7 +319,10 @@ Includes all fields from MasterSpec, plus:
 | `ingress`                  | [IngressSpec](#ingressspec)                   | No       | -                  | Ingress config                                                     |
 | `gatewayAPI`               | [GatewayAPISpec](#gatewayapispec)             | No       | -                  | Gateway API config                                                 |
 | `updateStrategy`           | string                                        | No       | `RollingUpdate`    | Update strategy (StatefulSets use OnDelete internally for quorum-safe restarts) |
-| `initContainers`           | []Container                                   | No       | -                  | Init containers                                                    |
+| `extraVolumes`             | []Volume                                      | No       | -                  | Extra volumes                                                      |
+| `extraVolumeMounts`        | []VolumeMount                                 | No       | -                  | Extra volume mounts                                                |
+| `extraInitContainers`      | []Container                                   | No       | -                  | Extra init containers                                              |
+| `extraContainers`          | []Container                                   | No       | -                  | Extra sidecar containers                                           |
 | `env`                      | []EnvVar                                      | No       | -                  | Environment variables                                              |
 | `envFrom`                  | []EnvFromSource                               | No       | -                  | Env from sources                                                   |
 | `securityContext`          | PodSecurityContext                            | No       | -                  | Pod security                                                       |
@@ -344,8 +349,12 @@ Configuration for a nodePool in advanced indexer topology mode. Each nodePool be
 | `nodeSelector`   | map[string]string    | No       | -       | Kubernetes node selector                       |
 | `tolerations`    | []Toleration         | No       | -       | Kubernetes tolerations                         |
 | `affinity`       | \*Affinity           | No       | -       | Kubernetes affinity rules                      |
-| `annotations`    | map[string]string    | No       | -       | StatefulSet annotations                        |
-| `podAnnotations` | map[string]string    | No       | -       | Pod annotations                                |
+| `annotations`         | map[string]string    | No       | -       | StatefulSet annotations                        |
+| `podAnnotations`      | map[string]string    | No       | -       | Pod annotations                                |
+| `extraVolumes`        | []Volume             | No       | -       | Extra volumes                                  |
+| `extraVolumeMounts`   | []VolumeMount        | No       | -       | Extra volume mounts                            |
+| `extraInitContainers` | []Container          | No       | -       | Extra init containers                          |
+| `extraContainers`     | []Container          | No       | -       | Extra sidecar containers                       |
 
 ### IndexerNodeRole
 
@@ -381,6 +390,10 @@ Valid values for OpenSearch node roles:
 | `gatewayAPI`               | [GatewayAPISpec](#gatewayapispec) | No       | -       | Gateway API config        |
 | `env`                      | []EnvVar                          | No       | -       | Environment variables     |
 | `envFrom`                  | []EnvFromSource                   | No       | -       | Env from sources          |
+| `extraVolumes`             | []Volume                          | No       | -       | Extra volumes             |
+| `extraVolumeMounts`        | []VolumeMount                     | No       | -       | Extra volume mounts       |
+| `extraInitContainers`      | []Container                       | No       | -       | Extra init containers     |
+| `extraContainers`          | []Container                       | No       | -       | Extra sidecar containers  |
 | `securityContext`          | PodSecurityContext                | No       | -       | Pod security              |
 | `containerSecurityContext` | SecurityContext                   | No       | -       | Container security        |
 | `hpa`                      | [HPASpec](#hpaspec)               | No       | -       | Horizontal Pod Autoscaler |
@@ -581,12 +594,18 @@ Standalone CRD for managing Wazuh Worker configuration. Used for per-worker over
 
 | Field          | Type                 | Required | Default | Description             |
 | -------------- | -------------------- | -------- | ------- | ----------------------- |
-| `clusterRef`   | string               | **Yes**  | -       | Reference to cluster    |
-| `workerIndex`  | int32                | **Yes**  | -       | Worker index (0-based)  |
-| `extraConfig`  | string               | No       | -       | Extra ossec.conf XML    |
-| `resources`    | ResourceRequirements | No       | -       | Resource overrides      |
-| `nodeSelector` | map[string]string    | No       | -       | Node selector overrides |
-| `tolerations`  | []Toleration         | No       | -       | Toleration overrides    |
+| `managerRef`          | string               | **Yes**  | -       | Reference to WazuhManager|
+| `replicas`            | int32                | No       | `2`     | Number of replicas       |
+| `resources`           | ResourceRequirements | No       | -       | Resource requirements    |
+| `storageSize`         | string               | No       | `50Gi`  | Storage size             |
+| `nodeSelector`        | map[string]string    | No       | -       | Node selector            |
+| `tolerations`         | []Toleration         | No       | -       | Tolerations              |
+| `affinity`            | Affinity             | No       | -       | Affinity rules           |
+| `extraConfig`         | string               | No       | -       | Extra ossec.conf XML     |
+| `extraVolumes`        | []Volume             | No       | -       | Extra volumes            |
+| `extraVolumeMounts`   | []VolumeMount        | No       | -       | Extra volume mounts      |
+| `extraInitContainers` | []Container          | No       | -       | Extra init containers    |
+| `extraContainers`     | []Container          | No       | -       | Extra sidecar containers |
 
 ---
 
@@ -614,9 +633,13 @@ Standalone CRD for managing OpenSearch Indexer configuration. Used in reference 
 | `javaOpts`         | string                                        | No       | `-Xms1g -Xmx1g -Dlog4j2.formatMsgNoLookups=true` | Java options         |
 | `clusterName`      | string                                        | No       | `wazuh`                                          | Cluster name         |
 | `credentials`      | [CredentialsSecretRef](#credentialssecretref) | No       | -                                                | Admin credentials    |
-| `nodeSelector`     | map[string]string                             | No       | -                                                | Node selector        |
-| `tolerations`      | []Toleration                                  | No       | -                                                | Tolerations          |
-| `affinity`         | Affinity                                      | No       | -                                                | Affinity rules       |
+| `nodeSelector`        | map[string]string                             | No       | -                                                | Node selector           |
+| `tolerations`         | []Toleration                                  | No       | -                                                | Tolerations             |
+| `affinity`            | Affinity                                      | No       | -                                                | Affinity rules          |
+| `extraVolumes`        | []Volume                                      | No       | -                                                | Extra volumes           |
+| `extraVolumeMounts`   | []VolumeMount                                 | No       | -                                                | Extra volume mounts     |
+| `extraInitContainers` | []Container                                   | No       | -                                                | Extra init containers   |
+| `extraContainers`     | []Container                                   | No       | -                                                | Extra sidecar containers|
 
 ### OpenSearchDashboard
 
@@ -640,7 +663,11 @@ Standalone CRD for managing OpenSearch Dashboard configuration. Used in referenc
 | `nodeSelector` | map[string]string           | No       | -       | Node selector         |
 | `tolerations`  | []Toleration                | No       | -       | Tolerations           |
 | `affinity`     | Affinity                    | No       | -       | Affinity rules        |
-| `ingress`      | [IngressSpec](#ingressspec) | No       | -       | Ingress configuration |
+| `ingress`             | [IngressSpec](#ingressspec) | No       | -       | Ingress configuration    |
+| `extraVolumes`        | []Volume                    | No       | -       | Extra volumes            |
+| `extraVolumeMounts`   | []VolumeMount               | No       | -       | Extra volume mounts      |
+| `extraInitContainers` | []Container                 | No       | -       | Extra init containers    |
+| `extraContainers`     | []Container                 | No       | -       | Extra sidecar containers |
 
 ---
 

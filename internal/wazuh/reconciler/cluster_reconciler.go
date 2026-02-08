@@ -327,6 +327,8 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		topologySpreadConstraints []corev1.TopologySpreadConstraint
 		extraVolumes              []corev1.Volume
 		extraVolumeMounts         []corev1.VolumeMount
+		extraInitContainers       []corev1.Container
+		extraContainers           []corev1.Container
 		extraConfig               string
 		annotations               map[string]string
 		podAnnotations            map[string]string
@@ -351,6 +353,8 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		envFrom = cluster.Spec.Manager.Master.EnvFrom
 		extraVolumes = cluster.Spec.Manager.Master.ExtraVolumes
 		extraVolumeMounts = cluster.Spec.Manager.Master.ExtraVolumeMounts
+		extraInitContainers = cluster.Spec.Manager.Master.ExtraInitContainers
+		extraContainers = cluster.Spec.Manager.Master.ExtraContainers
 		extraConfig = cluster.Spec.Manager.Master.ExtraConfig
 		annotations = cluster.Spec.Manager.Master.Annotations
 		podAnnotations = cluster.Spec.Manager.Master.PodAnnotations
@@ -450,6 +454,8 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		ExtraConfig:               extraConfig,
 		ExtraVolumes:              extraVolumes,
 		ExtraVolumeMounts:         extraVolumeMounts,
+		ExtraInitContainers:       extraInitContainers,
+		ExtraContainers:           extraContainers,
 		MonitoringEnabled:         cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Enabled,
 	})
 	if err != nil {
@@ -494,6 +500,12 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	}
 	if len(extraVolumeMounts) > 0 {
 		stsBuilder.WithVolumeMounts(extraVolumeMounts)
+	}
+	if len(extraInitContainers) > 0 {
+		stsBuilder.WithExtraInitContainers(extraInitContainers)
+	}
+	if len(extraContainers) > 0 {
+		stsBuilder.WithExtraContainers(extraContainers)
 	}
 	if len(annotations) > 0 {
 		stsBuilder.WithAnnotations(annotations)
@@ -842,6 +854,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	var workerExtraConfig string
 	var workerExtraVolumes []corev1.Volume
 	var workerExtraVolumeMounts []corev1.VolumeMount
+	var workerExtraInitContainers []corev1.Container
+	var workerExtraContainers []corev1.Container
 	var workerEnv []corev1.EnvVar
 	var workerEnvFrom []corev1.EnvFromSource
 	if cluster.Spec.Manager != nil {
@@ -849,6 +863,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		workerExtraConfig = cluster.Spec.Manager.Workers.ExtraConfig
 		workerExtraVolumes = cluster.Spec.Manager.Workers.ExtraVolumes
 		workerExtraVolumeMounts = cluster.Spec.Manager.Workers.ExtraVolumeMounts
+		workerExtraInitContainers = cluster.Spec.Manager.Workers.ExtraInitContainers
+		workerExtraContainers = cluster.Spec.Manager.Workers.ExtraContainers
 		workerEnv = cluster.Spec.Manager.Workers.Env
 		workerEnvFrom = cluster.Spec.Manager.Workers.EnvFrom
 	}
@@ -871,6 +887,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		ExtraConfig:               workerExtraConfig,
 		ExtraVolumes:              workerExtraVolumes,
 		ExtraVolumeMounts:         workerExtraVolumeMounts,
+		ExtraInitContainers:       workerExtraInitContainers,
+		ExtraContainers:           workerExtraContainers,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec hash")
@@ -909,6 +927,12 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	}
 	if len(extraVolumeMounts) > 0 {
 		stsBuilder.WithVolumeMounts(extraVolumeMounts)
+	}
+	if len(workerExtraInitContainers) > 0 {
+		stsBuilder.WithExtraInitContainers(workerExtraInitContainers)
+	}
+	if len(workerExtraContainers) > 0 {
+		stsBuilder.WithExtraContainers(workerExtraContainers)
 	}
 	if len(annotations) > 0 {
 		stsBuilder.WithAnnotations(annotations)
@@ -1194,10 +1218,14 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	extraConfig := ""
 	var extraVolumes []corev1.Volume
 	var extraVolumeMounts []corev1.VolumeMount
+	var extraInitContainers []corev1.Container
+	var extraContainers []corev1.Container
 	if cluster.Spec.Manager != nil {
 		extraConfig = cluster.Spec.Manager.Master.ExtraConfig
 		extraVolumes = cluster.Spec.Manager.Master.ExtraVolumes
 		extraVolumeMounts = cluster.Spec.Manager.Master.ExtraVolumeMounts
+		extraInitContainers = cluster.Spec.Manager.Master.ExtraInitContainers
+		extraContainers = cluster.Spec.Manager.Master.ExtraContainers
 	}
 
 	// Build ConfigMap
@@ -1316,6 +1344,12 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	if len(extraVolumeMounts) > 0 {
 		stsBuilder.WithVolumeMounts(extraVolumeMounts)
 	}
+	if len(extraInitContainers) > 0 {
+		stsBuilder.WithExtraInitContainers(extraInitContainers)
+	}
+	if len(extraContainers) > 0 {
+		stsBuilder.WithExtraContainers(extraContainers)
+	}
 	if cluster.Spec.Manager != nil {
 		if len(cluster.Spec.Manager.Master.Annotations) > 0 {
 			stsBuilder.WithAnnotations(cluster.Spec.Manager.Master.Annotations)
@@ -1348,14 +1382,16 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 		NodeSelector:      cluster.Spec.Manager.Master.NodeSelector,
 		Tolerations:       cluster.Spec.Manager.Master.Tolerations,
 		Affinity:          cluster.Spec.Manager.Master.Affinity,
-		ExtraVolumes:      extraVolumes,
-		ExtraVolumeMounts: extraVolumeMounts,
-		ExtraConfig:       extraConfig,
-		Env:               cluster.Spec.Manager.Master.Env,
-		EnvFrom:           cluster.Spec.Manager.Master.EnvFrom,
-		Annotations:       cluster.Spec.Manager.Master.Annotations,
-		PodAnnotations:    cluster.Spec.Manager.Master.PodAnnotations,
-		MonitoringEnabled: cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Enabled,
+		ExtraVolumes:        extraVolumes,
+		ExtraVolumeMounts:   extraVolumeMounts,
+		ExtraInitContainers: extraInitContainers,
+		ExtraContainers:     extraContainers,
+		ExtraConfig:         extraConfig,
+		Env:                 cluster.Spec.Manager.Master.Env,
+		EnvFrom:             cluster.Spec.Manager.Master.EnvFrom,
+		Annotations:         cluster.Spec.Manager.Master.Annotations,
+		PodAnnotations:      cluster.Spec.Manager.Master.PodAnnotations,
+		MonitoringEnabled:   cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Enabled,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
@@ -1478,10 +1514,14 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 	extraConfig := ""
 	var extraVolumes []corev1.Volume
 	var extraVolumeMounts []corev1.VolumeMount
+	var extraInitContainers []corev1.Container
+	var extraContainers []corev1.Container
 	if cluster.Spec.Manager != nil {
 		extraConfig = cluster.Spec.Manager.Workers.ExtraConfig
 		extraVolumes = cluster.Spec.Manager.Workers.ExtraVolumes
 		extraVolumeMounts = cluster.Spec.Manager.Workers.ExtraVolumeMounts
+		extraInitContainers = cluster.Spec.Manager.Workers.ExtraInitContainers
+		extraContainers = cluster.Spec.Manager.Workers.ExtraContainers
 	}
 
 	// Build ConfigMap
@@ -1604,6 +1644,12 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		if len(extraVolumeMounts) > 0 {
 			stsBuilder.WithVolumeMounts(extraVolumeMounts)
 		}
+		if len(extraInitContainers) > 0 {
+			stsBuilder.WithExtraInitContainers(extraInitContainers)
+		}
+		if len(extraContainers) > 0 {
+			stsBuilder.WithExtraContainers(extraContainers)
+		}
 		if len(cluster.Spec.Manager.Workers.Annotations) > 0 {
 			stsBuilder.WithAnnotations(cluster.Spec.Manager.Workers.Annotations)
 		}
@@ -1635,13 +1681,15 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		NodeSelector:      cluster.Spec.Manager.Workers.NodeSelector,
 		Tolerations:       cluster.Spec.Manager.Workers.Tolerations,
 		Affinity:          cluster.Spec.Manager.Workers.Affinity,
-		ExtraVolumes:      extraVolumes,
-		ExtraVolumeMounts: extraVolumeMounts,
-		ExtraConfig:       extraConfig,
-		Env:               cluster.Spec.Manager.Workers.Env,
-		EnvFrom:           cluster.Spec.Manager.Workers.EnvFrom,
-		Annotations:       cluster.Spec.Manager.Workers.Annotations,
-		PodAnnotations:    cluster.Spec.Manager.Workers.PodAnnotations,
+		ExtraVolumes:        extraVolumes,
+		ExtraVolumeMounts:   extraVolumeMounts,
+		ExtraInitContainers: extraInitContainers,
+		ExtraContainers:     extraContainers,
+		ExtraConfig:         extraConfig,
+		Env:                 cluster.Spec.Manager.Workers.Env,
+		EnvFrom:             cluster.Spec.Manager.Workers.EnvFrom,
+		Annotations:         cluster.Spec.Manager.Workers.Annotations,
+		PodAnnotations:      cluster.Spec.Manager.Workers.PodAnnotations,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec hash")

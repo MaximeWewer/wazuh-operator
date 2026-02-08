@@ -173,6 +173,20 @@ cluster:
       #     - secretName: indexer-tls
       #       hosts:
       #         - indexer.wazuh.example.com
+      # extraVolumes:
+      #   - name: my-config
+      #     configMap:
+      #       name: my-configmap
+      # extraVolumeMounts:
+      #   - name: my-config
+      #     mountPath: /usr/share/opensearch/config/my-config
+      # extraInitContainers:
+      #   - name: my-init
+      #     image: busybox:latest
+      #     command: ["sh", "-c", "echo init"]
+      # extraContainers:
+      #   - name: my-sidecar
+      #     image: my-sidecar:latest
 
     # @extra cluster.spec.manager Wazuh Manager configuration
     manager:
@@ -195,6 +209,20 @@ cluster:
         #       paths:
         #         - path: /
         #           pathType: Prefix
+        # extraVolumes:
+        #   - name: my-config
+        #     configMap:
+        #       name: my-configmap
+        # extraVolumeMounts:
+        #   - name: my-config
+        #     mountPath: /var/ossec/etc/custom
+        # extraInitContainers:
+        #   - name: my-init
+        #     image: busybox:latest
+        #     command: ["sh", "-c", "echo init"]
+        # extraContainers:
+        #   - name: my-sidecar
+        #     image: my-sidecar:latest
 
       # @extra cluster.spec.manager.workers Worker nodes configuration
       # @default -- `{}` (auto-configured by sizing profile)
@@ -222,6 +250,20 @@ cluster:
         #       paths:
         #         - path: /
         #           pathType: Prefix
+        # extraVolumes:
+        #   - name: my-config
+        #     configMap:
+        #       name: my-configmap
+        # extraVolumeMounts:
+        #   - name: my-config
+        #     mountPath: /var/ossec/etc/custom
+        # extraInitContainers:
+        #   - name: my-init
+        #     image: busybox:latest
+        #     command: ["sh", "-c", "echo init"]
+        # extraContainers:
+        #   - name: my-sidecar
+        #     image: my-sidecar:latest
 
     # @extra cluster.spec.dashboard OpenSearch Dashboard configuration
     # @default -- `{}` (auto-configured by sizing profile)
@@ -255,6 +297,20 @@ cluster:
       #     - secretName: dashboard-tls
       #       hosts:
       #         - dashboard.wazuh.example.com
+      # extraVolumes:
+      #   - name: my-config
+      #     configMap:
+      #       name: my-configmap
+      # extraVolumeMounts:
+      #   - name: my-config
+      #     mountPath: /usr/share/opensearch-dashboards/config/my-config
+      # extraInitContainers:
+      #   - name: my-init
+      #     image: busybox:latest
+      #     command: ["sh", "-c", "echo init"]
+      # extraContainers:
+      #   - name: my-sidecar
+      #     image: my-sidecar:latest
 
     # @extra cluster.spec.tls TLS/Certificate configuration
     # Configure TLS certificates for secure communication between components.

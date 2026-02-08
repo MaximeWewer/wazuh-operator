@@ -58,6 +58,10 @@ type NodePoolStatefulSetBuilder struct {
 	javaOpts                  string
 	// Monitoring configuration
 	cluster *wazuhv1.WazuhCluster
+	// Extra init containers
+	extraInitContainers []corev1.Container
+	// Extra sidecar containers
+	extraContainers []corev1.Container
 	// Termination grace period
 	terminationGracePeriodSeconds *int64
 }
@@ -237,6 +241,18 @@ func (b *NodePoolStatefulSetBuilder) WithCluster(cluster *wazuhv1.WazuhCluster) 
 	return b
 }
 
+// WithExtraInitContainers sets extra init containers
+func (b *NodePoolStatefulSetBuilder) WithExtraInitContainers(containers []corev1.Container) *NodePoolStatefulSetBuilder {
+	b.extraInitContainers = containers
+	return b
+}
+
+// WithExtraContainers sets extra sidecar containers
+func (b *NodePoolStatefulSetBuilder) WithExtraContainers(containers []corev1.Container) *NodePoolStatefulSetBuilder {
+	b.extraContainers = containers
+	return b
+}
+
 // WithTerminationGracePeriodSeconds sets the termination grace period for pods
 func (b *NodePoolStatefulSetBuilder) WithTerminationGracePeriodSeconds(seconds *int64) *NodePoolStatefulSetBuilder {
 	b.terminationGracePeriodSeconds = seconds
@@ -286,6 +302,57 @@ func (b *NodePoolStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	fsGroup := int64(1000)
 	runAsUser := int64(1000)
 
+	// Build init containers and append extras
+	initContainers := b.buildInitContainers(image, configMapName)
+	initContainers = append(initContainers, b.extraInitContainers...)
+
+	// Build containers list and append extras
+	containers := []corev1.Container{
+		{
+			Name:            constants.ContainerNameOpenSearch,
+			Image:           image,
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			Resources:       *resources,
+			SecurityContext: &corev1.SecurityContext{
+				AllowPrivilegeEscalation: boolPtr(false),
+				Capabilities: &corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+				},
+			},
+			Ports: []corev1.ContainerPort{
+				{Name: constants.PortNameIndexerREST, ContainerPort: constants.PortIndexerREST, Protocol: corev1.ProtocolTCP},
+				{Name: constants.PortNameIndexerTransport, ContainerPort: constants.PortIndexerTransport, Protocol: corev1.ProtocolTCP},
+				{Name: constants.PortNameIndexerMetrics, ContainerPort: constants.PortIndexerMetrics, Protocol: corev1.ProtocolTCP},
+			},
+			Env:          env,
+			EnvFrom:      b.envFrom,
+			VolumeMounts: volumeMounts,
+			LivenessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					TCPSocket: &corev1.TCPSocketAction{
+						Port: intstr.FromInt(int(constants.PortIndexerREST)),
+					},
+				},
+				InitialDelaySeconds: 120,
+				PeriodSeconds:       30,
+				TimeoutSeconds:      5,
+				FailureThreshold:    5,
+			},
+			ReadinessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					TCPSocket: &corev1.TCPSocketAction{
+						Port: intstr.FromInt(int(constants.PortIndexerREST)),
+					},
+				},
+				InitialDelaySeconds: 60,
+				PeriodSeconds:       10,
+				TimeoutSeconds:      5,
+				FailureThreshold:    3,
+			},
+		},
+	}
+	containers = append(containers, b.extraContainers...)
+
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
@@ -331,51 +398,8 @@ func (b *NodePoolStatefulSetBuilder) Build() *appsv1.StatefulSet {
 							Type: corev1.SeccompProfileTypeRuntimeDefault,
 						},
 					},
-					InitContainers: b.buildInitContainers(image, configMapName),
-					Containers: []corev1.Container{
-						{
-							Name:            constants.ContainerNameOpenSearch,
-							Image:           image,
-							ImagePullPolicy: corev1.PullIfNotPresent,
-							Resources:       *resources,
-							SecurityContext: &corev1.SecurityContext{
-								AllowPrivilegeEscalation: boolPtr(false),
-								Capabilities: &corev1.Capabilities{
-									Drop: []corev1.Capability{"ALL"},
-								},
-							},
-							Ports: []corev1.ContainerPort{
-								{Name: constants.PortNameIndexerREST, ContainerPort: constants.PortIndexerREST, Protocol: corev1.ProtocolTCP},
-								{Name: constants.PortNameIndexerTransport, ContainerPort: constants.PortIndexerTransport, Protocol: corev1.ProtocolTCP},
-								{Name: constants.PortNameIndexerMetrics, ContainerPort: constants.PortIndexerMetrics, Protocol: corev1.ProtocolTCP},
-							},
-							Env:          env,
-							EnvFrom:      b.envFrom,
-							VolumeMounts: volumeMounts,
-							LivenessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									TCPSocket: &corev1.TCPSocketAction{
-										Port: intstr.FromInt(int(constants.PortIndexerREST)),
-									},
-								},
-								InitialDelaySeconds: 120,
-								PeriodSeconds:       30,
-								TimeoutSeconds:      5,
-								FailureThreshold:    5,
-							},
-							ReadinessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									TCPSocket: &corev1.TCPSocketAction{
-										Port: intstr.FromInt(int(constants.PortIndexerREST)),
-									},
-								},
-								InitialDelaySeconds: 60,
-								PeriodSeconds:       10,
-								TimeoutSeconds:      5,
-								FailureThreshold:    3,
-							},
-						},
-					},
+					InitContainers: initContainers,
+					Containers:     containers,
 					Volumes: volumes,
 				},
 			},

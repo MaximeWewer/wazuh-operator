@@ -4,7 +4,7 @@
 # PREREQUISITE: The repository-s3 plugin must be installed in OpenSearch nodes.
 # Add an init container to install the plugin:
 #
-#   initContainers:
+#   extraInitContainers:
 #   - name: install-repository-s3
 #     image: opensearchproject/opensearch:2.x
 #     command:

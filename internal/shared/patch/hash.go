@@ -46,6 +46,11 @@ type IndexerSpec struct {
 	Labels         map[string]string      `json:"labels,omitempty"`
 	Annotations    map[string]string      `json:"annotations,omitempty"`
 	PodAnnotations map[string]string      `json:"podAnnotations,omitempty"`
+	// Extra volumes and containers
+	ExtraVolumes      []corev1.Volume    `json:"extraVolumes,omitempty"`
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+	ExtraInitContainers []corev1.Container `json:"extraInitContainers,omitempty"`
+	ExtraContainers     []corev1.Container `json:"extraContainers,omitempty"`
 	// Monitoring configuration
 	MonitoringEnabled bool `json:"monitoringEnabled,omitempty"`
 }
@@ -67,6 +72,11 @@ type DashboardSpec struct {
 	Labels         map[string]string      `json:"labels,omitempty"`
 	Annotations    map[string]string      `json:"annotations,omitempty"`
 	PodAnnotations map[string]string      `json:"podAnnotations,omitempty"`
+	// Extra volumes and containers
+	ExtraVolumes      []corev1.Volume    `json:"extraVolumes,omitempty"`
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+	ExtraInitContainers []corev1.Container `json:"extraInitContainers,omitempty"`
+	ExtraContainers     []corev1.Container `json:"extraContainers,omitempty"`
 }
 
 // ManagerMasterSpec contains fields from WazuhCluster.Spec.Manager.Master used for hash computation
@@ -87,9 +97,11 @@ type ManagerMasterSpec struct {
 	Annotations    map[string]string      `json:"annotations,omitempty"`
 	PodAnnotations map[string]string      `json:"podAnnotations,omitempty"`
 	// Extra configuration and volumes
-	ExtraConfig       string               `json:"extraConfig,omitempty"`
-	ExtraVolumes      []corev1.Volume      `json:"extraVolumes,omitempty"`
-	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+	ExtraConfig         string               `json:"extraConfig,omitempty"`
+	ExtraVolumes        []corev1.Volume      `json:"extraVolumes,omitempty"`
+	ExtraVolumeMounts   []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+	ExtraInitContainers []corev1.Container   `json:"extraInitContainers,omitempty"`
+	ExtraContainers     []corev1.Container   `json:"extraContainers,omitempty"`
 	// Monitoring configuration
 	MonitoringEnabled bool `json:"monitoringEnabled,omitempty"`
 }
@@ -113,9 +125,11 @@ type ManagerWorkersSpec struct {
 	Annotations    map[string]string      `json:"annotations,omitempty"`
 	PodAnnotations map[string]string      `json:"podAnnotations,omitempty"`
 	// Extra configuration and volumes
-	ExtraConfig       string               `json:"extraConfig,omitempty"`
-	ExtraVolumes      []corev1.Volume      `json:"extraVolumes,omitempty"`
-	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+	ExtraConfig         string               `json:"extraConfig,omitempty"`
+	ExtraVolumes        []corev1.Volume      `json:"extraVolumes,omitempty"`
+	ExtraVolumeMounts   []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+	ExtraInitContainers []corev1.Container   `json:"extraInitContainers,omitempty"`
+	ExtraContainers     []corev1.Container   `json:"extraContainers,omitempty"`
 }
 
 // ComputeSpecHash computes a SHA256 hash of spec fields for change detection
@@ -185,6 +199,10 @@ type IndexerSpecInput struct {
 	Labels                    map[string]string
 	Annotations               map[string]string
 	PodAnnotations            map[string]string
+	ExtraVolumes              []corev1.Volume
+	ExtraVolumeMounts         []corev1.VolumeMount
+	ExtraInitContainers       []corev1.Container
+	ExtraContainers           []corev1.Container
 	MonitoringEnabled         bool
 }
 
@@ -222,6 +240,10 @@ type DashboardSpecInput struct {
 	Labels                    map[string]string
 	Annotations               map[string]string
 	PodAnnotations            map[string]string
+	ExtraVolumes              []corev1.Volume
+	ExtraVolumeMounts         []corev1.VolumeMount
+	ExtraInitContainers       []corev1.Container
+	ExtraContainers           []corev1.Container
 }
 
 // ComputeDashboardSpecHash computes the spec hash for a Dashboard component
@@ -259,6 +281,8 @@ type ManagerMasterSpecInput struct {
 	ExtraConfig               string
 	ExtraVolumes              []corev1.Volume
 	ExtraVolumeMounts         []corev1.VolumeMount
+	ExtraInitContainers       []corev1.Container
+	ExtraContainers           []corev1.Container
 	MonitoringEnabled         bool
 }
 
@@ -301,6 +325,8 @@ type ManagerWorkersSpecInput struct {
 	ExtraConfig               string
 	ExtraVolumes              []corev1.Volume
 	ExtraVolumeMounts         []corev1.VolumeMount
+	ExtraInitContainers       []corev1.Container
+	ExtraContainers           []corev1.Container
 }
 
 // ComputeManagerWorkersSpecHash computes the spec hash for Manager Workers component

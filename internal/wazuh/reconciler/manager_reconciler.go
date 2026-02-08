@@ -264,6 +264,12 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 		if len(manager.Spec.Master.ExtraVolumeMounts) > 0 {
 			stsBuilder.WithVolumeMounts(manager.Spec.Master.ExtraVolumeMounts)
 		}
+		if len(manager.Spec.Master.ExtraInitContainers) > 0 {
+			stsBuilder.WithExtraInitContainers(manager.Spec.Master.ExtraInitContainers)
+		}
+		if len(manager.Spec.Master.ExtraContainers) > 0 {
+			stsBuilder.WithExtraContainers(manager.Spec.Master.ExtraContainers)
+		}
 		if len(manager.Spec.Master.Annotations) > 0 {
 			stsBuilder.WithAnnotations(manager.Spec.Master.Annotations)
 		}
@@ -301,6 +307,12 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 		}
 		if len(manager.Spec.Workers.ExtraVolumeMounts) > 0 {
 			stsBuilder.WithVolumeMounts(manager.Spec.Workers.ExtraVolumeMounts)
+		}
+		if len(manager.Spec.Workers.ExtraInitContainers) > 0 {
+			stsBuilder.WithExtraInitContainers(manager.Spec.Workers.ExtraInitContainers)
+		}
+		if len(manager.Spec.Workers.ExtraContainers) > 0 {
+			stsBuilder.WithExtraContainers(manager.Spec.Workers.ExtraContainers)
 		}
 		if len(manager.Spec.Workers.Annotations) > 0 {
 			stsBuilder.WithAnnotations(manager.Spec.Workers.Annotations)

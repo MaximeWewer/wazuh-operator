@@ -201,6 +201,12 @@ func (r *WorkerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, w
 	if len(worker.Spec.ExtraVolumeMounts) > 0 {
 		stsBuilder.WithVolumeMounts(worker.Spec.ExtraVolumeMounts)
 	}
+	if len(worker.Spec.ExtraInitContainers) > 0 {
+		stsBuilder.WithExtraInitContainers(worker.Spec.ExtraInitContainers)
+	}
+	if len(worker.Spec.ExtraContainers) > 0 {
+		stsBuilder.WithExtraContainers(worker.Spec.ExtraContainers)
+	}
 	if worker.Spec.Tolerations != nil {
 		stsBuilder.WithTolerations(worker.Spec.Tolerations)
 	}

@@ -56,6 +56,10 @@ type WorkerStatefulSetBuilder struct {
 	ruleConfigMaps []RuleConfigMapRef
 	// Decoder ConfigMaps to mount
 	decoderConfigMaps []DecoderConfigMapRef
+	// Extra init containers
+	extraInitContainers []corev1.Container
+	// Extra sidecar containers
+	extraContainers []corev1.Container
 	// Termination grace period
 	terminationGracePeriodSeconds *int64
 }
@@ -268,6 +272,18 @@ func (b *WorkerStatefulSetBuilder) WithDecoderHash(hash string) *WorkerStatefulS
 	return b
 }
 
+// WithExtraInitContainers sets extra init containers
+func (b *WorkerStatefulSetBuilder) WithExtraInitContainers(containers []corev1.Container) *WorkerStatefulSetBuilder {
+	b.extraInitContainers = containers
+	return b
+}
+
+// WithExtraContainers sets extra sidecar containers
+func (b *WorkerStatefulSetBuilder) WithExtraContainers(containers []corev1.Container) *WorkerStatefulSetBuilder {
+	b.extraContainers = containers
+	return b
+}
+
 // WithTerminationGracePeriodSeconds sets the termination grace period for pods
 func (b *WorkerStatefulSetBuilder) WithTerminationGracePeriodSeconds(seconds *int64) *WorkerStatefulSetBuilder {
 	b.terminationGracePeriodSeconds = seconds
@@ -317,6 +333,61 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		b.buildInitContainer(),
 	}
 
+	// Append extra init containers
+	initContainers = append(initContainers, b.extraInitContainers...)
+
+	// Build containers list
+	containers := []corev1.Container{
+		{
+			Name:            constants.ContainerNameWazuhManager,
+			Image:           image,
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			Resources:       *resources,
+			// SecurityContext: Wazuh manager image runs multiple services via s6 supervisor
+			// (wazuh-manager, filebeat, etc.) which require root privileges and SYS_CHROOT capability
+			SecurityContext: &corev1.SecurityContext{
+				RunAsUser: &runAsRoot,
+				Capabilities: &corev1.Capabilities{
+					Add: []corev1.Capability{"SYS_CHROOT"},
+				},
+			},
+			Ports: []corev1.ContainerPort{
+				{Name: "registration", ContainerPort: constants.PortManagerAgentAuth, Protocol: corev1.ProtocolTCP},
+				{Name: "cluster", ContainerPort: constants.PortManagerCluster, Protocol: corev1.ProtocolTCP},
+				{Name: "api", ContainerPort: constants.PortManagerAPI, Protocol: corev1.ProtocolTCP},
+				{Name: "agents", ContainerPort: constants.PortManagerAgentEvents, Protocol: corev1.ProtocolTCP},
+			},
+			Env:          env,
+			EnvFrom:      b.envFrom,
+			VolumeMounts: volumeMounts,
+			LivenessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					TCPSocket: &corev1.TCPSocketAction{
+						Port: intstr.FromInt(int(constants.PortManagerAPI)),
+					},
+				},
+				InitialDelaySeconds: 90,
+				PeriodSeconds:       30,
+				TimeoutSeconds:      5,
+				FailureThreshold:    3,
+			},
+			ReadinessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					TCPSocket: &corev1.TCPSocketAction{
+						Port: intstr.FromInt(int(constants.PortManagerAPI)),
+					},
+				},
+				InitialDelaySeconds: 30,
+				PeriodSeconds:       10,
+				TimeoutSeconds:      5,
+				FailureThreshold:    3,
+			},
+		},
+	}
+
+	// Append extra sidecar containers
+	containers = append(containers, b.extraContainers...)
+
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        b.name,
@@ -362,53 +433,7 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 						},
 					},
 					InitContainers: initContainers,
-					Containers: []corev1.Container{
-						{
-							Name:            constants.ContainerNameWazuhManager,
-							Image:           image,
-							ImagePullPolicy: corev1.PullIfNotPresent,
-							Resources:       *resources,
-							// SecurityContext: Wazuh manager image runs multiple services via s6 supervisor
-							// (wazuh-manager, filebeat, etc.) which require root privileges and SYS_CHROOT capability
-							SecurityContext: &corev1.SecurityContext{
-								RunAsUser: &runAsRoot,
-								Capabilities: &corev1.Capabilities{
-									Add: []corev1.Capability{"SYS_CHROOT"},
-								},
-							},
-							Ports: []corev1.ContainerPort{
-								{Name: "registration", ContainerPort: constants.PortManagerAgentAuth, Protocol: corev1.ProtocolTCP},
-								{Name: "cluster", ContainerPort: constants.PortManagerCluster, Protocol: corev1.ProtocolTCP},
-								{Name: "api", ContainerPort: constants.PortManagerAPI, Protocol: corev1.ProtocolTCP},
-								{Name: "agents", ContainerPort: constants.PortManagerAgentEvents, Protocol: corev1.ProtocolTCP},
-							},
-							Env:          env,
-							EnvFrom:      b.envFrom,
-							VolumeMounts: volumeMounts,
-							LivenessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									TCPSocket: &corev1.TCPSocketAction{
-										Port: intstr.FromInt(int(constants.PortManagerAPI)),
-									},
-								},
-								InitialDelaySeconds: 90,
-								PeriodSeconds:       30,
-								TimeoutSeconds:      5,
-								FailureThreshold:    3,
-							},
-							ReadinessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									TCPSocket: &corev1.TCPSocketAction{
-										Port: intstr.FromInt(int(constants.PortManagerAPI)),
-									},
-								},
-								InitialDelaySeconds: 30,
-								PeriodSeconds:       10,
-								TimeoutSeconds:      5,
-								FailureThreshold:    3,
-							},
-						},
-					},
+					Containers:     containers,
 					Volumes: volumes,
 				},
 			},

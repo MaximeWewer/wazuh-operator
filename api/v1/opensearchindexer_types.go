@@ -115,10 +115,25 @@ type OpenSearchIndexerSpec struct {
 	// +kubebuilder:default="RollingUpdate"
 	UpdateStrategy string `json:"updateStrategy,omitempty"`
 
-	// Init containers for the indexer pods
+	// Additional volumes
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
-	InitContainers []corev1.Container `json:"initContainers,omitempty"`
+	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
+
+	// Additional volume mounts
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+
+	// Additional init containers to inject into the pod
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraInitContainers []corev1.Container `json:"extraInitContainers,omitempty"`
+
+	// Additional sidecar containers to inject into the pod
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
 
 	// Environment variables to add to the container
 	// +optional

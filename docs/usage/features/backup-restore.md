@@ -20,7 +20,7 @@ The `repository-s3` plugin must be installed for S3/MinIO backends. Add an init 
 ```yaml
 spec:
   indexer:
-    initContainers:
+    extraInitContainers:
       - name: install-repository-s3
         image: opensearchproject/opensearch:2.x
         command:

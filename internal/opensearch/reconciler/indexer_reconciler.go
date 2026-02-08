@@ -883,6 +883,18 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		}
 	}
 
+	// Extract extra volumes, init containers, and sidecar containers
+	var extraVolumes []corev1.Volume
+	var extraVolumeMounts []corev1.VolumeMount
+	var extraInitContainers []corev1.Container
+	var extraContainers []corev1.Container
+	if cluster.Spec.Indexer != nil {
+		extraVolumes = cluster.Spec.Indexer.ExtraVolumes
+		extraVolumeMounts = cluster.Spec.Indexer.ExtraVolumeMounts
+		extraInitContainers = cluster.Spec.Indexer.ExtraInitContainers
+		extraContainers = cluster.Spec.Indexer.ExtraContainers
+	}
+
 	// Compute spec hash for change detection (includes all configurable fields)
 	specHash, err := patch.ComputeIndexerSpecHashFull(patch.IndexerSpecInput{
 		Replicas:                  replicas,
@@ -900,6 +912,10 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		EnvFrom:                   envFrom,
 		Annotations:               annotations,
 		PodAnnotations:            podAnnotations,
+		ExtraVolumes:              extraVolumes,
+		ExtraVolumeMounts:         extraVolumeMounts,
+		ExtraInitContainers:       extraInitContainers,
+		ExtraContainers:           extraContainers,
 		MonitoringEnabled:         monitoringEnabled,
 	})
 	if err != nil {
@@ -956,6 +972,20 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		if len(podAnnotations) > 0 {
 			stsBuilder.WithPodAnnotations(podAnnotations)
 		}
+	}
+
+	// Wire extra volumes, init containers, and sidecar containers
+	if len(extraVolumes) > 0 {
+		stsBuilder.WithVolumes(extraVolumes)
+	}
+	if len(extraVolumeMounts) > 0 {
+		stsBuilder.WithVolumeMounts(extraVolumeMounts)
+	}
+	if len(extraInitContainers) > 0 {
+		stsBuilder.WithExtraInitContainers(extraInitContainers)
+	}
+	if len(extraContainers) > 0 {
+		stsBuilder.WithExtraContainers(extraContainers)
 	}
 
 	// Apply cluster-level imagePullSecrets
@@ -2616,6 +2646,20 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 	}
 	if len(pool.PodAnnotations) > 0 {
 		stsBuilder.WithPodAnnotations(pool.PodAnnotations)
+	}
+
+	// Wire extra volumes, init containers, and sidecar containers from nodePool spec
+	if len(pool.ExtraVolumes) > 0 {
+		stsBuilder.WithVolumes(pool.ExtraVolumes)
+	}
+	if len(pool.ExtraVolumeMounts) > 0 {
+		stsBuilder.WithVolumeMounts(pool.ExtraVolumeMounts)
+	}
+	if len(pool.ExtraInitContainers) > 0 {
+		stsBuilder.WithExtraInitContainers(pool.ExtraInitContainers)
+	}
+	if len(pool.ExtraContainers) > 0 {
+		stsBuilder.WithExtraContainers(pool.ExtraContainers)
 	}
 
 	// Apply cluster-level imagePullSecrets

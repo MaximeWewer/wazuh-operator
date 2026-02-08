@@ -53,6 +53,10 @@ type DashboardDeploymentBuilder struct {
 	wazuhPlugin                   bool
 	terminationGracePeriodSeconds *int64
 	enableSSL                     bool
+	// Extra init containers
+	extraInitContainers []corev1.Container
+	// Extra sidecar containers
+	extraContainers []corev1.Container
 }
 
 // NewDashboardDeploymentBuilder creates a new DashboardDeploymentBuilder
@@ -224,6 +228,18 @@ func (b *DashboardDeploymentBuilder) WithConfigHash(hash string) *DashboardDeplo
 	return b
 }
 
+// WithExtraInitContainers sets extra init containers
+func (b *DashboardDeploymentBuilder) WithExtraInitContainers(containers []corev1.Container) *DashboardDeploymentBuilder {
+	b.extraInitContainers = containers
+	return b
+}
+
+// WithExtraContainers sets extra sidecar containers
+func (b *DashboardDeploymentBuilder) WithExtraContainers(containers []corev1.Container) *DashboardDeploymentBuilder {
+	b.extraContainers = containers
+	return b
+}
+
 // WithTerminationGracePeriodSeconds sets the termination grace period for pods
 func (b *DashboardDeploymentBuilder) WithTerminationGracePeriodSeconds(seconds *int64) *DashboardDeploymentBuilder {
 	b.terminationGracePeriodSeconds = seconds
@@ -268,6 +284,95 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 
 	// Build env vars
 	env := b.buildEnvVars()
+
+	// Build init containers and append extras
+	initContainers := []corev1.Container{
+		{
+			Name:  "config-processor",
+			Image: constants.ImageBusyboxStable,
+			Command: []string{
+				"sh",
+				"-c",
+				`sed "s/\${INDEXER_USERNAME}/$INDEXER_USERNAME/g; s/\${INDEXER_PASSWORD}/$INDEXER_PASSWORD/g" /config-template/opensearch_dashboards.yml > /config-processed/opensearch_dashboards.yml`,
+			},
+			Env: env,
+			SecurityContext: &corev1.SecurityContext{
+				AllowPrivilegeEscalation: func() *bool { b := false; return &b }(),
+				ReadOnlyRootFilesystem:   func() *bool { b := true; return &b }(),
+				Capabilities: &corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+				},
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      constants.VolumeNameDashboardConfig,
+					MountPath: "/config-template",
+					ReadOnly:  true,
+				},
+				{
+					Name:      constants.VolumeNameDashboardConfigProcessed,
+					MountPath: "/config-processed",
+				},
+			},
+		},
+	}
+	initContainers = append(initContainers, b.extraInitContainers...)
+
+	// Build containers list and append extras
+	containers := []corev1.Container{
+		{
+			Name:            "dashboard",
+			Image:           image,
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			Resources:       *resources,
+			SecurityContext: &corev1.SecurityContext{
+				AllowPrivilegeEscalation: func() *bool { b := true; return &b }(),
+			},
+			Ports: []corev1.ContainerPort{
+				{Name: constants.PortNameDashboardHTTP, ContainerPort: constants.PortDashboardHTTP, Protocol: corev1.ProtocolTCP},
+			},
+			Env:          env,
+			EnvFrom:      b.envFrom,
+			VolumeMounts: volumeMounts,
+			LivenessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/app/login",
+						Port: intstr.FromInt(int(constants.PortDashboardHTTP)),
+						Scheme: func() corev1.URIScheme {
+							if b.enableSSL {
+								return corev1.URISchemeHTTPS
+							}
+							return corev1.URISchemeHTTP
+						}(),
+					},
+				},
+				InitialDelaySeconds: 60,
+				PeriodSeconds:       30,
+				TimeoutSeconds:      5,
+				FailureThreshold:    3,
+			},
+			ReadinessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: "/app/login",
+						Port: intstr.FromInt(int(constants.PortDashboardHTTP)),
+						Scheme: func() corev1.URIScheme {
+							if b.enableSSL {
+								return corev1.URISchemeHTTPS
+							}
+							return corev1.URISchemeHTTP
+						}(),
+					},
+				},
+				InitialDelaySeconds: 30,
+				PeriodSeconds:       10,
+				TimeoutSeconds:      5,
+				FailureThreshold:    3,
+			},
+		},
+	}
+	containers = append(containers, b.extraContainers...)
 
 	// Configure RollingUpdate strategy with maxUnavailable=0 for graceful rollout
 	// This ensures new pods are Ready before old pods are terminated (zero downtime)
@@ -314,90 +419,8 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 							Type: corev1.SeccompProfileTypeRuntimeDefault,
 						},
 					},
-					InitContainers: []corev1.Container{
-						{
-							Name:  "config-processor",
-							Image: constants.ImageBusyboxStable,
-							Command: []string{
-								"sh",
-								"-c",
-								`sed "s/\${INDEXER_USERNAME}/$INDEXER_USERNAME/g; s/\${INDEXER_PASSWORD}/$INDEXER_PASSWORD/g" /config-template/opensearch_dashboards.yml > /config-processed/opensearch_dashboards.yml`,
-							},
-							Env: env,
-							SecurityContext: &corev1.SecurityContext{
-								AllowPrivilegeEscalation: func() *bool { b := false; return &b }(),
-								ReadOnlyRootFilesystem:   func() *bool { b := true; return &b }(),
-								Capabilities: &corev1.Capabilities{
-									Drop: []corev1.Capability{"ALL"},
-								},
-							},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      constants.VolumeNameDashboardConfig,
-									MountPath: "/config-template",
-									ReadOnly:  true,
-								},
-								{
-									Name:      constants.VolumeNameDashboardConfigProcessed,
-									MountPath: "/config-processed",
-								},
-							},
-						},
-					},
-					Containers: []corev1.Container{
-						{
-							Name:            "dashboard",
-							Image:           image,
-							ImagePullPolicy: corev1.PullIfNotPresent,
-							Resources:       *resources,
-							// SecurityContext: Dashboard needs SETUID/SETGID for node execution
-							SecurityContext: &corev1.SecurityContext{
-								AllowPrivilegeEscalation: func() *bool { b := true; return &b }(),
-							},
-							Ports: []corev1.ContainerPort{
-								{Name: constants.PortNameDashboardHTTP, ContainerPort: constants.PortDashboardHTTP, Protocol: corev1.ProtocolTCP},
-							},
-							Env:          env,
-							EnvFrom:      b.envFrom,
-							VolumeMounts: volumeMounts,
-							LivenessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path:   "/app/login",
-										Port:   intstr.FromInt(int(constants.PortDashboardHTTP)),
-										Scheme: func() corev1.URIScheme {
-											if b.enableSSL {
-												return corev1.URISchemeHTTPS
-											}
-											return corev1.URISchemeHTTP
-										}(),
-									},
-								},
-								InitialDelaySeconds: 60,
-								PeriodSeconds:       30,
-								TimeoutSeconds:      5,
-								FailureThreshold:    3,
-							},
-							ReadinessProbe: &corev1.Probe{
-								ProbeHandler: corev1.ProbeHandler{
-									HTTPGet: &corev1.HTTPGetAction{
-										Path:   "/app/login",
-										Port:   intstr.FromInt(int(constants.PortDashboardHTTP)),
-										Scheme: func() corev1.URIScheme {
-											if b.enableSSL {
-												return corev1.URISchemeHTTPS
-											}
-											return corev1.URISchemeHTTP
-										}(),
-									},
-								},
-								InitialDelaySeconds: 30,
-								PeriodSeconds:       10,
-								TimeoutSeconds:      5,
-								FailureThreshold:    3,
-							},
-						},
-					},
+					InitContainers: initContainers,
+					Containers:     containers,
 					Volumes: volumes,
 				},
 			},

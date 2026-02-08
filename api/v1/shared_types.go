@@ -65,6 +65,16 @@ type WazuhMasterSpec struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
 	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
 
+	// Additional init containers to inject into the pod
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraInitContainers []corev1.Container `json:"extraInitContainers,omitempty"`
+
+	// Additional sidecar containers to inject into the pod
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
+
 	// Pod annotations
 	// +optional
 	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
@@ -165,6 +175,16 @@ type WazuhWorkerSpec struct {
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
 	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+
+	// Additional init containers to inject into the pod
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraInitContainers []corev1.Container `json:"extraInitContainers,omitempty"`
+
+	// Additional sidecar containers to inject into the pod
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
 
 	// Pod annotations
 	// +optional

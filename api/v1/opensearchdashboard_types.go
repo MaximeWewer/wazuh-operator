@@ -117,6 +117,26 @@ type OpenSearchDashboardSpec struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
 	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
 
+	// Additional volumes
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
+
+	// Additional volume mounts
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+
+	// Additional init containers to inject into the pod
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraInitContainers []corev1.Container `json:"extraInitContainers,omitempty"`
+
+	// Additional sidecar containers to inject into the pod
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
+
 	// Image pull secrets for private registries
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`

@@ -61,6 +61,10 @@ type ManagerStatefulSetBuilder struct {
 	ruleConfigMaps []RuleConfigMapRef
 	// Decoder ConfigMaps to mount
 	decoderConfigMaps []DecoderConfigMapRef
+	// Extra init containers
+	extraInitContainers []corev1.Container
+	// Extra sidecar containers
+	extraContainers []corev1.Container
 	// Termination grace period
 	terminationGracePeriodSeconds *int64
 }
@@ -285,6 +289,18 @@ func (b *ManagerStatefulSetBuilder) WithDecoderHash(hash string) *ManagerStatefu
 	return b
 }
 
+// WithExtraInitContainers sets extra init containers
+func (b *ManagerStatefulSetBuilder) WithExtraInitContainers(containers []corev1.Container) *ManagerStatefulSetBuilder {
+	b.extraInitContainers = containers
+	return b
+}
+
+// WithExtraContainers sets extra sidecar containers
+func (b *ManagerStatefulSetBuilder) WithExtraContainers(containers []corev1.Container) *ManagerStatefulSetBuilder {
+	b.extraContainers = containers
+	return b
+}
+
 // WithTerminationGracePeriodSeconds sets the termination grace period for pods
 func (b *ManagerStatefulSetBuilder) WithTerminationGracePeriodSeconds(seconds *int64) *ManagerStatefulSetBuilder {
 	b.terminationGracePeriodSeconds = seconds
@@ -328,6 +344,14 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 
 	// Wazuh manager requires root (uid 0) to run s6, filebeat, and other services
 	runAsRoot := int64(0)
+
+	// Build init containers
+	initContainers := []corev1.Container{
+		b.buildInitContainer(),
+	}
+
+	// Append extra init containers
+	initContainers = append(initContainers, b.extraInitContainers...)
 
 	// Build containers list
 	containers := []corev1.Container{
@@ -386,10 +410,8 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		}
 	}
 
-	// Build init containers
-	initContainers := []corev1.Container{
-		b.buildInitContainer(),
-	}
+	// Append extra sidecar containers
+	containers = append(containers, b.extraContainers...)
 
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{

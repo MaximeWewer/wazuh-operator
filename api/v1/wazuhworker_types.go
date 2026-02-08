@@ -90,6 +90,16 @@ type WazuhWorkerCRDSpec struct {
 	// +kubebuilder:pruning:PreserveUnknownFields
 	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
 
+	// Extra init containers to add to the pod
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraInitContainers []corev1.Container `json:"extraInitContainers,omitempty"`
+
+	// Extra sidecar containers to add to the pod
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
+
 	// Ingress configuration
 	// +optional
 	Ingress *IngressSpec `json:"ingress,omitempty"`

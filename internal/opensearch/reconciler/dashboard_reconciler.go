@@ -748,6 +748,18 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		podAnnotations = cluster.Spec.Dashboard.PodAnnotations
 	}
 
+	// Extract extra volumes, init containers, and sidecar containers
+	var extraVolumes []corev1.Volume
+	var extraVolumeMounts []corev1.VolumeMount
+	var extraInitContainers []corev1.Container
+	var extraContainers []corev1.Container
+	if cluster.Spec.Dashboard != nil {
+		extraVolumes = cluster.Spec.Dashboard.ExtraVolumes
+		extraVolumeMounts = cluster.Spec.Dashboard.ExtraVolumeMounts
+		extraInitContainers = cluster.Spec.Dashboard.ExtraInitContainers
+		extraContainers = cluster.Spec.Dashboard.ExtraContainers
+	}
+
 	// Compute spec hash for change detection (includes all configurable fields)
 	specHash, err := patch.ComputeDashboardSpecHashFull(patch.DashboardSpecInput{
 		Replicas:                  replicas,
@@ -763,6 +775,10 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		EnvFrom:                   envFrom,
 		Annotations:               annotations,
 		PodAnnotations:            podAnnotations,
+		ExtraVolumes:              extraVolumes,
+		ExtraVolumeMounts:         extraVolumeMounts,
+		ExtraInitContainers:       extraInitContainers,
+		ExtraContainers:           extraContainers,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute dashboard spec hash, continuing without spec tracking")
@@ -815,6 +831,20 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 	}
 	if len(podAnnotations) > 0 {
 		deployBuilder.WithPodAnnotations(podAnnotations)
+	}
+
+	// Wire extra volumes, init containers, and sidecar containers
+	if len(extraVolumes) > 0 {
+		deployBuilder.WithVolumes(extraVolumes)
+	}
+	if len(extraVolumeMounts) > 0 {
+		deployBuilder.WithVolumeMounts(extraVolumeMounts)
+	}
+	if len(extraInitContainers) > 0 {
+		deployBuilder.WithExtraInitContainers(extraInitContainers)
+	}
+	if len(extraContainers) > 0 {
+		deployBuilder.WithExtraContainers(extraContainers)
 	}
 
 	if certHash != "" {
