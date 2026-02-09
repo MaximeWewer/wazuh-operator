@@ -13,7 +13,18 @@ Combines sizing profiles with credentials and other configurations
 
 {{- /* Apply TLS config if set in values */ -}}
 {{- if .Values.cluster.spec.tls -}}
-  {{- $_ := set $spec "tls" .Values.cluster.spec.tls -}}
+  {{- $tls := deepCopy .Values.cluster.spec.tls -}}
+  {{- /* Remove customCerts when not configured (empty secret names) */ -}}
+  {{- if $tls.customCerts -}}
+    {{- if not (and $tls.customCerts.caSecretRef $tls.customCerts.caSecretRef.name) -}}
+      {{- $_ := unset $tls "customCerts" -}}
+    {{- end -}}
+  {{- end -}}
+  {{- /* Remove the non-CRD 'enabled' field from customCerts if it still exists */ -}}
+  {{- if $tls.customCerts -}}
+    {{- $_ := unset $tls.customCerts "enabled" -}}
+  {{- end -}}
+  {{- $_ := set $spec "tls" $tls -}}
 {{- end -}}
 
 {{- /* Apply monitoring config if set in values */ -}}
@@ -162,6 +173,62 @@ Combines sizing profiles with credentials and other configurations
 {{- /* Apply drain config if set in values */ -}}
 {{- if .Values.cluster.spec.drain -}}
   {{- $_ := set $spec "drain" .Values.cluster.spec.drain -}}
+{{- end -}}
+
+{{- /* ============================================ */ -}}
+{{- /* Clean up empty enum/optional fields          */ -}}
+{{- /* Strip empty strings that would fail CRD      */ -}}
+{{- /* validation on enum or required fields         */ -}}
+{{- /* ============================================ */ -}}
+
+{{- /* --- Indexer cleanup --- */ -}}
+{{- $idx := $spec.indexer -}}
+{{- if $idx -}}
+  {{- if $idx.image -}}
+    {{- if not $idx.image.pullPolicy }}{{ $_ := unset $idx.image "pullPolicy" }}{{ end -}}
+    {{- if not $idx.image.repository }}{{ $_ := unset $idx.image "repository" }}{{ end -}}
+    {{- if not $idx.image.tag }}{{ $_ := unset $idx.image "tag" }}{{ end -}}
+  {{- end -}}
+  {{- if and $idx.service (not $idx.service.type) }}{{ $_ := unset $idx.service "type" }}{{ end -}}
+  {{- if not $idx.updateStrategy }}{{ $_ := unset $idx "updateStrategy" }}{{ end -}}
+  {{- if not $idx.clusterName }}{{ $_ := unset $idx "clusterName" }}{{ end -}}
+{{- end -}}
+
+{{- /* --- Dashboard cleanup --- */ -}}
+{{- $dash := $spec.dashboard -}}
+{{- if $dash -}}
+  {{- if $dash.image -}}
+    {{- if not $dash.image.pullPolicy }}{{ $_ := unset $dash.image "pullPolicy" }}{{ end -}}
+    {{- if not $dash.image.repository }}{{ $_ := unset $dash.image "repository" }}{{ end -}}
+    {{- if not $dash.image.tag }}{{ $_ := unset $dash.image "tag" }}{{ end -}}
+  {{- end -}}
+  {{- if and $dash.service (not $dash.service.type) }}{{ $_ := unset $dash.service "type" }}{{ end -}}
+{{- end -}}
+
+{{- /* --- Manager cleanup --- */ -}}
+{{- $mgr := $spec.manager -}}
+{{- if $mgr -}}
+  {{- if $mgr.image -}}
+    {{- if not $mgr.image.pullPolicy }}{{ $_ := unset $mgr.image "pullPolicy" }}{{ end -}}
+    {{- if not $mgr.image.repository }}{{ $_ := unset $mgr.image "repository" }}{{ end -}}
+    {{- if not $mgr.image.tag }}{{ $_ := unset $mgr.image "tag" }}{{ end -}}
+  {{- end -}}
+  {{- /* Manager config string cleanup */ -}}
+  {{- if $mgr.config -}}
+    {{- if not $mgr.config.masterConfig }}{{ $_ := unset $mgr.config "masterConfig" }}{{ end -}}
+    {{- if not $mgr.config.workerConfig }}{{ $_ := unset $mgr.config "workerConfig" }}{{ end -}}
+    {{- if not $mgr.config.localInternalOptions }}{{ $_ := unset $mgr.config "localInternalOptions" }}{{ end -}}
+  {{- end -}}
+  {{- /* Master cleanup */ -}}
+  {{- if $mgr.master -}}
+    {{- if and $mgr.master.service (not $mgr.master.service.type) }}{{ $_ := unset $mgr.master.service "type" }}{{ end -}}
+    {{- if not $mgr.master.extraConfig }}{{ $_ := unset $mgr.master "extraConfig" }}{{ end -}}
+  {{- end -}}
+  {{- /* Workers cleanup */ -}}
+  {{- if $mgr.workers -}}
+    {{- if and $mgr.workers.service (not $mgr.workers.service.type) }}{{ $_ := unset $mgr.workers.service "type" }}{{ end -}}
+    {{- if not $mgr.workers.extraConfig }}{{ $_ := unset $mgr.workers "extraConfig" }}{{ end -}}
+  {{- end -}}
 {{- end -}}
 
 {{- toYaml $spec -}}
