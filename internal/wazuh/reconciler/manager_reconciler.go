@@ -32,6 +32,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/serviceaccount"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/deployments"
@@ -291,6 +292,17 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 			terminationGracePeriod = *manager.Spec.Master.TerminationGracePeriodSeconds
 		}
 		stsBuilder.WithTerminationGracePeriodSeconds(&terminationGracePeriod)
+		// Reconcile and set ServiceAccount if configured
+		if manager.Spec.Master.ServiceAccount != nil {
+			saName, err := serviceaccount.ReconcileServiceAccount(ctx, r.Client, r.Scheme, manager,
+				manager.Spec.Master.ServiceAccount, manager.Name, manager.Namespace, "master")
+			if err != nil {
+				return fmt.Errorf("failed to reconcile master ServiceAccount: %w", err)
+			}
+			if saName != "" {
+				stsBuilder.WithServiceAccountName(saName)
+			}
+		}
 		sts = stsBuilder.Build()
 	} else {
 		stsBuilder := deployments.NewWorkerStatefulSetBuilder(manager.Name, manager.Namespace)
@@ -335,6 +347,17 @@ func (r *ManagerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, 
 			terminationGracePeriod = *manager.Spec.Workers.TerminationGracePeriodSeconds
 		}
 		stsBuilder.WithTerminationGracePeriodSeconds(&terminationGracePeriod)
+		// Reconcile and set ServiceAccount if configured
+		if manager.Spec.Workers.ServiceAccount != nil {
+			saName, err := serviceaccount.ReconcileServiceAccount(ctx, r.Client, r.Scheme, manager,
+				manager.Spec.Workers.ServiceAccount, manager.Name, manager.Namespace, "worker")
+			if err != nil {
+				return fmt.Errorf("failed to reconcile worker ServiceAccount: %w", err)
+			}
+			if saName != "" {
+				stsBuilder.WithServiceAccountName(saName)
+			}
+		}
 		sts = stsBuilder.Build()
 	}
 

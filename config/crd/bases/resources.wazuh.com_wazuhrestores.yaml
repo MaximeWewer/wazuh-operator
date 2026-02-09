@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: wazuhrestores.resources.wazuh.com
 spec:
   group: resources.wazuh.com
@@ -189,6 +189,13 @@ spec:
                 description: RestoreTimeout is the maximum duration for the restore
                   operation
                 type: string
+              serviceAccountAnnotations:
+                additionalProperties:
+                  type: string
+                description: |-
+                  ServiceAccountAnnotations are merged into the restore job ServiceAccount
+                  Useful for cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+                type: object
               source:
                 description: Source defines where to restore from
                 properties:

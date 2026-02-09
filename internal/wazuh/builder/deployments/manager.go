@@ -67,6 +67,8 @@ type ManagerStatefulSetBuilder struct {
 	extraContainers []corev1.Container
 	// Termination grace period
 	terminationGracePeriodSeconds *int64
+	// Service account name
+	serviceAccountName string
 }
 
 // RuleConfigMapRef holds information about a rule ConfigMap to mount
@@ -307,6 +309,12 @@ func (b *ManagerStatefulSetBuilder) WithTerminationGracePeriodSeconds(seconds *i
 	return b
 }
 
+// WithServiceAccountName sets the ServiceAccount name on the PodSpec
+func (b *ManagerStatefulSetBuilder) WithServiceAccountName(name string) *ManagerStatefulSetBuilder {
+	b.serviceAccountName = name
+	return b
+}
+
 // Build creates the StatefulSet
 func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	labels := b.buildLabels()
@@ -443,6 +451,7 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 				},
 				Spec: corev1.PodSpec{
 					TerminationGracePeriodSeconds: b.terminationGracePeriodSeconds,
+					ServiceAccountName:            b.serviceAccountName,
 					NodeSelector:                  b.nodeSelector,
 					Tolerations:                   b.tolerations,
 					Affinity:                      b.affinity,

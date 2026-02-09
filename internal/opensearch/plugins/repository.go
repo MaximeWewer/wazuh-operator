@@ -183,10 +183,10 @@ func (i *RepositoryPluginInstaller) BuildKeystoreInitContainer() corev1.Containe
 	}
 
 	return corev1.Container{
-		Name:    "setup-keystore",
-		Image:   i.IndexerImage,
-		Command: []string{"sh", "-c"},
-		Args:    []string{keystoreScript},
+		Name:         "setup-keystore",
+		Image:        i.IndexerImage,
+		Command:      []string{"sh", "-c"},
+		Args:         []string{keystoreScript},
 		VolumeMounts: mounts,
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{

@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: wazuhclusters.resources.wazuh.com
 spec:
   group: resources.wazuh.com
@@ -7322,6 +7322,34 @@ spec:
                         - ClusterIP
                         - NodePort
                         - LoadBalancer
+                        type: string
+                    type: object
+                  serviceAccount:
+                    description: |-
+                      ServiceAccount configuration for dashboard pods
+                      Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        description: Annotations on the ServiceAccount (e.g., iam.gke.io/gcp-service-account,
+                          eks.amazonaws.com/role-arn)
+                        type: object
+                      create:
+                        default: false
+                        description: |-
+                          Create: if true, the operator creates and manages the ServiceAccount.
+                          If false, only sets ServiceAccountName on PodSpec (SA must already exist).
+                        type: boolean
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: 'Labels on the ServiceAccount (e.g., azure.workload.identity/use:
+                          "true")'
+                        type: object
+                      name:
+                        description: Name is the ServiceAccount name. Auto-generated
+                          as "{cluster}-{component}" if empty and Create=true.
                         type: string
                     type: object
                   terminationGracePeriodSeconds:
@@ -21218,6 +21246,34 @@ spec:
                             - remote_cluster_client
                             type: string
                           type: array
+                        serviceAccount:
+                          description: |-
+                            ServiceAccount configuration for this nodePool's pods
+                            If nil, inherits from indexer-level ServiceAccount configuration
+                          properties:
+                            annotations:
+                              additionalProperties:
+                                type: string
+                              description: Annotations on the ServiceAccount (e.g.,
+                                iam.gke.io/gcp-service-account, eks.amazonaws.com/role-arn)
+                              type: object
+                            create:
+                              default: false
+                              description: |-
+                                Create: if true, the operator creates and manages the ServiceAccount.
+                                If false, only sets ServiceAccountName on PodSpec (SA must already exist).
+                              type: boolean
+                            labels:
+                              additionalProperties:
+                                type: string
+                              description: 'Labels on the ServiceAccount (e.g., azure.workload.identity/use:
+                                "true")'
+                              type: object
+                            name:
+                              description: Name is the ServiceAccount name. Auto-generated
+                                as "{cluster}-{component}" if empty and Create=true.
+                              type: string
+                          type: object
                         storageClass:
                           description: |-
                             StorageClass is the StorageClass name for PVCs
@@ -21885,6 +21941,34 @@ spec:
                         - ClusterIP
                         - NodePort
                         - LoadBalancer
+                        type: string
+                    type: object
+                  serviceAccount:
+                    description: |-
+                      ServiceAccount configuration for indexer pods
+                      Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        description: Annotations on the ServiceAccount (e.g., iam.gke.io/gcp-service-account,
+                          eks.amazonaws.com/role-arn)
+                        type: object
+                      create:
+                        default: false
+                        description: |-
+                          Create: if true, the operator creates and manages the ServiceAccount.
+                          If false, only sets ServiceAccountName on PodSpec (SA must already exist).
+                        type: boolean
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: 'Labels on the ServiceAccount (e.g., azure.workload.identity/use:
+                          "true")'
+                        type: object
+                      name:
+                        description: Name is the ServiceAccount name. Auto-generated
+                          as "{cluster}-{component}" if empty and Create=true.
                         type: string
                     type: object
                   storageSize:
@@ -29492,6 +29576,34 @@ spec:
                             - LoadBalancer
                             type: string
                         type: object
+                      serviceAccount:
+                        description: |-
+                          ServiceAccount configuration for master pods
+                          Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            description: Annotations on the ServiceAccount (e.g.,
+                              iam.gke.io/gcp-service-account, eks.amazonaws.com/role-arn)
+                            type: object
+                          create:
+                            default: false
+                            description: |-
+                              Create: if true, the operator creates and manages the ServiceAccount.
+                              If false, only sets ServiceAccountName on PodSpec (SA must already exist).
+                            type: boolean
+                          labels:
+                            additionalProperties:
+                              type: string
+                            description: 'Labels on the ServiceAccount (e.g., azure.workload.identity/use:
+                              "true")'
+                            type: object
+                          name:
+                            description: Name is the ServiceAccount name. Auto-generated
+                              as "{cluster}-{component}" if empty and Create=true.
+                            type: string
+                        type: object
                       storageSize:
                         default: 50Gi
                         description: Storage size for master node
@@ -37035,6 +37147,34 @@ spec:
                             - ClusterIP
                             - NodePort
                             - LoadBalancer
+                            type: string
+                        type: object
+                      serviceAccount:
+                        description: |-
+                          ServiceAccount configuration for worker pods
+                          Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            description: Annotations on the ServiceAccount (e.g.,
+                              iam.gke.io/gcp-service-account, eks.amazonaws.com/role-arn)
+                            type: object
+                          create:
+                            default: false
+                            description: |-
+                              Create: if true, the operator creates and manages the ServiceAccount.
+                              If false, only sets ServiceAccountName on PodSpec (SA must already exist).
+                            type: boolean
+                          labels:
+                            additionalProperties:
+                              type: string
+                            description: 'Labels on the ServiceAccount (e.g., azure.workload.identity/use:
+                              "true")'
+                            type: object
+                          name:
+                            description: Name is the ServiceAccount name. Auto-generated
+                              as "{cluster}-{component}" if empty and Create=true.
                             type: string
                         type: object
                       storageSize:

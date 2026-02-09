@@ -58,13 +58,15 @@ type IndexerStatefulSetBuilder struct {
 	volumeMounts              []corev1.VolumeMount
 	javaOpts                  string
 	// Monitoring configuration
-	cluster *wazuhv1.WazuhCluster
+	cluster 				  		*wazuhv1.WazuhCluster
 	// Extra init containers
-	extraInitContainers []corev1.Container
+	extraInitContainers       		[]corev1.Container
 	// Extra sidecar containers
-	extraContainers []corev1.Container
+	extraContainers 		  		[]corev1.Container
 	// Termination grace period
-	terminationGracePeriodSeconds *int64
+	terminationGracePeriodSeconds 	*int64
+	// ServiceAccount name
+	serviceAccountName 		       	string
 }
 
 // NewIndexerStatefulSetBuilder creates a new IndexerStatefulSetBuilder
@@ -259,6 +261,12 @@ func (b *IndexerStatefulSetBuilder) WithTerminationGracePeriodSeconds(seconds *i
 	return b
 }
 
+// WithServiceAccountName sets the ServiceAccount name on the PodSpec
+func (b *IndexerStatefulSetBuilder) WithServiceAccountName(name string) *IndexerStatefulSetBuilder {
+	b.serviceAccountName = name
+	return b
+}
+
 // Build creates the StatefulSet
 func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	labels := b.buildLabels()
@@ -380,6 +388,7 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 				},
 				Spec: corev1.PodSpec{
 					TerminationGracePeriodSeconds: b.terminationGracePeriodSeconds,
+					ServiceAccountName:            b.serviceAccountName,
 					NodeSelector:                  b.nodeSelector,
 					Tolerations:                   b.tolerations,
 					Affinity:                      b.affinity,
@@ -397,7 +406,7 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 					},
 					InitContainers: initContainers,
 					Containers:     containers,
-					Volumes: volumes,
+					Volumes:        volumes,
 				},
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{

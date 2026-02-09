@@ -21,6 +21,28 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// ServiceAccountConfig defines ServiceAccount configuration for a component
+// Supports cloud identity integrations: GKE Workload Identity, AWS IRSA, Azure Workload Identity
+type ServiceAccountConfig struct {
+	// Create: if true, the operator creates and manages the ServiceAccount.
+	// If false, only sets ServiceAccountName on PodSpec (SA must already exist).
+	// +optional
+	// +kubebuilder:default=false
+	Create bool `json:"create,omitempty"`
+
+	// Name is the ServiceAccount name. Auto-generated as "{cluster}-{component}" if empty and Create=true.
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// Annotations on the ServiceAccount (e.g., iam.gke.io/gcp-service-account, eks.amazonaws.com/role-arn)
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// Labels on the ServiceAccount (e.g., azure.workload.identity/use: "true")
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+}
+
 // WazuhMasterSpec defines the master node configuration
 type WazuhMasterSpec struct {
 	// Resources for the master node
@@ -120,6 +142,11 @@ type WazuhMasterSpec struct {
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
+
+	// ServiceAccount configuration for master pods
+	// Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+	// +optional
+	ServiceAccount *ServiceAccountConfig `json:"serviceAccount,omitempty"`
 }
 
 // WazuhWorkerSpec defines the worker nodes configuration
@@ -240,6 +267,11 @@ type WazuhWorkerSpec struct {
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
+
+	// ServiceAccount configuration for worker pods
+	// Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+	// +optional
+	ServiceAccount *ServiceAccountConfig `json:"serviceAccount,omitempty"`
 }
 
 // GetReplicas returns the number of worker replicas, defaulting to DefaultManagerWorkerReplicas if not set

@@ -574,13 +574,23 @@ func (b *BackupJobBuilder) BuildCronJob() *batchv1.CronJob {
 func (b *BackupJobBuilder) BuildServiceAccount() *corev1.ServiceAccount {
 	labels := b.buildLabels()
 
-	return &corev1.ServiceAccount{
+	sa := &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      b.serviceAccountName(),
 			Namespace: b.namespace,
 			Labels:    labels,
 		},
 	}
+
+	// Merge user-provided annotations (e.g., for cloud identity: IRSA, Workload Identity)
+	if len(b.backup.Spec.ServiceAccountAnnotations) > 0 {
+		sa.Annotations = make(map[string]string, len(b.backup.Spec.ServiceAccountAnnotations))
+		for k, v := range b.backup.Spec.ServiceAccountAnnotations {
+			sa.Annotations[k] = v
+		}
+	}
+
+	return sa
 }
 
 // BuildRole creates the Role for backup jobs (pods, pods/exec, pods/cp permissions)

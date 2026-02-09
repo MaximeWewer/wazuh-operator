@@ -62,6 +62,8 @@ type WorkerStatefulSetBuilder struct {
 	extraContainers []corev1.Container
 	// Termination grace period
 	terminationGracePeriodSeconds *int64
+	// Service account name
+	serviceAccountName string
 }
 
 // NewWorkerStatefulSetBuilder creates a new WorkerStatefulSetBuilder
@@ -290,6 +292,12 @@ func (b *WorkerStatefulSetBuilder) WithTerminationGracePeriodSeconds(seconds *in
 	return b
 }
 
+// WithServiceAccountName sets the ServiceAccount name on the PodSpec
+func (b *WorkerStatefulSetBuilder) WithServiceAccountName(name string) *WorkerStatefulSetBuilder {
+	b.serviceAccountName = name
+	return b
+}
+
 // Build creates the StatefulSet
 func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	labels := b.buildLabels()
@@ -418,6 +426,7 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 				},
 				Spec: corev1.PodSpec{
 					TerminationGracePeriodSeconds: b.terminationGracePeriodSeconds,
+					ServiceAccountName:            b.serviceAccountName,
 					NodeSelector:                  b.nodeSelector,
 					Tolerations:                   b.tolerations,
 					Affinity:                      b.affinity,
@@ -434,7 +443,7 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 					},
 					InitContainers: initContainers,
 					Containers:     containers,
-					Volumes: volumes,
+					Volumes:        volumes,
 				},
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{

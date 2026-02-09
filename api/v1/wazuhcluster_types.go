@@ -362,6 +362,11 @@ type WazuhIndexerClusterSpec struct {
 	// Plugins are installed via init containers and credentials are stored in the OpenSearch keystore
 	// +optional
 	RepositoryPlugins []RepositoryPluginConfig `json:"repositoryPlugins,omitempty"`
+
+	// ServiceAccount configuration for indexer pods
+	// Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+	// +optional
+	ServiceAccount *ServiceAccountConfig `json:"serviceAccount,omitempty"`
 }
 
 // RepositoryPluginConfig defines an OpenSearch repository plugin to install
@@ -519,6 +524,11 @@ type WazuhDashboardClusterSpec struct {
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
+
+	// ServiceAccount configuration for dashboard pods
+	// Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+	// +optional
+	ServiceAccount *ServiceAccountConfig `json:"serviceAccount,omitempty"`
 }
 
 // TLSConfig defines TLS configuration

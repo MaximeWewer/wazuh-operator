@@ -62,6 +62,11 @@ type WazuhBackupSpec struct {
 	// Resources for the backup Job/CronJob container
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// ServiceAccountAnnotations are merged into the backup job ServiceAccount
+	// Useful for cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+	// +optional
+	ServiceAccountAnnotations map[string]string `json:"serviceAccountAnnotations,omitempty"`
 }
 
 // BackupComponents defines what Wazuh Manager data to backup

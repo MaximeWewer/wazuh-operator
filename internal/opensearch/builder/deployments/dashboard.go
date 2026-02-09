@@ -57,6 +57,8 @@ type DashboardDeploymentBuilder struct {
 	extraInitContainers []corev1.Container
 	// Extra sidecar containers
 	extraContainers []corev1.Container
+	// Service account name
+	serviceAccountName string
 }
 
 // NewDashboardDeploymentBuilder creates a new DashboardDeploymentBuilder
@@ -246,6 +248,12 @@ func (b *DashboardDeploymentBuilder) WithTerminationGracePeriodSeconds(seconds *
 	return b
 }
 
+// WithServiceAccountName sets the ServiceAccount name on the PodSpec
+func (b *DashboardDeploymentBuilder) WithServiceAccountName(name string) *DashboardDeploymentBuilder {
+	b.serviceAccountName = name
+	return b
+}
+
 // Build creates the Deployment
 func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 	labels := b.buildLabels()
@@ -405,6 +413,7 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 				},
 				Spec: corev1.PodSpec{
 					TerminationGracePeriodSeconds: b.terminationGracePeriodSeconds,
+					ServiceAccountName:            b.serviceAccountName,
 					NodeSelector:                  b.nodeSelector,
 					Tolerations:                   b.tolerations,
 					Affinity:                      b.affinity,
@@ -421,7 +430,7 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 					},
 					InitContainers: initContainers,
 					Containers:     containers,
-					Volumes: volumes,
+					Volumes:        volumes,
 				},
 			},
 		},

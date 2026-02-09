@@ -55,14 +55,16 @@ type IndexerSpec struct {
 	Annotations    map[string]string      `json:"annotations,omitempty"`
 	PodAnnotations map[string]string      `json:"podAnnotations,omitempty"`
 	// Extra volumes and containers
-	ExtraVolumes      []corev1.Volume    `json:"extraVolumes,omitempty"`
-	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
-	ExtraInitContainers []corev1.Container `json:"extraInitContainers,omitempty"`
-	ExtraContainers     []corev1.Container `json:"extraContainers,omitempty"`
+	ExtraVolumes        []corev1.Volume      `json:"extraVolumes,omitempty"`
+	ExtraVolumeMounts   []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+	ExtraInitContainers []corev1.Container   `json:"extraInitContainers,omitempty"`
+	ExtraContainers     []corev1.Container   `json:"extraContainers,omitempty"`
 	// Monitoring configuration
 	MonitoringEnabled bool `json:"monitoringEnabled,omitempty"`
 	// Repository plugins configuration
 	RepositoryPlugins []RepositoryPluginHashInput `json:"repositoryPlugins,omitempty"`
+	// ServiceAccount name
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 }
 
 // DashboardSpec contains fields from WazuhCluster.Spec.Dashboard used for hash computation
@@ -83,10 +85,12 @@ type DashboardSpec struct {
 	Annotations    map[string]string      `json:"annotations,omitempty"`
 	PodAnnotations map[string]string      `json:"podAnnotations,omitempty"`
 	// Extra volumes and containers
-	ExtraVolumes      []corev1.Volume    `json:"extraVolumes,omitempty"`
-	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
-	ExtraInitContainers []corev1.Container `json:"extraInitContainers,omitempty"`
-	ExtraContainers     []corev1.Container `json:"extraContainers,omitempty"`
+	ExtraVolumes        []corev1.Volume      `json:"extraVolumes,omitempty"`
+	ExtraVolumeMounts   []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+	ExtraInitContainers []corev1.Container   `json:"extraInitContainers,omitempty"`
+	ExtraContainers     []corev1.Container   `json:"extraContainers,omitempty"`
+	// ServiceAccount name
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 }
 
 // ManagerMasterSpec contains fields from WazuhCluster.Spec.Manager.Master used for hash computation
@@ -114,6 +118,8 @@ type ManagerMasterSpec struct {
 	ExtraContainers     []corev1.Container   `json:"extraContainers,omitempty"`
 	// Monitoring configuration
 	MonitoringEnabled bool `json:"monitoringEnabled,omitempty"`
+	// ServiceAccount name
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 }
 
 // ManagerWorkersSpec contains fields from WazuhCluster.Spec.Manager.Workers used for hash computation
@@ -140,6 +146,8 @@ type ManagerWorkersSpec struct {
 	ExtraVolumeMounts   []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
 	ExtraInitContainers []corev1.Container   `json:"extraInitContainers,omitempty"`
 	ExtraContainers     []corev1.Container   `json:"extraContainers,omitempty"`
+	// ServiceAccount name
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 }
 
 // ComputeSpecHash computes a SHA256 hash of spec fields for change detection
@@ -215,6 +223,7 @@ type IndexerSpecInput struct {
 	ExtraContainers           []corev1.Container
 	MonitoringEnabled         bool
 	RepositoryPlugins         []RepositoryPluginHashInput
+	ServiceAccountName        string
 }
 
 // ComputeIndexerSpecHash computes the spec hash for an Indexer component
@@ -255,6 +264,7 @@ type DashboardSpecInput struct {
 	ExtraVolumeMounts         []corev1.VolumeMount
 	ExtraInitContainers       []corev1.Container
 	ExtraContainers           []corev1.Container
+	ServiceAccountName        string
 }
 
 // ComputeDashboardSpecHash computes the spec hash for a Dashboard component
@@ -295,6 +305,7 @@ type ManagerMasterSpecInput struct {
 	ExtraInitContainers       []corev1.Container
 	ExtraContainers           []corev1.Container
 	MonitoringEnabled         bool
+	ServiceAccountName        string
 }
 
 // ComputeManagerMasterSpecHash computes the spec hash for a Manager Master component
@@ -338,6 +349,7 @@ type ManagerWorkersSpecInput struct {
 	ExtraVolumeMounts         []corev1.VolumeMount
 	ExtraInitContainers       []corev1.Container
 	ExtraContainers           []corev1.Container
+	ServiceAccountName        string
 }
 
 // ComputeManagerWorkersSpecHash computes the spec hash for Manager Workers component

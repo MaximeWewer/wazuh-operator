@@ -135,6 +135,11 @@ type WazuhWorkerCRDSpec struct {
 	// Image pull secrets for private registries
 	// +optional
 	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// ServiceAccount configuration for worker pods
+	// Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+	// +optional
+	ServiceAccount *ServiceAccountConfig `json:"serviceAccount,omitempty"`
 }
 
 // FilebeatConfig defines Filebeat sidecar configuration for workers

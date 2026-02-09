@@ -28,8 +28,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -43,6 +43,7 @@ import (
 	affinityutil "github.com/MaximeWewer/wazuh-operator/internal/shared/affinity"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/serviceaccount"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/validation"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
@@ -437,6 +438,17 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		return nil, fmt.Errorf("failed to reconcile master headless service: %w", err)
 	}
 
+	// Reconcile ServiceAccount for master if configured
+	var masterSAName string
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.ServiceAccount != nil {
+		saName, err := serviceaccount.ReconcileServiceAccount(ctx, r.Client, r.Scheme, cluster,
+			cluster.Spec.Manager.Master.ServiceAccount, cluster.Name, cluster.Namespace, "master")
+		if err != nil {
+			return nil, fmt.Errorf("failed to reconcile master ServiceAccount: %w", err)
+		}
+		masterSAName = saName
+	}
+
 	// Compute specHash for change detection (version is included in image tag)
 	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
 		Version:                   version,
@@ -457,6 +469,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		ExtraInitContainers:       extraInitContainers,
 		ExtraContainers:           extraContainers,
 		MonitoringEnabled:         cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Enabled,
+		ServiceAccountName:        masterSAName,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
@@ -530,6 +543,11 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		masterTerminationGracePeriod = *cluster.Spec.Manager.Master.TerminationGracePeriodSeconds
 	}
 	stsBuilder.WithTerminationGracePeriodSeconds(&masterTerminationGracePeriod)
+
+	// Set ServiceAccount name if configured
+	if masterSAName != "" {
+		stsBuilder.WithServiceAccountName(masterSAName)
+	}
 
 	// Mount rule ConfigMaps if RuleReconciler is configured
 	var ruleHash string
@@ -869,6 +887,17 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		workerEnvFrom = cluster.Spec.Manager.Workers.EnvFrom
 	}
 
+	// Reconcile ServiceAccount for workers if configured
+	var workerSAName string
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.ServiceAccount != nil {
+		saName, err := serviceaccount.ReconcileServiceAccount(ctx, r.Client, r.Scheme, cluster,
+			cluster.Spec.Manager.Workers.ServiceAccount, cluster.Name, cluster.Namespace, "worker")
+		if err != nil {
+			return nil, fmt.Errorf("failed to reconcile worker ServiceAccount: %w", err)
+		}
+		workerSAName = saName
+	}
+
 	// Compute specHash for change detection (version is included in image tag)
 	specHash, err := patch.ComputeManagerWorkersSpecHashFull(patch.ManagerWorkersSpecInput{
 		Replicas:                  replicas,
@@ -889,6 +918,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		ExtraVolumeMounts:         workerExtraVolumeMounts,
 		ExtraInitContainers:       workerExtraInitContainers,
 		ExtraContainers:           workerExtraContainers,
+		ServiceAccountName:        workerSAName,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec hash")
@@ -956,6 +986,11 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		workerTerminationGracePeriod = *cluster.Spec.Manager.Workers.TerminationGracePeriodSeconds
 	}
 	stsBuilder.WithTerminationGracePeriodSeconds(&workerTerminationGracePeriod)
+
+	// Set ServiceAccount name if configured
+	if workerSAName != "" {
+		stsBuilder.WithServiceAccountName(workerSAName)
+	}
 
 	// Mount rule ConfigMaps if RuleReconciler is configured
 	var ruleHash string
@@ -1375,13 +1410,13 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	stsBuilder.WithTerminationGracePeriodSeconds(&legacyMasterTerminationGracePeriod)
 
 	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
-		Version:           cluster.Spec.Version,
-		Resources:         cluster.Spec.Manager.Master.Resources,
-		StorageSize:       cluster.Spec.Manager.Master.StorageSize,
-		Image:             "",
-		NodeSelector:      cluster.Spec.Manager.Master.NodeSelector,
-		Tolerations:       cluster.Spec.Manager.Master.Tolerations,
-		Affinity:          cluster.Spec.Manager.Master.Affinity,
+		Version:             cluster.Spec.Version,
+		Resources:           cluster.Spec.Manager.Master.Resources,
+		StorageSize:         cluster.Spec.Manager.Master.StorageSize,
+		Image:               "",
+		NodeSelector:        cluster.Spec.Manager.Master.NodeSelector,
+		Tolerations:         cluster.Spec.Manager.Master.Tolerations,
+		Affinity:            cluster.Spec.Manager.Master.Affinity,
 		ExtraVolumes:        extraVolumes,
 		ExtraVolumeMounts:   extraVolumeMounts,
 		ExtraInitContainers: extraInitContainers,
@@ -1673,14 +1708,14 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 	stsBuilder.WithTerminationGracePeriodSeconds(&legacyWorkerTerminationGracePeriod)
 
 	specHash, err := patch.ComputeManagerWorkersSpecHashFull(patch.ManagerWorkersSpecInput{
-		Replicas:          workerReplicas2,
-		Version:           cluster.Spec.Version,
-		Resources:         cluster.Spec.Manager.Workers.Resources,
-		StorageSize:       cluster.Spec.Manager.Workers.StorageSize,
-		Image:             "",
-		NodeSelector:      cluster.Spec.Manager.Workers.NodeSelector,
-		Tolerations:       cluster.Spec.Manager.Workers.Tolerations,
-		Affinity:          cluster.Spec.Manager.Workers.Affinity,
+		Replicas:            workerReplicas2,
+		Version:             cluster.Spec.Version,
+		Resources:           cluster.Spec.Manager.Workers.Resources,
+		StorageSize:         cluster.Spec.Manager.Workers.StorageSize,
+		Image:               "",
+		NodeSelector:        cluster.Spec.Manager.Workers.NodeSelector,
+		Tolerations:         cluster.Spec.Manager.Workers.Tolerations,
+		Affinity:            cluster.Spec.Manager.Workers.Affinity,
 		ExtraVolumes:        extraVolumes,
 		ExtraVolumeMounts:   extraVolumeMounts,
 		ExtraInitContainers: extraInitContainers,

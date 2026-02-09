@@ -3,7 +3,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.19.0
+    controller-gen.kubebuilder.io/version: v0.20.0
   name: wazuhworkers.resources.wazuh.com
 spec:
   group: resources.wazuh.com
@@ -6957,6 +6957,34 @@ spec:
                     - ClusterIP
                     - NodePort
                     - LoadBalancer
+                    type: string
+                type: object
+              serviceAccount:
+                description: |-
+                  ServiceAccount configuration for worker pods
+                  Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: Annotations on the ServiceAccount (e.g., iam.gke.io/gcp-service-account,
+                      eks.amazonaws.com/role-arn)
+                    type: object
+                  create:
+                    default: false
+                    description: |-
+                      Create: if true, the operator creates and manages the ServiceAccount.
+                      If false, only sets ServiceAccountName on PodSpec (SA must already exist).
+                    type: boolean
+                  labels:
+                    additionalProperties:
+                      type: string
+                    description: 'Labels on the ServiceAccount (e.g., azure.workload.identity/use:
+                      "true")'
+                    type: object
+                  name:
+                    description: Name is the ServiceAccount name. Auto-generated as
+                      "{cluster}-{component}" if empty and Create=true.
                     type: string
                 type: object
               storageClassName:

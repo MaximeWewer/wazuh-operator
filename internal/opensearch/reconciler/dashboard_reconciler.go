@@ -26,8 +26,8 @@ import (
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -44,6 +44,7 @@ import (
 	osservices "github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/serviceaccount"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -413,6 +414,18 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 	}
 	deployBuilder.WithTerminationGracePeriodSeconds(&terminationGracePeriod)
 
+	// Reconcile and set ServiceAccount if configured
+	if cluster.Spec.Dashboard != nil && cluster.Spec.Dashboard.ServiceAccount != nil {
+		saName, saErr := serviceaccount.ReconcileServiceAccount(ctx, r.Client, r.Scheme, cluster,
+			cluster.Spec.Dashboard.ServiceAccount, cluster.Name, cluster.Namespace, "dashboard")
+		if saErr != nil {
+			return fmt.Errorf("failed to reconcile dashboard ServiceAccount: %w", saErr)
+		}
+		if saName != "" {
+			deployBuilder.WithServiceAccountName(saName)
+		}
+	}
+
 	deployment := deployBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, deployment, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for dashboard deployment: %w", err)
@@ -760,6 +773,17 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		extraContainers = cluster.Spec.Dashboard.ExtraContainers
 	}
 
+	// Reconcile ServiceAccount if configured
+	var dashboardSAName string
+	if cluster.Spec.Dashboard != nil && cluster.Spec.Dashboard.ServiceAccount != nil {
+		saName, err := serviceaccount.ReconcileServiceAccount(ctx, r.Client, r.Scheme, cluster,
+			cluster.Spec.Dashboard.ServiceAccount, cluster.Name, cluster.Namespace, "dashboard")
+		if err != nil {
+			return nil, fmt.Errorf("failed to reconcile dashboard ServiceAccount: %w", err)
+		}
+		dashboardSAName = saName
+	}
+
 	// Compute spec hash for change detection (includes all configurable fields)
 	specHash, err := patch.ComputeDashboardSpecHashFull(patch.DashboardSpecInput{
 		Replicas:                  replicas,
@@ -779,6 +803,7 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		ExtraVolumeMounts:         extraVolumeMounts,
 		ExtraInitContainers:       extraInitContainers,
 		ExtraContainers:           extraContainers,
+		ServiceAccountName:        dashboardSAName,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute dashboard spec hash, continuing without spec tracking")
@@ -849,6 +874,11 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 
 	if certHash != "" {
 		deployBuilder.WithCertHash(certHash)
+	}
+
+	// Set ServiceAccount name if configured
+	if dashboardSAName != "" {
+		deployBuilder.WithServiceAccountName(dashboardSAName)
 	}
 
 	// Set spec hash for change detection

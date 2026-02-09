@@ -32,8 +32,8 @@ import (
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -59,6 +59,7 @@ import (
 	drainstate "github.com/MaximeWewer/wazuh-operator/internal/shared/drain"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/serviceaccount"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/storage"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
@@ -911,6 +912,17 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		}
 	}
 
+	// Reconcile ServiceAccount if configured
+	var indexerSAName string
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.ServiceAccount != nil {
+		saName, err := serviceaccount.ReconcileServiceAccount(ctx, r.Client, r.Scheme, cluster,
+			cluster.Spec.Indexer.ServiceAccount, cluster.Name, cluster.Namespace, "indexer")
+		if err != nil {
+			return nil, fmt.Errorf("failed to reconcile indexer ServiceAccount: %w", err)
+		}
+		indexerSAName = saName
+	}
+
 	// Compute spec hash for change detection (includes all configurable fields)
 	specHash, err := patch.ComputeIndexerSpecHashFull(patch.IndexerSpecInput{
 		Replicas:                  replicas,
@@ -934,6 +946,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		ExtraContainers:           extraContainers,
 		MonitoringEnabled:         monitoringEnabled,
 		RepositoryPlugins:         repoPluginsHash,
+		ServiceAccountName:        indexerSAName,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute indexer spec hash, proceeding without spec hash tracking")
@@ -1027,6 +1040,11 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		terminationGracePeriod = *cluster.Spec.Indexer.TerminationGracePeriodSeconds
 	}
 	stsBuilder.WithTerminationGracePeriodSeconds(&terminationGracePeriod)
+
+	// Set ServiceAccount name if configured
+	if indexerSAName != "" {
+		stsBuilder.WithServiceAccountName(indexerSAName)
+	}
 
 	sts := stsBuilder.Build()
 
@@ -2698,6 +2716,22 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 		terminationGracePeriod = *cluster.Spec.Indexer.TerminationGracePeriodSeconds
 	}
 	stsBuilder.WithTerminationGracePeriodSeconds(&terminationGracePeriod)
+
+	// Reconcile ServiceAccount for nodePool (inherit from indexer if pool SA is nil)
+	saCfg := pool.ServiceAccount
+	if saCfg == nil && cluster.Spec.Indexer != nil {
+		saCfg = cluster.Spec.Indexer.ServiceAccount
+	}
+	if saCfg != nil {
+		poolSAName, err := serviceaccount.ReconcileServiceAccount(ctx, r.Client, r.Scheme, cluster,
+			saCfg, cluster.Name, cluster.Namespace, fmt.Sprintf("indexer-%s", pool.Name))
+		if err != nil {
+			return fmt.Errorf("failed to reconcile nodePool %s ServiceAccount: %w", pool.Name, err)
+		}
+		if poolSAName != "" {
+			stsBuilder.WithServiceAccountName(poolSAName)
+		}
+	}
 
 	sts := stsBuilder.Build()
 

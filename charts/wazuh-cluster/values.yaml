@@ -277,6 +277,17 @@ cluster:
       # -- Indexer extra sidecar containers
       extraContainers: []
 
+      # @extra cluster.spec.indexer.serviceAccount Indexer ServiceAccount configuration
+      # Cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+      # serviceAccount:
+      #   create: true
+      #   name: ""  # auto-generated as "{cluster}-indexer" if empty
+      #   annotations:
+      #     iam.gke.io/gcp-service-account: "my-gsa@project.iam.gserviceaccount.com"
+      #     eks.amazonaws.com/role-arn: "arn:aws:iam::role/my-role"
+      #   labels:
+      #     azure.workload.identity/use: "true"
+
       # Advanced: use nodePools instead of replicas for different node roles (mutually exclusive with replicas)
       # nodePools:
       #   - name: master
@@ -500,6 +511,13 @@ cluster:
         # -- Master extra sidecar containers
         extraContainers: []
 
+        # @extra cluster.spec.manager.master.serviceAccount Master ServiceAccount configuration
+        # serviceAccount:
+        #   create: true
+        #   name: ""
+        #   annotations: {}
+        #   labels: {}
+
       # @extra cluster.spec.manager.workers Worker nodes configuration
       workers:
         # Sizing-managed fields (auto-configured by sizing profile, override here if needed):
@@ -612,6 +630,13 @@ cluster:
         extraInitContainers: []
         # -- Workers extra sidecar containers
         extraContainers: []
+
+        # @extra cluster.spec.manager.workers.serviceAccount Workers ServiceAccount configuration
+        # serviceAccount:
+        #   create: true
+        #   name: ""
+        #   annotations: {}
+        #   labels: {}
 
     # @section Dashboard Configuration
 
@@ -783,6 +808,13 @@ cluster:
       extraInitContainers: []
       # -- Dashboard extra sidecar containers
       extraContainers: []
+
+      # @extra cluster.spec.dashboard.serviceAccount Dashboard ServiceAccount configuration
+      # serviceAccount:
+      #   create: true
+      #   name: ""
+      #   annotations: {}
+      #   labels: {}
 
     # @section TLS Configuration
 

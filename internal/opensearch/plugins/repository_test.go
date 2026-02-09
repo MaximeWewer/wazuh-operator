@@ -20,8 +20,9 @@ import (
 	"strings"
 	"testing"
 
-	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
 func TestNewFromCluster_NilCluster(t *testing.T) {

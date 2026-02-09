@@ -65,6 +65,8 @@ type NodePoolStatefulSetBuilder struct {
 	extraContainers []corev1.Container
 	// Termination grace period
 	terminationGracePeriodSeconds *int64
+	// Service account name
+	serviceAccountName string
 }
 
 // NewNodePoolStatefulSetBuilder creates a new NodePoolStatefulSetBuilder
@@ -260,6 +262,12 @@ func (b *NodePoolStatefulSetBuilder) WithTerminationGracePeriodSeconds(seconds *
 	return b
 }
 
+// WithServiceAccountName sets the service account name for pods
+func (b *NodePoolStatefulSetBuilder) WithServiceAccountName(name string) *NodePoolStatefulSetBuilder {
+	b.serviceAccountName = name
+	return b
+}
+
 // Build creates the StatefulSet for this nodePool
 func (b *NodePoolStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	name := constants.IndexerNodePoolName(b.clusterName, b.poolName)
@@ -384,6 +392,7 @@ func (b *NodePoolStatefulSetBuilder) Build() *appsv1.StatefulSet {
 				},
 				Spec: corev1.PodSpec{
 					TerminationGracePeriodSeconds: b.terminationGracePeriodSeconds,
+					ServiceAccountName:            b.serviceAccountName,
 					NodeSelector:                  b.nodeSelector,
 					Tolerations:                   b.tolerations,
 					Affinity:                      b.affinity,
@@ -401,7 +410,7 @@ func (b *NodePoolStatefulSetBuilder) Build() *appsv1.StatefulSet {
 					},
 					InitContainers: initContainers,
 					Containers:     containers,
-					Volumes: volumes,
+					Volumes:        volumes,
 				},
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{

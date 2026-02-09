@@ -277,10 +277,11 @@ Configuration for safe scale-down operations. See [Drain Strategy](features/drai
 | `envFrom`                  | []EnvFromSource                   | No       | -       | Env from sources        |
 | `securityContext`          | PodSecurityContext                | No       | -       | Pod security            |
 | `containerSecurityContext` | SecurityContext                   | No       | -       | Container security      |
+| `serviceAccount`           | [ServiceAccountConfig](#serviceaccountconfig) | No       | -       | ServiceAccount config   |
 
 ### WorkerSpec
 
-Includes all fields from [MasterSpec](#masterspec) (including `extraVolumes`, `extraVolumeMounts`, `extraInitContainers`, `extraContainers`), plus:
+Includes all fields from [MasterSpec](#masterspec) (including `extraVolumes`, `extraVolumeMounts`, `extraInitContainers`, `extraContainers`, `serviceAccount`), plus:
 
 | Field                 | Type                                | Required | Default | Description               |
 | --------------------- | ----------------------------------- | -------- | ------- | ------------------------- |
@@ -330,6 +331,7 @@ Includes all fields from [MasterSpec](#masterspec) (including `extraVolumes`, `e
 | `antiAffinity`             | [AntiAffinitySpec](#antiaffinityspec)         | No       | -                  | Pod anti-affinity for HA                                           |
 | `hpa`                      | [HPASpec](#hpaspec)                           | No       | -                  | Horizontal Pod Autoscaler (use with caution for StatefulSet)       |
 | `repositoryPlugins`        | [][RepositoryPluginConfig](#repositorypluginconfig) | No | -                  | Auto-install OpenSearch repository plugins + keystore              |
+| `serviceAccount`           | [ServiceAccountConfig](#serviceaccountconfig)       | No       | -                  | ServiceAccount for cloud identity integrations                     |
 
 > **Note**: `replicas` and `nodePools` are mutually exclusive. Use `replicas` for simple mode (all nodes have all roles) or `nodePools` for advanced mode (dedicated node roles). See [Advanced Indexer Topology](features/advanced-indexer-topology.md) for details.
 
@@ -356,6 +358,7 @@ Configuration for a nodePool in advanced indexer topology mode. Each nodePool be
 | `extraVolumeMounts`   | []VolumeMount        | No       | -       | Extra volume mounts                            |
 | `extraInitContainers` | []Container          | No       | -       | Extra init containers                          |
 | `extraContainers`     | []Container          | No       | -       | Extra sidecar containers                       |
+| `serviceAccount`      | [ServiceAccountConfig](#serviceaccountconfig) | No       | -       | SA config (inherits from indexer if nil)     |
 
 ### IndexerNodeRole
 
@@ -398,6 +401,7 @@ Valid values for OpenSearch node roles:
 | `securityContext`          | PodSecurityContext                | No       | -       | Pod security              |
 | `containerSecurityContext` | SecurityContext                   | No       | -       | Container security        |
 | `hpa`                      | [HPASpec](#hpaspec)               | No       | -       | Horizontal Pod Autoscaler |
+| `serviceAccount`           | [ServiceAccountConfig](#serviceaccountconfig) | No       | -       | ServiceAccount config   |
 
 ### Common Types
 
@@ -418,6 +422,17 @@ Valid values for OpenSearch node roles:
 | `loadBalancerIP` | string            | No       | -           | LB IP        |
 | `nodePort`       | int32             | No       | -           | Node port    |
 | `ports`          | []ServicePortSpec | No       | -           | Custom ports |
+
+#### ServiceAccountConfig
+
+Configuration for component ServiceAccounts. Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity).
+
+| Field         | Type              | Required | Default | Description                                                                                 |
+| ------------- | ----------------- | -------- | ------- | ------------------------------------------------------------------------------------------- |
+| `create`      | bool              | No       | `false` | If true, the operator creates and manages the ServiceAccount                                |
+| `name`        | string            | No       | -       | SA name. Auto-generated as `{cluster}-{component}` if empty and `create=true`               |
+| `annotations` | map[string]string | No       | -       | SA annotations (e.g., `iam.gke.io/gcp-service-account`, `eks.amazonaws.com/role-arn`)       |
+| `labels`      | map[string]string | No       | -       | SA labels (e.g., `azure.workload.identity/use: "true"`)                                     |
 
 #### IngressSpec
 
@@ -624,6 +639,7 @@ Standalone CRD for managing Wazuh Worker configuration. Used for per-worker over
 | `extraVolumeMounts`   | []VolumeMount        | No       | -       | Extra volume mounts      |
 | `extraInitContainers` | []Container          | No       | -       | Extra init containers    |
 | `extraContainers`     | []Container          | No       | -       | Extra sidecar containers |
+| `serviceAccount`    | [ServiceAccountConfig](#serviceaccountconfig) | No       | -       | ServiceAccount config    |
 
 ---
 
@@ -1136,6 +1152,7 @@ Manages scheduled or one-shot backups of Wazuh Manager data to S3, GCS, Azure, o
 | `backupTimeout` | string                | No       | `30m`   | Maximum backup duration                  |
 | `image`         | ImageSpec             | No       | -       | Custom backup image                      |
 | `resources`     | ResourceRequirements  | No       | -       | Container resources                      |
+| `serviceAccountAnnotations` | map[string]string | No | - | Annotations merged into the backup job ServiceAccount (for cloud identity) |
 
 #### BackupComponents
 
@@ -1216,6 +1233,7 @@ Restores Wazuh Manager data from a backup archive (S3, GCS, Azure, or HDFS).
 | `restartAfterRestore` | bool                  | No       | `true`  | Restart manager after restore |
 | `restoreTimeout`      | string                | No       | `30m`   | Maximum restore duration      |
 | `resources`           | ResourceRequirements  | No       | -       | Container resources           |
+| `serviceAccountAnnotations` | map[string]string | No | - | Annotations merged into the restore job ServiceAccount (for cloud identity) |
 
 #### RestoreSource
 

@@ -32,7 +32,7 @@ Helm chart for deploying Wazuh clusters via the Wazuh Operator
 helm install wazuh-operator ./charts/wazuh-operator
 ```
 
-1. Install the chart with a sizing profile:
+2. Install the chart with a sizing profile:
 
 ```bash
 helm install my-wazuh-cluster ./charts/wazuh-cluster \

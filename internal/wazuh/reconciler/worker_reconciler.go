@@ -35,6 +35,7 @@ import (
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
 	shareddrain "github.com/MaximeWewer/wazuh-operator/internal/shared/drain"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/serviceaccount"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/deployments"
@@ -217,6 +218,18 @@ func (r *WorkerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, w
 	// Set termination grace period default
 	terminationGracePeriod := constants.DefaultManagerTerminationGracePeriod
 	stsBuilder.WithTerminationGracePeriodSeconds(&terminationGracePeriod)
+
+	// Reconcile and set ServiceAccount if configured
+	if worker.Spec.ServiceAccount != nil {
+		saName, err := serviceaccount.ReconcileServiceAccount(ctx, r.Client, r.Scheme, worker,
+			worker.Spec.ServiceAccount, worker.Name, worker.Namespace, "worker")
+		if err != nil {
+			return fmt.Errorf("failed to reconcile worker ServiceAccount: %w", err)
+		}
+		if saName != "" {
+			stsBuilder.WithServiceAccountName(saName)
+		}
+	}
 
 	sts := stsBuilder.Build()
 	if err := controllerutil.SetControllerReference(worker, sts, r.Scheme); err != nil {

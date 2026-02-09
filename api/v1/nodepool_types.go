@@ -145,6 +145,11 @@ type IndexerNodePoolSpec struct {
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
 	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
+
+	// ServiceAccount configuration for this nodePool's pods
+	// If nil, inherits from indexer-level ServiceAccount configuration
+	// +optional
+	ServiceAccount *ServiceAccountConfig `json:"serviceAccount,omitempty"`
 }
 
 // NodePoolStatus represents the observed state of a nodePool
