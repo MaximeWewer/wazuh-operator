@@ -465,3 +465,20 @@ func (a *SnapshotsAPI) GetRestoreStatus(ctx context.Context, indexName string) (
 
 	return result, nil
 }
+
+// ReloadSecureSettings reloads the OpenSearch keystore on all nodes
+// This is required after keystore changes for repository plugins to pick up new credentials
+func (a *SnapshotsAPI) ReloadSecureSettings(ctx context.Context) error {
+	resp, err := a.client.Post(ctx, "/_nodes/reload_secure_settings", map[string]any{})
+	if err != nil {
+		return fmt.Errorf("failed to reload secure settings: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to reload secure settings (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}

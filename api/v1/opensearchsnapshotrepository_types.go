@@ -27,9 +27,9 @@ type OpenSearchSnapshotRepositorySpec struct {
 	ClusterRef WazuhClusterReference `json:"clusterRef"`
 
 	// Type is the repository type
-	// Note: s3 type requires repository-s3 plugin to be installed in OpenSearch
+	// Note: s3/gcs/azure/hdfs types require the corresponding repository plugin to be installed
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=s3;azure;fs
+	// +kubebuilder:validation:Enum=s3;azure;fs;gcs;hdfs
 	Type string `json:"type"`
 
 	// Settings contains type-specific repository configuration
@@ -103,9 +103,55 @@ type SnapshotRepositorySettings struct {
 	// +optional
 	CannedACL string `json:"cannedAcl,omitempty"`
 
+	// Protocol is the connection protocol (s3 type only)
+	// Use "http" for MinIO or other S3-compatible services without TLS
+	// +optional
+	// +kubebuilder:validation:Enum=http;https
+	Protocol string `json:"protocol,omitempty"`
+
 	// ReadOnly marks the repository as read-only
 	// +optional
 	ReadOnly bool `json:"readonly,omitempty"`
+
+	// Client is the named client for keystore-based credentials
+	// Corresponds to the clientName in RepositoryPluginConfig
+	// Used by S3, GCS, and Azure repository types
+	// +optional
+	// +kubebuilder:default="default"
+	Client string `json:"client,omitempty"`
+
+	// UseKeystore indicates that credentials are stored in the OpenSearch keystore
+	// When true, inline credentials (access_key/secret_key) are not set in repository settings
+	// The operator expects the keystore to be populated via RepositoryPlugins in WazuhCluster
+	// +optional
+	UseKeystore bool `json:"useKeystore,omitempty"`
+
+	// ApplicationName is the GCS application name (gcs type only)
+	// +optional
+	ApplicationName string `json:"applicationName,omitempty"`
+
+	// EndpointSuffix is the Azure endpoint suffix for sovereign clouds (azure type only)
+	// Example: "core.chinacloudapi.cn" for Azure China
+	// +optional
+	EndpointSuffix string `json:"endpointSuffix,omitempty"`
+
+	// URI is the HDFS namenode URI (hdfs type only)
+	// Example: "hdfs://namenode:8020"
+	// +optional
+	URI string `json:"uri,omitempty"`
+
+	// Path is the HDFS directory path (hdfs type only)
+	// +optional
+	Path string `json:"path,omitempty"`
+
+	// SecurityPrincipal is the Kerberos principal for HDFS (hdfs type only)
+	// +optional
+	SecurityPrincipal string `json:"securityPrincipal,omitempty"`
+
+	// HadoopConf is extra Hadoop configuration for HDFS (hdfs type only)
+	// Keys are prefixed with "conf." when sent to OpenSearch
+	// +optional
+	HadoopConf map[string]string `json:"hadoopConf,omitempty"`
 }
 
 // OpenSearchSnapshotRepositoryStatus defines the observed state of OpenSearchSnapshotRepository

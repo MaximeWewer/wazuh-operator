@@ -1,0 +1,58 @@
+# Example: OpenSearchSnapshotRepository with GCS
+# Requires repository-gcs plugin to be installed via repositoryPlugins
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchSnapshotRepository
+metadata:
+  name: gcs-snapshots
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  type: gcs
+  settings:
+    bucket: my-wazuh-snapshots
+    basePath: opensearch/snapshots
+    compress: true
+    useKeystore: true
+    client: default # Matches clientName in WazuhCluster repositoryPlugins
+  verify: true
+
+---
+# Example: OpenSearchSnapshotRepository with GCS + Workload Identity
+# No keystore credentials needed - GCS SDK auto-discovers from ServiceAccount
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchSnapshotRepository
+metadata:
+  name: gcs-snapshots-wi
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  type: gcs
+  settings:
+    bucket: my-wazuh-snapshots
+    basePath: opensearch/snapshots
+    compress: true
+    useKeystore: false
+    client: default
+    applicationName: wazuh-operator
+  verify: true
+
+---
+# Example: OpenSearchSnapshotRepository with HDFS
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchSnapshotRepository
+metadata:
+  name: hdfs-snapshots
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  type: hdfs
+  settings:
+    uri: "hdfs://namenode:8020"
+    path: "/opensearch/snapshots"
+    compress: true
+    hadoopConf:
+      dfs.replication: "2"
+  verify: true

@@ -192,6 +192,101 @@ spec:
               source:
                 description: Source defines where to restore from
                 properties:
+                  azure:
+                    description: Azure defines Azure Blob Storage source configuration
+                    properties:
+                      accountName:
+                        description: AccountName is the Azure Storage account name
+                        type: string
+                      container:
+                        description: Container is the Azure Blob Storage container
+                          name
+                        type: string
+                      credentialsSecret:
+                        description: CredentialsSecret references the Secret containing
+                          Azure credentials
+                        properties:
+                          accessKeyKey:
+                            default: access-key
+                            description: AccessKeyKey is the key in the Secret for
+                              the access key ID
+                            type: string
+                          name:
+                            description: Name of the Secret containing credentials
+                            type: string
+                          secretKeyKey:
+                            default: secret-key
+                            description: SecretKeyKey is the key in the Secret for
+                              the secret access key
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      endpointSuffix:
+                        description: EndpointSuffix is the Azure endpoint suffix for
+                          sovereign clouds
+                        type: string
+                      key:
+                        description: Key is the blob key (path) to the backup archive
+                        type: string
+                    required:
+                    - container
+                    - key
+                    type: object
+                  gcs:
+                    description: GCS defines Google Cloud Storage source configuration
+                    properties:
+                      bucket:
+                        description: Bucket is the GCS bucket name
+                        type: string
+                      credentialsSecret:
+                        description: |-
+                          CredentialsSecret references the Secret containing GCS credentials
+                          Optional for Workload Identity
+                        properties:
+                          accessKeyKey:
+                            default: access-key
+                            description: AccessKeyKey is the key in the Secret for
+                              the access key ID
+                            type: string
+                          name:
+                            description: Name of the Secret containing credentials
+                            type: string
+                          secretKeyKey:
+                            default: secret-key
+                            description: SecretKeyKey is the key in the Secret for
+                              the secret access key
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      key:
+                        description: Key is the object key (path) to the backup archive
+                        type: string
+                      project:
+                        description: Project is the GCP project ID
+                        type: string
+                    required:
+                    - bucket
+                    - key
+                    type: object
+                  hdfs:
+                    description: HDFS defines HDFS source configuration
+                    properties:
+                      key:
+                        description: Key is the archive filename within the path
+                        type: string
+                      path:
+                        description: Path is the HDFS path to the backup archive
+                        type: string
+                      uri:
+                        description: URI is the HDFS namenode WebHDFS URI
+                        type: string
+                    required:
+                    - key
+                    - path
+                    - uri
+                    type: object
                   s3:
                     description: S3 defines S3/MinIO source configuration
                     properties:

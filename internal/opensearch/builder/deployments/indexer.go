@@ -28,6 +28,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/plugins"
 	"github.com/MaximeWewer/wazuh-operator/pkg/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -485,6 +486,15 @@ func (b *IndexerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 		},
 	}
 
+	// Add repository plugin volumes (secrets + keystore)
+	if b.cluster != nil {
+		installer := plugins.NewFromCluster(b.cluster)
+		if installer != nil && installer.NeedsInstallation() {
+			volumes = append(volumes, installer.GetSecretVolumes()...)
+			volumes = append(volumes, installer.GetKeystoreVolume())
+		}
+	}
+
 	// Add custom volumes
 	volumes = append(volumes, b.volumes...)
 
@@ -544,6 +554,18 @@ func (b *IndexerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 		pluginsMount := monitoring.GetPluginsVolumeMountFromSpec(b.cluster)
 		if pluginsMount != nil {
 			mounts = append(mounts, *pluginsMount)
+		}
+	}
+
+	// Add repository plugin mounts (plugins directory + keystore)
+	if b.cluster != nil {
+		installer := plugins.NewFromCluster(b.cluster)
+		if installer != nil && installer.NeedsInstallation() {
+			// Add plugins directory mount if monitoring didn't already add it
+			if monitoring.GetPluginsVolumeMountFromSpec(b.cluster) == nil {
+				mounts = append(mounts, installer.GetPluginsVolumeMount())
+			}
+			mounts = append(mounts, installer.GetKeystoreVolumeMount())
 		}
 	}
 
@@ -723,6 +745,15 @@ fi`, config.VMMaxMapCount()),
 		pluginContainer := monitoring.BuildPluginInstallInitContainerFromSpec(b.cluster)
 		if pluginContainer != nil {
 			initContainers = append(initContainers, *pluginContainer)
+		}
+	}
+
+	// Add repository plugin installation and keystore setup init containers
+	if b.cluster != nil {
+		installer := plugins.NewFromCluster(b.cluster)
+		if installer != nil && installer.NeedsInstallation() {
+			initContainers = append(initContainers, installer.BuildInstallInitContainer())
+			initContainers = append(initContainers, installer.BuildKeystoreInitContainer())
 		}
 	}
 

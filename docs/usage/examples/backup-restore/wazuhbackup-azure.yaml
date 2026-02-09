@@ -1,0 +1,48 @@
+# Example: WazuhBackup with Azure Blob Storage
+apiVersion: resources.wazuh.com/v1
+kind: WazuhBackup
+metadata:
+  name: daily-backup-azure
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+
+  components:
+    agentKeys: true
+    fimDatabase: true
+    agentDatabase: true
+
+  schedule: "0 2 * * *"
+
+  retention:
+    maxBackups: 14
+    maxAge: "30d"
+
+  storage:
+    type: azure
+    bucket: wazuh-backups # Used as container name fallback
+    prefix: "{{ .ClusterName }}/{{ .Namespace }}"
+    azure:
+      container: wazuh-backups
+      accountName: mystorageaccount
+      # For Azure Government or sovereign clouds:
+      # endpointSuffix: "core.usgovcloudapi.net"
+    credentialsSecret:
+      name: azure-backup-credentials
+      accessKeyKey: account
+      secretKeyKey: key
+
+  backupTimeout: "30m"
+
+---
+# Azure credentials Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: azure-backup-credentials
+  namespace: wazuh
+type: Opaque
+stringData:
+  account: "mystorageaccount"
+  key: "base64encodedstorageaccountkey=="

@@ -113,21 +113,21 @@ type BackupRetention struct {
 
 // BackupStorage defines where backups are stored
 type BackupStorage struct {
-	// Type is the storage type
+	// Type is the storage backend type
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Enum=s3
+	// +kubebuilder:validation:Enum=s3;gcs;azure;hdfs
 	Type string `json:"type"`
 
-	// Bucket is the S3 bucket name
-	// +kubebuilder:validation:Required
-	Bucket string `json:"bucket"`
+	// Bucket is the bucket or container name (S3, GCS, Azure)
+	// +optional
+	Bucket string `json:"bucket,omitempty"`
 
 	// Prefix is the path prefix within the bucket
 	// Supports Go templates: {{ .ClusterName }}, {{ .Namespace }}, {{ .Date }}
 	// +kubebuilder:default="{{ .ClusterName }}/{{ .Namespace }}"
 	Prefix string `json:"prefix,omitempty"`
 
-	// Region is the AWS region (for S3)
+	// Region is the AWS region (S3 only)
 	// +optional
 	Region string `json:"region,omitempty"`
 
@@ -139,9 +139,56 @@ type BackupStorage struct {
 	// +optional
 	ForcePathStyle bool `json:"forcePathStyle,omitempty"`
 
-	// CredentialsSecret references the Secret containing S3 credentials
+	// CredentialsSecret references the Secret containing storage credentials
+	// Optional for GCS Workload Identity or HDFS simple auth
+	// +optional
+	CredentialsSecret *RepositoryCredentialsRef `json:"credentialsSecret,omitempty"`
+
+	// GCS contains GCS-specific backup configuration
+	// +optional
+	GCS *GCSBackupConfig `json:"gcs,omitempty"`
+
+	// Azure contains Azure-specific backup configuration
+	// +optional
+	Azure *AzureBackupConfig `json:"azure,omitempty"`
+
+	// HDFS contains HDFS-specific backup configuration
+	// +optional
+	HDFS *HDFSBackupConfig `json:"hdfs,omitempty"`
+}
+
+// GCSBackupConfig defines GCS-specific backup storage configuration
+type GCSBackupConfig struct {
+	// Project is the GCP project ID
+	// +optional
+	Project string `json:"project,omitempty"`
+}
+
+// AzureBackupConfig defines Azure-specific backup storage configuration
+type AzureBackupConfig struct {
+	// Container is the Azure Blob Storage container name (overrides Bucket)
+	// +optional
+	Container string `json:"container,omitempty"`
+
+	// AccountName is the Azure Storage account name
+	// +optional
+	AccountName string `json:"accountName,omitempty"`
+
+	// EndpointSuffix is the Azure endpoint suffix for sovereign clouds
+	// +optional
+	EndpointSuffix string `json:"endpointSuffix,omitempty"`
+}
+
+// HDFSBackupConfig defines HDFS-specific backup storage configuration
+type HDFSBackupConfig struct {
+	// URI is the HDFS namenode WebHDFS URI
+	// Example: "http://namenode:9870/webhdfs/v1"
 	// +kubebuilder:validation:Required
-	CredentialsSecret RepositoryCredentialsRef `json:"credentialsSecret"`
+	URI string `json:"uri"`
+
+	// Path is the HDFS directory path for backups
+	// +kubebuilder:validation:Required
+	Path string `json:"path"`
 }
 
 // BackupImage specifies the backup container image

@@ -1,0 +1,61 @@
+# Example: WazuhCluster with repository plugins for snapshot/backup support
+# This installs the repository-s3 plugin and configures the keystore
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCluster
+metadata:
+  name: wazuh
+  namespace: wazuh
+spec:
+  version: "4.9.2"
+
+  indexer:
+    replicas: 3
+    storageSize: "50Gi"
+    # Automatically install repository plugins and configure keystore
+    repositoryPlugins:
+      - name: repository-s3
+        clientName: default
+        credentialsSecret:
+          name: s3-snapshot-credentials
+
+  manager:
+    master:
+      resources:
+        requests:
+          cpu: "500m"
+          memory: "512Mi"
+    workers:
+      replicas: 2
+
+  dashboard:
+    replicas: 1
+
+---
+# Credentials Secret for the S3 repository plugin
+apiVersion: v1
+kind: Secret
+metadata:
+  name: s3-snapshot-credentials
+  namespace: wazuh
+type: Opaque
+stringData:
+  access-key: "YOUR_ACCESS_KEY"
+  secret-key: "YOUR_SECRET_KEY"
+
+---
+# Snapshot repository using keystore credentials (no inline secrets)
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchSnapshotRepository
+metadata:
+  name: s3-snapshots
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh
+  type: s3
+  settings:
+    bucket: my-wazuh-snapshots
+    basePath: snapshots
+    region: us-east-1
+    useKeystore: true
+    client: default

@@ -19,8 +19,8 @@ package constants
 import "time"
 
 // Snapshot repository type constants
-// Note: S3 type requires repository-s3 plugin to be installed in OpenSearch
-// See: https://docs.opensearch.org/latest/tuning-your-cluster/availability-and-recovery/snapshots/snapshot-restore/#amazon-s3
+// Note: S3/GCS/Azure/HDFS types require the corresponding repository plugin
+// See: https://docs.opensearch.org/latest/tuning-your-cluster/availability-and-recovery/snapshots/snapshot-restore/
 const (
 	// RepositoryTypeS3 is the S3 repository type (including MinIO)
 	// Requires repository-s3 plugin
@@ -32,6 +32,14 @@ const (
 
 	// RepositoryTypeFS is the filesystem repository type (shared storage required)
 	RepositoryTypeFS = "fs"
+
+	// RepositoryTypeGCS is the Google Cloud Storage repository type
+	// Requires repository-gcs plugin
+	RepositoryTypeGCS = "gcs"
+
+	// RepositoryTypeHDFS is the HDFS repository type
+	// Requires repository-hdfs plugin
+	RepositoryTypeHDFS = "hdfs"
 )
 
 // OpenSearch snapshot state constants (from OpenSearch API)
@@ -222,7 +230,7 @@ var (
 // Default backup image
 const (
 	// DefaultBackupImage is the default image for backup jobs
-	// This image includes mc (MinIO Client), kubectl, and tar
+	// This image includes rclone (S3, GCS, Azure, HDFS/WebDAV), kubectl, and tar
 	DefaultBackupImage = "ghcr.io/maximewewer/wazuh-operator/backup-tools:latest"
 )
 

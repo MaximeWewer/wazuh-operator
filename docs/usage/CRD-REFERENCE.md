@@ -329,6 +329,7 @@ Includes all fields from [MasterSpec](#masterspec) (including `extraVolumes`, `e
 | `containerSecurityContext` | SecurityContext                               | No       | -                  | Container security                                                 |
 | `antiAffinity`             | [AntiAffinitySpec](#antiaffinityspec)         | No       | -                  | Pod anti-affinity for HA                                           |
 | `hpa`                      | [HPASpec](#hpaspec)                           | No       | -                  | Horizontal Pod Autoscaler (use with caution for StatefulSet)       |
+| `repositoryPlugins`        | [][RepositoryPluginConfig](#repositorypluginconfig) | No | -                  | Auto-install OpenSearch repository plugins + keystore              |
 
 > **Note**: `replicas` and `nodePools` are mutually exclusive. Use `replicas` for simple mode (all nodes have all roles) or `nodePools` for advanced mode (dedicated node roles). See [Advanced Indexer Topology](features/advanced-indexer-topology.md) for details.
 
@@ -509,6 +510,23 @@ Configuration for Horizontal Pod Autoscaler (supported on Dashboard, Workers, In
 | `type`        | string | No       | `required`               | Anti-affinity type: `required` or `preferred` |
 | `topologyKey` | string | No       | `kubernetes.io/hostname` | Topology key for spreading                    |
 | `weight`      | int32  | No       | `100`                    | Weight for preferred anti-affinity (1-100)    |
+
+#### RepositoryPluginConfig
+
+Automatically installs OpenSearch repository plugins and configures the keystore. See [Repository Plugins & Keystore](features/repository-plugins.md).
+
+| Field               | Type                                                        | Required | Default     | Description                                                             |
+| ------------------- | ----------------------------------------------------------- | -------- | ----------- | ----------------------------------------------------------------------- |
+| `name`              | string                                                      | **Yes**  | -           | Plugin name: `repository-s3`, `repository-gcs`, `repository-azure`, `repository-hdfs` |
+| `clientName`        | string                                                      | No       | `default`   | Named client for keystore entries                                       |
+| `credentialsSecret` | [RepositoryPluginCredentials](#repositoryplugincredentials) | No       | -           | Secret containing plugin credentials                                    |
+
+#### RepositoryPluginCredentials
+
+| Field  | Type              | Required | Default | Description                                                                                     |
+| ------ | ----------------- | -------- | ------- | ----------------------------------------------------------------------------------------------- |
+| `name` | string            | **Yes**  | -       | Secret name                                                                                     |
+| `keys` | map[string]string | No       | -       | Custom key mappings. Defaults: S3=`access-key`/`secret-key`, GCS=`credentials-file`, Azure=`account`/`key` |
 
 #### GatewayAPISpec
 
@@ -854,26 +872,36 @@ Manages OpenSearch snapshot repositories for storing backups.
 
 **Short Name:** `osrepo`
 
-| Field        | Type                       | Required | Default | Description                          |
-| ------------ | -------------------------- | -------- | ------- | ------------------------------------ |
-| `clusterRef` | WazuhClusterReference      | **Yes**  | -       | Cluster reference                    |
-| `type`       | string                     | **Yes**  | -       | Repository type: `s3`, `azure`, `fs` |
-| `settings`   | SnapshotRepositorySettings | **Yes**  | -       | Repository settings                  |
-| `verify`     | bool                       | No       | `true`  | Verify repository after creation     |
+| Field        | Type                       | Required | Default | Description                                       |
+| ------------ | -------------------------- | -------- | ------- | ------------------------------------------------- |
+| `clusterRef` | WazuhClusterReference      | **Yes**  | -       | Cluster reference                                 |
+| `type`       | string                     | **Yes**  | -       | Repository type: `s3`, `azure`, `fs`, `gcs`, `hdfs` |
+| `settings`   | SnapshotRepositorySettings | **Yes**  | -       | Repository settings                               |
+| `verify`     | bool                       | No       | `true`  | Verify repository after creation                  |
 
-#### SnapshotRepositorySettings (S3)
+#### SnapshotRepositorySettings
 
-| Field                  | Type                       | Required | Default | Description                      |
-| ---------------------- | -------------------------- | -------- | ------- | -------------------------------- |
-| `bucket`               | string                     | **Yes**  | -       | S3 bucket name                   |
-| `basePath`             | string                     | No       | -       | Path prefix within bucket        |
-| `region`               | string                     | No       | -       | AWS region                       |
-| `endpoint`             | string                     | No       | -       | Custom endpoint (for MinIO)      |
-| `pathStyleAccess`      | bool                       | No       | `false` | Use path-style access (MinIO)    |
-| `compress`             | bool                       | No       | `true`  | Compress snapshot files          |
-| `serverSideEncryption` | bool                       | No       | `false` | Enable S3 server-side encryption |
-| `storageClass`         | string                     | No       | -       | S3 storage class                 |
-| `credentialsSecret`    | CredentialsSecretReference | **Yes**  | -       | Secret containing S3 credentials |
+| Field                  | Type                       | Required | Default     | Description                                                  |
+| ---------------------- | -------------------------- | -------- | ----------- | ------------------------------------------------------------ |
+| `bucket`               | string                     | No       | -           | Bucket name (S3, GCS, Azure)                                 |
+| `basePath`             | string                     | No       | -           | Path prefix within bucket                                    |
+| `region`               | string                     | No       | -           | AWS region (S3)                                              |
+| `endpoint`             | string                     | No       | -           | Custom endpoint (MinIO)                                      |
+| `pathStyleAccess`      | bool                       | No       | `false`     | Use path-style access (MinIO)                                |
+| `compress`             | bool                       | No       | `true`      | Compress snapshot files                                      |
+| `serverSideEncryption` | bool                       | No       | `false`     | Enable S3 server-side encryption                             |
+| `storageClass`         | string                     | No       | -           | S3 storage class                                             |
+| `credentialsSecret`    | CredentialsSecretReference | No       | -           | Secret containing credentials (legacy inline mode)           |
+| `client`               | string                     | No       | `default`   | Named client for keystore-based credentials                  |
+| `useKeystore`          | bool                       | No       | `false`     | Use keystore credentials instead of inline                   |
+| `applicationName`      | string                     | No       | -           | GCS application name                                         |
+| `endpointSuffix`       | string                     | No       | -           | Azure endpoint suffix for sovereign clouds                   |
+| `uri`                  | string                     | No       | -           | HDFS namenode URI (e.g., `hdfs://namenode:8020`)             |
+| `path`                 | string                     | No       | -           | HDFS directory path                                          |
+| `securityPrincipal`    | string                     | No       | -           | HDFS Kerberos principal                                      |
+| `hadoopConf`           | map[string]string          | No       | -           | Extra HDFS Hadoop configuration (prefixed with `conf.`)      |
+| `container`            | string                     | No       | -           | Azure container name                                         |
+| `readonly`             | bool                       | No       | `false`     | Read-only repository                                         |
 
 ### OpenSearchSnapshot
 
@@ -1093,7 +1121,7 @@ See [Filebeat Configuration Guide](./features/filebeat-configuration.md) for det
 
 ### WazuhBackup
 
-Manages scheduled or one-shot backups of Wazuh Manager data to S3/MinIO.
+Manages scheduled or one-shot backups of Wazuh Manager data to S3, GCS, Azure, or HDFS.
 
 **Short Name:** `wbak`
 
@@ -1129,15 +1157,39 @@ Manages scheduled or one-shot backups of Wazuh Manager data to S3/MinIO.
 
 #### BackupStorage
 
-| Field               | Type                       | Required | Default | Description                      |
-| ------------------- | -------------------------- | -------- | ------- | -------------------------------- |
-| `type`              | string                     | **Yes**  | -       | Storage type: `s3`               |
-| `bucket`            | string                     | **Yes**  | -       | S3/MinIO bucket name             |
-| `prefix`            | string                     | No       | -       | Path prefix (supports templates) |
-| `region`            | string                     | No       | -       | AWS region                       |
-| `endpoint`          | string                     | No       | -       | Custom endpoint (for MinIO)      |
-| `forcePathStyle`    | bool                       | No       | `false` | Use path-style access (MinIO)    |
-| `credentialsSecret` | CredentialsSecretReference | **Yes**  | -       | Secret containing credentials    |
+| Field               | Type                                      | Required | Default | Description                                      |
+| ------------------- | ----------------------------------------- | -------- | ------- | ------------------------------------------------ |
+| `type`              | string                                    | **Yes**  | -       | Storage type: `s3`, `gcs`, `azure`, `hdfs`       |
+| `bucket`            | string                                    | No       | -       | Bucket/container name (S3, GCS, Azure)           |
+| `prefix`            | string                                    | No       | -       | Path prefix (supports templates)                 |
+| `region`            | string                                    | No       | -       | AWS region (S3)                                  |
+| `endpoint`          | string                                    | No       | -       | Custom endpoint (MinIO)                          |
+| `forcePathStyle`    | bool                                      | No       | `false` | Use path-style access (MinIO)                    |
+| `credentialsSecret` | CredentialsSecretReference                | No       | -       | Secret containing credentials (optional for GCS WI, HDFS) |
+| `gcs`               | [GCSBackupConfig](#gcsbackupconfig)       | No       | -       | GCS-specific configuration                       |
+| `azure`             | [AzureBackupConfig](#azurebackupconfig)   | No       | -       | Azure-specific configuration                     |
+| `hdfs`              | [HDFSBackupConfig](#hdfsbackupconfig)     | No       | -       | HDFS-specific configuration                      |
+
+#### GCSBackupConfig
+
+| Field     | Type   | Required | Default | Description    |
+| --------- | ------ | -------- | ------- | -------------- |
+| `project` | string | No       | -       | GCP project ID |
+
+#### AzureBackupConfig
+
+| Field            | Type   | Required | Default | Description                          |
+| ---------------- | ------ | -------- | ------- | ------------------------------------ |
+| `container`      | string | No       | -       | Azure Blob Storage container name    |
+| `accountName`    | string | No       | -       | Azure Storage account name           |
+| `endpointSuffix` | string | No       | -       | Azure endpoint suffix (Gov/China)    |
+
+#### HDFSBackupConfig
+
+| Field  | Type   | Required | Default | Description                    |
+| ------ | ------ | -------- | ------- | ------------------------------ |
+| `uri`  | string | **Yes**  | -       | HDFS namenode WebHDFS URI      |
+| `path` | string | **Yes**  | -       | HDFS directory path            |
 
 **Status Fields:**
 
@@ -1150,7 +1202,7 @@ Manages scheduled or one-shot backups of Wazuh Manager data to S3/MinIO.
 
 ### WazuhRestore
 
-Restores Wazuh Manager data from an S3/MinIO backup archive.
+Restores Wazuh Manager data from a backup archive (S3, GCS, Azure, or HDFS).
 
 **Short Name:** `wrest`
 
@@ -1167,12 +1219,15 @@ Restores Wazuh Manager data from an S3/MinIO backup archive.
 
 #### RestoreSource
 
-Either `s3` or `wazuhBackupRef` must be specified:
+Exactly one source must be specified:
 
-| Field            | Type            | Description                         |
-| ---------------- | --------------- | ----------------------------------- |
-| `s3`             | S3RestoreSource | Restore from S3/MinIO directly      |
-| `wazuhBackupRef` | WazuhBackupRef  | Reference to a WazuhBackup resource |
+| Field            | Type                                              | Description                         |
+| ---------------- | ------------------------------------------------- | ----------------------------------- |
+| `s3`             | [S3RestoreSource](#s3restoresource)               | Restore from S3/MinIO               |
+| `gcs`            | [GCSRestoreSource](#gcsrestoresource)             | Restore from GCS                    |
+| `azure`          | [AzureRestoreSource](#azurerestoresource)         | Restore from Azure Blob Storage     |
+| `hdfs`           | [HDFSRestoreSource](#hdfsrestoresource)           | Restore from HDFS                   |
+| `wazuhBackupRef` | [WazuhBackupRef](#wazuhbackupref)                 | Reference to a WazuhBackup resource |
 
 #### S3RestoreSource
 
@@ -1184,6 +1239,33 @@ Either `s3` or `wazuhBackupRef` must be specified:
 | `endpoint`          | string                     | No       | Custom endpoint (for MinIO)   |
 | `forcePathStyle`    | bool                       | No       | Use path-style access (MinIO) |
 | `credentialsSecret` | CredentialsSecretReference | **Yes**  | Secret containing credentials |
+
+#### GCSRestoreSource
+
+| Field               | Type                       | Required | Description                             |
+| ------------------- | -------------------------- | -------- | --------------------------------------- |
+| `bucket`            | string                     | **Yes**  | GCS bucket name                         |
+| `key`               | string                     | **Yes**  | Object key to backup archive            |
+| `project`           | string                     | No       | GCP project ID                          |
+| `credentialsSecret` | CredentialsSecretReference | No       | Credentials (optional for Workload Identity) |
+
+#### AzureRestoreSource
+
+| Field               | Type                       | Required | Description                           |
+| ------------------- | -------------------------- | -------- | ------------------------------------- |
+| `container`         | string                     | **Yes**  | Azure Blob Storage container name     |
+| `key`               | string                     | **Yes**  | Blob key to backup archive            |
+| `accountName`       | string                     | No       | Azure Storage account name            |
+| `endpointSuffix`    | string                     | No       | Azure endpoint suffix (Gov/China)     |
+| `credentialsSecret` | CredentialsSecretReference | No       | Secret containing credentials         |
+
+#### HDFSRestoreSource
+
+| Field  | Type   | Required | Description                |
+| ------ | ------ | -------- | -------------------------- |
+| `uri`  | string | **Yes**  | HDFS namenode WebHDFS URI  |
+| `path` | string | **Yes**  | HDFS directory path        |
+| `key`  | string | **Yes**  | Archive filename           |
 
 #### WazuhBackupRef
 
@@ -1311,8 +1393,12 @@ See `config/samples/` for example manifests:
 
 - `opensearch_v1_opensearchsnapshotrepository_s3.yaml` - AWS S3 repository
 - `opensearch_v1_opensearchsnapshotrepository_minio.yaml` - MinIO repository
+- `opensearch_v1_opensearchsnapshotrepository_gcs.yaml` - GCS + HDFS repositories
 - `opensearch_v1_opensearchsnapshot_manual.yaml` - Manual snapshot trigger
 - `opensearch_v1_opensearchrestore.yaml` - Restore from snapshot
-- `wazuh_v1_wazuhbackup_scheduled.yaml` - Scheduled Wazuh backups
+- `wazuh_v1_wazuhcluster_with_plugins.yaml` - WazuhCluster with repository plugins
+- `wazuh_v1_wazuhbackup_scheduled.yaml` - Scheduled Wazuh backups (S3)
+- `wazuh_v1_wazuhbackup_gcs.yaml` - GCS backup (with Workload Identity variant)
+- `wazuh_v1_wazuhbackup_azure.yaml` - Azure Blob Storage backup
 - `wazuh_v1_wazuhbackup_oneshot.yaml` - One-shot Wazuh backup
 - `wazuh_v1_wazuhrestore.yaml` - Wazuh restore examples

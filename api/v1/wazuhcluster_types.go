@@ -357,6 +357,45 @@ type WazuhIndexerClusterSpec struct {
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
+
+	// RepositoryPlugins defines OpenSearch repository plugins to install automatically
+	// Plugins are installed via init containers and credentials are stored in the OpenSearch keystore
+	// +optional
+	RepositoryPlugins []RepositoryPluginConfig `json:"repositoryPlugins,omitempty"`
+}
+
+// RepositoryPluginConfig defines an OpenSearch repository plugin to install
+type RepositoryPluginConfig struct {
+	// Name is the plugin name
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=repository-s3;repository-gcs;repository-azure;repository-hdfs
+	Name string `json:"name"`
+
+	// ClientName is the named client for keystore settings (e.g., s3.client.<name>.access_key)
+	// +optional
+	// +kubebuilder:default="default"
+	ClientName string `json:"clientName,omitempty"`
+
+	// CredentialsSecret references a Secret containing plugin credentials
+	// When set, credentials are added to the OpenSearch keystore
+	// Not required for GCS Workload Identity or HDFS simple auth
+	// +optional
+	CredentialsSecret *RepositoryPluginCredentials `json:"credentialsSecret,omitempty"`
+}
+
+// RepositoryPluginCredentials references a Secret containing repository plugin credentials
+type RepositoryPluginCredentials struct {
+	// Name is the Secret name
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// Keys maps Secret data keys to credential types
+	// Defaults per plugin if not specified:
+	//   S3: access-key → access_key, secret-key → secret_key
+	//   GCS: credentials-file → JSON service account file
+	//   Azure: account → account name, key → access key
+	// +optional
+	Keys map[string]string `json:"keys,omitempty"`
 }
 
 // WazuhDashboardClusterSpec defines the dashboard configuration (inline in WazuhCluster)

@@ -87,18 +87,20 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, backup *wazuhv1.WazuhB
 		return fmt.Errorf("failed to get WazuhCluster: %w", err)
 	}
 
-	// Validate credentials secret exists
-	credsSecret := &corev1.Secret{}
-	credsKey := types.NamespacedName{
-		Name:      backup.Spec.Storage.CredentialsSecret.Name,
-		Namespace: backup.Namespace,
-	}
-	if err := r.Get(ctx, credsKey, credsSecret); err != nil {
-		if errors.IsNotFound(err) {
-			return r.updateStatus(ctx, backup, wazuhv1.BackupPhaseFailed,
-				fmt.Sprintf("Credentials Secret '%s' not found", backup.Spec.Storage.CredentialsSecret.Name))
+	// Validate credentials secret exists (if specified)
+	if backup.Spec.Storage.CredentialsSecret != nil {
+		credsSecret := &corev1.Secret{}
+		credsKey := types.NamespacedName{
+			Name:      backup.Spec.Storage.CredentialsSecret.Name,
+			Namespace: backup.Namespace,
 		}
-		return fmt.Errorf("failed to get credentials Secret: %w", err)
+		if err := r.Get(ctx, credsKey, credsSecret); err != nil {
+			if errors.IsNotFound(err) {
+				return r.updateStatus(ctx, backup, wazuhv1.BackupPhaseFailed,
+					fmt.Sprintf("Credentials Secret '%s' not found", backup.Spec.Storage.CredentialsSecret.Name))
+			}
+			return fmt.Errorf("failed to get credentials Secret: %w", err)
+		}
 	}
 
 	// Build RBAC resources

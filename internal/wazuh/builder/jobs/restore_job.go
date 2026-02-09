@@ -117,31 +117,124 @@ func (b *RestoreJobBuilder) buildRestorePaths() []string {
 	return paths
 }
 
-// getS3Source returns the S3 source configuration
-func (b *RestoreJobBuilder) getS3Source() *wazuhv1.S3RestoreSource {
-	return b.restore.Spec.Source.S3
+// getStorageType determines the storage type from the restore source
+func (b *RestoreJobBuilder) getStorageType() string {
+	source := b.restore.Spec.Source
+	switch {
+	case source.S3 != nil:
+		return constants.RepositoryTypeS3
+	case source.GCS != nil:
+		return constants.RepositoryTypeGCS
+	case source.Azure != nil:
+		return constants.RepositoryTypeAzure
+	case source.HDFS != nil:
+		return constants.RepositoryTypeHDFS
+	default:
+		return ""
+	}
 }
 
-// buildMcEndpoint returns the S3/MinIO endpoint URL for mc alias
-func (b *RestoreJobBuilder) buildMcEndpoint() string {
-	s3 := b.getS3Source()
-	if s3 == nil {
-		return "https://s3.amazonaws.com"
+// buildRcloneConfig returns the rclone configuration command for the restore source
+func (b *RestoreJobBuilder) buildRcloneConfig() string {
+	source := b.restore.Spec.Source
+
+	if source.S3 != nil {
+		s3 := source.S3
+		endpoint := ""
+		if s3.Endpoint != "" {
+			endpoint = fmt.Sprintf("endpoint=%s ", s3.Endpoint)
+		}
+		region := ""
+		if s3.Region != "" {
+			region = fmt.Sprintf("region=%s ", s3.Region)
+		}
+		forcePathStyle := ""
+		if s3.ForcePathStyle {
+			forcePathStyle = "force_path_style=true "
+		}
+		return fmt.Sprintf(`rclone config create remote s3 env_auth=true %s%s%sprovider=Other`, endpoint, region, forcePathStyle)
 	}
-	if s3.Endpoint != "" {
-		return s3.Endpoint
+
+	if source.GCS != nil {
+		gcs := source.GCS
+		project := ""
+		if gcs.Project != "" {
+			project = fmt.Sprintf("project_number=%s ", gcs.Project)
+		}
+		if gcs.CredentialsSecret != nil {
+			return fmt.Sprintf(`rclone config create remote gcs %sservice_account_file=/mnt/credentials/credentials-file`, project)
+		}
+		return fmt.Sprintf(`rclone config create remote gcs %s`, project)
 	}
-	if s3.Region != "" {
-		return fmt.Sprintf("https://s3.%s.amazonaws.com", s3.Region)
+
+	if source.Azure != nil {
+		azure := source.Azure
+		account := ""
+		if azure.AccountName != "" {
+			account = fmt.Sprintf("account=%s ", azure.AccountName)
+		}
+		endpoint := ""
+		if azure.EndpointSuffix != "" {
+			endpoint = fmt.Sprintf("endpoint_suffix=%s ", azure.EndpointSuffix)
+		}
+		return fmt.Sprintf(`rclone config create remote azureblob %s%senv_auth=true`, account, endpoint)
 	}
-	return "https://s3.amazonaws.com"
+
+	if source.HDFS != nil {
+		return fmt.Sprintf(`rclone config create remote webdav url=%s`, source.HDFS.URI)
+	}
+
+	return `echo "ERROR: No restore source configured"; exit 1`
+}
+
+// buildSourceRemotePath returns the rclone path to download the archive from
+func (b *RestoreJobBuilder) buildSourceRemotePath() string {
+	source := b.restore.Spec.Source
+
+	if source.S3 != nil {
+		return fmt.Sprintf("remote:%s/%s", source.S3.Bucket, source.S3.Key)
+	}
+	if source.GCS != nil {
+		return fmt.Sprintf("remote:%s/%s", source.GCS.Bucket, source.GCS.Key)
+	}
+	if source.Azure != nil {
+		return fmt.Sprintf("remote:%s/%s", source.Azure.Container, source.Azure.Key)
+	}
+	if source.HDFS != nil {
+		return fmt.Sprintf("remote:%s/%s", source.HDFS.Path, source.HDFS.Key)
+	}
+	return ""
+}
+
+// buildArchiveName extracts the archive filename from the source key
+func (b *RestoreJobBuilder) buildArchiveName() string {
+	source := b.restore.Spec.Source
+
+	var key string
+	switch {
+	case source.S3 != nil:
+		key = source.S3.Key
+	case source.GCS != nil:
+		key = source.GCS.Key
+	case source.Azure != nil:
+		key = source.Azure.Key
+	case source.HDFS != nil:
+		key = source.HDFS.Key
+	}
+
+	// Extract filename from path
+	parts := strings.Split(key, "/")
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return "backup.tar.gz"
 }
 
 // buildRestoreScript builds the shell script for the restore job
 func (b *RestoreJobBuilder) buildRestoreScript() string {
-	s3 := b.getS3Source()
-	if s3 == nil {
-		return "echo 'ERROR: No S3 source configured'; exit 1"
+	storageType := b.getStorageType()
+	if storageType == "" {
+		return `echo "ERROR: No restore source configured"; exit 1`
 	}
 
 	paths := b.buildRestorePaths()
@@ -168,7 +261,11 @@ func (b *RestoreJobBuilder) buildRestoreScript() string {
 		restartAfterRestore = "true"
 	}
 
-	mcEndpoint := b.buildMcEndpoint()
+	rcloneConfig := b.buildRcloneConfig()
+	sourcePath := b.buildSourceRemotePath()
+	archiveName := b.buildArchiveName()
+	// Get the directory containing the archive for pre-restore backup upload
+	sourceDir := strings.TrimSuffix(sourcePath, "/"+archiveName)
 
 	script := fmt.Sprintf(`#!/bin/sh
 set -e
@@ -178,6 +275,7 @@ echo "Wazuh Restore Job"
 echo "Cluster: %s"
 echo "Namespace: %s"
 echo "Restore Name: %s"
+echo "Storage Type: %s"
 echo "Started at: $(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)"
 echo "========================================"
 
@@ -185,21 +283,20 @@ echo "========================================"
 RESTORE_NAME="%s"
 CLUSTER_NAME="%s"
 NAMESPACE="%s"
-S3_BUCKET="%s"
-S3_KEY="%s"
 PRE_RESTORE_BACKUP="%s"
 STOP_MANAGER="%s"
 RESTART_AFTER_RESTORE="%s"
 TEMP_DIR="/tmp/restore"
+ARCHIVE_NAME="%s"
 
-echo "Source: s3/${S3_BUCKET}/${S3_KEY}"
+echo "Source: %s"
 echo "Restore paths: %s"
 echo "Pre-restore backup: ${PRE_RESTORE_BACKUP}"
 echo "Stop manager: ${STOP_MANAGER}"
 echo "Restart after: ${RESTART_AFTER_RESTORE}"
 
-# Configure mc alias for S3/MinIO
-mc alias set s3 %s ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY} --api S3v4
+# Configure rclone remote
+%s
 
 # Get manager pod name (master or first manager)
 MANAGER_POD=$(kubectl get pods -n ${NAMESPACE} -l app.kubernetes.io/component=wazuh-manager,app.kubernetes.io/instance=${CLUSTER_NAME} -o jsonpath='{.items[0].metadata.name}')
@@ -214,10 +311,9 @@ echo "Using manager pod: ${MANAGER_POD}"
 # Create temp directory
 mkdir -p ${TEMP_DIR}
 
-# Download backup archive from S3
-echo "Downloading backup from S3..."
-ARCHIVE_NAME=$(basename ${S3_KEY})
-mc cp s3/${S3_BUCKET}/${S3_KEY} ${TEMP_DIR}/${ARCHIVE_NAME}
+# Download backup archive
+echo "Downloading backup archive..."
+rclone copy %s ${TEMP_DIR}/
 
 echo "Downloaded: ${ARCHIVE_NAME}"
 ls -lh ${TEMP_DIR}/${ARCHIVE_NAME}
@@ -236,11 +332,10 @@ if [ "${PRE_RESTORE_BACKUP}" = "true" ]; then
     kubectl exec -n ${NAMESPACE} ${MANAGER_POD} -c wazuh-manager -- sh -c "cd /var/ossec && tar -czf /tmp/${PRE_RESTORE_ARCHIVE} %s 2>/dev/null || true"
 
     # Upload pre-restore backup
-    PRE_RESTORE_KEY=$(dirname ${S3_KEY})/pre-restore/${PRE_RESTORE_ARCHIVE}
     kubectl cp ${NAMESPACE}/${MANAGER_POD}:/tmp/${PRE_RESTORE_ARCHIVE} ${TEMP_DIR}/${PRE_RESTORE_ARCHIVE} -c wazuh-manager
-    mc cp ${TEMP_DIR}/${PRE_RESTORE_ARCHIVE} s3/${S3_BUCKET}/${PRE_RESTORE_KEY}
+    rclone copy ${TEMP_DIR}/${PRE_RESTORE_ARCHIVE} %s/pre-restore/
 
-    echo "Pre-restore backup saved to: s3/${S3_BUCKET}/${PRE_RESTORE_KEY}"
+    echo "Pre-restore backup saved"
     kubectl exec -n ${NAMESPACE} ${MANAGER_POD} -c wazuh-manager -- rm -f /tmp/${PRE_RESTORE_ARCHIVE} || true
 fi
 
@@ -274,7 +369,7 @@ fi
 
 echo "========================================"
 echo "Restore completed successfully!"
-echo "Source: s3/${S3_BUCKET}/${S3_KEY}"
+echo "Source: %s"
 echo "Restored to: ${MANAGER_POD}"
 echo "Finished at: $(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)"
 echo "========================================"
@@ -282,18 +377,22 @@ echo "========================================"
 		b.clusterName,
 		b.namespace,
 		b.restore.Name,
+		storageType,
 		b.restore.Name,
 		b.clusterName,
 		b.namespace,
-		s3.Bucket,
-		s3.Key,
 		preRestoreBackup,
 		stopManager,
 		restartAfterRestore,
+		archiveName,
+		sourcePath,
 		strings.Join(paths, ", "),
-		mcEndpoint,
+		rcloneConfig,
+		sourcePath,
 		strings.Join(tarPaths, " "),
+		sourceDir,
 		strings.Join(tarPaths, " "),
+		sourcePath,
 	)
 
 	return script
@@ -337,52 +436,119 @@ func (b *RestoreJobBuilder) getResources() corev1.ResourceRequirements {
 	}
 }
 
-// buildEnvVars returns environment variables for S3 credentials
+// buildEnvVars returns environment variables based on restore source
 func (b *RestoreJobBuilder) buildEnvVars() []corev1.EnvVar {
-	s3 := b.getS3Source()
-	if s3 == nil {
-		return nil
-	}
+	var envVars []corev1.EnvVar
+	source := b.restore.Spec.Source
 
-	creds := s3.CredentialsSecret
-	accessKeyKey := creds.AccessKeyKey
-	secretKeyKey := creds.SecretKeyKey
+	envVars = append(envVars, corev1.EnvVar{
+		Name:  "RCLONE_CONFIG",
+		Value: "/tmp/.rclone.conf",
+	})
 
-	if accessKeyKey == "" {
-		accessKeyKey = constants.DefaultAccessKeyKey
-	}
-	if secretKeyKey == "" {
-		secretKeyKey = constants.DefaultSecretKeyKey
-	}
-
-	return []corev1.EnvVar{
-		{
-			Name:  "MC_CONFIG_DIR",
-			Value: "/tmp/.mc",
-		},
-		{
-			Name: "AWS_ACCESS_KEY_ID",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: creds.Name,
+	if source.S3 != nil {
+		creds := source.S3.CredentialsSecret
+		accessKeyKey := creds.AccessKeyKey
+		secretKeyKey := creds.SecretKeyKey
+		if accessKeyKey == "" {
+			accessKeyKey = constants.DefaultAccessKeyKey
+		}
+		if secretKeyKey == "" {
+			secretKeyKey = constants.DefaultSecretKeyKey
+		}
+		envVars = append(envVars,
+			corev1.EnvVar{
+				Name: "AWS_ACCESS_KEY_ID",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: creds.Name},
+						Key:                  accessKeyKey,
 					},
-					Key: accessKeyKey,
 				},
 			},
-		},
-		{
-			Name: "AWS_SECRET_ACCESS_KEY",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: creds.Name,
+			corev1.EnvVar{
+				Name: "AWS_SECRET_ACCESS_KEY",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: creds.Name},
+						Key:                  secretKeyKey,
 					},
-					Key: secretKeyKey,
 				},
 			},
-		},
+		)
 	}
+
+	if source.Azure != nil && source.Azure.CredentialsSecret != nil {
+		creds := source.Azure.CredentialsSecret
+		accessKeyKey := creds.AccessKeyKey
+		secretKeyKey := creds.SecretKeyKey
+		if accessKeyKey == "" {
+			accessKeyKey = constants.DefaultAccessKeyKey
+		}
+		if secretKeyKey == "" {
+			secretKeyKey = constants.DefaultSecretKeyKey
+		}
+		envVars = append(envVars,
+			corev1.EnvVar{
+				Name: "AZURE_STORAGE_ACCOUNT",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: creds.Name},
+						Key:                  accessKeyKey,
+					},
+				},
+			},
+			corev1.EnvVar{
+				Name: "AZURE_STORAGE_KEY",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: creds.Name},
+						Key:                  secretKeyKey,
+					},
+				},
+			},
+		)
+	}
+
+	// GCS uses mounted credentials file, HDFS needs no credentials
+	return envVars
+}
+
+// buildVolumes returns additional volumes needed for credentials
+func (b *RestoreJobBuilder) buildVolumes() []corev1.Volume {
+	source := b.restore.Spec.Source
+
+	if source.GCS != nil && source.GCS.CredentialsSecret != nil {
+		return []corev1.Volume{
+			{
+				Name: "gcs-credentials",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: source.GCS.CredentialsSecret.Name,
+					},
+				},
+			},
+		}
+	}
+
+	return nil
+}
+
+// buildVolumeMounts returns additional volume mounts for credentials
+func (b *RestoreJobBuilder) buildVolumeMounts() []corev1.VolumeMount {
+	source := b.restore.Spec.Source
+
+	if source.GCS != nil && source.GCS.CredentialsSecret != nil {
+		return []corev1.VolumeMount{
+			{
+				Name:      "gcs-credentials",
+				MountPath: "/mnt/credentials",
+				ReadOnly:  true,
+			},
+		}
+	}
+
+	return nil
 }
 
 // BuildJob creates the restore Job
@@ -392,6 +558,24 @@ func (b *RestoreJobBuilder) BuildJob() *batchv1.Job {
 
 	backoffLimit := int32(1) // Restore should not retry automatically
 	ttlSeconds := int32(86400)
+
+	container := corev1.Container{
+		Name:            "restore",
+		Image:           b.getImage(),
+		ImagePullPolicy: b.getImagePullPolicy(),
+		Command:         []string{"/bin/sh", "-c"},
+		Args:            []string{script},
+		Env:             b.buildEnvVars(),
+		Resources:       b.getResources(),
+		VolumeMounts:    b.buildVolumeMounts(),
+		SecurityContext: &corev1.SecurityContext{
+			AllowPrivilegeEscalation: func() *bool { b := false; return &b }(),
+			ReadOnlyRootFilesystem:   func() *bool { b := false; return &b }(),
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+		},
+	}
 
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
@@ -417,24 +601,8 @@ func (b *RestoreJobBuilder) BuildJob() *batchv1.Job {
 							Type: corev1.SeccompProfileTypeRuntimeDefault,
 						},
 					},
-					Containers: []corev1.Container{
-						{
-							Name:            "restore",
-							Image:           b.getImage(),
-							ImagePullPolicy: b.getImagePullPolicy(),
-							Command:         []string{"/bin/sh", "-c"},
-							Args:            []string{script},
-							Env:             b.buildEnvVars(),
-							Resources:       b.getResources(),
-							SecurityContext: &corev1.SecurityContext{
-								AllowPrivilegeEscalation: func() *bool { b := false; return &b }(),
-								ReadOnlyRootFilesystem:   func() *bool { b := false; return &b }(),
-								Capabilities: &corev1.Capabilities{
-									Drop: []corev1.Capability{"ALL"},
-								},
-							},
-						},
-					},
+					Containers: []corev1.Container{container},
+					Volumes:    b.buildVolumes(),
 				},
 			},
 		},

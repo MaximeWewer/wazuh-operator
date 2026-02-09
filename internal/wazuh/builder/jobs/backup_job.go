@@ -118,16 +118,78 @@ func (b *BackupJobBuilder) buildBackupPaths() []string {
 	return paths
 }
 
-// buildMcEndpoint returns the S3/MinIO endpoint URL for mc alias
-func (b *BackupJobBuilder) buildMcEndpoint() string {
+// buildRcloneConfig returns the rclone configuration commands for the storage backend
+func (b *BackupJobBuilder) buildRcloneConfig() string {
 	storage := b.backup.Spec.Storage
-	if storage.Endpoint != "" {
-		return storage.Endpoint
+
+	switch storage.Type {
+	case constants.RepositoryTypeS3:
+		endpoint := ""
+		if storage.Endpoint != "" {
+			endpoint = fmt.Sprintf("endpoint=%s ", storage.Endpoint)
+		}
+		region := ""
+		if storage.Region != "" {
+			region = fmt.Sprintf("region=%s ", storage.Region)
+		}
+		forcePathStyle := ""
+		if storage.ForcePathStyle {
+			forcePathStyle = "force_path_style=true "
+		}
+		return fmt.Sprintf(`rclone config create remote s3 env_auth=true %s%s%sprovider=Other`, endpoint, region, forcePathStyle)
+
+	case constants.RepositoryTypeGCS:
+		project := ""
+		if storage.GCS != nil && storage.GCS.Project != "" {
+			project = fmt.Sprintf("project_number=%s ", storage.GCS.Project)
+		}
+		if storage.CredentialsSecret != nil {
+			return fmt.Sprintf(`rclone config create remote gcs %sservice_account_file=/mnt/credentials/credentials-file`, project)
+		}
+		// Workload Identity: no explicit credentials
+		return fmt.Sprintf(`rclone config create remote gcs %s`, project)
+
+	case constants.RepositoryTypeAzure:
+		account := ""
+		if storage.Azure != nil && storage.Azure.AccountName != "" {
+			account = fmt.Sprintf("account=%s ", storage.Azure.AccountName)
+		}
+		endpoint := ""
+		if storage.Azure != nil && storage.Azure.EndpointSuffix != "" {
+			endpoint = fmt.Sprintf("endpoint_suffix=%s ", storage.Azure.EndpointSuffix)
+		}
+		return fmt.Sprintf(`rclone config create remote azureblob %s%senv_auth=true`, account, endpoint)
+
+	case constants.RepositoryTypeHDFS:
+		if storage.HDFS != nil {
+			return fmt.Sprintf(`rclone config create remote webdav url=%s`, storage.HDFS.URI)
+		}
+		return `echo "ERROR: HDFS config is required for hdfs storage type"; exit 1`
+
+	default:
+		return fmt.Sprintf(`echo "ERROR: Unknown storage type: %s"; exit 1`, storage.Type)
 	}
-	if storage.Region != "" {
-		return fmt.Sprintf("https://s3.%s.amazonaws.com", storage.Region)
+}
+
+// buildRemotePath returns the rclone remote path for upload
+func (b *BackupJobBuilder) buildRemotePath() string {
+	storage := b.backup.Spec.Storage
+
+	switch storage.Type {
+	case constants.RepositoryTypeHDFS:
+		if storage.HDFS != nil {
+			return fmt.Sprintf("remote:%s/${S3_PREFIX}", storage.HDFS.Path)
+		}
+		return "remote:/${S3_PREFIX}"
+	case constants.RepositoryTypeAzure:
+		container := storage.Bucket
+		if storage.Azure != nil && storage.Azure.Container != "" {
+			container = storage.Azure.Container
+		}
+		return fmt.Sprintf("remote:%s/${S3_PREFIX}", container)
+	default:
+		return fmt.Sprintf("remote:%s/${S3_PREFIX}", storage.Bucket)
 	}
-	return "https://s3.amazonaws.com"
 }
 
 // buildBackupScript builds the shell script for the backup job
@@ -149,7 +211,8 @@ func (b *BackupJobBuilder) buildBackupScript() string {
 		prefix = "{{ .ClusterName }}/{{ .Namespace }}"
 	}
 
-	mcEndpoint := b.buildMcEndpoint()
+	rcloneConfig := b.buildRcloneConfig()
+	remotePath := b.buildRemotePath()
 
 	script := fmt.Sprintf(`#!/bin/sh
 set -e
@@ -159,6 +222,7 @@ echo "Wazuh Backup Job"
 echo "Cluster: %s"
 echo "Namespace: %s"
 echo "Backup Name: %s"
+echo "Storage Type: %s"
 echo "Started at: $(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)"
 echo "========================================"
 
@@ -169,18 +233,16 @@ NAMESPACE="%s"
 TIMESTAMP=$(date -u +%%Y%%m%%d-%%H%%M%%S)
 ARCHIVE_NAME="${BACKUP_NAME}-${TIMESTAMP}.tar.gz"
 TEMP_DIR="/tmp/backup"
-S3_BUCKET="%s"
 S3_PREFIX="%s"
 
 # Resolve prefix template
 S3_PREFIX=$(echo "$S3_PREFIX" | sed "s/{{ .ClusterName }}/${CLUSTER_NAME}/g" | sed "s/{{ .Namespace }}/${NAMESPACE}/g" | sed "s/{{ .Date }}/${TIMESTAMP}/g")
 
 echo "Backup paths: %s"
-echo "S3 bucket: ${S3_BUCKET}"
-echo "S3 prefix: ${S3_PREFIX}"
+echo "Remote prefix: ${S3_PREFIX}"
 
-# Configure mc alias for S3/MinIO
-mc alias set s3 %s ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY} --api S3v4
+# Configure rclone remote
+%s
 
 # Create temp directory
 mkdir -p ${TEMP_DIR}
@@ -207,13 +269,13 @@ kubectl cp ${NAMESPACE}/${MANAGER_POD}:/tmp/${ARCHIVE_NAME} ${TEMP_DIR}/${ARCHIV
 BACKUP_SIZE=$(ls -lh ${TEMP_DIR}/${ARCHIVE_NAME} | awk '{print $5}')
 echo "Backup size: ${BACKUP_SIZE}"
 
-# Upload to S3
-echo "Uploading to S3..."
-mc cp ${TEMP_DIR}/${ARCHIVE_NAME} s3/${S3_BUCKET}/${S3_PREFIX}/${ARCHIVE_NAME}
+# Upload via rclone
+echo "Uploading backup..."
+rclone copy ${TEMP_DIR}/${ARCHIVE_NAME} %s
 
 # Verify upload
 echo "Verifying upload..."
-mc ls s3/${S3_BUCKET}/${S3_PREFIX}/${ARCHIVE_NAME}
+rclone ls %s/${ARCHIVE_NAME}
 
 # Cleanup temp archive on manager pod
 echo "Cleaning up temporary files..."
@@ -224,7 +286,7 @@ rm -rf ${TEMP_DIR}
 
 echo "========================================"
 echo "Backup completed successfully!"
-echo "Location: s3/${S3_BUCKET}/${S3_PREFIX}/${ARCHIVE_NAME}"
+echo "Location: %s/${ARCHIVE_NAME}"
 echo "Size: ${BACKUP_SIZE}"
 echo "Finished at: $(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)"
 echo "========================================"
@@ -232,14 +294,17 @@ echo "========================================"
 		b.clusterName,
 		b.namespace,
 		b.backup.Name,
+		storage.Type,
 		b.backup.Name,
 		b.clusterName,
 		b.namespace,
-		storage.Bucket,
 		prefix,
 		strings.Join(paths, ", "),
-		mcEndpoint,
+		rcloneConfig,
 		strings.Join(tarPaths, " "),
+		remotePath,
+		remotePath,
+		remotePath,
 	)
 
 	return script
@@ -283,12 +348,25 @@ func (b *BackupJobBuilder) getResources() corev1.ResourceRequirements {
 	}
 }
 
-// buildEnvVars returns environment variables for S3 credentials
+// buildEnvVars returns environment variables based on storage backend
 func (b *BackupJobBuilder) buildEnvVars() []corev1.EnvVar {
-	creds := b.backup.Spec.Storage.CredentialsSecret
+	storage := b.backup.Spec.Storage
+
+	var envVars []corev1.EnvVar
+
+	// Rclone config directory
+	envVars = append(envVars, corev1.EnvVar{
+		Name:  "RCLONE_CONFIG",
+		Value: "/tmp/.rclone.conf",
+	})
+
+	if storage.CredentialsSecret == nil {
+		return envVars
+	}
+
+	creds := storage.CredentialsSecret
 	accessKeyKey := creds.AccessKeyKey
 	secretKeyKey := creds.SecretKeyKey
-
 	if accessKeyKey == "" {
 		accessKeyKey = constants.DefaultAccessKeyKey
 	}
@@ -296,33 +374,133 @@ func (b *BackupJobBuilder) buildEnvVars() []corev1.EnvVar {
 		secretKeyKey = constants.DefaultSecretKeyKey
 	}
 
-	return []corev1.EnvVar{
-		{
-			Name:  "MC_CONFIG_DIR",
-			Value: "/tmp/.mc",
-		},
-		{
-			Name: "AWS_ACCESS_KEY_ID",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: creds.Name,
+	switch storage.Type {
+	case constants.RepositoryTypeS3:
+		envVars = append(envVars,
+			corev1.EnvVar{
+				Name: "AWS_ACCESS_KEY_ID",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: creds.Name},
+						Key:                  accessKeyKey,
 					},
-					Key: accessKeyKey,
 				},
 			},
-		},
-		{
-			Name: "AWS_SECRET_ACCESS_KEY",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: creds.Name,
+			corev1.EnvVar{
+				Name: "AWS_SECRET_ACCESS_KEY",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: creds.Name},
+						Key:                  secretKeyKey,
 					},
-					Key: secretKeyKey,
 				},
 			},
+		)
+
+	case constants.RepositoryTypeAzure:
+		envVars = append(envVars,
+			corev1.EnvVar{
+				Name: "AZURE_STORAGE_ACCOUNT",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: creds.Name},
+						Key:                  accessKeyKey,
+					},
+				},
+			},
+			corev1.EnvVar{
+				Name: "AZURE_STORAGE_KEY",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: creds.Name},
+						Key:                  secretKeyKey,
+					},
+				},
+			},
+		)
+
+	case constants.RepositoryTypeGCS:
+		// GCS uses a credentials file mounted as a volume, not env vars
+		// (unless using Workload Identity, which needs no credentials)
+
+	case constants.RepositoryTypeHDFS:
+		// HDFS typically uses no credentials for backup jobs
+	}
+
+	return envVars
+}
+
+// buildVolumes returns additional volumes needed for credentials
+func (b *BackupJobBuilder) buildVolumes() []corev1.Volume {
+	storage := b.backup.Spec.Storage
+
+	// GCS needs a volume mount for the service account JSON file
+	if storage.Type == constants.RepositoryTypeGCS && storage.CredentialsSecret != nil {
+		return []corev1.Volume{
+			{
+				Name: "gcs-credentials",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: storage.CredentialsSecret.Name,
+					},
+				},
+			},
+		}
+	}
+
+	return nil
+}
+
+// buildVolumeMounts returns additional volume mounts for credentials
+func (b *BackupJobBuilder) buildVolumeMounts() []corev1.VolumeMount {
+	storage := b.backup.Spec.Storage
+
+	if storage.Type == constants.RepositoryTypeGCS && storage.CredentialsSecret != nil {
+		return []corev1.VolumeMount{
+			{
+				Name:      "gcs-credentials",
+				MountPath: "/mnt/credentials",
+				ReadOnly:  true,
+			},
+		}
+	}
+
+	return nil
+}
+
+// buildPodSpec creates the common PodSpec for backup jobs
+func (b *BackupJobBuilder) buildPodSpec(script string) corev1.PodSpec {
+	container := corev1.Container{
+		Name:            "backup",
+		Image:           b.getImage(),
+		ImagePullPolicy: b.getImagePullPolicy(),
+		Command:         []string{"/bin/sh", "-c"},
+		Args:            []string{script},
+		Env:             b.buildEnvVars(),
+		Resources:       b.getResources(),
+		VolumeMounts:    b.buildVolumeMounts(),
+		SecurityContext: &corev1.SecurityContext{
+			AllowPrivilegeEscalation: func() *bool { b := false; return &b }(),
+			ReadOnlyRootFilesystem:   func() *bool { b := false; return &b }(),
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
 		},
+	}
+
+	return corev1.PodSpec{
+		ServiceAccountName: b.serviceAccountName(),
+		RestartPolicy:      corev1.RestartPolicyOnFailure,
+		SecurityContext: &corev1.PodSecurityContext{
+			RunAsNonRoot: func() *bool { b := true; return &b }(),
+			RunAsUser:    func() *int64 { u := int64(1000); return &u }(),
+			FSGroup:      func() *int64 { g := int64(1000); return &g }(),
+			SeccompProfile: &corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			},
+		},
+		Containers: []corev1.Container{container},
+		Volumes:    b.buildVolumes(),
 	}
 }
 
@@ -347,36 +525,7 @@ func (b *BackupJobBuilder) BuildJob() *batchv1.Job {
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: labels,
 				},
-				Spec: corev1.PodSpec{
-					ServiceAccountName: b.serviceAccountName(),
-					RestartPolicy:      corev1.RestartPolicyOnFailure,
-					SecurityContext: &corev1.PodSecurityContext{
-						RunAsNonRoot: func() *bool { b := true; return &b }(),
-						RunAsUser:    func() *int64 { u := int64(1000); return &u }(),
-						FSGroup:      func() *int64 { g := int64(1000); return &g }(),
-						SeccompProfile: &corev1.SeccompProfile{
-							Type: corev1.SeccompProfileTypeRuntimeDefault,
-						},
-					},
-					Containers: []corev1.Container{
-						{
-							Name:            "backup",
-							Image:           b.getImage(),
-							ImagePullPolicy: b.getImagePullPolicy(),
-							Command:         []string{"/bin/sh", "-c"},
-							Args:            []string{script},
-							Env:             b.buildEnvVars(),
-							Resources:       b.getResources(),
-							SecurityContext: &corev1.SecurityContext{
-								AllowPrivilegeEscalation: func() *bool { b := false; return &b }(),
-								ReadOnlyRootFilesystem:   func() *bool { b := false; return &b }(),
-								Capabilities: &corev1.Capabilities{
-									Drop: []corev1.Capability{"ALL"},
-								},
-							},
-						},
-					},
-				},
+				Spec: b.buildPodSpec(script),
 			},
 		},
 	}
@@ -413,36 +562,7 @@ func (b *BackupJobBuilder) BuildCronJob() *batchv1.CronJob {
 						ObjectMeta: metav1.ObjectMeta{
 							Labels: labels,
 						},
-						Spec: corev1.PodSpec{
-							ServiceAccountName: b.serviceAccountName(),
-							RestartPolicy:      corev1.RestartPolicyOnFailure,
-							SecurityContext: &corev1.PodSecurityContext{
-								RunAsNonRoot: func() *bool { b := true; return &b }(),
-								RunAsUser:    func() *int64 { u := int64(1000); return &u }(),
-								FSGroup:      func() *int64 { g := int64(1000); return &g }(),
-								SeccompProfile: &corev1.SeccompProfile{
-									Type: corev1.SeccompProfileTypeRuntimeDefault,
-								},
-							},
-							Containers: []corev1.Container{
-								{
-									Name:            "backup",
-									Image:           b.getImage(),
-									ImagePullPolicy: b.getImagePullPolicy(),
-									Command:         []string{"/bin/sh", "-c"},
-									Args:            []string{script},
-									Env:             b.buildEnvVars(),
-									Resources:       b.getResources(),
-									SecurityContext: &corev1.SecurityContext{
-										AllowPrivilegeEscalation: func() *bool { b := false; return &b }(),
-										ReadOnlyRootFilesystem:   func() *bool { b := false; return &b }(),
-										Capabilities: &corev1.Capabilities{
-											Drop: []corev1.Capability{"ALL"},
-										},
-									},
-								},
-							},
-						},
+						Spec: b.buildPodSpec(script),
 					},
 				},
 			},

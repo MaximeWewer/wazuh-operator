@@ -137,6 +137,14 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 		}
 	}
 
+	// Reload secure settings if using keystore-backed credentials
+	if repo.Spec.Settings.UseKeystore {
+		log.Info("Reloading secure settings for keystore-backed repository", "name", repo.Name)
+		if err := snapshotsAPI.ReloadSecureSettings(ctx); err != nil {
+			log.Error(err, "Failed to reload secure settings, repository may not have access to credentials")
+		}
+	}
+
 	// Verify repository if enabled
 	verified := false
 	if repo.Spec.Verify {
@@ -254,6 +262,11 @@ func (r *SnapshotRepositoryReconciler) buildRepositorySettings(ctx context.Conte
 		settings["readonly"] = true
 	}
 
+	// Set client name for keystore-backed repositories
+	if spec.Client != "" && spec.Client != "default" {
+		settings["client"] = spec.Client
+	}
+
 	// Type-specific settings
 	switch repo.Spec.Type {
 	case constants.RepositoryTypeS3:
@@ -262,6 +275,9 @@ func (r *SnapshotRepositoryReconciler) buildRepositorySettings(ctx context.Conte
 		}
 		if spec.Endpoint != "" {
 			settings["endpoint"] = spec.Endpoint
+		}
+		if spec.Protocol != "" {
+			settings["protocol"] = spec.Protocol
 		}
 		if spec.PathStyleAccess {
 			settings["path_style_access"] = true
@@ -285,10 +301,33 @@ func (r *SnapshotRepositoryReconciler) buildRepositorySettings(ctx context.Conte
 		if spec.Container != "" {
 			settings["container"] = spec.Container
 		}
+		if spec.EndpointSuffix != "" {
+			settings["endpoint_suffix"] = spec.EndpointSuffix
+		}
+
+	case constants.RepositoryTypeGCS:
+		if spec.ApplicationName != "" {
+			settings["application_name"] = spec.ApplicationName
+		}
+
+	case constants.RepositoryTypeHDFS:
+		if spec.URI != "" {
+			settings["uri"] = spec.URI
+		}
+		if spec.Path != "" {
+			settings["path"] = spec.Path
+		}
+		if spec.SecurityPrincipal != "" {
+			settings["security.principal"] = spec.SecurityPrincipal
+		}
+		for k, v := range spec.HadoopConf {
+			settings["conf."+k] = v
+		}
 	}
 
-	// Load credentials from Secret if specified
-	if spec.CredentialsSecret != nil {
+	// Load credentials from Secret if specified and keystore is NOT being used
+	// When UseKeystore is true, credentials are in the OpenSearch keystore (populated by init container)
+	if spec.CredentialsSecret != nil && !spec.UseKeystore {
 		accessKey, secretKey, err := r.loadCredentials(ctx, repo.Namespace, spec.CredentialsSecret)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load credentials: %w", err)

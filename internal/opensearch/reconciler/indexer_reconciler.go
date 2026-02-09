@@ -895,6 +895,22 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		extraContainers = cluster.Spec.Indexer.ExtraContainers
 	}
 
+	// Convert repository plugins for hash computation
+	var repoPluginsHash []patch.RepositoryPluginHashInput
+	if cluster.Spec.Indexer != nil {
+		for _, p := range cluster.Spec.Indexer.RepositoryPlugins {
+			secretName := ""
+			if p.CredentialsSecret != nil {
+				secretName = p.CredentialsSecret.Name
+			}
+			repoPluginsHash = append(repoPluginsHash, patch.RepositoryPluginHashInput{
+				Name:              p.Name,
+				ClientName:        p.ClientName,
+				CredentialsSecret: secretName,
+			})
+		}
+	}
+
 	// Compute spec hash for change detection (includes all configurable fields)
 	specHash, err := patch.ComputeIndexerSpecHashFull(patch.IndexerSpecInput{
 		Replicas:                  replicas,
@@ -917,6 +933,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		ExtraInitContainers:       extraInitContainers,
 		ExtraContainers:           extraContainers,
 		MonitoringEnabled:         monitoringEnabled,
+		RepositoryPlugins:         repoPluginsHash,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute indexer spec hash, proceeding without spec hash tracking")

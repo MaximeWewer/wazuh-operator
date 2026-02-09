@@ -4,10 +4,10 @@ The Wazuh Operator provides comprehensive backup and restore capabilities for bo
 
 ## Overview
 
-| Component         | Backup Method           | CRDs                                                                                          | Storage               |
-| ----------------- | ----------------------- | --------------------------------------------------------------------------------------------- | --------------------- |
-| **OpenSearch**    | Native Snapshot API     | OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchSnapshotPolicy, OpenSearchRestore | S3, MinIO, Azure, NFS |
-| **Wazuh Manager** | File-based tar archives | WazuhBackup, WazuhRestore                                                                     | S3, MinIO             |
+| Component         | Backup Method           | CRDs                                                                                          | Storage                             |
+| ----------------- | ----------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------- |
+| **OpenSearch**    | Native Snapshot API     | OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchSnapshotPolicy, OpenSearchRestore | S3, MinIO, GCS, Azure, HDFS, NFS    |
+| **Wazuh Manager** | File-based tar archives | WazuhBackup, WazuhRestore                                                                     | S3, MinIO, GCS, Azure, HDFS         |
 
 ## OpenSearch Backups
 
@@ -15,65 +15,60 @@ OpenSearch backups use the native [Snapshot API](https://opensearch.org/docs/lat
 
 ### Prerequisites
 
-#### 1. Install the repository-s3 plugin
+#### 1. Install repository plugins
 
-The `repository-s3` plugin must be installed on all indexer nodes. Add an init container to your WazuhCluster spec:
-
-> **Important:** Use the same `wazuh/wazuh-indexer` image as your indexer containers. The plugin paths are `/usr/share/wazuh-indexer/` (not `/usr/share/opensearch/`).
+The operator can automatically install OpenSearch repository plugins and configure the keystore. Add `repositoryPlugins` to your WazuhCluster spec:
 
 ```yaml
 spec:
   indexer:
-    # Required: allow insecure settings for S3 credential passthrough
-    javaOpts: "-Xms512m -Xmx512m -Dopensearch.allow_insecure_settings=true"
-    extraInitContainers:
-      - name: install-repository-s3
-        image: wazuh/wazuh-indexer:4.14.1 # Must match your Wazuh version
-        securityContext:
-          runAsUser: 0 # Required to create /etc/sysconfig
-        env:
-          - name: OPENSEARCH_PATH_CONF
-            value: /usr/share/wazuh-indexer/config
-        command:
-          - sh
-          - -c
-          - |
-            # Create required sysconfig file (wazuh-indexer entrypoint expects it)
-            mkdir -p /etc/sysconfig
-            touch /etc/sysconfig/wazuh-indexer
-            # Install the S3 repository plugin
-            /usr/share/wazuh-indexer/bin/opensearch-plugin install --batch repository-s3
-            # Copy plugin files to shared volume
-            cp -r /usr/share/wazuh-indexer/plugins/repository-s3/* /mnt/plugins/
-        volumeMounts:
-          - name: s3-plugin
-            mountPath: /mnt/plugins
-    extraVolumes:
-      - name: s3-plugin
-        emptyDir: {}
-    extraVolumeMounts:
-      - name: s3-plugin
-        mountPath: /usr/share/wazuh-indexer/plugins/repository-s3
+    repositoryPlugins:
+      - name: repository-s3
+        clientName: default
+        credentialsSecret:
+          name: s3-credentials
 ```
 
-**Why these settings are needed:**
+This creates two init containers on every indexer pod:
 
-- `securityContext.runAsUser: 0` — The wazuh-indexer image expects `/etc/sysconfig/wazuh-indexer` to exist. The init container must run as root to create it.
-- `OPENSEARCH_PATH_CONF` — Required by the plugin installer to locate the OpenSearch configuration directory.
-- `allow_insecure_settings=true` — The operator passes S3 credentials via the repository API (access_key/secret_key). Without this JVM flag, OpenSearch rejects inline credentials.
+1. **install-repository-plugins** — Installs the plugin and persists it to the data PVC
+2. **setup-keystore** — Creates the OpenSearch keystore with credentials from the referenced Secret
 
-#### 2. Configure S3/MinIO credentials
+No `allow_insecure_settings` or manual init containers needed. See [Repository Plugins & Keystore](repository-plugins.md) for full details.
 
-Create a Secret with your S3 or MinIO credentials:
+**Supported plugins:** `repository-s3`, `repository-gcs`, `repository-azure`, `repository-hdfs`
+
+#### 2. Configure credentials
+
+Create a Secret with your storage credentials:
+
+**S3/MinIO:**
 
 ```bash
-kubectl create secret generic minio-credentials \
+kubectl create secret generic s3-credentials \
   --namespace wazuh \
   --from-literal=access-key=YOURACCESSKEY \
   --from-literal=secret-key=YOURSECRETKEY
 ```
 
-The default Secret key names are `access-key` and `secret-key`. You can use custom key names via `credentialsSecret.accessKeyKey` and `credentialsSecret.secretKeyKey`.
+**GCS (service account):**
+
+```bash
+kubectl create secret generic gcs-credentials \
+  --namespace wazuh \
+  --from-file=credentials-file=service-account.json
+```
+
+**Azure:**
+
+```bash
+kubectl create secret generic azure-credentials \
+  --namespace wazuh \
+  --from-literal=account=mystorageaccount \
+  --from-literal=key=base64storageaccountkey==
+```
+
+**GCS Workload Identity / HDFS:** No credentials Secret required.
 
 #### 3. MinIO-specific configuration
 
@@ -82,8 +77,6 @@ When using MinIO instead of AWS S3, the following settings are required in the S
 - `pathStyleAccess: true` — MinIO uses path-style URLs instead of virtual-hosted-style
 - `endpoint: http://minio.namespace.svc.cluster.local:9000` — Your MinIO service endpoint
 - `region: us-east-1` — Required for the OpenSearch repository-s3 plugin (the AWS SDK needs a region even for MinIO)
-
-> **Note:** The `region` field is only required for the OpenSearch SnapshotRepository (repository-s3 plugin). WazuhBackup/WazuhRestore jobs use [MinIO Client (mc)](https://min.io/docs/minio/linux/reference/minio-mc.html) which does not require a region.
 
 ### Step 1: Create a Snapshot Repository
 
@@ -114,7 +107,7 @@ spec:
   verify: true # Verify repository after creation
 ```
 
-**AWS S3 Example:**
+**AWS S3 Example (keystore-based — recommended):**
 
 ```yaml
 apiVersion: resources.wazuh.com/v1
@@ -133,10 +126,72 @@ spec:
     compress: true
     serverSideEncryption: true
     storageClass: standard
+    useKeystore: true
+    client: default # Matches clientName in repositoryPlugins
+  verify: true
+```
+
+**AWS S3 Example (inline credentials):**
+
+```yaml
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchSnapshotRepository
+metadata:
+  name: aws-backups-legacy
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  type: s3
+  settings:
+    bucket: my-wazuh-backups
+    basePath: production/opensearch
+    region: eu-west-1
+    compress: true
     credentialsSecret:
       name: aws-credentials
       accessKeyKey: aws-access-key-id
       secretKeyKey: aws-secret-access-key
+  verify: true
+```
+
+**GCS Example:**
+
+```yaml
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchSnapshotRepository
+metadata:
+  name: gcs-backups
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  type: gcs
+  settings:
+    bucket: my-wazuh-snapshots
+    basePath: opensearch/snapshots
+    compress: true
+    useKeystore: true
+    client: default
+  verify: true
+```
+
+**HDFS Example:**
+
+```yaml
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchSnapshotRepository
+metadata:
+  name: hdfs-backups
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  type: hdfs
+  settings:
+    uri: "hdfs://namenode:8020"
+    path: "/opensearch/snapshots"
+    compress: true
   verify: true
 ```
 
@@ -335,6 +390,86 @@ spec:
       name: minio-backup-credentials
 ```
 
+### GCS Backups
+
+```yaml
+apiVersion: resources.wazuh.com/v1
+kind: WazuhBackup
+metadata:
+  name: daily-backup-gcs
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  components:
+    agentKeys: true
+    fimDatabase: true
+    agentDatabase: true
+  schedule: "0 2 * * *"
+  storage:
+    type: gcs
+    bucket: my-wazuh-backups
+    prefix: "{{ .ClusterName }}/{{ .Namespace }}"
+    gcs:
+      project: my-gcp-project
+    credentialsSecret:
+      name: gcs-backup-credentials
+      accessKeyKey: credentials-file
+```
+
+For GCS Workload Identity, omit `credentialsSecret`. The GCS SDK auto-discovers credentials from the pod's ServiceAccount.
+
+### Azure Backups
+
+```yaml
+apiVersion: resources.wazuh.com/v1
+kind: WazuhBackup
+metadata:
+  name: daily-backup-azure
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  components:
+    agentKeys: true
+    fimDatabase: true
+    agentDatabase: true
+  schedule: "0 2 * * *"
+  storage:
+    type: azure
+    bucket: wazuh-backups
+    azure:
+      container: wazuh-backups
+      accountName: mystorageaccount
+    credentialsSecret:
+      name: azure-backup-credentials
+      accessKeyKey: account
+      secretKeyKey: key
+```
+
+### HDFS Backups
+
+```yaml
+apiVersion: resources.wazuh.com/v1
+kind: WazuhBackup
+metadata:
+  name: daily-backup-hdfs
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  components:
+    agentKeys: true
+    fimDatabase: true
+    agentDatabase: true
+  schedule: "0 2 * * *"
+  storage:
+    type: hdfs
+    hdfs:
+      uri: "http://namenode:9870/webhdfs/v1"
+      path: /backups/wazuh
+```
+
 ### Restore Wazuh Manager Data (WazuhRestore)
 
 Restore from an S3 backup archive:
@@ -394,25 +529,104 @@ spec:
   restartAfterRestore: true
 ```
 
+### Restore from GCS
+
+```yaml
+apiVersion: resources.wazuh.com/v1
+kind: WazuhRestore
+metadata:
+  name: restore-from-gcs
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  source:
+    gcs:
+      bucket: my-wazuh-backups
+      key: "wazuh-cluster/wazuh/daily-backup-gcs-20260105-020000.tar.gz"
+      project: my-gcp-project
+      credentialsSecret:
+        name: gcs-backup-credentials
+        accessKeyKey: credentials-file
+  preRestoreBackup: true
+  stopManager: true
+  restartAfterRestore: true
+```
+
+### Restore from Azure
+
+```yaml
+apiVersion: resources.wazuh.com/v1
+kind: WazuhRestore
+metadata:
+  name: restore-from-azure
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  source:
+    azure:
+      container: wazuh-backups
+      key: "wazuh-cluster/wazuh/daily-backup-azure-20260105-020000.tar.gz"
+      accountName: mystorageaccount
+      credentialsSecret:
+        name: azure-backup-credentials
+        accessKeyKey: account
+        secretKeyKey: key
+  preRestoreBackup: true
+  stopManager: true
+  restartAfterRestore: true
+```
+
+### Restore from HDFS
+
+```yaml
+apiVersion: resources.wazuh.com/v1
+kind: WazuhRestore
+metadata:
+  name: restore-from-hdfs
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  source:
+    hdfs:
+      uri: "http://namenode:9870/webhdfs/v1"
+      path: /backups/wazuh
+      key: "daily-backup-hdfs-20260105-020000.tar.gz"
+  preRestoreBackup: true
+  stopManager: true
+  restartAfterRestore: true
+```
+
 ## Credentials Setup
 
-Create secrets for S3/MinIO access:
+Create secrets for storage access:
 
 ```bash
-# MinIO credentials
-kubectl create secret generic minio-backup-credentials \
+# S3/MinIO credentials
+kubectl create secret generic s3-credentials \
   --namespace wazuh \
   --from-literal=access-key=YOURACCESSKEY \
   --from-literal=secret-key=YOURSECRETKEY
 
-# AWS credentials
-kubectl create secret generic aws-credentials \
+# GCS credentials (service account JSON)
+kubectl create secret generic gcs-credentials \
   --namespace wazuh \
-  --from-literal=aws-access-key-id=AKIAIOSFODNN7EXAMPLE \
-  --from-literal=aws-secret-access-key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+  --from-file=credentials-file=service-account.json
+
+# Azure credentials
+kubectl create secret generic azure-credentials \
+  --namespace wazuh \
+  --from-literal=account=mystorageaccount \
+  --from-literal=key=base64storageaccountkey==
 ```
 
-**Production Recommendation:** For AWS, use IRSA (IAM Roles for Service Accounts) instead of static credentials.
+**Production Recommendations:**
+
+- **AWS:** Use IRSA (IAM Roles for Service Accounts) instead of static credentials
+- **GCS:** Use Workload Identity — omit `credentialsSecret` and the GCS SDK auto-discovers credentials
+- **Azure:** Use Azure AD Workload Identity where available
 
 ## Monitoring Backup Status
 
@@ -471,7 +685,9 @@ kubectl logs -n wazuh job/daily-backup-20250105-020000
 3. **Storage:**
    - Use separate buckets or prefixes per environment
    - Enable server-side encryption for sensitive data
-   - Consider S3 lifecycle policies for cost optimization
+   - Consider lifecycle policies for cost optimization (S3, GCS, Azure)
+   - Use `repositoryPlugins` + `useKeystore: true` for secure credential management
+   - GCS Workload Identity and Azure AD Workload Identity avoid static credentials entirely
 
 ### Restore Testing
 
@@ -526,6 +742,7 @@ kubectl logs -n wazuh -l job-name=daily-backup-xxxxx
 
 ## Related Documentation
 
+- [Repository Plugins & Keystore](repository-plugins.md) - Automatic plugin installation and secure credentials
 - [Advanced Indexer Topology](advanced-indexer-topology.md) - NodePools and dedicated roles
 - [Drain Strategy](drain-strategy.md) - Safe scale-down operations
 - [Volume Expansion](volume-expansion.md) - Storage management

@@ -69,6 +69,18 @@ type RestoreSource struct {
 	// +optional
 	S3 *S3RestoreSource `json:"s3,omitempty"`
 
+	// GCS defines Google Cloud Storage source configuration
+	// +optional
+	GCS *GCSRestoreSource `json:"gcs,omitempty"`
+
+	// Azure defines Azure Blob Storage source configuration
+	// +optional
+	Azure *AzureRestoreSource `json:"azure,omitempty"`
+
+	// HDFS defines HDFS source configuration
+	// +optional
+	HDFS *HDFSRestoreSource `json:"hdfs,omitempty"`
+
 	// WazuhBackupRef references an existing WazuhBackup to restore from
 	// Uses the last successful backup from that WazuhBackup
 	// +optional
@@ -101,6 +113,64 @@ type S3RestoreSource struct {
 	// CredentialsSecret references the Secret containing S3 credentials
 	// +kubebuilder:validation:Required
 	CredentialsSecret RepositoryCredentialsRef `json:"credentialsSecret"`
+}
+
+// GCSRestoreSource defines GCS restore source configuration
+type GCSRestoreSource struct {
+	// Bucket is the GCS bucket name
+	// +kubebuilder:validation:Required
+	Bucket string `json:"bucket"`
+
+	// Key is the object key (path) to the backup archive
+	// +kubebuilder:validation:Required
+	Key string `json:"key"`
+
+	// Project is the GCP project ID
+	// +optional
+	Project string `json:"project,omitempty"`
+
+	// CredentialsSecret references the Secret containing GCS credentials
+	// Optional for Workload Identity
+	// +optional
+	CredentialsSecret *RepositoryCredentialsRef `json:"credentialsSecret,omitempty"`
+}
+
+// AzureRestoreSource defines Azure Blob Storage restore source configuration
+type AzureRestoreSource struct {
+	// Container is the Azure Blob Storage container name
+	// +kubebuilder:validation:Required
+	Container string `json:"container"`
+
+	// Key is the blob key (path) to the backup archive
+	// +kubebuilder:validation:Required
+	Key string `json:"key"`
+
+	// AccountName is the Azure Storage account name
+	// +optional
+	AccountName string `json:"accountName,omitempty"`
+
+	// EndpointSuffix is the Azure endpoint suffix for sovereign clouds
+	// +optional
+	EndpointSuffix string `json:"endpointSuffix,omitempty"`
+
+	// CredentialsSecret references the Secret containing Azure credentials
+	// +optional
+	CredentialsSecret *RepositoryCredentialsRef `json:"credentialsSecret,omitempty"`
+}
+
+// HDFSRestoreSource defines HDFS restore source configuration
+type HDFSRestoreSource struct {
+	// URI is the HDFS namenode WebHDFS URI
+	// +kubebuilder:validation:Required
+	URI string `json:"uri"`
+
+	// Path is the HDFS path to the backup archive
+	// +kubebuilder:validation:Required
+	Path string `json:"path"`
+
+	// Key is the archive filename within the path
+	// +kubebuilder:validation:Required
+	Key string `json:"key"`
 }
 
 // WazuhBackupReference references a WazuhBackup resource
@@ -240,6 +310,21 @@ func init() {
 // IsFromS3 returns true if restoring from S3 directly
 func (r *WazuhRestore) IsFromS3() bool {
 	return r.Spec.Source.S3 != nil
+}
+
+// IsFromGCS returns true if restoring from GCS directly
+func (r *WazuhRestore) IsFromGCS() bool {
+	return r.Spec.Source.GCS != nil
+}
+
+// IsFromAzure returns true if restoring from Azure Blob Storage directly
+func (r *WazuhRestore) IsFromAzure() bool {
+	return r.Spec.Source.Azure != nil
+}
+
+// IsFromHDFS returns true if restoring from HDFS directly
+func (r *WazuhRestore) IsFromHDFS() bool {
+	return r.Spec.Source.HDFS != nil
 }
 
 // IsFromWazuhBackup returns true if restoring from a WazuhBackup reference

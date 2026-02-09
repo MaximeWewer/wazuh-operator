@@ -27,6 +27,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+// RepositoryPluginHashInput is a mirror of RepositoryPluginConfig for hash computation.
+// It avoids importing the API types package to prevent circular dependencies.
+type RepositoryPluginHashInput struct {
+	Name              string `json:"name"`
+	ClientName        string `json:"clientName,omitempty"`
+	CredentialsSecret string `json:"credentialsSecret,omitempty"` // Secret name only (for change detection)
+}
+
 // IndexerSpec contains fields from WazuhCluster.Spec.Indexer used for hash computation
 type IndexerSpec struct {
 	Replicas                  int32                             `json:"replicas,omitempty"`
@@ -53,6 +61,8 @@ type IndexerSpec struct {
 	ExtraContainers     []corev1.Container `json:"extraContainers,omitempty"`
 	// Monitoring configuration
 	MonitoringEnabled bool `json:"monitoringEnabled,omitempty"`
+	// Repository plugins configuration
+	RepositoryPlugins []RepositoryPluginHashInput `json:"repositoryPlugins,omitempty"`
 }
 
 // DashboardSpec contains fields from WazuhCluster.Spec.Dashboard used for hash computation
@@ -204,6 +214,7 @@ type IndexerSpecInput struct {
 	ExtraInitContainers       []corev1.Container
 	ExtraContainers           []corev1.Container
 	MonitoringEnabled         bool
+	RepositoryPlugins         []RepositoryPluginHashInput
 }
 
 // ComputeIndexerSpecHash computes the spec hash for an Indexer component

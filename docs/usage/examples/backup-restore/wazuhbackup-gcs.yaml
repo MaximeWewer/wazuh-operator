@@ -1,0 +1,83 @@
+# Example: WazuhBackup with Google Cloud Storage
+# Supports both service account credentials and Workload Identity
+apiVersion: resources.wazuh.com/v1
+kind: WazuhBackup
+metadata:
+  name: daily-backup-gcs
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+
+  components:
+    agentKeys: true
+    fimDatabase: true
+    agentDatabase: true
+
+  schedule: "0 2 * * *"
+
+  retention:
+    maxBackups: 14
+    maxAge: "30d"
+
+  storage:
+    type: gcs
+    bucket: my-wazuh-backups
+    prefix: "{{ .ClusterName }}/{{ .Namespace }}"
+    gcs:
+      project: my-gcp-project
+    # With service account credentials:
+    credentialsSecret:
+      name: gcs-backup-credentials
+      accessKeyKey: credentials-file
+    # For Workload Identity, omit credentialsSecret entirely
+
+  backupTimeout: "30m"
+
+---
+# GCS credentials Secret (service account JSON)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: gcs-backup-credentials
+  namespace: wazuh
+type: Opaque
+stringData:
+  credentials-file: |
+    {
+      "type": "service_account",
+      "project_id": "my-gcp-project",
+      "private_key_id": "key-id",
+      "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n",
+      "client_email": "wazuh-backup@my-gcp-project.iam.gserviceaccount.com",
+      "client_id": "123456789",
+      "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+      "token_uri": "https://oauth2.googleapis.com/token"
+    }
+
+---
+# Example: Workload Identity variant (no credentials Secret)
+# Requires GKE Workload Identity configured on the namespace/service account
+apiVersion: resources.wazuh.com/v1
+kind: WazuhBackup
+metadata:
+  name: daily-backup-gcs-wi
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh-cluster
+
+  components:
+    agentKeys: true
+    fimDatabase: true
+    agentDatabase: true
+
+  schedule: "0 2 * * *"
+
+  storage:
+    type: gcs
+    bucket: my-wazuh-backups
+    prefix: "{{ .ClusterName }}/{{ .Namespace }}"
+    gcs:
+      project: my-gcp-project
+    # No credentialsSecret - uses Workload Identity

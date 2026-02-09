@@ -9,7 +9,7 @@ A Kubernetes operator for managing Wazuh clusters, providing a declarative way t
 - **Rule & Decoder Management** - Manage Wazuh detection rules and log decoders as CRDs
 - **OpenSearch Security CRDs** - Manage users, roles, role mappings, and tenants declaratively
 - **Index Lifecycle Management** - Configure ISM policies, index templates, and snapshot policies
-- **Backup & Restore** - OpenSearch snapshots and Wazuh Manager backups to S3/MinIO
+- **Backup & Restore** - OpenSearch snapshots and Wazuh Manager backups to S3, GCS, Azure, HDFS
 - **TLS Automation** - Auto-generated certificates with hot reload support (Wazuh 4.9+)
 - **High Availability** - Multi-node deployments with pod disruption budgets
 - **Monitoring Ready** - Prometheus metrics and ServiceMonitor integration
@@ -95,7 +95,8 @@ Open <https://localhost:5601> - Credentials are auto-generated in secrets.
 | [Credentials](docs/usage/features/credentials.md)                     | Auto-generated passwords, secrets |
 | [TLS Configuration](docs/usage/features/tls.md)                       | Certificate management            |
 | [Monitoring](docs/usage/features/monitoring.md)                       | Prometheus integration            |
-| [Backup & Restore](docs/usage/features/backup-restore.md)             | Data protection                   |
+| [Backup & Restore](docs/usage/features/backup-restore.md)             | Data protection (S3, GCS, Azure, HDFS) |
+| [Repository Plugins](docs/usage/features/repository-plugins.md)       | Auto plugin install & keystore    |
 | [Advanced Topology](docs/usage/features/advanced-indexer-topology.md) | NodePools, dedicated roles        |
 | [Examples](docs/usage/examples/)                                      | Configuration examples            |
 | [Troubleshooting](docs/usage/troubleshooting/)                        | Common issues and debugging       |
