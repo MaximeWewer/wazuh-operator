@@ -8,16 +8,19 @@ on:
   workflow_dispatch:
     inputs:
       force_version:
-        description: 'Force a specific version (optional, format: YYYY.MM.X or v*.*.*)'
+        description: 'Force a specific version (optional, format: YYYY.MM.X)'
         required: false
         type: string
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 permissions:
   contents: write
   packages: write
 
 env:
-  GO_VERSION: '1.25.7'
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/wazuh-operator
   HELM_OPERATOR_CHART_PATH: charts/wazuh-operator
@@ -32,6 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get_version.outputs.version }}
+      tag: ${{ steps.get_version.outputs.tag }}
       is_prerelease: ${{ steps.get_version.outputs.is_prerelease }}
       image_name_lower: ${{ steps.lowercase.outputs.image_name_lower }}
       repository_owner_lower: ${{ steps.lowercase.outputs.repository_owner_lower }}
@@ -43,62 +47,52 @@ jobs:
 
       - name: Convert names to lowercase
         id: lowercase
+        env:
+          RAW_IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          RAW_OWNER: ${{ github.repository_owner }}
         run: |
-          IMAGE_NAME_LOWER=$(echo "${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
-          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-
-          echo "image_name_lower=${IMAGE_NAME_LOWER}" >> $GITHUB_OUTPUT
-          echo "repository_owner_lower=${OWNER_LOWER}" >> $GITHUB_OUTPUT
-
-          echo "Image name (lowercase): ${IMAGE_NAME_LOWER}"
-          echo "Repository owner (lowercase): ${OWNER_LOWER}"
+          echo "image_name_lower=${RAW_IMAGE_NAME,,}" >> $GITHUB_OUTPUT
+          echo "repository_owner_lower=${RAW_OWNER,,}" >> $GITHUB_OUTPUT
 
       - name: Generate version
         id: get_version
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FORCE_VERSION: ${{ github.event.inputs.force_version }}
         run: |
-          # If triggered by a tag push, use the tag
-          if [ "${{ github.event_name }}" == "push" ]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-            echo "Using tag: $VERSION"
-          # If force_version is provided in workflow_dispatch, use it
-          elif [ -n "${{ github.event.inputs.force_version }}" ]; then
-            VERSION="${{ github.event.inputs.force_version }}"
-            # Add 'v' prefix if not present and version looks like X.Y.Z
-            if [[ ! "$VERSION" =~ ^v ]] && [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-              VERSION="v${VERSION}"
-            fi
-            echo "Using forced version: $VERSION"
+          if [ "${EVENT_NAME}" == "push" ]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            VERSION="${TAG#v}"
+          elif [ -n "${FORCE_VERSION}" ]; then
+            VERSION="${FORCE_VERSION#v}"
+            TAG="v${VERSION}"
           else
-            # Auto-generate version based on YEAR.MONTH.INDEX pattern
             git fetch --tags
-
             YEAR_MONTH=$(date +'%Y.%m')
-
             LATEST_TAG=$(git tag -l "v${YEAR_MONTH}.*" | sort -V | tail -n 1)
-
-            if [ -z "$LATEST_TAG" ]; then
-              VERSION="v${YEAR_MONTH}.1"
+            if [ -z "${LATEST_TAG}" ]; then
+              VERSION="${YEAR_MONTH}.1"
             else
-              PATCH_VERSION=$(echo "$LATEST_TAG" | sed 's/^v.*\.//')
+              PATCH_VERSION="${LATEST_TAG##*.}"
               NEW_PATCH=$((PATCH_VERSION + 1))
-              VERSION="v${YEAR_MONTH}.${NEW_PATCH}"
+              VERSION="${YEAR_MONTH}.${NEW_PATCH}"
             fi
-            echo "Auto-generated version: $VERSION"
+            TAG="v${VERSION}"
           fi
 
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
 
-          # Check if this is a pre-release (contains -, alpha, beta, rc)
-          if [[ "$VERSION" =~ - ]]; then
+          if [[ "${VERSION}" =~ - ]]; then
             echo "is_prerelease=true" >> $GITHUB_OUTPUT
           else
             echo "is_prerelease=false" >> $GITHUB_OUTPUT
           fi
 
-          echo "Release version: ${VERSION}"
+          echo "::notice::Release version: ${VERSION} (tag: ${TAG})"
 
   # =============================================================================
-  # Job 1b: Build and Push Backup Tools Image
+  # Job 2: Build and Push Backup Tools Image
   # =============================================================================
   build-backup-tools:
     name: Build Backup Tools Image
@@ -121,31 +115,35 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Generate Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}/backup-tools
+          tags: |
+            type=raw,value=${{ needs.prepare.outputs.version }}
+            type=raw,value=latest,enable=${{ needs.prepare.outputs.is_prerelease == 'false' }}
+
       - name: Build and push backup-tools image
         uses: docker/build-push-action@v6
         with:
           context: build/backup-tools
           file: build/backup-tools/Dockerfile
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}/backup-tools:${{ needs.prepare.outputs.version }}
-            ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}/backup-tools:latest
+          cache-from: type=gha,scope=backup-tools
+          cache-to: type=gha,scope=backup-tools,mode=max
+          tags: ${{ steps.meta.outputs.tags }}
 
   # =============================================================================
-  # Job 2: Build Multi-Architecture Docker Images (Linux only)
+  # Job 3: Build and Push Operator Docker Image
   # =============================================================================
-  build-multiarch-images:
-    name: Build Docker Images (${{ matrix.platform }})
+  build-operator-image:
+    name: Build Operator Image
     runs-on: ubuntu-latest
     needs: prepare
     permissions:
       contents: read
       packages: write
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
-          - linux/amd64
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -157,29 +155,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract platform architecture
-        run: |
-          echo "PLATFORM_ARCH=${platform##*/}" >> $GITHUB_ENV
-        env:
-          platform: ${{ matrix.platform }}
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          platforms: ${{ matrix.platform }}
 
-      - name: Generate Docker metadata and labels
+      - name: Generate Docker metadata
         id: meta
         uses: docker/metadata-action@v5
-        env:
-          PLATFORM_ARCH: ${{ env.PLATFORM_ARCH }}
         with:
           images: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}
           tags: |
-            type=raw,value=${{ needs.prepare.outputs.version }}-${{ env.PLATFORM_ARCH }}
+            type=raw,value=${{ needs.prepare.outputs.version }}
+            type=raw,value=latest,enable=${{ needs.prepare.outputs.is_prerelease == 'false' }}
           labels: |
             org.opencontainers.image.title=Wazuh Kubernetes Operator
-            org.opencontainers.image.description=Kubernetes Operator for Wazuh security monitoring (${{ env.PLATFORM_ARCH }})
+            org.opencontainers.image.description=Kubernetes Operator for Wazuh security monitoring
             org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
             org.opencontainers.image.vendor=${{ github.repository_owner }}
             org.opencontainers.image.licenses=Apache-2.0
@@ -188,73 +177,22 @@ jobs:
             org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/main/README.md
             org.opencontainers.image.revision=${{ github.sha }}
 
-      - name: Build and push platform-specific image
-        id: build
+      - name: Build and push image
         uses: docker/build-push-action@v6
-        env:
-          DOCKER_BUILD_SUMMARY: false
         with:
           context: .
           file: build/operator/Dockerfile
-          platforms: ${{ matrix.platform }}
+          platforms: linux/amd64
           push: true
-          provenance: false
-          sbom: false
           build-args: |
             VERSION=${{ needs.prepare.outputs.version }}
             TARGETOS=linux
-            TARGETARCH=${{ env.PLATFORM_ARCH }}
+            TARGETARCH=amd64
           tags: ${{ steps.meta.outputs.tags }}
           annotations: ${{ steps.meta.outputs.annotations }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,oci-mediatypes=true
-
-  # =============================================================================
-  # Job 3: Create Multi-Architecture Manifest
-  # =============================================================================
-  create-multiarch-manifest:
-    name: Create Multi-Arch Manifest
-    runs-on: ubuntu-latest
-    needs: [prepare, build-multiarch-images]
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Generate multiarch manifest metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}
-          annotations: |
-            type=org.opencontainers.image.description,value=Kubernetes Operator for Wazuh security monitoring
-          tags: |
-            type=raw,value=${{ needs.prepare.outputs.version }}
-            type=raw,value=latest
-
-      - name: Create multiarch manifest and push
-        id: manifest-annotate
-        run: |
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            --annotation='index:org.opencontainers.image.description=Kubernetes Operator for Wazuh security monitoring' \
-            --annotation='index:org.opencontainers.image.source=https://github.com/${{ github.repository }}' \
-            --annotation='index:org.opencontainers.image.licenses=Apache-2.0' \
-            ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}-amd64
-
-      - name: Inspect multiarch manifest
-        id: inspect
-        run: |
-          docker buildx imagetools inspect '${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}'
+          cache-from: type=gha,scope=operator
+          cache-to: type=gha,scope=operator,mode=max
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
@@ -268,7 +206,7 @@ jobs:
         with:
           name: sbom
           path: sbom.spdx.json
-          retention-days: 90
+          retention-days: 1
 
   # =============================================================================
   # Job 4: Package and Push Wazuh Operator Helm Chart (OCI)
@@ -276,7 +214,7 @@ jobs:
   build-helm-operator:
     name: Package Wazuh Operator Helm Chart
     runs-on: ubuntu-latest
-    needs: [prepare, create-multiarch-manifest]
+    needs: [prepare, build-operator-image]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -287,41 +225,46 @@ jobs:
           version: 'latest'
 
       - name: Log in to GitHub Container Registry
+        env:
+          HELM_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HELM_USER: ${{ github.actor }}
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
+          echo "${HELM_TOKEN}" | helm registry login "${REGISTRY}" --username "${HELM_USER}" --password-stdin
 
       - name: Update Chart version
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-
-          # Update Chart.yaml with new version
-          sed -i "s/^version:.*/version: ${VERSION}/" ${{ env.HELM_OPERATOR_CHART_PATH }}/Chart.yaml
-          sed -i "s/^appVersion:.*/appVersion: \"${{ needs.prepare.outputs.version }}\"/" ${{ env.HELM_OPERATOR_CHART_PATH }}/Chart.yaml
+          sed -i "s/^version:.*/version: ${VERSION}/" "${HELM_OPERATOR_CHART_PATH}/Chart.yaml"
+          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" "${HELM_OPERATOR_CHART_PATH}/Chart.yaml"
 
           echo "Updated Chart.yaml:"
-          cat ${{ env.HELM_OPERATOR_CHART_PATH }}/Chart.yaml
+          cat "${HELM_OPERATOR_CHART_PATH}/Chart.yaml"
 
       - name: Lint Helm chart
-        run: |
-          helm lint ${{ env.HELM_OPERATOR_CHART_PATH }}
+        run: helm lint "${HELM_OPERATOR_CHART_PATH}"
 
       - name: Package Helm chart
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          helm package ${{ env.HELM_OPERATOR_CHART_PATH }} \
-            --version ${{ needs.prepare.outputs.version }} \
-            --app-version ${{ needs.prepare.outputs.version }}
+          helm package "${HELM_OPERATOR_CHART_PATH}" \
+            --version "${VERSION}" \
+            --app-version "${VERSION}"
 
       - name: Push Helm chart to OCI registry
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          OWNER_LOWER: ${{ needs.prepare.outputs.repository_owner_lower }}
         run: |
-          CHART_FILE="wazuh-operator-${{ needs.prepare.outputs.version }}.tgz"
-          helm push "${CHART_FILE}" oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts
+          helm push "wazuh-operator-${VERSION}.tgz" "oci://${REGISTRY}/${OWNER_LOWER}/charts"
 
       - name: Upload Helm chart artifact
         uses: actions/upload-artifact@v4
         with:
           name: helm-chart-operator
           path: wazuh-operator-*.tgz
-          retention-days: 90
+          retention-days: 1
 
   # =============================================================================
   # Job 5: Package and Push Wazuh Cluster Helm Chart (OCI)
@@ -329,7 +272,7 @@ jobs:
   build-helm-cluster:
     name: Package Wazuh Cluster Helm Chart
     runs-on: ubuntu-latest
-    needs: [prepare, create-multiarch-manifest]
+    needs: [prepare, build-operator-image]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -340,58 +283,46 @@ jobs:
           version: 'latest'
 
       - name: Log in to GitHub Container Registry
+        env:
+          HELM_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HELM_USER: ${{ github.actor }}
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
-
-      - name: Extract latest Wazuh version from versions.go
-        id: wazuh_version
-        run: |
-          # Extract the latest WazuhVersion from wazuhVersionMapping in versions.go
-          # The mapping is ordered with newest versions first
-          WAZUH_APP_VERSION=$(grep -oP 'WazuhVersion:\s*"\K[0-9]+\.[0-9]+\.[0-9]+' pkg/versions/versions.go | head -1)
-
-          if [ -z "$WAZUH_APP_VERSION" ]; then
-            echo "ERROR: Could not extract Wazuh version from versions.go"
-            exit 1
-          fi
-
-          echo "Extracted Wazuh appVersion: ${WAZUH_APP_VERSION}"
-          echo "wazuh_app_version=${WAZUH_APP_VERSION}" >> $GITHUB_OUTPUT
+          echo "${HELM_TOKEN}" | helm registry login "${REGISTRY}" --username "${HELM_USER}" --password-stdin
 
       - name: Update Chart version
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          WAZUH_APP_VERSION="${{ steps.wazuh_version.outputs.wazuh_app_version }}"
-
-          # Update Chart.yaml with new version (chart version) and appVersion (Wazuh version)
-          sed -i "s/^version:.*/version: ${VERSION}/" ${{ env.HELM_CLUSTER_CHART_PATH }}/Chart.yaml
-          sed -i "s/^appVersion:.*/appVersion: \"${WAZUH_APP_VERSION}\"/" ${{ env.HELM_CLUSTER_CHART_PATH }}/Chart.yaml
+          sed -i "s/^version:.*/version: ${VERSION}/" "${HELM_CLUSTER_CHART_PATH}/Chart.yaml"
+          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" "${HELM_CLUSTER_CHART_PATH}/Chart.yaml"
 
           echo "Updated Chart.yaml:"
-          cat ${{ env.HELM_CLUSTER_CHART_PATH }}/Chart.yaml
+          cat "${HELM_CLUSTER_CHART_PATH}/Chart.yaml"
 
       - name: Lint Helm chart
-        run: |
-          helm lint ${{ env.HELM_CLUSTER_CHART_PATH }}
+        run: helm lint "${HELM_CLUSTER_CHART_PATH}"
 
       - name: Package Helm chart
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          WAZUH_APP_VERSION="${{ steps.wazuh_version.outputs.wazuh_app_version }}"
-          helm package ${{ env.HELM_CLUSTER_CHART_PATH }} \
-            --version ${{ needs.prepare.outputs.version }} \
-            --app-version "${WAZUH_APP_VERSION}"
+          helm package "${HELM_CLUSTER_CHART_PATH}" \
+            --version "${VERSION}" \
+            --app-version "${VERSION}"
 
       - name: Push Helm chart to OCI registry
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          OWNER_LOWER: ${{ needs.prepare.outputs.repository_owner_lower }}
         run: |
-          CHART_FILE="wazuh-cluster-${{ needs.prepare.outputs.version }}.tgz"
-          helm push "${CHART_FILE}" oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts
+          helm push "wazuh-cluster-${VERSION}.tgz" "oci://${REGISTRY}/${OWNER_LOWER}/charts"
 
       - name: Upload Helm chart artifact
         uses: actions/upload-artifact@v4
         with:
           name: helm-chart-cluster
           path: wazuh-cluster-*.tgz
-          retention-days: 90
+          retention-days: 1
 
   # =============================================================================
   # Job 6: Create GitHub Release
@@ -399,7 +330,9 @@ jobs:
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [prepare, create-multiarch-manifest, build-helm-operator, build-helm-cluster]
+    needs: [prepare, build-operator-image, build-helm-operator, build-helm-cluster]
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -425,98 +358,78 @@ jobs:
           path: sbom
 
       - name: Generate release notes
-        id: release_notes
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          IMAGE_LOWER: ${{ needs.prepare.outputs.image_name_lower }}
+          OWNER_LOWER: ${{ needs.prepare.outputs.repository_owner_lower }}
+          REPO: ${{ github.repository }}
         run: |
-          # Fetch all tags from remote to ensure we have the latest
           git fetch --tags
 
-          # Get the previous tag (exclude current version if it exists)
-          CURRENT_VERSION="${{ needs.prepare.outputs.version }}"
-          PREVIOUS_TAG=$(git tag -l --sort=-version:refname | grep -v "^${CURRENT_VERSION}$" | head -n 1)
+          PREVIOUS_TAG=$(git tag -l --sort=-version:refname | grep -v "^${TAG}$" | head -n 1)
 
-          # Generate changelog
-          cat << EOF > release_notes.md
-          ## Wazuh Operator ${{ needs.prepare.outputs.version }}
+          {
+            echo "## Wazuh Operator ${VERSION}"
+            echo ""
+            echo "### What's Changed"
+            echo ""
+          } > release_notes.md
 
-          ### What's Changed
-
-          EOF
-
-          if [ -n "$PREVIOUS_TAG" ]; then
-            echo "Changes since ${PREVIOUS_TAG} (last 10 events):" >> release_notes.md
+          if [ -n "${PREVIOUS_TAG}" ]; then
+            echo "Changes since ${PREVIOUS_TAG}:" >> release_notes.md
             echo "" >> release_notes.md
 
-            # Create a temporary file to store all events with timestamps
-            TEMP_EVENTS=$(mktemp)
-            
-            # Get all commits with their timestamps (excluding merge commits)
-            git log --all --pretty=format:"%at|commit|%h|%s" --grep="Merge pull request\|Merge branch" --invert-grep -n 20 > "$TEMP_EVENTS"
-            
-            # Get merged PRs with timestamps
-            gh pr list --state merged --limit 20 --json number,title,url,mergedAt --jq '.[] | "\(.mergedAt | fromdateiso8601)|pr|#\(.number)|\(.title)|\(.url)"' >> "$TEMP_EVENTS" 2>/dev/null || true
-            
-            # Sort by timestamp (newest first) and take only the first 10
-            EVENTS_LIST=$(sort -t'|' -k1 -rn "$TEMP_EVENTS" | head -10 | while IFS='|' read -r timestamp type id title url; do
-              if [ "$type" = "commit" ]; then
-                echo "- **Commit** $id: $title"
-              elif [ "$type" = "pr" ]; then
-                echo "- **Pull request** [#${id}](${url}): ${title}"
-              fi
-            done)
-            
-            # Clean up temp file
-            rm -f "$TEMP_EVENTS"
-            
-            # Build the changelog content
-            if [ -n "$EVENTS_LIST" ]; then
-              CHANGELOG_CONTENT="$EVENTS_LIST"
-            else
-              CHANGELOG_CONTENT="No changes found."
-            fi
+            COMMITS=$(git log "${PREVIOUS_TAG}..HEAD" --no-merges --pretty=format:"- %h: %s" --max-count=20)
 
-            echo "$CHANGELOG_CONTENT" >> release_notes.md
+            if [ -n "${COMMITS}" ]; then
+              echo "${COMMITS}" >> release_notes.md
+            else
+              echo "No changes found." >> release_notes.md
+            fi
           else
             echo "Initial release" >> release_notes.md
           fi
 
-          cat << EOF >> release_notes.md
-
-
-          ### Docker Images
-
-          Multi-architecture Docker images are available:
-
-          \`\`\`bash
-          docker pull ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}
-          \`\`\`
-
-          Supported platforms:
-          - linux/amd64
-
-          ### Helm Charts (OCI Registry)
-
-          \`\`\`bash
-          # Install the operator
-          helm install wazuh-operator oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/wazuh-operator \\
-            --version ${{ needs.prepare.outputs.version }}
-
-          # Install a Wazuh cluster
-          helm install wazuh-cluster oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/wazuh-cluster \\
-            --version ${{ needs.prepare.outputs.version }}
-          \`\`\`
-
-          ---
-
-          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG}...${{ needs.prepare.outputs.version }}
-          EOF
+          {
+            echo ""
+            echo "### Docker Images"
+            echo ""
+            echo "Pull the operator image:"
+            echo ""
+            echo "\`\`\`bash"
+            echo "docker pull ${REGISTRY}/${IMAGE_LOWER}:${VERSION}"
+            echo "\`\`\`"
+            echo ""
+            echo "Supported platforms:"
+            echo "- linux/amd64"
+            echo ""
+            echo "### Helm Charts (OCI Registry)"
+            echo ""
+            echo "\`\`\`bash"
+            echo "# Install the operator"
+            echo "helm install wazuh-operator oci://${REGISTRY}/${OWNER_LOWER}/charts/wazuh-operator \\"
+            echo "  --version ${VERSION}"
+            echo ""
+            echo "# Install a Wazuh cluster"
+            echo "helm install wazuh-cluster oci://${REGISTRY}/${OWNER_LOWER}/charts/wazuh-cluster \\"
+            echo "  --version ${VERSION}"
+            echo "\`\`\`"
+            echo ""
+            echo "---"
+            echo ""
+            if [ -n "${PREVIOUS_TAG}" ]; then
+              echo "**Full Changelog**: https://github.com/${REPO}/compare/${PREVIOUS_TAG}...${TAG}"
+            fi
+          } >> release_notes.md
 
           cat release_notes.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ needs.prepare.outputs.version }}
-          name: Release ${{ needs.prepare.outputs.version }}
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: ${{ needs.prepare.outputs.version }}
           body_path: release_notes.md
           draft: false
           prerelease: ${{ needs.prepare.outputs.is_prerelease }}
@@ -528,27 +441,32 @@ jobs:
           generate_release_notes: false
 
       - name: Generate release summary
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          IMAGE_LOWER: ${{ needs.prepare.outputs.image_name_lower }}
+          OWNER_LOWER: ${{ needs.prepare.outputs.repository_owner_lower }}
+          REPO: ${{ github.repository }}
         run: |
-          cat << EOF >> $GITHUB_STEP_SUMMARY
-          ## Release ${{ needs.prepare.outputs.version }} Created Successfully
-
-          ### Artifacts Published
-
-          #### Docker Images
-          - \`${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}\`
-          - \`${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:latest\`
-
-          #### Helm Charts (OCI Registry)
-          - Operator: \`oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/wazuh-operator:${{ needs.prepare.outputs.version }}\`
-          - Cluster: \`oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/wazuh-cluster:${{ needs.prepare.outputs.version }}\`
-
-          ### Links
-          - [GitHub Release](https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare.outputs.version }})
-          - [Docker Image](https://${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }})
-          EOF
+          {
+            echo "## Release ${VERSION} Created Successfully"
+            echo ""
+            echo "### Artifacts Published"
+            echo ""
+            echo "#### Docker Images"
+            echo "- \`${REGISTRY}/${IMAGE_LOWER}:${VERSION}\`"
+            echo "- \`${REGISTRY}/${IMAGE_LOWER}:latest\`"
+            echo ""
+            echo "#### Helm Charts (OCI Registry)"
+            echo "- Operator: \`oci://${REGISTRY}/${OWNER_LOWER}/charts/wazuh-operator:${VERSION}\`"
+            echo "- Cluster: \`oci://${REGISTRY}/${OWNER_LOWER}/charts/wazuh-cluster:${VERSION}\`"
+            echo ""
+            echo "### Links"
+            echo "- [GitHub Release](https://github.com/${REPO}/releases/tag/${VERSION})"
+            echo "- [Docker Image](https://${REGISTRY}/${IMAGE_LOWER})"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # =============================================================================
-  # Job 8: Post-Release Verification
+  # Job 7: Post-Release Verification
   # =============================================================================
   verify-release:
     name: Verify Release
@@ -556,9 +474,11 @@ jobs:
     needs: [prepare, create-release]
     steps:
       - name: Verify Docker image
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}
         run: |
-          docker pull ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}
-          docker inspect ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name_lower }}:${{ needs.prepare.outputs.version }}
+          docker pull "${IMAGE}"
+          docker inspect "${IMAGE}"
 
       - name: Install Helm
         uses: azure/setup-helm@v4
@@ -566,26 +486,30 @@ jobs:
           version: 'latest'
 
       - name: Log in to Helm registry
+        env:
+          HELM_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HELM_USER: ${{ github.actor }}
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
+          echo "${HELM_TOKEN}" | helm registry login "${REGISTRY}" --username "${HELM_USER}" --password-stdin
 
       - name: Verify Helm charts
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          OWNER_LOWER: ${{ needs.prepare.outputs.repository_owner_lower }}
         run: |
-          # Verify operator chart
-          helm pull oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/wazuh-operator \
-            --version ${{ needs.prepare.outputs.version }}
-          helm show chart wazuh-operator-${{ needs.prepare.outputs.version }}.tgz
+          helm pull "oci://${REGISTRY}/${OWNER_LOWER}/charts/wazuh-operator" --version "${VERSION}"
+          helm show chart "wazuh-operator-${VERSION}.tgz"
 
-          # Verify cluster chart
-          helm pull oci://${{ env.REGISTRY }}/${{ needs.prepare.outputs.repository_owner_lower }}/charts/wazuh-cluster \
-            --version ${{ needs.prepare.outputs.version }}
-          helm show chart wazuh-cluster-${{ needs.prepare.outputs.version }}.tgz
+          helm pull "oci://${REGISTRY}/${OWNER_LOWER}/charts/wazuh-cluster" --version "${VERSION}"
+          helm show chart "wazuh-cluster-${VERSION}.tgz"
 
       - name: Verification summary
         run: |
-          echo "## Release Verification Completed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "All artifacts have been successfully verified:" >> $GITHUB_STEP_SUMMARY
-          echo "- Docker image is pullable and inspectable" >> $GITHUB_STEP_SUMMARY
-          echo "- Wazuh Operator Helm chart is available in OCI registry" >> $GITHUB_STEP_SUMMARY
-          echo "- Wazuh Cluster Helm chart is available in OCI registry" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Release Verification Completed"
+            echo ""
+            echo "All artifacts have been successfully verified:"
+            echo "- Docker image is pullable and inspectable"
+            echo "- Wazuh Operator Helm chart is available in OCI registry"
+            echo "- Wazuh Cluster Helm chart is available in OCI registry"
+          } >> "$GITHUB_STEP_SUMMARY"
