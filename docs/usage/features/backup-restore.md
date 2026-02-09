@@ -15,24 +15,75 @@ OpenSearch backups use the native [Snapshot API](https://opensearch.org/docs/lat
 
 ### Prerequisites
 
-The `repository-s3` plugin must be installed for S3/MinIO backends. Add an init container to install it:
+#### 1. Install the repository-s3 plugin
+
+The `repository-s3` plugin must be installed on all indexer nodes. Add an init container to your WazuhCluster spec:
+
+> **Important:** Use the same `wazuh/wazuh-indexer` image as your indexer containers. The plugin paths are `/usr/share/wazuh-indexer/` (not `/usr/share/opensearch/`).
 
 ```yaml
 spec:
   indexer:
+    # Required: allow insecure settings for S3 credential passthrough
+    javaOpts: "-Xms512m -Xmx512m -Dopensearch.allow_insecure_settings=true"
     extraInitContainers:
       - name: install-repository-s3
-        image: opensearchproject/opensearch:2.x
+        image: wazuh/wazuh-indexer:4.14.1 # Must match your Wazuh version
+        securityContext:
+          runAsUser: 0 # Required to create /etc/sysconfig
+        env:
+          - name: OPENSEARCH_PATH_CONF
+            value: /usr/share/wazuh-indexer/config
         command:
           - sh
           - -c
           - |
-            /usr/share/opensearch/bin/opensearch-plugin install --batch repository-s3
-            cp -r /usr/share/opensearch/plugins/repository-s3 /plugins/
+            # Create required sysconfig file (wazuh-indexer entrypoint expects it)
+            mkdir -p /etc/sysconfig
+            touch /etc/sysconfig/wazuh-indexer
+            # Install the S3 repository plugin
+            /usr/share/wazuh-indexer/bin/opensearch-plugin install --batch repository-s3
+            # Copy plugin files to shared volume
+            cp -r /usr/share/wazuh-indexer/plugins/repository-s3/* /mnt/plugins/
         volumeMounts:
-          - name: plugins
-            mountPath: /plugins
+          - name: s3-plugin
+            mountPath: /mnt/plugins
+    extraVolumes:
+      - name: s3-plugin
+        emptyDir: {}
+    extraVolumeMounts:
+      - name: s3-plugin
+        mountPath: /usr/share/wazuh-indexer/plugins/repository-s3
 ```
+
+**Why these settings are needed:**
+
+- `securityContext.runAsUser: 0` — The wazuh-indexer image expects `/etc/sysconfig/wazuh-indexer` to exist. The init container must run as root to create it.
+- `OPENSEARCH_PATH_CONF` — Required by the plugin installer to locate the OpenSearch configuration directory.
+- `allow_insecure_settings=true` — The operator passes S3 credentials via the repository API (access_key/secret_key). Without this JVM flag, OpenSearch rejects inline credentials.
+
+#### 2. Configure S3/MinIO credentials
+
+Create a Secret with your S3 or MinIO credentials:
+
+```bash
+kubectl create secret generic minio-credentials \
+  --namespace wazuh \
+  --from-literal=access-key=YOURACCESSKEY \
+  --from-literal=secret-key=YOURSECRETKEY
+```
+
+The default Secret key names are `access-key` and `secret-key`. You can use custom key names via `credentialsSecret.accessKeyKey` and `credentialsSecret.secretKeyKey`.
+
+#### 3. MinIO-specific configuration
+
+When using MinIO instead of AWS S3, the following settings are required in the SnapshotRepository:
+
+- `pathStyleAccess: true` — MinIO uses path-style URLs instead of virtual-hosted-style
+- `endpoint: http://minio.namespace.svc.cluster.local:9000` — Your MinIO service endpoint
+- `region: us-east-1` — Required for the OpenSearch repository-s3 plugin (the AWS SDK needs a region even for MinIO)
+
+> **Note:** The `region` field is only required for the OpenSearch SnapshotRepository (repository-s3 plugin). WazuhBackup/WazuhRestore jobs use [MinIO Client (mc)](https://min.io/docs/minio/linux/reference/minio-mc.html) which does not require a region.
 
 ### Step 1: Create a Snapshot Repository
 
@@ -58,8 +109,8 @@ spec:
     compress: true
     credentialsSecret:
       name: minio-credentials
-      accessKeyKey: accessKeyId
-      secretKeyKey: secretAccessKey
+      accessKeyKey: access-key
+      secretKeyKey: secret-key
   verify: true # Verify repository after creation
 ```
 
@@ -249,8 +300,8 @@ spec:
     forcePathStyle: true
     credentialsSecret:
       name: minio-backup-credentials
-      accessKeyKey: accessKeyId
-      secretKeyKey: secretAccessKey
+      accessKeyKey: access-key
+      secretKeyKey: secret-key
 
   # Backup timeout
   backupTimeout: "30m"
@@ -351,8 +402,8 @@ Create secrets for S3/MinIO access:
 # MinIO credentials
 kubectl create secret generic minio-backup-credentials \
   --namespace wazuh \
-  --from-literal=accessKeyId=YOURACCESSKEY \
-  --from-literal=secretAccessKey=YOURSECRETKEY
+  --from-literal=access-key=YOURACCESSKEY \
+  --from-literal=secret-key=YOURSECRETKEY
 
 # AWS credentials
 kubectl create secret generic aws-credentials \

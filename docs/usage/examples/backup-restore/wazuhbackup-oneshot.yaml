@@ -40,7 +40,8 @@ spec:
     bucket: wazuh-backups
     # Include date in path for one-shot backups
     prefix: "{{ .ClusterName }}/pre-upgrade/{{ .Date }}"
-    region: us-east-1
+    # Optional: region is only needed for AWS S3 (not required for MinIO)
+    # region: us-east-1
     credentialsSecret:
       name: s3-backup-credentials
 
@@ -76,7 +77,8 @@ spec:
     type: s3
     bucket: wazuh-backups
     prefix: "{{ .ClusterName }}/emergency"
-    region: us-east-1
+    # Optional: region is only needed for AWS S3 (not required for MinIO)
+    # region: us-east-1
     credentialsSecret:
       name: s3-backup-credentials
 

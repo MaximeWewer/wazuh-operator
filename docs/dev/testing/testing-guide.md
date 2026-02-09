@@ -47,7 +47,7 @@ go test ./internal/... -v
 make test
 
 # Run specific controller tests
-KUBEBUILDER_ASSETS="$(bin/setup-envtest use 1.31.0 -p path)" go test ./controllers -v
+KUBEBUILDER_ASSETS="$(bin/setup-envtest use 1.35.0 -p path)" go test ./controllers -v
 
 # Run a specific test
 go test ./controllers -run TestWazuhCluster -v
@@ -66,8 +66,8 @@ The operator uses [envtest](https://book.kubebuilder.io/reference/envtest.html) 
 
 **Binary locations:**
 
-- Linux/WSL: `~/.local/share/kubebuilder-envtest/k8s/1.31.0-linux-amd64/`
-- macOS: `~/Library/Application Support/io.kubebuilder.envtest/k8s/1.31.0-darwin-amd64/`
+- Linux/WSL: `~/.local/share/kubebuilder-envtest/k8s/1.35.0-linux-amd64/`
+- macOS: `~/Library/Application Support/io.kubebuilder.envtest/k8s/1.35.0-darwin-amd64/`
 
 ### Test Structure
 

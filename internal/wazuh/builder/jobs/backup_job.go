@@ -118,6 +118,18 @@ func (b *BackupJobBuilder) buildBackupPaths() []string {
 	return paths
 }
 
+// buildMcEndpoint returns the S3/MinIO endpoint URL for mc alias
+func (b *BackupJobBuilder) buildMcEndpoint() string {
+	storage := b.backup.Spec.Storage
+	if storage.Endpoint != "" {
+		return storage.Endpoint
+	}
+	if storage.Region != "" {
+		return fmt.Sprintf("https://s3.%s.amazonaws.com", storage.Region)
+	}
+	return "https://s3.amazonaws.com"
+}
+
 // buildBackupScript builds the shell script for the backup job
 func (b *BackupJobBuilder) buildBackupScript() string {
 	paths := b.buildBackupPaths()
@@ -131,20 +143,13 @@ func (b *BackupJobBuilder) buildBackupScript() string {
 		tarPaths = append(tarPaths, relPath)
 	}
 
-	// Build S3 endpoint options
-	var s3EndpointOpts string
-	if storage.Endpoint != "" {
-		s3EndpointOpts = fmt.Sprintf("--endpoint-url %s", storage.Endpoint)
-	}
-	if storage.ForcePathStyle {
-		s3EndpointOpts += " --no-verify-ssl"
-	}
-
 	// Build prefix with template substitution
 	prefix := storage.Prefix
 	if prefix == "" {
 		prefix = "{{ .ClusterName }}/{{ .Namespace }}"
 	}
+
+	mcEndpoint := b.buildMcEndpoint()
 
 	script := fmt.Sprintf(`#!/bin/sh
 set -e
@@ -166,7 +171,6 @@ ARCHIVE_NAME="${BACKUP_NAME}-${TIMESTAMP}.tar.gz"
 TEMP_DIR="/tmp/backup"
 S3_BUCKET="%s"
 S3_PREFIX="%s"
-S3_REGION="%s"
 
 # Resolve prefix template
 S3_PREFIX=$(echo "$S3_PREFIX" | sed "s/{{ .ClusterName }}/${CLUSTER_NAME}/g" | sed "s/{{ .Namespace }}/${NAMESPACE}/g" | sed "s/{{ .Date }}/${TIMESTAMP}/g")
@@ -174,6 +178,9 @@ S3_PREFIX=$(echo "$S3_PREFIX" | sed "s/{{ .ClusterName }}/${CLUSTER_NAME}/g" | s
 echo "Backup paths: %s"
 echo "S3 bucket: ${S3_BUCKET}"
 echo "S3 prefix: ${S3_PREFIX}"
+
+# Configure mc alias for S3/MinIO
+mc alias set s3 %s ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY} --api S3v4
 
 # Create temp directory
 mkdir -p ${TEMP_DIR}
@@ -202,14 +209,11 @@ echo "Backup size: ${BACKUP_SIZE}"
 
 # Upload to S3
 echo "Uploading to S3..."
-export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-
-aws s3 cp ${TEMP_DIR}/${ARCHIVE_NAME} s3://${S3_BUCKET}/${S3_PREFIX}/${ARCHIVE_NAME} %s --region ${S3_REGION}
+mc cp ${TEMP_DIR}/${ARCHIVE_NAME} s3/${S3_BUCKET}/${S3_PREFIX}/${ARCHIVE_NAME}
 
 # Verify upload
 echo "Verifying upload..."
-aws s3 ls s3://${S3_BUCKET}/${S3_PREFIX}/${ARCHIVE_NAME} %s --region ${S3_REGION}
+mc ls s3/${S3_BUCKET}/${S3_PREFIX}/${ARCHIVE_NAME}
 
 # Cleanup temp archive on manager pod
 echo "Cleaning up temporary files..."
@@ -220,7 +224,7 @@ rm -rf ${TEMP_DIR}
 
 echo "========================================"
 echo "Backup completed successfully!"
-echo "Location: s3://${S3_BUCKET}/${S3_PREFIX}/${ARCHIVE_NAME}"
+echo "Location: s3/${S3_BUCKET}/${S3_PREFIX}/${ARCHIVE_NAME}"
 echo "Size: ${BACKUP_SIZE}"
 echo "Finished at: $(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)"
 echo "========================================"
@@ -233,11 +237,9 @@ echo "========================================"
 		b.namespace,
 		storage.Bucket,
 		prefix,
-		storage.Region,
 		strings.Join(paths, ", "),
+		mcEndpoint,
 		strings.Join(tarPaths, " "),
-		s3EndpointOpts,
-		s3EndpointOpts,
 	)
 
 	return script
@@ -288,13 +290,17 @@ func (b *BackupJobBuilder) buildEnvVars() []corev1.EnvVar {
 	secretKeyKey := creds.SecretKeyKey
 
 	if accessKeyKey == "" {
-		accessKeyKey = "accessKeyId"
+		accessKeyKey = constants.DefaultAccessKeyKey
 	}
 	if secretKeyKey == "" {
-		secretKeyKey = "secretAccessKey"
+		secretKeyKey = constants.DefaultSecretKeyKey
 	}
 
 	return []corev1.EnvVar{
+		{
+			Name:  "MC_CONFIG_DIR",
+			Value: "/tmp/.mc",
+		},
 		{
 			Name: "AWS_ACCESS_KEY_ID",
 			ValueFrom: &corev1.EnvVarSource{

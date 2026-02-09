@@ -54,7 +54,7 @@ type WazuhRestoreSpec struct {
 	RestoreTimeout string `json:"restoreTimeout,omitempty"`
 
 	// Image specifies a custom restore container image
-	// If not set, uses a default image with aws-cli and tar
+	// If not set, uses a default image with mc (MinIO Client), kubectl and tar
 	// +optional
 	Image *BackupImage `json:"image,omitempty"`
 

@@ -148,7 +148,7 @@ setup_minikube() {
         --memory="${MINIKUBE_MEMORY}" \
         --disk-size="${MINIKUBE_DISK_SIZE}" \
         --driver="${MINIKUBE_DRIVER}" \
-        --kubernetes-version=v1.31.0 \
+        --kubernetes-version=v1.35.0 \
         --extra-config=apiserver.service-node-port-range=1-65535
 
     # Set context

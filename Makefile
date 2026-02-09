@@ -73,6 +73,16 @@ docker-build: ## Build docker image with the manager.
 docker-push: ## Push docker image with the manager.
 	docker push ${IMG}
 
+BACKUP_TOOLS_IMG ?= ghcr.io/maximewewer/wazuh-operator/backup-tools:latest
+
+.PHONY: docker-build-backup-tools
+docker-build-backup-tools: ## Build backup-tools docker image (mc + kubectl).
+	docker build -t ${BACKUP_TOOLS_IMG} -f build/backup-tools/Dockerfile build/backup-tools/
+
+.PHONY: docker-push-backup-tools
+docker-push-backup-tools: ## Push backup-tools docker image.
+	docker push ${BACKUP_TOOLS_IMG}
+
 ##@ Deployment (Helm)
 
 HELM_RELEASE_OPERATOR ?= wazuh-operator
@@ -162,7 +172,7 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 ## Tool Versions
 CONTROLLER_TOOLS_VERSION ?= v0.19.0
 ENVTEST_VERSION ?= latest
-ENVTEST_K8S_VERSION = 1.31.0
+ENVTEST_K8S_VERSION = 1.35.0
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.

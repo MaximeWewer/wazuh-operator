@@ -122,6 +122,21 @@ func (b *RestoreJobBuilder) getS3Source() *wazuhv1.S3RestoreSource {
 	return b.restore.Spec.Source.S3
 }
 
+// buildMcEndpoint returns the S3/MinIO endpoint URL for mc alias
+func (b *RestoreJobBuilder) buildMcEndpoint() string {
+	s3 := b.getS3Source()
+	if s3 == nil {
+		return "https://s3.amazonaws.com"
+	}
+	if s3.Endpoint != "" {
+		return s3.Endpoint
+	}
+	if s3.Region != "" {
+		return fmt.Sprintf("https://s3.%s.amazonaws.com", s3.Region)
+	}
+	return "https://s3.amazonaws.com"
+}
+
 // buildRestoreScript builds the shell script for the restore job
 func (b *RestoreJobBuilder) buildRestoreScript() string {
 	s3 := b.getS3Source()
@@ -130,15 +145,6 @@ func (b *RestoreJobBuilder) buildRestoreScript() string {
 	}
 
 	paths := b.buildRestorePaths()
-
-	// Build S3 endpoint options
-	var s3EndpointOpts string
-	if s3.Endpoint != "" {
-		s3EndpointOpts = fmt.Sprintf("--endpoint-url %s", s3.Endpoint)
-	}
-	if s3.ForcePathStyle {
-		s3EndpointOpts += " --no-verify-ssl"
-	}
 
 	// Build tar extract paths for filtering
 	var tarPaths []string
@@ -162,6 +168,8 @@ func (b *RestoreJobBuilder) buildRestoreScript() string {
 		restartAfterRestore = "true"
 	}
 
+	mcEndpoint := b.buildMcEndpoint()
+
 	script := fmt.Sprintf(`#!/bin/sh
 set -e
 
@@ -179,17 +187,19 @@ CLUSTER_NAME="%s"
 NAMESPACE="%s"
 S3_BUCKET="%s"
 S3_KEY="%s"
-S3_REGION="%s"
 PRE_RESTORE_BACKUP="%s"
 STOP_MANAGER="%s"
 RESTART_AFTER_RESTORE="%s"
 TEMP_DIR="/tmp/restore"
 
-echo "Source: s3://${S3_BUCKET}/${S3_KEY}"
+echo "Source: s3/${S3_BUCKET}/${S3_KEY}"
 echo "Restore paths: %s"
 echo "Pre-restore backup: ${PRE_RESTORE_BACKUP}"
 echo "Stop manager: ${STOP_MANAGER}"
 echo "Restart after: ${RESTART_AFTER_RESTORE}"
+
+# Configure mc alias for S3/MinIO
+mc alias set s3 %s ${AWS_ACCESS_KEY_ID} ${AWS_SECRET_ACCESS_KEY} --api S3v4
 
 # Get manager pod name (master or first manager)
 MANAGER_POD=$(kubectl get pods -n ${NAMESPACE} -l app.kubernetes.io/component=wazuh-manager,app.kubernetes.io/instance=${CLUSTER_NAME} -o jsonpath='{.items[0].metadata.name}')
@@ -206,11 +216,8 @@ mkdir -p ${TEMP_DIR}
 
 # Download backup archive from S3
 echo "Downloading backup from S3..."
-export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-
 ARCHIVE_NAME=$(basename ${S3_KEY})
-aws s3 cp s3://${S3_BUCKET}/${S3_KEY} ${TEMP_DIR}/${ARCHIVE_NAME} %s --region ${S3_REGION}
+mc cp s3/${S3_BUCKET}/${S3_KEY} ${TEMP_DIR}/${ARCHIVE_NAME}
 
 echo "Downloaded: ${ARCHIVE_NAME}"
 ls -lh ${TEMP_DIR}/${ARCHIVE_NAME}
@@ -231,9 +238,9 @@ if [ "${PRE_RESTORE_BACKUP}" = "true" ]; then
     # Upload pre-restore backup
     PRE_RESTORE_KEY=$(dirname ${S3_KEY})/pre-restore/${PRE_RESTORE_ARCHIVE}
     kubectl cp ${NAMESPACE}/${MANAGER_POD}:/tmp/${PRE_RESTORE_ARCHIVE} ${TEMP_DIR}/${PRE_RESTORE_ARCHIVE} -c wazuh-manager
-    aws s3 cp ${TEMP_DIR}/${PRE_RESTORE_ARCHIVE} s3://${S3_BUCKET}/${PRE_RESTORE_KEY} %s --region ${S3_REGION}
+    mc cp ${TEMP_DIR}/${PRE_RESTORE_ARCHIVE} s3/${S3_BUCKET}/${PRE_RESTORE_KEY}
 
-    echo "Pre-restore backup saved to: s3://${S3_BUCKET}/${PRE_RESTORE_KEY}"
+    echo "Pre-restore backup saved to: s3/${S3_BUCKET}/${PRE_RESTORE_KEY}"
     kubectl exec -n ${NAMESPACE} ${MANAGER_POD} -c wazuh-manager -- rm -f /tmp/${PRE_RESTORE_ARCHIVE} || true
 fi
 
@@ -267,7 +274,7 @@ fi
 
 echo "========================================"
 echo "Restore completed successfully!"
-echo "Source: s3://${S3_BUCKET}/${S3_KEY}"
+echo "Source: s3/${S3_BUCKET}/${S3_KEY}"
 echo "Restored to: ${MANAGER_POD}"
 echo "Finished at: $(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)"
 echo "========================================"
@@ -280,14 +287,12 @@ echo "========================================"
 		b.namespace,
 		s3.Bucket,
 		s3.Key,
-		s3.Region,
 		preRestoreBackup,
 		stopManager,
 		restartAfterRestore,
 		strings.Join(paths, ", "),
-		s3EndpointOpts,
+		mcEndpoint,
 		strings.Join(tarPaths, " "),
-		s3EndpointOpts,
 		strings.Join(tarPaths, " "),
 	)
 
@@ -344,13 +349,17 @@ func (b *RestoreJobBuilder) buildEnvVars() []corev1.EnvVar {
 	secretKeyKey := creds.SecretKeyKey
 
 	if accessKeyKey == "" {
-		accessKeyKey = "accessKeyId"
+		accessKeyKey = constants.DefaultAccessKeyKey
 	}
 	if secretKeyKey == "" {
-		secretKeyKey = "secretAccessKey"
+		secretKeyKey = constants.DefaultSecretKeyKey
 	}
 
 	return []corev1.EnvVar{
+		{
+			Name:  "MC_CONFIG_DIR",
+			Value: "/tmp/.mc",
+		},
 		{
 			Name: "AWS_ACCESS_KEY_ID",
 			ValueFrom: &corev1.EnvVarSource{

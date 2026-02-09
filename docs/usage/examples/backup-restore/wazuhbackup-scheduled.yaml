@@ -6,10 +6,10 @@
 # 1. A WazuhCluster named 'wazuh-cluster' must exist
 # 2. A Secret named 's3-backup-credentials' with AWS/MinIO credentials:
 #    kubectl create secret generic s3-backup-credentials \
-#      --from-literal=accessKeyId=YOURACCESSKEY \
-#      --from-literal=secretAccessKey=YOURSECRETKEY
+#      --from-literal=access-key=YOURACCESSKEY \
+#      --from-literal=secret-key=YOURSECRETKEY
 #
-# NOTE: The backup Job uses amazon/aws-cli image which requires
+# NOTE: The backup Job uses mc (MinIO Client) + kubectl and requires
 # a ServiceAccount with permissions to list and exec into pods.
 #
 apiVersion: resources.wazuh.com/v1
@@ -51,12 +51,13 @@ spec:
     bucket: wazuh-backups
     # Path prefix in bucket - supports templates
     prefix: "{{ .ClusterName }}/{{ .Namespace }}"
-    region: us-east-1
-    # Secret containing accessKeyId and secretAccessKey
+    # Optional: region is only needed for AWS S3 (not required for MinIO)
+    # region: us-east-1
+    # Secret containing access-key and secret-key
     credentialsSecret:
       name: s3-backup-credentials
-      accessKeyKey: accessKeyId
-      secretKeyKey: secretAccessKey
+      accessKeyKey: access-key
+      secretKeyKey: secret-key
 
   # Suspend scheduled backups temporarily
   suspend: false

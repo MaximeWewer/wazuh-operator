@@ -222,8 +222,8 @@ var (
 // Default backup image
 const (
 	// DefaultBackupImage is the default image for backup jobs
-	// This image should include aws-cli, kubectl, and tar
-	DefaultBackupImage = "amazon/aws-cli:2.15.0"
+	// This image includes mc (MinIO Client), kubectl, and tar
+	DefaultBackupImage = "ghcr.io/maximewewer/wazuh-operator/backup-tools:latest"
 )
 
 // Wazuh backup paths for component-based backups

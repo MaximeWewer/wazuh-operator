@@ -27,11 +27,12 @@ spec:
       bucket: wazuh-backups
       # Full path to the backup archive
       key: "wazuh-cluster/wazuh/daily-backup-20250105-020000.tar.gz"
-      region: us-east-1
+      # Optional: region is only needed for AWS S3 (not required for MinIO)
+      # region: us-east-1
       credentialsSecret:
         name: s3-backup-credentials
-        accessKeyKey: accessKeyId
-        secretKeyKey: secretAccessKey
+        accessKeyKey: access-key
+        secretKeyKey: secret-key
 
   # Components to restore (optional - defaults to all available)
   components:

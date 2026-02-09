@@ -975,7 +975,7 @@ Manages TLS certificates for Wazuh cluster components.
 
 | Field               | Type                    | Required | Default | Description                                                     |
 | ------------------- | ----------------------- | -------- | ------- | --------------------------------------------------------------- |
-| `clusterRef`        | string                  | **Yes**  | -       | Cluster reference                                               |
+| `clusterRef`        | WazuhClusterReference   | **Yes**  | -       | Cluster reference (object with `name` field)                    |
 | `type`              | string                  | **Yes**  | -       | Certificate type: ca, node, admin, filebeat, indexer, dashboard |
 | `distinguishedName` | DistinguishedNameConfig | No       | -       | X.509 DN configuration                                          |
 | `validity`          | string                  | No       | `365d`  | Certificate validity duration (e.g., "365d", "24h", "30m")      |

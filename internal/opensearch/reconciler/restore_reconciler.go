@@ -182,6 +182,18 @@ func (r *RestoreReconciler) monitorRestoreProgress(ctx context.Context, restore 
 
 	// Check recovery status for restored indices
 	if len(restore.Status.RestoredIndices) == 0 {
+		// If restore was already initiated (StartTime set) and there are 0 shards,
+		// the restore completed with nothing to do
+		if restore.Status.StartTime != nil && restore.Status.Shards != nil && restore.Status.Shards.Total == 0 {
+			now := metav1.Now()
+			restore.Status.EndTime = &now
+			if restore.Status.StartTime != nil {
+				duration := now.Sub(restore.Status.StartTime.Time)
+				restore.Status.Duration = formatDuration(duration)
+			}
+			log.Info("Restore completed with no indices to restore")
+			return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseCompleted, "Restore completed (no matching indices to restore)")
+		}
 		return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseInProgress, "Waiting for restore to start")
 	}
 
