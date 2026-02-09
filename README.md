@@ -59,6 +59,15 @@ Open <https://localhost:5601> - Credentials are auto-generated in secrets.
 
 > See [Quick Start Guide](docs/usage/getting-started/quick-start.md) for detailed instructions.
 
+## Supported Wazuh Versions
+
+| Wazuh           | OpenSearch         | Notes                                                                               |
+| --------------- | ------------------ | ----------------------------------------------------------------------------------- |
+| 4.12.x - 4.14.x | 2.19.1             | Automatic TLS certificate hot reload (file-watch).                                  |
+| 4.10.x - 4.11.x | 2.16.0             |                                                                                     |
+| 4.9.x           | 2.13.0             | TLS certificate hot reload via API call. Minimum version supported by the operator. |
+| < 4.9.0         | Not supported      | Might work, but it hasn't been tested.                                              |
+
 ## Custom Resource Definitions
 
 **API Group**: `resources.wazuh.com/v1`
