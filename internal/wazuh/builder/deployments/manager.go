@@ -499,7 +499,9 @@ func (b *ManagerStatefulSetBuilder) buildLabels() map[string]string {
 
 // buildSelectorLabels builds the selector labels
 func (b *ManagerStatefulSetBuilder) buildSelectorLabels() map[string]string {
-	return constants.SelectorLabels(b.clusterName, "wazuh-manager")
+	labels := constants.SelectorLabels(b.clusterName, "wazuh-manager")
+	labels[constants.LabelManagerNodeType] = b.nodeType
+	return labels
 }
 
 // buildVolumes builds the volume list

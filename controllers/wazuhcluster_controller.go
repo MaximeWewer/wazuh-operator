@@ -1902,9 +1902,18 @@ func (r *WazuhClusterReconciler) findClustersForDecoder(ctx context.Context, obj
 
 // SetupWithManager sets up the controller with the Manager
 func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	// Wire the event recorder into the cluster reconciler for workload recreation events
+	// Wire the event recorder into sub-reconcilers
 	if r.ClusterReconciler != nil {
 		r.ClusterReconciler.Recorder = r.Recorder
+	}
+	if r.IndexerReconciler != nil {
+		r.IndexerReconciler.Recorder = r.Recorder
+	}
+	if r.DashboardReconciler != nil {
+		r.DashboardReconciler.Recorder = r.Recorder
+	}
+	if r.WorkerReconciler != nil {
+		r.WorkerReconciler.Recorder = r.Recorder
 	}
 
 	// Use GenerationChangedPredicate on the primary resource to skip reconciles

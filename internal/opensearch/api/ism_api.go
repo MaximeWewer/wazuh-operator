@@ -182,6 +182,15 @@ func (a *ISMAPI) Create(ctx context.Context, policyID string, policy ISMPolicy) 
 	return nil
 }
 
+// ISMPolicyGetResponse represents the response from GET ISM policy, including metadata
+// needed for optimistic concurrency control on updates.
+type ISMPolicyGetResponse struct {
+	ID          string        `json:"_id"`
+	SeqNo       int64         `json:"_seq_no"`
+	PrimaryTerm int64         `json:"_primary_term"`
+	Policy      ISMPolicySpec `json:"policy"`
+}
+
 // Get retrieves an ISM policy
 func (a *ISMAPI) Get(ctx context.Context, policyID string) (*ISMPolicy, error) {
 	resp, err := a.client.Get(ctx, fmt.Sprintf("/_plugins/_ism/policies/%s", policyID))
@@ -205,6 +214,32 @@ func (a *ISMAPI) Get(ctx context.Context, policyID string) (*ISMPolicy, error) {
 	}
 
 	return &policy, nil
+}
+
+// GetWithMeta retrieves an ISM policy along with its sequence number and primary term,
+// which are required for updates (optimistic concurrency control).
+func (a *ISMAPI) GetWithMeta(ctx context.Context, policyID string) (*ISMPolicyGetResponse, error) {
+	resp, err := a.client.Get(ctx, fmt.Sprintf("/_plugins/_ism/policies/%s", policyID))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ISM policy: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get ISM policy: status %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var policyResp ISMPolicyGetResponse
+	if err := json.NewDecoder(resp.Body).Decode(&policyResp); err != nil {
+		return nil, fmt.Errorf("failed to decode ISM policy response: %w", err)
+	}
+
+	return &policyResp, nil
 }
 
 // Update updates an existing ISM policy

@@ -81,9 +81,23 @@ func (o *RollingRestartOrchestrator) OrchestrateRestart(
 		return nil, fmt.Errorf("failed to list pods for StatefulSet %s: %w", sts.Name, err)
 	}
 
+	// Filter pods by owner reference to ensure we only consider pods owned by this StatefulSet.
+	// This is important when multiple StatefulSets share the same label selector (e.g. manager-master
+	// and manager-worker both use "wazuh-manager" app label).
+	stsUID := sts.UID
+	var ownedPods []corev1.Pod
+	for _, pod := range podList.Items {
+		for _, ownerRef := range pod.OwnerReferences {
+			if ownerRef.UID == stsUID {
+				ownedPods = append(ownedPods, pod)
+				break
+			}
+		}
+	}
+
 	// Step 2: Classify pods as updated or outdated
 	var updatedPods, outdatedPods []corev1.Pod
-	for _, pod := range podList.Items {
+	for _, pod := range ownedPods {
 		revision := pod.Labels["controller-revision-hash"]
 		if revision == targetRevision {
 			updatedPods = append(updatedPods, pod)
@@ -92,7 +106,7 @@ func (o *RollingRestartOrchestrator) OrchestrateRestart(
 		}
 	}
 
-	totalPods := int32(len(podList.Items))
+	totalPods := int32(len(ownedPods))
 	updatedCount := int32(len(updatedPods))
 
 	// Step 3: All pods on target revision → Complete
@@ -107,7 +121,7 @@ func (o *RollingRestartOrchestrator) OrchestrateRestart(
 	}
 
 	// Step 4: Check if any pod is not ready (wait for in-flight replacement)
-	for _, pod := range podList.Items {
+	for _, pod := range ownedPods {
 		if !isPodReady(&pod) {
 			log.V(1).Info("Waiting for pod to become ready",
 				"pod", pod.Name,
