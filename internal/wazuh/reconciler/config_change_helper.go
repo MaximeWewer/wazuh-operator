@@ -19,6 +19,7 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -26,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -97,8 +99,14 @@ func (h *ConfigChangeHelper) DetectChangesForComponent(
 		detector.SetTrackedHashes(existingHashes)
 	}
 
-	// Detect changes
+	// Detect changes and measure detection duration
+	startTime := time.Now()
 	result, err := detector.DetectChanges(ctx)
+	detectionDuration := time.Since(startTime).Seconds()
+
+	// Record detection duration metric regardless of outcome
+	metrics.RecordConfigDetectionDuration(resourceName, h.namespace, h.component, detectionDuration)
+
 	if err != nil {
 		log.Error(err, "Failed to detect configuration changes", "component", h.component)
 		return nil, err
@@ -109,12 +117,42 @@ func (h *ConfigChangeHelper) DetectChangesForComponent(
 			"component", h.component,
 			"changeCount", len(result.Changes),
 			"requiredAction", result.RequiredAction)
+
+		// Record metrics for each detected change
 		for _, change := range result.Changes {
 			log.V(1).Info("Detected change",
 				"type", change.Type,
 				"source", change.Source,
 				"impact", change.Impact)
+
+			// Record the general config change metric with lowercased change type
+			changeTypeStr := strings.ToLower(string(change.Type))
+			metrics.RecordConfigChangeDetected(resourceName, h.namespace, changeTypeStr)
+
+			// Record type-specific metrics
+			switch change.Type {
+			case config.ChangeTypeTLSConfig:
+				metrics.RecordTLSConfigChange(resourceName, h.namespace, h.component)
+			case config.ChangeTypeEnvFrom:
+				// Determine source type from the source identifier (e.g., "EnvFrom/my-configmap")
+				sourceType := "configmap"
+				if strings.Contains(change.Source, "secret/") || strings.Contains(change.Source, "Secret") {
+					sourceType = "secret"
+				}
+				metrics.RecordEnvFromChange(resourceName, h.namespace, h.component, sourceType)
+			case config.ChangeTypeCertificate:
+				metrics.RecordCertConfigChange(resourceName, h.namespace, h.component, change.Source)
+			}
+
+			// Record hash mismatch for changes that have both old and new hashes
+			if change.OldHash != "" && change.NewHash != "" {
+				metrics.RecordConfigHashMismatch(resourceName, h.namespace, h.component, changeTypeStr)
+			}
 		}
+
+		// Record that a reconciliation was triggered by config changes
+		trigger := strings.ToLower(string(result.RequiredAction))
+		metrics.RecordConfigReconciliationTriggered(resourceName, h.namespace, h.component, trigger)
 	}
 
 	return result, nil

@@ -31,7 +31,9 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -104,6 +106,21 @@ func (r *UserReconciler) Reconcile(ctx context.Context, user *wazuhv1.OpenSearch
 	}
 
 	r.recordEvent(user, corev1.EventTypeNormal, "Synced", "User successfully synchronized to OpenSearch")
+
+	// Compute spec hash for drift detection
+	specHash, hashErr := patch.ComputeSpecHash(user.Spec)
+	if hashErr == nil && user.Status.LastAppliedHash != "" && user.Status.LastAppliedHash != specHash {
+		user.Status.DriftDetected = true
+		now := metav1.Now()
+		user.Status.LastDriftTime = &now
+		metrics.RecordDriftDetection("OpenSearchUser", user.Namespace)
+		log.Info("Drift detected on OpenSearchUser", "name", user.Name)
+	} else {
+		user.Status.DriftDetected = false
+	}
+	if hashErr == nil {
+		user.Status.LastAppliedHash = specHash
+	}
 
 	// Update status
 	if err := r.updateStatus(ctx, user, wazuhv1.OpenSearchResourcePhaseReady, "User reconciled successfully"); err != nil {
@@ -183,6 +200,8 @@ func (r *UserReconciler) updateStatus(ctx context.Context, user *wazuhv1.OpenSea
 	user.Status.Message = message
 	now := metav1.Now()
 	user.Status.LastSyncTime = &now
+
+	metrics.SetResourceSyncStatus("OpenSearchUser", user.Namespace, user.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
 	return r.Status().Update(ctx, user)
 }

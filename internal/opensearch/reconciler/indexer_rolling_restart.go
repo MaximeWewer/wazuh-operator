@@ -19,6 +19,7 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -26,6 +27,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/rolling"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -37,6 +39,7 @@ import (
 // Returns nil result if no restart is needed.
 func (r *IndexerReconciler) OrchestrateRollingRestart(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*rolling.RestartResult, error) {
 	log := logf.FromContext(ctx)
+	startTime := time.Now()
 
 	if cluster.Spec.Indexer == nil {
 		return nil, nil
@@ -66,12 +69,15 @@ func (r *IndexerReconciler) OrchestrateRollingRestart(ctx context.Context, clust
 		return nil, nil
 	}
 
+	metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "indexer", metrics.PhaseToValue(constants.DrainPhaseDraining))
+
 	desiredNodes := int(cluster.Spec.Indexer.Replicas)
 	healthChecker := NewIndexerHealthChecker(r.osClient, desiredNodes)
 
 	orchestrator := rolling.NewOrchestrator(r.Client)
 	result, err := orchestrator.OrchestrateRestart(ctx, sts, healthChecker, true)
 	if err != nil {
+		metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "indexer", metrics.PhaseToValue(constants.DrainPhaseFailed))
 		return nil, fmt.Errorf("rolling restart failed for indexer: %w", err)
 	}
 
@@ -80,6 +86,8 @@ func (r *IndexerReconciler) OrchestrateRollingRestart(ctx context.Context, clust
 			"Rolling restart: deleted indexer pod %s (%d/%d updated)", result.CurrentPod, result.UpdatedPods, result.TotalPods)
 	}
 	if result.Phase == rolling.RestartPhaseComplete {
+		metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "indexer", metrics.PhaseToValue(constants.DrainPhaseComplete))
+		metrics.ObserveDrainDuration(cluster.Name, cluster.Namespace, "indexer", time.Since(startTime).Seconds())
 		r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonRollingRestartComplete,
 			"Rolling restart complete for indexer")
 	}
@@ -91,11 +99,14 @@ func (r *IndexerReconciler) OrchestrateRollingRestart(ctx context.Context, clust
 // It iterates over each pool and restarts one pod at a time across all pools.
 func (r *IndexerReconciler) orchestrateNodePoolRollingRestart(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*rolling.RestartResult, error) {
 	log := logf.FromContext(ctx)
+	startTime := time.Now()
 
 	if err := r.ensureOpenSearchClient(ctx, cluster); err != nil {
 		log.V(1).Info("Cannot create OpenSearch client for health check, skipping rolling restart", "error", err)
 		return nil, nil
 	}
+
+	metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "indexer", metrics.PhaseToValue(constants.DrainPhaseDraining))
 
 	totalDesiredNodes := int(cluster.Spec.Indexer.GetTotalReplicas())
 	healthChecker := NewIndexerHealthChecker(r.osClient, totalDesiredNodes)
@@ -123,6 +134,7 @@ func (r *IndexerReconciler) orchestrateNodePoolRollingRestart(ctx context.Contex
 
 		result, err := orchestrator.OrchestrateRestart(ctx, sts, healthChecker, true)
 		if err != nil {
+			metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "indexer", metrics.PhaseToValue(constants.DrainPhaseFailed))
 			return nil, fmt.Errorf("rolling restart failed for nodePool %s: %w", pool.Name, err)
 		}
 
@@ -159,6 +171,8 @@ func (r *IndexerReconciler) orchestrateNodePoolRollingRestart(ctx context.Contex
 	}
 
 	// All pools complete
+	metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "indexer", metrics.PhaseToValue(constants.DrainPhaseComplete))
+	metrics.ObserveDrainDuration(cluster.Name, cluster.Namespace, "indexer", time.Since(startTime).Seconds())
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonRollingRestartComplete,
 		"Rolling restart complete for all indexer node pools")
 

@@ -42,6 +42,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/deployments"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/hpa"
 	osservices "github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/services"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/serviceaccount"
@@ -473,6 +474,11 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 			"name", deployment.Name,
 			"oldReplicas", *found.Spec.Replicas,
 			"newReplicas", desiredReplicas)
+		direction := "up"
+		if desiredReplicas < *found.Spec.Replicas {
+			direction = "down"
+		}
+		metrics.RecordScaleOperation(cluster.Name, cluster.Namespace, "dashboard", direction)
 		needsUpdate = true
 	}
 
@@ -939,6 +945,10 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		needsUpdate = true
 		updateReason = "spec-change"
 
+		// Record spec hash change metric
+		metrics.RecordSpecHashChange(cluster.Name, cluster.Namespace, "dashboard")
+		metrics.RecordPatchDetection(cluster.Name, cluster.Namespace, "dashboard", "spec-change")
+
 		// Emit Kubernetes event for spec change
 		if r.Recorder != nil {
 			r.Recorder.Event(cluster, corev1.EventTypeNormal, "SpecChanged",
@@ -995,6 +1005,10 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		} else {
 			updateReason += ",config-change"
 		}
+
+		// Record config hash change metric
+		metrics.RecordConfigHashChange(cluster.Name, cluster.Namespace, "dashboard")
+		metrics.RecordPatchDetection(cluster.Name, cluster.Namespace, "dashboard", "config-change")
 
 		// Emit event for config change detection
 		if r.Recorder != nil {

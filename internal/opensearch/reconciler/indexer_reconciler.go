@@ -708,6 +708,11 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 			"name", sts.Name,
 			"oldReplicas", *found.Spec.Replicas,
 			"newReplicas", desiredReplicas)
+		direction := "up"
+		if desiredReplicas < *found.Spec.Replicas {
+			direction = "down"
+		}
+		metrics.RecordScaleOperation(cluster.Name, cluster.Namespace, "indexer", direction)
 		needsUpdate = true
 	}
 
@@ -1125,6 +1130,10 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		needsUpdate = true
 		updateReason = "spec-change"
 
+		// Record spec hash change metric
+		metrics.RecordSpecHashChange(cluster.Name, cluster.Namespace, "indexer")
+		metrics.RecordPatchDetection(cluster.Name, cluster.Namespace, "indexer", "spec-change")
+
 		// Emit event for spec change detection
 		if r.Recorder != nil {
 			r.Recorder.Event(cluster, corev1.EventTypeNormal, "SpecChanged",
@@ -1186,6 +1195,10 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		} else {
 			updateReason += ",config-change"
 		}
+
+		// Record config hash change metric
+		metrics.RecordConfigHashChange(cluster.Name, cluster.Namespace, "indexer")
+		metrics.RecordPatchDetection(cluster.Name, cluster.Namespace, "indexer", "config-change")
 
 		// Emit event for config change detection
 		if r.Recorder != nil {
@@ -1323,7 +1336,9 @@ func (r *IndexerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *wa
 	case wazuhv1.DrainPhaseIdle, "":
 		// Start new drain
 		log.Info("Starting indexer drain for scale-down", "targetPod", scaleInfo.TargetPodName)
+		metrics.RecordDrainStarted(cluster.Name, cluster.Namespace, "indexer")
 		if err := r.startDrain(ctx, cluster, scaleInfo, drainStatus); err != nil {
+			metrics.RecordDrainFailed(cluster.Name, cluster.Namespace, "indexer")
 			result.Error = err
 			return result, err
 		}
@@ -1338,6 +1353,10 @@ func (r *IndexerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *wa
 			result.Error = err
 			return result, nil //nolint:nilerr // Error stored in result.Error for caller to handle
 		}
+		if progress != nil {
+			metrics.RecordDrainProgress(cluster.Name, cluster.Namespace, "indexer", float64(progress.Percent))
+			metrics.SetIndexerShardCount(cluster.Name, cluster.Namespace, scaleInfo.TargetPodName, progress.ShardsRemaining)
+		}
 		result.Progress = progress
 		return result, nil
 
@@ -1349,6 +1368,14 @@ func (r *IndexerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *wa
 			return result, nil //nolint:nilerr // Error stored in result.Error for caller to handle
 		}
 		if complete {
+			// Compute drain duration from status start time
+			var durationSeconds float64
+			if drainStatus.StartTime != nil {
+				durationSeconds = time.Since(drainStatus.StartTime.Time).Seconds()
+			}
+			metrics.RecordDrainCompleted(cluster.Name, cluster.Namespace, "indexer")
+			metrics.RecordDrainOperation(cluster.Name, cluster.Namespace, "indexer", "success", durationSeconds)
+			metrics.ShardRelocationDuration.WithLabelValues(cluster.Name, cluster.Namespace).Observe(durationSeconds)
 			result.DrainComplete = true
 			result.DrainInProgress = false
 		} else {
@@ -1359,12 +1386,19 @@ func (r *IndexerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *wa
 	case wazuhv1.DrainPhaseComplete:
 		// Drain complete, proceed with scale-down
 		log.Info("Indexer drain complete, proceeding with scale-down")
+		metrics.ResetDrainMetrics(cluster.Name, cluster.Namespace, "indexer")
 		result.DrainComplete = true
 		return result, nil
 
 	case wazuhv1.DrainPhaseFailed:
 		// Drain failed - check if we should retry or skip
 		log.Info("Previous drain failed", "message", drainStatus.Message)
+		metrics.RecordDrainFailed(cluster.Name, cluster.Namespace, "indexer")
+		var durationSeconds float64
+		if drainStatus.StartTime != nil {
+			durationSeconds = time.Since(drainStatus.StartTime.Time).Seconds()
+		}
+		metrics.RecordDrainOperation(cluster.Name, cluster.Namespace, "indexer", "failure", durationSeconds)
 		result.Error = fmt.Errorf("drain failed: %s", drainStatus.Message)
 		return result, nil
 
@@ -2773,6 +2807,13 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 			"oldReplicas", currentReplicas,
 			"newReplicas", pool.Replicas,
 			"isScaleDown", isScaleDown)
+
+		// Record scale operation metric
+		direction := "up"
+		if isScaleDown {
+			direction = "down"
+		}
+		metrics.RecordScaleOperation(cluster.Name, cluster.Namespace, "indexer-"+pool.Name, direction)
 
 		// Handle scale-down with drain integration
 		if isScaleDown {

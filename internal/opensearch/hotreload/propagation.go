@@ -309,6 +309,13 @@ func (h *HotReloader) VerifyPodCertSync(
 
 	result.AllSynced = result.SyncedPods == result.TotalPods
 
+	// If all pods are synced, clear individual pod sync metrics for this component
+	if result.AllSynced {
+		for _, podName := range podNames {
+			metrics.ClearPodSyncStatus(cluster.Name, cluster.Namespace, component, podName)
+		}
+	}
+
 	log.Info("Certificate sync verification completed",
 		"operation", "verify-cert-sync",
 		"cluster", cluster.Name,

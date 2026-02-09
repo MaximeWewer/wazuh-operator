@@ -45,6 +45,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
+	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
 	certreconciler "github.com/MaximeWewer/wazuh-operator/internal/certificates/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
@@ -193,6 +194,11 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Detect version upgrade before updating status
+	if oldVersion := cluster.Status.Version; oldVersion != "" && oldVersion != cluster.Spec.Version {
+		metrics.RecordVersionUpgrade(cluster.Name, cluster.Namespace, oldVersion, cluster.Spec.Version)
 	}
 
 	// Update phase if pending
@@ -406,6 +412,9 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{}, err
 		}
 	}
+
+	// Record certificate expiry days metrics for cluster-level dashboards
+	r.recordCertificateExpiryDaysMetrics(ctx, cluster)
 
 	// Track new pending rollouts
 	var newPendingRollouts []utils.PendingRollout
@@ -720,6 +729,9 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 
+	// Track managed WazuhCluster resource
+	metrics.SetManagedResources("WazuhCluster", cluster.Namespace, 1)
+
 	// Determine requeue interval based on state
 	requeueInterval := r.determineRequeueInterval(hasPendingRollouts, hasRollingRestart)
 	log.V(1).Info("Reconciliation complete",
@@ -969,6 +981,12 @@ func (r *WazuhClusterReconciler) handleDeletion(ctx context.Context, cluster *wa
 	// Record event for successful cleanup
 	r.Recorder.Event(cluster, corev1.EventTypeNormal, "Cleanup", "All resources cleaned up successfully")
 
+	// Clean up cluster metrics for the deleted cluster
+	metrics.DeleteClusterMetrics(cluster.Name, cluster.Namespace)
+	metrics.ClearCertificateMetrics(cluster.Name, cluster.Namespace)
+	metrics.ClearConfigMetrics(cluster.Name, cluster.Namespace)
+	log.V(1).Info("Cleaned up cluster metrics")
+
 	// Remove finalizer after successful cleanup
 	controllerutil.RemoveFinalizer(cluster, wazuhClusterFinalizer)
 	if err := r.Update(ctx, cluster); err != nil {
@@ -1161,35 +1179,115 @@ func (r *WazuhClusterReconciler) updateStatus(ctx context.Context, cluster *wazu
 
 		allReady := true
 
+		// Track component health for overall cluster health computation
+		componentHealths := make(map[string]metrics.ClusterHealthStatus)
+
 		// Check Indexer status
 		if status, err := r.IndexerReconciler.GetStatus(ctx, cluster); err != nil {
 			log.Error(err, "Failed to get Indexer status")
+			componentHealths["indexer"] = metrics.ClusterHealthUnknown
+			metrics.SetClusterComponentHealth(cluster.Name, cluster.Namespace, "indexer", metrics.ClusterHealthUnknown)
 		} else {
 			latestCluster.Status.Indexer = status
-			if status != nil && status.ReadyReplicas < status.Replicas {
-				allReady = false
+			if status != nil {
+				metrics.SetClusterReplicas(cluster.Name, cluster.Namespace, "indexer", status.ReadyReplicas, status.Replicas)
+				if status.ReadyReplicas < status.Replicas {
+					allReady = false
+					if status.ReadyReplicas == 0 {
+						componentHealths["indexer"] = metrics.ClusterHealthRed
+					} else {
+						componentHealths["indexer"] = metrics.ClusterHealthYellow
+					}
+				} else {
+					componentHealths["indexer"] = metrics.ClusterHealthGreen
+				}
+			} else {
+				componentHealths["indexer"] = metrics.ClusterHealthUnknown
 			}
+			metrics.SetClusterComponentHealth(cluster.Name, cluster.Namespace, "indexer", componentHealths["indexer"])
 		}
 
 		// Check Manager status
 		if status, err := r.ClusterReconciler.GetManagerStatus(ctx, cluster); err != nil {
 			log.Error(err, "Failed to get Manager status")
+			componentHealths["manager"] = metrics.ClusterHealthUnknown
+			metrics.SetClusterComponentHealth(cluster.Name, cluster.Namespace, "manager", metrics.ClusterHealthUnknown)
 		} else {
 			latestCluster.Status.Manager = status
-			if status != nil && status.ReadyReplicas < status.Replicas {
-				allReady = false
+			if status != nil {
+				metrics.SetClusterReplicas(cluster.Name, cluster.Namespace, "manager", status.ReadyReplicas, status.Replicas)
+				if status.ReadyReplicas < status.Replicas {
+					allReady = false
+					if status.ReadyReplicas == 0 {
+						componentHealths["manager"] = metrics.ClusterHealthRed
+					} else {
+						componentHealths["manager"] = metrics.ClusterHealthYellow
+					}
+				} else {
+					componentHealths["manager"] = metrics.ClusterHealthGreen
+				}
+			} else {
+				componentHealths["manager"] = metrics.ClusterHealthUnknown
 			}
+			metrics.SetClusterComponentHealth(cluster.Name, cluster.Namespace, "manager", componentHealths["manager"])
 		}
 
 		// Check Dashboard status
 		if status, err := r.DashboardReconciler.GetStatus(ctx, cluster); err != nil {
 			log.Error(err, "Failed to get Dashboard status")
+			componentHealths["dashboard"] = metrics.ClusterHealthUnknown
+			metrics.SetClusterComponentHealth(cluster.Name, cluster.Namespace, "dashboard", metrics.ClusterHealthUnknown)
 		} else {
 			latestCluster.Status.Dashboard = status
-			if status != nil && status.ReadyReplicas < status.Replicas {
-				allReady = false
+			if status != nil {
+				metrics.SetClusterReplicas(cluster.Name, cluster.Namespace, "dashboard", status.ReadyReplicas, status.Replicas)
+				if status.ReadyReplicas < status.Replicas {
+					allReady = false
+					if status.ReadyReplicas == 0 {
+						componentHealths["dashboard"] = metrics.ClusterHealthRed
+					} else {
+						componentHealths["dashboard"] = metrics.ClusterHealthYellow
+					}
+				} else {
+					componentHealths["dashboard"] = metrics.ClusterHealthGreen
+				}
+			} else {
+				componentHealths["dashboard"] = metrics.ClusterHealthUnknown
 			}
+			metrics.SetClusterComponentHealth(cluster.Name, cluster.Namespace, "dashboard", componentHealths["dashboard"])
 		}
+
+		// Worker is a sub-component of manager; report separately for visibility
+		// Worker replicas are tracked via the manager StatefulSet status, but we
+		// set a dedicated "worker" component health so dashboards can distinguish
+		// master from worker health. The worker ready count is derived from the
+		// manager status (total ready minus the 1 master node).
+		if latestCluster.Status.Manager != nil {
+			workerReady := latestCluster.Status.Manager.ReadyReplicas - 1
+			if workerReady < 0 {
+				workerReady = 0
+			}
+			workerDesired := latestCluster.Status.Manager.Replicas - 1
+			if workerDesired < 0 {
+				workerDesired = 0
+			}
+			metrics.SetClusterReplicas(cluster.Name, cluster.Namespace, "worker", workerReady, workerDesired)
+			var workerHealth metrics.ClusterHealthStatus
+			if workerDesired == 0 {
+				workerHealth = metrics.ClusterHealthGreen // No workers expected
+			} else if workerReady == 0 {
+				workerHealth = metrics.ClusterHealthRed
+			} else if workerReady < workerDesired {
+				workerHealth = metrics.ClusterHealthYellow
+			} else {
+				workerHealth = metrics.ClusterHealthGreen
+			}
+			metrics.SetClusterComponentHealth(cluster.Name, cluster.Namespace, "worker", workerHealth)
+		}
+
+		// Compute and set overall cluster health from component statuses
+		overallHealth := metrics.CalculateOverallHealth(componentHealths)
+		metrics.SetClusterHealth(cluster.Name, cluster.Namespace, overallHealth)
 
 		// Copy conditions from working cluster (preserves SecurityReady and other
 		// conditions set during the reconciliation loop before updateStatus is called)
@@ -1294,6 +1392,49 @@ func (r *WazuhClusterReconciler) collectWazuhAgentMetrics(cluster *wazuhv1.Wazuh
 
 	// Record agent metrics
 	metrics.SetWazuhAgentsConnected(cluster.Name, cluster.Namespace, summary.Active)
+}
+
+// recordCertificateExpiryDaysMetrics reads certificate secrets and records
+// days-until-expiry and expiry-timestamp metrics via the cluster_metrics gauges.
+// This is best-effort: failures are logged at debug level and do not block reconciliation.
+func (r *WazuhClusterReconciler) recordCertificateExpiryDaysMetrics(ctx context.Context, cluster *wazuhv1.WazuhCluster) {
+	log := logf.FromContext(ctx)
+
+	type certInfo struct {
+		certType  string
+		secretName string
+		certKey   string
+	}
+
+	certs := []certInfo{
+		{"ca", cluster.Name + "-ca", constants.SecretKeyCACert},
+		{"indexer", constants.IndexerCertsName(cluster.Name), constants.SecretKeyNodeCert},
+		{"dashboard", constants.DashboardCertsName(cluster.Name), constants.SecretKeyNodeCert},
+		{"manager-master", constants.ManagerMasterCertsName(cluster.Name), constants.SecretKeyNodeCert},
+		{"manager-worker", constants.ManagerWorkerCertsName(cluster.Name), constants.SecretKeyNodeCert},
+		{"admin", constants.AdminCertsName(cluster.Name), constants.SecretKeyAdminCert},
+		{"filebeat", constants.FilebeatCertsName(cluster.Name), constants.SecretKeyNodeCert},
+	}
+
+	now := time.Now()
+	for _, ci := range certs {
+		secret := &corev1.Secret{}
+		if err := r.Get(ctx, types.NamespacedName{Name: ci.secretName, Namespace: cluster.Namespace}, secret); err != nil {
+			log.V(2).Info("Cannot read certificate secret for expiry metrics", "secret", ci.secretName, "error", err)
+			continue
+		}
+		certPEM, ok := secret.Data[ci.certKey]
+		if !ok {
+			continue
+		}
+		expiry, err := certificates.GetCertificateExpiry(certPEM)
+		if err != nil {
+			log.V(2).Info("Failed to parse certificate expiry", "secret", ci.secretName, "error", err)
+			continue
+		}
+		daysUntilExpiry := expiry.Sub(now).Hours() / 24
+		metrics.SetCertificateExpiryDays(cluster.Name, cluster.Namespace, ci.certType, ci.secretName, daysUntilExpiry, float64(expiry.Unix()))
+	}
 }
 
 // updateDrainStatus updates the drain status in the cluster

@@ -27,8 +27,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -111,6 +113,21 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSe
 		return fmt.Errorf("failed to %s tenant: %w", action, err)
 	}
 
+	// Compute spec hash for drift detection
+	specHash, hashErr := patch.ComputeSpecHash(tenant.Spec)
+	if hashErr == nil && tenant.Status.LastAppliedHash != "" && tenant.Status.LastAppliedHash != specHash {
+		tenant.Status.DriftDetected = true
+		now := metav1.Now()
+		tenant.Status.LastDriftTime = &now
+		metrics.RecordDriftDetection("OpenSearchTenant", tenant.Namespace)
+		log.Info("Drift detected on OpenSearchTenant", "name", tenant.Name)
+	} else {
+		tenant.Status.DriftDetected = false
+	}
+	if hashErr == nil {
+		tenant.Status.LastAppliedHash = specHash
+	}
+
 	// Update status
 	if err := r.updateStatus(ctx, tenant, wazuhv1.OpenSearchResourcePhaseReady, "Tenant reconciled successfully"); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
@@ -133,6 +150,8 @@ func (r *TenantReconciler) updateStatus(ctx context.Context, tenant *wazuhv1.Ope
 	tenant.Status.Message = message
 	now := metav1.Now()
 	tenant.Status.LastSyncTime = &now
+
+	metrics.SetResourceSyncStatus("OpenSearchTenant", tenant.Namespace, tenant.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
 	return r.Status().Update(ctx, tenant)
 }

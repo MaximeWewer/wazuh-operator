@@ -181,6 +181,10 @@ func RegisterMetrics() {
 	RegisterClusterMetrics()
 	// Register config change detection metrics
 	RegisterConfigMetrics()
+	// Register OpenSearch-specific metrics
+	RegisterOpenSearchMetrics()
+	// Register Wazuh-specific metrics
+	RegisterWazuhMetrics()
 }
 
 // RecordReconciliation records a reconciliation event

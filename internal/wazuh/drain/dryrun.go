@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -298,6 +299,8 @@ func (e *DryRunEvaluatorImpl) EvaluateAll(ctx context.Context, cluster *v1.Wazuh
 	if totalDuration > 0 {
 		combinedResult.EstimatedDuration = &metav1.Duration{Duration: totalDuration}
 	}
+
+	metrics.RecordDryRunResult(cluster.Name, cluster.Namespace, combinedResult.Feasible)
 
 	e.log.Info("Comprehensive dry-run evaluation complete",
 		"feasible", combinedResult.Feasible,

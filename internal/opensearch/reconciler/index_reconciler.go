@@ -30,7 +30,9 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -111,6 +113,21 @@ func (r *IndexReconciler) Reconcile(ctx context.Context, index *wazuhv1.OpenSear
 			r.recordEvent(index, corev1.EventTypeNormal, "Updated", "Index settings updated in OpenSearch")
 			log.Info("Updated OpenSearch index settings", "name", indexName)
 		}
+	}
+
+	// Compute spec hash for drift detection
+	specHash, hashErr := patch.ComputeSpecHash(index.Spec)
+	if hashErr == nil && index.Status.LastAppliedHash != "" && index.Status.LastAppliedHash != specHash {
+		index.Status.DriftDetected = true
+		now := metav1.Now()
+		index.Status.LastDriftTime = &now
+		metrics.RecordDriftDetection("OpenSearchIndex", index.Namespace)
+		log.Info("Drift detected on OpenSearchIndex", "name", index.Name)
+	} else {
+		index.Status.DriftDetected = false
+	}
+	if hashErr == nil {
+		index.Status.LastAppliedHash = specHash
 	}
 
 	// Update status
@@ -197,6 +214,8 @@ func (r *IndexReconciler) updateStatus(ctx context.Context, index *wazuhv1.OpenS
 	index.Status.Message = message
 	now := metav1.Now()
 	index.Status.LastSyncTime = &now
+
+	metrics.SetResourceSyncStatus("OpenSearchIndex", index.Namespace, index.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
 	return r.Status().Update(ctx, index)
 }

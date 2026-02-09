@@ -59,6 +59,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/pkg/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 	"github.com/MaximeWewer/wazuh-operator/pkg/logging"
+	"github.com/MaximeWewer/wazuh-operator/pkg/version"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -82,6 +83,10 @@ func init() {
 
 	// Register operator metrics with Prometheus
 	metrics.RegisterMetrics()
+
+	// Set operator version info metric
+	v := version.Get()
+	metrics.SetOperatorInfo(v.Version, v.GitCommit, v.BuildDate)
 }
 
 //nolint:gocyclo // Main function has high cyclomatic complexity due to controller setup; splitting would reduce clarity

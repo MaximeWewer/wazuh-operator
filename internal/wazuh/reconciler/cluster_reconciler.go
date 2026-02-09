@@ -40,6 +40,7 @@ import (
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
 	wazuhcerts "github.com/MaximeWewer/wazuh-operator/internal/certificates/wazuh"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	affinityutil "github.com/MaximeWewer/wazuh-operator/internal/shared/affinity"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
@@ -662,6 +663,10 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingConfigHash),
 			"newHash", utils.ShortHash(configHash))
+
+		// Record config hash change metric
+		metrics.RecordConfigHashChange(cluster.Name, cluster.Namespace, "master")
+		metrics.RecordPatchDetection(cluster.Name, cluster.Namespace, "master", "config-change")
 	}
 	if specHash != "" && specHash != existingSpecHash {
 		needsUpdate = true
@@ -674,6 +679,10 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingSpecHash),
 			"newHash", utils.ShortHash(specHash))
+
+		// Record spec hash change metric
+		metrics.RecordSpecHashChange(cluster.Name, cluster.Namespace, "master")
+		metrics.RecordPatchDetection(cluster.Name, cluster.Namespace, "master", "spec-change")
 	}
 	if !apiequality.Semantic.DeepEqual(found.Spec.Template.Spec.Tolerations, sts.Spec.Template.Spec.Tolerations) {
 		needsUpdate = true
@@ -1109,6 +1118,10 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingConfigHash),
 			"newHash", utils.ShortHash(configHash))
+
+		// Record config hash change metric
+		metrics.RecordConfigHashChange(cluster.Name, cluster.Namespace, "worker")
+		metrics.RecordPatchDetection(cluster.Name, cluster.Namespace, "worker", "config-change")
 	}
 	if specHash != "" && specHash != existingSpecHash {
 		needsUpdate = true
@@ -1121,6 +1134,10 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingSpecHash),
 			"newHash", utils.ShortHash(specHash))
+
+		// Record spec hash change metric
+		metrics.RecordSpecHashChange(cluster.Name, cluster.Namespace, "worker")
+		metrics.RecordPatchDetection(cluster.Name, cluster.Namespace, "worker", "spec-change")
 	}
 	if !apiequality.Semantic.DeepEqual(found.Spec.Template.Spec.Tolerations, sts.Spec.Template.Spec.Tolerations) {
 		needsUpdate = true
@@ -1481,6 +1498,8 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingConfigHash),
 			"newHash", utils.ShortHash(configHash))
+		metrics.RecordConfigHashChange(cluster.Name, cluster.Namespace, "master")
+		metrics.RecordPatchDetection(cluster.Name, cluster.Namespace, "master", "config-change")
 		needsUpdate = true
 	}
 	if specHash != "" && specHash != existingSpecHash {
@@ -1488,6 +1507,8 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingSpecHash),
 			"newHash", utils.ShortHash(specHash))
+		metrics.RecordSpecHashChange(cluster.Name, cluster.Namespace, "master")
+		metrics.RecordPatchDetection(cluster.Name, cluster.Namespace, "master", "spec-change")
 		needsUpdate = true
 	}
 	if utils.HashMap(sts.Annotations) != utils.HashMap(found.Annotations) {
@@ -1783,6 +1804,11 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 			"name", sts.Name,
 			"oldReplicas", *found.Spec.Replicas,
 			"newReplicas", workerReplicas2)
+		direction := "up"
+		if workerReplicas2 < *found.Spec.Replicas {
+			direction = "down"
+		}
+		metrics.RecordScaleOperation(cluster.Name, cluster.Namespace, "worker", direction)
 		needsUpdate = true
 	}
 	if configHash != "" && configHash != existingConfigHash {
@@ -1790,6 +1816,8 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingConfigHash),
 			"newHash", utils.ShortHash(configHash))
+		metrics.RecordConfigHashChange(cluster.Name, cluster.Namespace, "worker")
+		metrics.RecordPatchDetection(cluster.Name, cluster.Namespace, "worker", "config-change")
 		needsUpdate = true
 	}
 	if specHash != "" && specHash != existingSpecHash {
@@ -1797,6 +1825,8 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingSpecHash),
 			"newHash", utils.ShortHash(specHash))
+		metrics.RecordSpecHashChange(cluster.Name, cluster.Namespace, "worker")
+		metrics.RecordPatchDetection(cluster.Name, cluster.Namespace, "worker", "spec-change")
 		needsUpdate = true
 	}
 	if utils.HashMap(sts.Annotations) != utils.HashMap(found.Annotations) {

@@ -28,8 +28,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -112,6 +114,21 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.Op
 		return fmt.Errorf("failed to %s index template: %w", action, err)
 	}
 
+	// Compute spec hash for drift detection
+	specHash, hashErr := patch.ComputeSpecHash(template.Spec)
+	if hashErr == nil && template.Status.LastAppliedHash != "" && template.Status.LastAppliedHash != specHash {
+		template.Status.DriftDetected = true
+		now := metav1.Now()
+		template.Status.LastDriftTime = &now
+		metrics.RecordDriftDetection("OpenSearchIndexTemplate", template.Namespace)
+		log.Info("Drift detected on OpenSearchIndexTemplate", "name", template.Name)
+	} else {
+		template.Status.DriftDetected = false
+	}
+	if hashErr == nil {
+		template.Status.LastAppliedHash = specHash
+	}
+
 	// Update status
 	if err := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseReady, "Index template reconciled successfully"); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
@@ -176,6 +193,8 @@ func (r *TemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1
 	template.Status.Message = message
 	now := metav1.Now()
 	template.Status.LastSyncTime = &now
+
+	metrics.SetResourceSyncStatus("OpenSearchIndexTemplate", template.Namespace, template.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
 	return r.Status().Update(ctx, template)
 }

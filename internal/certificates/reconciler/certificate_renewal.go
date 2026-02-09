@@ -19,6 +19,7 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -29,6 +30,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
@@ -88,6 +90,14 @@ func (r *CertificateReconciler) reconcileDashboardCerts(ctx context.Context, clu
 		// Check if certificate needs renewal using options from CRD
 		certResult, parseErr := certificates.ParseDashboardCert(found.Data[constants.SecretKeyTLSCert], found.Data[constants.SecretKeyTLSKey])
 		if parseErr == nil {
+			// Record certificate expiry metric
+			secondsUntilExpiry := time.Until(certResult.Certificate.NotAfter).Seconds()
+			metrics.SetCertificateExpiry(cluster.Name, cluster.Namespace, constants.CertComponentDashboard, constants.CertTypeDashboard, secondsUntilExpiry)
+
+			// Record certificate info metric
+			metrics.SetCertificateInfo(cluster.Name, cluster.Namespace, constants.CertComponentDashboard,
+				certResult.Certificate.SerialNumber.String(), certResult.Certificate.Issuer.CommonName)
+
 			// Check for cluster domain mismatch
 			if certificates.RequiresDomainRegeneration(certResult.Certificate, secretName, cluster.Namespace, log) {
 				log.Info("Dashboard certificate has domain mismatch, regenerating",
@@ -109,12 +119,14 @@ func (r *CertificateReconciler) reconcileDashboardCerts(ctx context.Context, clu
 		}
 		if parseErr != nil {
 			log.Info("Failed to parse dashboard certificate, regenerating", "error", parseErr.Error())
+			metrics.RecordCertificateError(cluster.Name, cluster.Namespace, constants.CertComponentDashboard, "parse_error")
 		}
 	} else if !errors.IsNotFound(getErr) {
 		return fmt.Errorf("failed to get dashboard secret: %w", getErr)
 	}
 
 	// Generate new dashboard certificate using options from CRD
+	renewalStart := time.Now()
 	log.Info("Generating new dashboard certificate", "name", secretName, "validity", certificates.FormatCertDuration(certOpts.GetDashboardValidity()))
 	dashboardConfig := certificates.DefaultDashboardCertConfig()
 	dashboardConfig.CommonName = cluster.Name + "-dashboard"
@@ -131,6 +143,9 @@ func (r *CertificateReconciler) reconcileDashboardCerts(ctx context.Context, clu
 
 	certResult, err := certificates.GenerateDashboardCert(dashboardConfig, caResult)
 	if err != nil {
+		duration := time.Since(renewalStart).Seconds()
+		metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentDashboard, "failure", duration)
+		metrics.RecordCertificateError(cluster.Name, cluster.Namespace, constants.CertComponentDashboard, "generation_error")
 		return fmt.Errorf("failed to generate dashboard certificate: %w", err)
 	}
 
@@ -156,21 +171,34 @@ func (r *CertificateReconciler) reconcileDashboardCerts(ctx context.Context, clu
 	}
 
 	if err := controllerutil.SetControllerReference(cluster, secret, r.Scheme); err != nil {
+		duration := time.Since(renewalStart).Seconds()
+		metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentDashboard, "failure", duration)
+		metrics.RecordCertificateError(cluster.Name, cluster.Namespace, constants.CertComponentDashboard, "controller_reference_error")
 		return fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
 	if !secretExists {
 		if err := r.Create(ctx, secret); err != nil {
+			duration := time.Since(renewalStart).Seconds()
+			metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentDashboard, "failure", duration)
+			metrics.RecordCertificateError(cluster.Name, cluster.Namespace, constants.CertComponentDashboard, "create_error")
 			r.emitTypedCertRenewalFailedEvent(cluster, CertEventTypeDashboard, secretName, err)
 			return fmt.Errorf("failed to create dashboard secret: %w", err)
 		}
+		duration := time.Since(renewalStart).Seconds()
+		metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentDashboard, "success", duration)
 		r.emitTypedCertCreatedEvent(cluster, CertEventTypeDashboard, secretName)
 	} else {
 		secret.SetResourceVersion(found.GetResourceVersion())
 		if err := r.Update(ctx, secret); err != nil {
+			duration := time.Since(renewalStart).Seconds()
+			metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentDashboard, "failure", duration)
+			metrics.RecordCertificateError(cluster.Name, cluster.Namespace, constants.CertComponentDashboard, "update_error")
 			r.emitTypedCertRenewalFailedEvent(cluster, CertEventTypeDashboard, secretName, err)
 			return fmt.Errorf("failed to update dashboard secret: %w", err)
 		}
+		duration := time.Since(renewalStart).Seconds()
+		metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentDashboard, "success", duration)
 		r.emitTypedCertRenewedEvent(cluster, CertEventTypeDashboard, secretName)
 	}
 
@@ -191,6 +219,14 @@ func (r *CertificateReconciler) reconcileFilebeatCerts(ctx context.Context, clus
 		// Check if certificate needs renewal using options from CRD
 		certResult, parseErr := certificates.ParseFilebeatCert(found.Data[constants.SecretKeyTLSCert], found.Data[constants.SecretKeyTLSKey])
 		if parseErr == nil {
+			// Record certificate expiry metric
+			secondsUntilExpiry := time.Until(certResult.Certificate.NotAfter).Seconds()
+			metrics.SetCertificateExpiry(cluster.Name, cluster.Namespace, constants.CertComponentFilebeat, constants.CertTypeFilebeat, secondsUntilExpiry)
+
+			// Record certificate info metric
+			metrics.SetCertificateInfo(cluster.Name, cluster.Namespace, constants.CertComponentFilebeat,
+				certResult.Certificate.SerialNumber.String(), certResult.Certificate.Issuer.CommonName)
+
 			// Check for cluster domain mismatch
 			if certificates.RequiresDomainRegeneration(certResult.Certificate, secretName, cluster.Namespace, log) {
 				log.Info("Filebeat certificate has domain mismatch, regenerating",
@@ -212,12 +248,14 @@ func (r *CertificateReconciler) reconcileFilebeatCerts(ctx context.Context, clus
 		}
 		if parseErr != nil {
 			log.Info("Failed to parse filebeat certificate, regenerating", "error", parseErr.Error())
+			metrics.RecordCertificateError(cluster.Name, cluster.Namespace, constants.CertComponentFilebeat, "parse_error")
 		}
 	} else if !errors.IsNotFound(getErr) {
 		return fmt.Errorf("failed to get filebeat secret: %w", getErr)
 	}
 
 	// Generate new filebeat certificate using options from CRD
+	renewalStart := time.Now()
 	log.Info("Generating new filebeat certificate", "name", secretName, "validity", certificates.FormatCertDuration(certOpts.GetFilebeatValidity()))
 	var workerReplicas int32
 	if cluster.Spec.Manager != nil {
@@ -239,6 +277,9 @@ func (r *CertificateReconciler) reconcileFilebeatCerts(ctx context.Context, clus
 
 	certResult, err := certificates.GenerateFilebeatCert(filebeatConfig, caResult)
 	if err != nil {
+		duration := time.Since(renewalStart).Seconds()
+		metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentFilebeat, "failure", duration)
+		metrics.RecordCertificateError(cluster.Name, cluster.Namespace, constants.CertComponentFilebeat, "generation_error")
 		return fmt.Errorf("failed to generate filebeat certificate: %w", err)
 	}
 
@@ -264,21 +305,34 @@ func (r *CertificateReconciler) reconcileFilebeatCerts(ctx context.Context, clus
 	}
 
 	if err := controllerutil.SetControllerReference(cluster, secret, r.Scheme); err != nil {
+		duration := time.Since(renewalStart).Seconds()
+		metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentFilebeat, "failure", duration)
+		metrics.RecordCertificateError(cluster.Name, cluster.Namespace, constants.CertComponentFilebeat, "controller_reference_error")
 		return fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
 	if !secretExists {
 		if err := r.Create(ctx, secret); err != nil {
+			duration := time.Since(renewalStart).Seconds()
+			metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentFilebeat, "failure", duration)
+			metrics.RecordCertificateError(cluster.Name, cluster.Namespace, constants.CertComponentFilebeat, "create_error")
 			r.emitTypedCertRenewalFailedEvent(cluster, CertEventTypeFilebeat, secretName, err)
 			return fmt.Errorf("failed to create filebeat secret: %w", err)
 		}
+		duration := time.Since(renewalStart).Seconds()
+		metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentFilebeat, "success", duration)
 		r.emitTypedCertCreatedEvent(cluster, CertEventTypeFilebeat, secretName)
 	} else {
 		secret.SetResourceVersion(found.GetResourceVersion())
 		if err := r.Update(ctx, secret); err != nil {
+			duration := time.Since(renewalStart).Seconds()
+			metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentFilebeat, "failure", duration)
+			metrics.RecordCertificateError(cluster.Name, cluster.Namespace, constants.CertComponentFilebeat, "update_error")
 			r.emitTypedCertRenewalFailedEvent(cluster, CertEventTypeFilebeat, secretName, err)
 			return fmt.Errorf("failed to update filebeat secret: %w", err)
 		}
+		duration := time.Since(renewalStart).Seconds()
+		metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentFilebeat, "success", duration)
 		r.emitTypedCertRenewedEvent(cluster, CertEventTypeFilebeat, secretName)
 	}
 
@@ -299,6 +353,14 @@ func (r *CertificateReconciler) reconcileAdminCerts(ctx context.Context, cluster
 		// Check if certificate needs renewal using options from CRD
 		certResult, parseErr := certificates.ParseAdminCert(found.Data[constants.SecretKeyTLSCert], found.Data[constants.SecretKeyTLSKey])
 		if parseErr == nil {
+			// Record certificate expiry metric
+			secondsUntilExpiry := time.Until(certResult.Certificate.NotAfter).Seconds()
+			metrics.SetCertificateExpiry(cluster.Name, cluster.Namespace, constants.CertComponentAdmin, constants.CertTypeAdmin, secondsUntilExpiry)
+
+			// Record certificate info metric
+			metrics.SetCertificateInfo(cluster.Name, cluster.Namespace, constants.CertComponentAdmin,
+				certResult.Certificate.SerialNumber.String(), certResult.Certificate.Issuer.CommonName)
+
 			// Check for cluster domain mismatch (admin certs typically don't have K8s FQDNs, but check anyway)
 			if certificates.RequiresDomainRegeneration(certResult.Certificate, secretName, cluster.Namespace, log) {
 				log.Info("Admin certificate has domain mismatch, regenerating",
@@ -320,12 +382,14 @@ func (r *CertificateReconciler) reconcileAdminCerts(ctx context.Context, cluster
 		}
 		if parseErr != nil {
 			log.Info("Failed to parse admin certificate, regenerating", "error", parseErr.Error())
+			metrics.RecordCertificateError(cluster.Name, cluster.Namespace, constants.CertComponentAdmin, "parse_error")
 		}
 	} else if !errors.IsNotFound(getErr) {
 		return fmt.Errorf("failed to get admin secret: %w", getErr)
 	}
 
 	// Generate new admin certificate using options from CRD
+	renewalStart := time.Now()
 	log.Info("Generating new admin certificate", "name", secretName, "validity", certificates.FormatCertDuration(certOpts.GetAdminValidity()))
 	adminConfig := certificates.DefaultAdminCertConfig()
 	// Apply subject fields from CRD configuration
@@ -340,6 +404,9 @@ func (r *CertificateReconciler) reconcileAdminCerts(ctx context.Context, cluster
 
 	certResult, err := certificates.GenerateAdminCert(adminConfig, caResult)
 	if err != nil {
+		duration := time.Since(renewalStart).Seconds()
+		metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentAdmin, "failure", duration)
+		metrics.RecordCertificateError(cluster.Name, cluster.Namespace, constants.CertComponentAdmin, "generation_error")
 		return fmt.Errorf("failed to generate admin certificate: %w", err)
 	}
 
@@ -365,21 +432,34 @@ func (r *CertificateReconciler) reconcileAdminCerts(ctx context.Context, cluster
 	}
 
 	if err := controllerutil.SetControllerReference(cluster, secret, r.Scheme); err != nil {
+		duration := time.Since(renewalStart).Seconds()
+		metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentAdmin, "failure", duration)
+		metrics.RecordCertificateError(cluster.Name, cluster.Namespace, constants.CertComponentAdmin, "controller_reference_error")
 		return fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
 	if !secretExists {
 		if err := r.Create(ctx, secret); err != nil {
+			duration := time.Since(renewalStart).Seconds()
+			metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentAdmin, "failure", duration)
+			metrics.RecordCertificateError(cluster.Name, cluster.Namespace, constants.CertComponentAdmin, "create_error")
 			r.emitTypedCertRenewalFailedEvent(cluster, CertEventTypeAdmin, secretName, err)
 			return fmt.Errorf("failed to create admin secret: %w", err)
 		}
+		duration := time.Since(renewalStart).Seconds()
+		metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentAdmin, "success", duration)
 		r.emitTypedCertCreatedEvent(cluster, CertEventTypeAdmin, secretName)
 	} else {
 		secret.SetResourceVersion(found.GetResourceVersion())
 		if err := r.Update(ctx, secret); err != nil {
+			duration := time.Since(renewalStart).Seconds()
+			metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentAdmin, "failure", duration)
+			metrics.RecordCertificateError(cluster.Name, cluster.Namespace, constants.CertComponentAdmin, "update_error")
 			r.emitTypedCertRenewalFailedEvent(cluster, CertEventTypeAdmin, secretName, err)
 			return fmt.Errorf("failed to update admin secret: %w", err)
 		}
+		duration := time.Since(renewalStart).Seconds()
+		metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, constants.CertComponentAdmin, "success", duration)
 		r.emitTypedCertRenewedEvent(cluster, CertEventTypeAdmin, secretName)
 	}
 
@@ -405,6 +485,14 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 		// Check if certificate needs renewal using options from CRD
 		certResult, parseErr := certificates.ParseNodeCert(found.Data[constants.SecretKeyTLSCert], found.Data[constants.SecretKeyTLSKey])
 		if parseErr == nil {
+			// Record certificate expiry metric
+			secondsUntilExpiry := time.Until(certResult.Certificate.NotAfter).Seconds()
+			metrics.SetCertificateExpiry(cluster.Name, cluster.Namespace, componentName, constants.CertTypeNode, secondsUntilExpiry)
+
+			// Record certificate info metric
+			metrics.SetCertificateInfo(cluster.Name, cluster.Namespace, componentName,
+				certResult.Certificate.SerialNumber.String(), certResult.Certificate.Issuer.CommonName)
+
 			// Check for cluster domain mismatch (e.g., after operator upgrade with new domain)
 			if certificates.RequiresDomainRegeneration(certResult.Certificate, secretName, cluster.Namespace, log) {
 				log.Info("Node certificate has domain mismatch, regenerating",
@@ -427,12 +515,14 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 		}
 		if parseErr != nil {
 			log.Info("Failed to parse node certificate, regenerating", "error", parseErr.Error())
+			metrics.RecordCertificateError(cluster.Name, cluster.Namespace, componentName, "parse_error")
 		}
 	} else if !errors.IsNotFound(getErr) {
 		return false, fmt.Errorf("failed to get node secret: %w", getErr)
 	}
 
 	// Generate new node certificate using options from CRD
+	renewalStart := time.Now()
 	log.Info("Generating new node certificate", "name", secretName, "component", componentName, "validity", certificates.FormatCertDuration(certOpts.GetNodeValidity()))
 	nodeConfig := certificates.DefaultNodeCertConfig(cluster.Name + "-" + componentName)
 	nodeConfig.DNSNames = sans
@@ -448,6 +538,9 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 
 	certResult, err := certificates.GenerateNodeCert(nodeConfig, caResult)
 	if err != nil {
+		duration := time.Since(renewalStart).Seconds()
+		metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, componentName, "failure", duration)
+		metrics.RecordCertificateError(cluster.Name, cluster.Namespace, componentName, "generation_error")
 		return false, fmt.Errorf("failed to generate node certificate: %w", err)
 	}
 
@@ -473,14 +566,22 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 	}
 
 	if err := controllerutil.SetControllerReference(cluster, secret, r.Scheme); err != nil {
+		duration := time.Since(renewalStart).Seconds()
+		metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, componentName, "failure", duration)
+		metrics.RecordCertificateError(cluster.Name, cluster.Namespace, componentName, "controller_reference_error")
 		return false, fmt.Errorf("failed to set controller reference: %w", err)
 	}
 
 	if !secretExists {
 		if err := r.Create(ctx, secret); err != nil {
+			duration := time.Since(renewalStart).Seconds()
+			metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, componentName, "failure", duration)
+			metrics.RecordCertificateError(cluster.Name, cluster.Namespace, componentName, "create_error")
 			r.emitTypedCertRenewalFailedEvent(cluster, CertEventTypeNode, secretName, err)
 			return false, fmt.Errorf("failed to create node secret: %w", err)
 		}
+		duration := time.Since(renewalStart).Seconds()
+		metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, componentName, "success", duration)
 		r.emitTypedCertCreatedEvent(cluster, CertEventTypeNode, secretName)
 		return false, nil // Certificate was created (not renewed)
 	}
@@ -488,9 +589,14 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 	// Secret exists, update it (this is a renewal)
 	secret.SetResourceVersion(found.GetResourceVersion())
 	if err := r.Update(ctx, secret); err != nil {
+		duration := time.Since(renewalStart).Seconds()
+		metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, componentName, "failure", duration)
+		metrics.RecordCertificateError(cluster.Name, cluster.Namespace, componentName, "update_error")
 		r.emitTypedCertRenewalFailedEvent(cluster, CertEventTypeNode, secretName, err)
 		return false, fmt.Errorf("failed to update node secret: %w", err)
 	}
+	duration := time.Since(renewalStart).Seconds()
+	metrics.RecordCertificateRenewal(cluster.Name, cluster.Namespace, componentName, "success", duration)
 	r.emitTypedCertRenewedEvent(cluster, CertEventTypeNode, secretName)
 
 	return true, nil // Certificate was renewed

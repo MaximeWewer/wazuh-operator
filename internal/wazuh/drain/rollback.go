@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -69,6 +70,8 @@ type RollbackResult struct {
 func (r *RollbackManagerImpl) ExecuteRollback(ctx context.Context, cluster *v1.WazuhCluster, component string) error {
 	log := r.log.WithValues("cluster", cluster.Name, "namespace", cluster.Namespace, "component", component)
 	log.Info("Starting rollback operation")
+
+	metrics.RecordDrainRollback(cluster.Name, cluster.Namespace, component)
 
 	switch component {
 	case constants.DrainComponentIndexer:

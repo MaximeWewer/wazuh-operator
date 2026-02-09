@@ -19,6 +19,7 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -27,6 +28,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/rolling"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -38,6 +40,7 @@ import (
 // Returns nil results for components that don't need a restart.
 func (r *ClusterReconciler) OrchestrateManagerRollingRestart(ctx context.Context, cluster *wazuhv1.WazuhCluster) (masterResult, workerResult *rolling.RestartResult, err error) {
 	log := logf.FromContext(ctx)
+	startTime := time.Now()
 
 	if cluster.Spec.Manager == nil {
 		return nil, nil, nil
@@ -46,8 +49,10 @@ func (r *ClusterReconciler) OrchestrateManagerRollingRestart(ctx context.Context
 	orchestrator := rolling.NewOrchestrator(r.Client)
 
 	// Step 1: Handle workers first (if any)
+	metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "manager-worker", metrics.PhaseToValue(constants.DrainPhaseDraining))
 	workerResult, err = r.orchestrateWorkerRestart(ctx, cluster, orchestrator)
 	if err != nil {
+		metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "manager-worker", metrics.PhaseToValue(constants.DrainPhaseFailed))
 		return nil, nil, fmt.Errorf("worker rolling restart failed: %w", err)
 	}
 
@@ -57,10 +62,22 @@ func (r *ClusterReconciler) OrchestrateManagerRollingRestart(ctx context.Context
 		return nil, workerResult, nil
 	}
 
+	if workerResult != nil && workerResult.Phase == rolling.RestartPhaseComplete {
+		metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "manager-worker", metrics.PhaseToValue(constants.DrainPhaseComplete))
+		metrics.ObserveDrainDuration(cluster.Name, cluster.Namespace, "manager-worker", time.Since(startTime).Seconds())
+	}
+
 	// Step 2: Handle master after workers are complete
+	metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "manager-master", metrics.PhaseToValue(constants.DrainPhaseDraining))
 	masterResult, err = r.orchestrateMasterRestart(ctx, cluster, orchestrator)
 	if err != nil {
+		metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "manager-master", metrics.PhaseToValue(constants.DrainPhaseFailed))
 		return nil, workerResult, fmt.Errorf("master rolling restart failed: %w", err)
+	}
+
+	if masterResult != nil && masterResult.Phase == rolling.RestartPhaseComplete {
+		metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "manager-master", metrics.PhaseToValue(constants.DrainPhaseComplete))
+		metrics.ObserveDrainDuration(cluster.Name, cluster.Namespace, "manager-master", time.Since(startTime).Seconds())
 	}
 
 	return masterResult, workerResult, nil

@@ -47,7 +47,7 @@ func (t testLoggerImpl) Init(_ logr.RuntimeInfo)           {}
 var _ logr.LogSink = testLoggerImpl{}
 
 func TestNewManagerDrainer_DefaultConfig(t *testing.T) {
-	drainer := NewManagerDrainer(nil, getTestLogger(), nil)
+	drainer := NewManagerDrainer(nil, getTestLogger(), nil, "test-cluster", "test-ns")
 
 	if drainer.timeout != constants.DefaultManagerDrainTimeout {
 		t.Errorf("expected timeout %v, got %v", constants.DefaultManagerDrainTimeout, drainer.timeout)
@@ -75,7 +75,7 @@ func TestNewManagerDrainer_CustomConfig(t *testing.T) {
 		GracePeriod:        &metav1.Duration{Duration: customGracePeriod},
 	}
 
-	drainer := NewManagerDrainer(nil, getTestLogger(), config)
+	drainer := NewManagerDrainer(nil, getTestLogger(), config, "test-cluster", "test-ns")
 
 	if drainer.timeout != customTimeout {
 		t.Errorf("expected timeout %v, got %v", customTimeout, drainer.timeout)
@@ -166,7 +166,7 @@ func TestManagerDrainProgress_Calculations(t *testing.T) {
 }
 
 func TestManagerDrainer_GracePeriodLogic(t *testing.T) {
-	drainer := NewManagerDrainer(nil, getTestLogger(), nil)
+	drainer := NewManagerDrainer(nil, getTestLogger(), nil, "test-cluster", "test-ns")
 
 	// Initially, no empty queue seen
 	if drainer.emptyQueueSeenTime != nil {
@@ -252,7 +252,7 @@ func TestDryRunResult_ManagerDrain(t *testing.T) {
 }
 
 func TestCancelDrain_ResetsState(t *testing.T) {
-	drainer := NewManagerDrainer(nil, getTestLogger(), nil)
+	drainer := NewManagerDrainer(nil, getTestLogger(), nil, "test-cluster", "test-ns")
 
 	// Set up some state
 	drainer.initialQueueDepth = 1000

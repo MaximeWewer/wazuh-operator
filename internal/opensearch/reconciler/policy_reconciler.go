@@ -27,8 +27,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -119,6 +121,21 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSe
 		}
 	}
 
+	// Compute spec hash for drift detection
+	specHash, hashErr := patch.ComputeSpecHash(policy.Spec)
+	if hashErr == nil && policy.Status.LastAppliedHash != "" && policy.Status.LastAppliedHash != specHash {
+		policy.Status.DriftDetected = true
+		now := metav1.Now()
+		policy.Status.LastDriftTime = &now
+		metrics.RecordDriftDetection("OpenSearchISMPolicy", policy.Namespace)
+		log.Info("Drift detected on OpenSearchISMPolicy", "name", policy.Name)
+	} else {
+		policy.Status.DriftDetected = false
+	}
+	if hashErr == nil {
+		policy.Status.LastAppliedHash = specHash
+	}
+
 	// Update status
 	if err := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseReady, "ISM policy reconciled successfully"); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
@@ -190,6 +207,8 @@ func (r *PolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.Ope
 	policy.Status.Message = message
 	now := metav1.Now()
 	policy.Status.LastSyncTime = &now
+
+	metrics.SetResourceSyncStatus("OpenSearchISMPolicy", policy.Namespace, policy.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
 	return r.Status().Update(ctx, policy)
 }

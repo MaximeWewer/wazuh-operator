@@ -30,7 +30,9 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -91,6 +93,22 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, role *wazuhv1.OpenSearch
 	}
 
 	r.recordEvent(role, corev1.EventTypeNormal, "Synced", "Role successfully synchronized to OpenSearch")
+
+	// Compute spec hash for drift detection
+	specHash, hashErr := patch.ComputeSpecHash(role.Spec)
+	if hashErr == nil && role.Status.LastAppliedHash != "" && role.Status.LastAppliedHash != specHash {
+		// Spec changed since last sync - this is drift (external modification to CRD)
+		role.Status.DriftDetected = true
+		now := metav1.Now()
+		role.Status.LastDriftTime = &now
+		metrics.RecordDriftDetection("OpenSearchRole", role.Namespace)
+		log.Info("Drift detected on OpenSearchRole", "name", role.Name)
+	} else {
+		role.Status.DriftDetected = false
+	}
+	if hashErr == nil {
+		role.Status.LastAppliedHash = specHash
+	}
 
 	// Update status
 	if err := r.updateStatus(ctx, role, wazuhv1.OpenSearchResourcePhaseReady, "Role reconciled successfully"); err != nil {
@@ -162,6 +180,8 @@ func (r *RoleReconciler) updateStatus(ctx context.Context, role *wazuhv1.OpenSea
 	role.Status.Message = message
 	now := metav1.Now()
 	role.Status.LastSyncTime = &now
+
+	metrics.SetResourceSyncStatus("OpenSearchRole", role.Namespace, role.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
 	return r.Status().Update(ctx, role)
 }

@@ -27,8 +27,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -109,6 +111,21 @@ func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.
 		return fmt.Errorf("failed to %s role mapping: %w", action, err)
 	}
 
+	// Compute spec hash for drift detection
+	specHash, hashErr := patch.ComputeSpecHash(mapping.Spec)
+	if hashErr == nil && mapping.Status.LastAppliedHash != "" && mapping.Status.LastAppliedHash != specHash {
+		mapping.Status.DriftDetected = true
+		now := metav1.Now()
+		mapping.Status.LastDriftTime = &now
+		metrics.RecordDriftDetection("OpenSearchRoleMapping", mapping.Namespace)
+		log.Info("Drift detected on OpenSearchRoleMapping", "name", mapping.Name)
+	} else {
+		mapping.Status.DriftDetected = false
+	}
+	if hashErr == nil {
+		mapping.Status.LastAppliedHash = specHash
+	}
+
 	// Update status
 	if err := r.updateStatus(ctx, mapping, wazuhv1.OpenSearchResourcePhaseReady, "Role mapping reconciled successfully"); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
@@ -135,6 +152,8 @@ func (r *RoleMappingReconciler) updateStatus(ctx context.Context, mapping *wazuh
 	mapping.Status.Message = message
 	now := metav1.Now()
 	mapping.Status.LastSyncTime = &now
+
+	metrics.SetResourceSyncStatus("OpenSearchRoleMapping", mapping.Namespace, mapping.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
 	return r.Status().Update(ctx, mapping)
 }

@@ -26,6 +26,7 @@ import (
 
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	shareddrain "github.com/MaximeWewer/wazuh-operator/internal/shared/drain"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -78,10 +79,12 @@ type ManagerDrainerImpl struct {
 	gracePeriod        time.Duration
 	initialQueueDepth  int64
 	emptyQueueSeenTime *time.Time
+	clusterName        string
+	namespace          string
 }
 
 // NewManagerDrainer creates a new ManagerDrainer instance
-func NewManagerDrainer(client *adapters.WazuhAPIAdapter, log logr.Logger, config *v1.ManagerDrainConfig) *ManagerDrainerImpl {
+func NewManagerDrainer(client *adapters.WazuhAPIAdapter, log logr.Logger, config *v1.ManagerDrainConfig, clusterName, namespace string) *ManagerDrainerImpl {
 	timeout := constants.DefaultManagerDrainTimeout
 	queueCheckInterval := constants.DefaultManagerQueueCheckInterval
 
@@ -106,6 +109,8 @@ func NewManagerDrainer(client *adapters.WazuhAPIAdapter, log logr.Logger, config
 		timeout:            timeout,
 		queueCheckInterval: queueCheckInterval,
 		gracePeriod:        gracePeriod,
+		clusterName:        clusterName,
+		namespace:          namespace,
 	}
 }
 
@@ -145,6 +150,7 @@ func (d *ManagerDrainerImpl) MonitorQueueDepth(ctx context.Context, nodeName str
 	}
 
 	progress.QueueDepth = queueStatus.TotalEvents
+	metrics.SetManagerQueueDepth(d.clusterName, d.namespace, nodeName, progress.QueueDepth)
 
 	// Calculate progress percentage
 	if d.initialQueueDepth > 0 {
@@ -327,6 +333,7 @@ func (d *ManagerDrainerImpl) WaitForDrainComplete(ctx context.Context, nodeName 
 		case <-ticker.C:
 			// Check timeout
 			if time.Since(startTime) > d.timeout {
+				metrics.RecordDrainTimeout(d.clusterName, d.namespace, "manager")
 				return fmt.Errorf("drain timeout after %v", d.timeout)
 			}
 

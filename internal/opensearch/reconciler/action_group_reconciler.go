@@ -27,8 +27,10 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -111,6 +113,21 @@ func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenS
 		return fmt.Errorf("failed to %s action group: %w", action, err)
 	}
 
+	// Compute spec hash for drift detection
+	specHash, hashErr := patch.ComputeSpecHash(ag.Spec)
+	if hashErr == nil && ag.Status.LastAppliedHash != "" && ag.Status.LastAppliedHash != specHash {
+		ag.Status.DriftDetected = true
+		now := metav1.Now()
+		ag.Status.LastDriftTime = &now
+		metrics.RecordDriftDetection("OpenSearchActionGroup", ag.Namespace)
+		log.Info("Drift detected on OpenSearchActionGroup", "name", ag.Name)
+	} else {
+		ag.Status.DriftDetected = false
+	}
+	if hashErr == nil {
+		ag.Status.LastAppliedHash = specHash
+	}
+
 	// Update status
 	if err := r.updateStatus(ctx, ag, wazuhv1.OpenSearchResourcePhaseReady, "Action group reconciled successfully"); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
@@ -135,6 +152,8 @@ func (r *ActionGroupReconciler) updateStatus(ctx context.Context, ag *wazuhv1.Op
 	ag.Status.Message = message
 	now := metav1.Now()
 	ag.Status.LastSyncTime = &now
+
+	metrics.SetResourceSyncStatus("OpenSearchActionGroup", ag.Namespace, ag.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
 	return r.Status().Update(ctx, ag)
 }

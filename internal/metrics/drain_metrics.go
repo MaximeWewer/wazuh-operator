@@ -299,6 +299,16 @@ func ResetDrainMetrics(cluster, namespace, component string) {
 	DrainRetryCount.WithLabelValues(cluster, namespace, component).Set(0)
 }
 
+// SetDrainPhase sets the drain phase gauge for a component
+func SetDrainPhase(cluster, namespace, component string, phaseValue float64) {
+	DrainPhase.WithLabelValues(cluster, namespace, component).Set(phaseValue)
+}
+
+// ObserveDrainDuration observes a drain duration in the histogram
+func ObserveDrainDuration(cluster, namespace, component string, seconds float64) {
+	DrainDuration.WithLabelValues(cluster, namespace, component, "success").Observe(seconds)
+}
+
 // PhaseToValue converts a drain phase string to numeric value for metrics
 func PhaseToValue(phase string) float64 {
 	switch phase {

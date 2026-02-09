@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,6 +35,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	shareddrain "github.com/MaximeWewer/wazuh-operator/internal/shared/drain"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/serviceaccount"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
@@ -253,6 +255,11 @@ func (r *WorkerReconciler) reconcileStandaloneStatefulSet(ctx context.Context, w
 	needsUpdate := false
 	if *found.Spec.Replicas != *sts.Spec.Replicas {
 		log.Info("Updating Worker StatefulSet replicas", "name", sts.Name, "replicas", *sts.Spec.Replicas)
+		direction := "up"
+		if *sts.Spec.Replicas < *found.Spec.Replicas {
+			direction = "down"
+		}
+		metrics.RecordScaleOperation(worker.Name, worker.Namespace, "worker", direction)
 		needsUpdate = true
 	}
 	if utils.HashMap(sts.Annotations) != utils.HashMap(found.Annotations) {
@@ -409,7 +416,9 @@ func (r *WorkerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *waz
 	case wazuhv1.DrainPhaseIdle, "":
 		// Start new drain
 		log.Info("Starting manager drain for scale-down", "targetPod", scaleInfo.TargetPodName)
+		metrics.RecordDrainStarted(cluster.Name, cluster.Namespace, "manager")
 		if err := r.startDrain(ctx, cluster, scaleInfo, drainStatus); err != nil {
+			metrics.RecordDrainFailed(cluster.Name, cluster.Namespace, "manager")
 			result.Error = err
 			return result, err
 		}
@@ -424,6 +433,9 @@ func (r *WorkerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *waz
 			result.Error = err
 			return result, nil //nolint:nilerr // Error stored in result.Error for caller to handle
 		}
+		if progress != nil {
+			metrics.RecordDrainProgress(cluster.Name, cluster.Namespace, "manager", float64(progress.Percent))
+		}
 		result.Progress = progress
 		return result, nil
 
@@ -435,6 +447,14 @@ func (r *WorkerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *waz
 			return result, nil //nolint:nilerr // Error stored in result.Error for caller to handle
 		}
 		if complete {
+			// Compute drain duration from status start time
+			var durationSeconds float64
+			if drainStatus.StartTime != nil {
+				durationSeconds = time.Since(drainStatus.StartTime.Time).Seconds()
+			}
+			metrics.RecordDrainCompleted(cluster.Name, cluster.Namespace, "manager")
+			metrics.RecordDrainOperation(cluster.Name, cluster.Namespace, "manager", "success", durationSeconds)
+			metrics.QueueDrainDuration.WithLabelValues(cluster.Name, cluster.Namespace).Observe(durationSeconds)
 			result.DrainComplete = true
 			result.DrainInProgress = false
 		} else {
@@ -445,12 +465,19 @@ func (r *WorkerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *waz
 	case wazuhv1.DrainPhaseComplete:
 		// Drain complete, proceed with scale-down
 		log.Info("Manager drain complete, proceeding with scale-down")
+		metrics.ResetDrainMetrics(cluster.Name, cluster.Namespace, "manager")
 		result.DrainComplete = true
 		return result, nil
 
 	case wazuhv1.DrainPhaseFailed:
 		// Drain failed - check if we should retry or skip
 		log.Info("Previous drain failed", "message", drainStatus.Message)
+		metrics.RecordDrainFailed(cluster.Name, cluster.Namespace, "manager")
+		var durationSeconds float64
+		if drainStatus.StartTime != nil {
+			durationSeconds = time.Since(drainStatus.StartTime.Time).Seconds()
+		}
+		metrics.RecordDrainOperation(cluster.Name, cluster.Namespace, "manager", "failure", durationSeconds)
 		result.Error = fmt.Errorf("drain failed: %s", drainStatus.Message)
 		return result, nil
 
@@ -490,7 +517,7 @@ func (r *WorkerReconciler) startDrain(ctx context.Context, cluster *wazuhv1.Wazu
 
 	// Create drainer if not exists
 	if r.drainer == nil {
-		r.drainer = drain.NewManagerDrainer(r.wazuhClient, log, drainConfig)
+		r.drainer = drain.NewManagerDrainer(r.wazuhClient, log, drainConfig, cluster.Name, cluster.Namespace)
 	}
 
 	// Get the node name from the pod name
@@ -697,6 +724,6 @@ func (r *WorkerReconciler) EvaluateDrainFeasibility(ctx context.Context, cluster
 	}
 
 	// Create drainer for evaluation
-	drainer := drain.NewManagerDrainer(r.wazuhClient, logf.FromContext(ctx), drainConfig)
+	drainer := drain.NewManagerDrainer(r.wazuhClient, logf.FromContext(ctx), drainConfig, cluster.Name, cluster.Namespace)
 	return drainer.EvaluateFeasibility(ctx, nodeName)
 }
