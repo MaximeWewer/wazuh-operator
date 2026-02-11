@@ -1,0 +1,11 @@
+{{- if .Values.opensearchSnapshotPolicy.enabled }}
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchSnapshotPolicy
+metadata:
+  name: {{ default (printf "%s-opensearch-snapshot-policy" .Values.cluster.name) .Values.opensearchSnapshotPolicy.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "wazuh-cluster.labels" . | nindent 4 }}
+spec:
+  {{- toYaml .Values.opensearchSnapshotPolicy.spec | nindent 2 }}
+{{- end }}

@@ -1,0 +1,11 @@
+{{- if .Values.wazuhBackup.enabled }}
+apiVersion: resources.wazuh.com/v1
+kind: WazuhBackup
+metadata:
+  name: {{ default (printf "%s-backup" .Values.cluster.name) .Values.wazuhBackup.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "wazuh-cluster.labels" . | nindent 4 }}
+spec:
+  {{- toYaml .Values.wazuhBackup.spec | nindent 2 }}
+{{- end }}
