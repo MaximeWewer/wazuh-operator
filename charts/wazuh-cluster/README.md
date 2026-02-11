@@ -158,6 +158,10 @@ helm uninstall my-wazuh-cluster
 | cluster.spec.indexer.securityContext | object | `{}` | Indexer pod security context |
 | cluster.spec.indexer.service.annotations | object | `{}` | Indexer service annotations |
 | cluster.spec.indexer.service.type | string | `""` | Indexer service type |
+| cluster.spec.indexer.serviceAccount.annotations | object | `{}` | ServiceAccount annotations (e.g., for GKE Workload Identity, AWS IRSA) |
+| cluster.spec.indexer.serviceAccount.create | bool | `false` | Create a dedicated ServiceAccount for indexer pods |
+| cluster.spec.indexer.serviceAccount.labels | object | `{}` | ServiceAccount labels (e.g., for Azure Workload Identity) |
+| cluster.spec.indexer.serviceAccount.name | string | `""` | ServiceAccount name (auto-generated as "{cluster}-indexer" if empty) |
 | cluster.spec.indexer.terminationGracePeriodSeconds | int | `120` | Termination grace period for indexer pods (seconds) |
 | cluster.spec.indexer.tolerations | list | `[]` | Indexer tolerations |
 | cluster.spec.indexer.topologySpreadConstraints | list | `[]` | Indexer topology spread constraints |
@@ -238,6 +242,10 @@ helm uninstall my-wazuh-cluster
 | cluster.spec.manager.master.securityContext | object | `{}` | Master pod security context |
 | cluster.spec.manager.master.service.annotations | object | `{}` | Master service annotations |
 | cluster.spec.manager.master.service.type | string | `""` | Master service type |
+| cluster.spec.manager.master.serviceAccount.annotations | object | `{}` | ServiceAccount annotations |
+| cluster.spec.manager.master.serviceAccount.create | bool | `false` | Create a dedicated ServiceAccount for master pods |
+| cluster.spec.manager.master.serviceAccount.labels | object | `{}` | ServiceAccount labels |
+| cluster.spec.manager.master.serviceAccount.name | string | `""` | ServiceAccount name (auto-generated as "{cluster}-master" if empty) |
 | cluster.spec.manager.master.terminationGracePeriodSeconds | int | `90` | Master termination grace period (seconds) |
 | cluster.spec.manager.master.tolerations | list | `[]` | Master tolerations |
 | cluster.spec.manager.master.topologySpreadConstraints | list | `[]` | Master topology spread constraints |
@@ -276,6 +284,10 @@ helm uninstall my-wazuh-cluster
 | cluster.spec.manager.workers.securityContext | object | `{}` | Workers pod security context |
 | cluster.spec.manager.workers.service.annotations | object | `{}` | Workers service annotations |
 | cluster.spec.manager.workers.service.type | string | `""` | Workers service type |
+| cluster.spec.manager.workers.serviceAccount.annotations | object | `{}` | ServiceAccount annotations |
+| cluster.spec.manager.workers.serviceAccount.create | bool | `false` | Create a dedicated ServiceAccount for worker pods |
+| cluster.spec.manager.workers.serviceAccount.labels | object | `{}` | ServiceAccount labels |
+| cluster.spec.manager.workers.serviceAccount.name | string | `""` | ServiceAccount name (auto-generated as "{cluster}-worker" if empty) |
 | cluster.spec.manager.workers.terminationGracePeriodSeconds | int | `90` | Workers termination grace period (seconds) |
 | cluster.spec.manager.workers.tolerations | list | `[]` | Workers tolerations |
 | cluster.spec.manager.workers.topologySpreadConstraints | list | `[]` | Workers topology spread constraints |
@@ -314,6 +326,10 @@ helm uninstall my-wazuh-cluster
 | cluster.spec.dashboard.securityContext | object | `{}` | Dashboard pod security context |
 | cluster.spec.dashboard.service.annotations | object | `{}` | Dashboard service annotations |
 | cluster.spec.dashboard.service.type | string | `""` | Dashboard service type |
+| cluster.spec.dashboard.serviceAccount.annotations | object | `{}` | ServiceAccount annotations |
+| cluster.spec.dashboard.serviceAccount.create | bool | `false` | Create a dedicated ServiceAccount for dashboard pods |
+| cluster.spec.dashboard.serviceAccount.labels | object | `{}` | ServiceAccount labels |
+| cluster.spec.dashboard.serviceAccount.name | string | `""` | ServiceAccount name (auto-generated as "{cluster}-dashboard" if empty) |
 | cluster.spec.dashboard.terminationGracePeriodSeconds | int | `30` | Dashboard termination grace period (seconds) |
 | cluster.spec.dashboard.tolerations | list | `[]` | Dashboard tolerations |
 | cluster.spec.dashboard.topologySpreadConstraints | list | `[]` | Dashboard topology spread constraints |

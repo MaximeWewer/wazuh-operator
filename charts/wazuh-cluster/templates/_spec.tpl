@@ -192,6 +192,7 @@ Combines sizing profiles with credentials and other configurations
   {{- if and $idx.service (not $idx.service.type) }}{{ $_ := unset $idx.service "type" }}{{ end -}}
   {{- if not $idx.updateStrategy }}{{ $_ := unset $idx "updateStrategy" }}{{ end -}}
   {{- if not $idx.clusterName }}{{ $_ := unset $idx "clusterName" }}{{ end -}}
+  {{- if and $idx.serviceAccount (not $idx.serviceAccount.create) }}{{ $_ := unset $idx "serviceAccount" }}{{ end -}}
 {{- end -}}
 
 {{- /* --- Dashboard cleanup --- */ -}}
@@ -203,6 +204,7 @@ Combines sizing profiles with credentials and other configurations
     {{- if not $dash.image.tag }}{{ $_ := unset $dash.image "tag" }}{{ end -}}
   {{- end -}}
   {{- if and $dash.service (not $dash.service.type) }}{{ $_ := unset $dash.service "type" }}{{ end -}}
+  {{- if and $dash.serviceAccount (not $dash.serviceAccount.create) }}{{ $_ := unset $dash "serviceAccount" }}{{ end -}}
 {{- end -}}
 
 {{- /* --- Manager cleanup --- */ -}}
@@ -223,11 +225,13 @@ Combines sizing profiles with credentials and other configurations
   {{- if $mgr.master -}}
     {{- if and $mgr.master.service (not $mgr.master.service.type) }}{{ $_ := unset $mgr.master.service "type" }}{{ end -}}
     {{- if not $mgr.master.extraConfig }}{{ $_ := unset $mgr.master "extraConfig" }}{{ end -}}
+    {{- if and $mgr.master.serviceAccount (not $mgr.master.serviceAccount.create) }}{{ $_ := unset $mgr.master "serviceAccount" }}{{ end -}}
   {{- end -}}
   {{- /* Workers cleanup */ -}}
   {{- if $mgr.workers -}}
     {{- if and $mgr.workers.service (not $mgr.workers.service.type) }}{{ $_ := unset $mgr.workers.service "type" }}{{ end -}}
     {{- if not $mgr.workers.extraConfig }}{{ $_ := unset $mgr.workers "extraConfig" }}{{ end -}}
+    {{- if and $mgr.workers.serviceAccount (not $mgr.workers.serviceAccount.create) }}{{ $_ := unset $mgr.workers "serviceAccount" }}{{ end -}}
   {{- end -}}
 {{- end -}}
 

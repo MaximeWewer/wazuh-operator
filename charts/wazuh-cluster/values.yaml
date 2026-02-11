@@ -279,14 +279,20 @@ cluster:
 
       # @extra cluster.spec.indexer.serviceAccount Indexer ServiceAccount configuration
       # Cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
-      # serviceAccount:
-      #   create: true
-      #   name: ""  # auto-generated as "{cluster}-indexer" if empty
-      #   annotations:
-      #     iam.gke.io/gcp-service-account: "my-gsa@project.iam.gserviceaccount.com"
-      #     eks.amazonaws.com/role-arn: "arn:aws:iam::role/my-role"
-      #   labels:
-      #     azure.workload.identity/use: "true"
+      serviceAccount:
+        # -- Create a dedicated ServiceAccount for indexer pods
+        create: false
+        # -- ServiceAccount name (auto-generated as "{cluster}-indexer" if empty)
+        name: ""
+        # -- ServiceAccount annotations (e.g., for GKE Workload Identity, AWS IRSA)
+        annotations: {}
+        # Example:
+        #   iam.gke.io/gcp-service-account: "my-gsa@project.iam.gserviceaccount.com"
+        #   eks.amazonaws.com/role-arn: "arn:aws:iam::role/my-role"
+        # -- ServiceAccount labels (e.g., for Azure Workload Identity)
+        labels: {}
+        # Example:
+        #   azure.workload.identity/use: "true"
 
       # Advanced: use nodePools instead of replicas for different node roles (mutually exclusive with replicas)
       # nodePools:
@@ -512,11 +518,15 @@ cluster:
         extraContainers: []
 
         # @extra cluster.spec.manager.master.serviceAccount Master ServiceAccount configuration
-        # serviceAccount:
-        #   create: true
-        #   name: ""
-        #   annotations: {}
-        #   labels: {}
+        serviceAccount:
+          # -- Create a dedicated ServiceAccount for master pods
+          create: false
+          # -- ServiceAccount name (auto-generated as "{cluster}-master" if empty)
+          name: ""
+          # -- ServiceAccount annotations
+          annotations: {}
+          # -- ServiceAccount labels
+          labels: {}
 
       # @extra cluster.spec.manager.workers Worker nodes configuration
       workers:
@@ -632,11 +642,15 @@ cluster:
         extraContainers: []
 
         # @extra cluster.spec.manager.workers.serviceAccount Workers ServiceAccount configuration
-        # serviceAccount:
-        #   create: true
-        #   name: ""
-        #   annotations: {}
-        #   labels: {}
+        serviceAccount:
+          # -- Create a dedicated ServiceAccount for worker pods
+          create: false
+          # -- ServiceAccount name (auto-generated as "{cluster}-worker" if empty)
+          name: ""
+          # -- ServiceAccount annotations
+          annotations: {}
+          # -- ServiceAccount labels
+          labels: {}
 
     # @section Dashboard Configuration
 
@@ -810,11 +824,15 @@ cluster:
       extraContainers: []
 
       # @extra cluster.spec.dashboard.serviceAccount Dashboard ServiceAccount configuration
-      # serviceAccount:
-      #   create: true
-      #   name: ""
-      #   annotations: {}
-      #   labels: {}
+      serviceAccount:
+        # -- Create a dedicated ServiceAccount for dashboard pods
+        create: false
+        # -- ServiceAccount name (auto-generated as "{cluster}-dashboard" if empty)
+        name: ""
+        # -- ServiceAccount annotations
+        annotations: {}
+        # -- ServiceAccount labels
+        labels: {}
 
     # @section TLS Configuration
 
