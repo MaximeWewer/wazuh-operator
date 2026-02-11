@@ -192,7 +192,11 @@ Combines sizing profiles with credentials and other configurations
   {{- if and $idx.service (not $idx.service.type) }}{{ $_ := unset $idx.service "type" }}{{ end -}}
   {{- if not $idx.updateStrategy }}{{ $_ := unset $idx "updateStrategy" }}{{ end -}}
   {{- if not $idx.clusterName }}{{ $_ := unset $idx "clusterName" }}{{ end -}}
-  {{- if and $idx.serviceAccount (not $idx.serviceAccount.create) }}{{ $_ := unset $idx "serviceAccount" }}{{ end -}}
+  {{- if $idx.serviceAccount -}}
+    {{- if and (not $idx.serviceAccount.create) (not $idx.serviceAccount.name) (not $idx.serviceAccount.annotations) (not $idx.serviceAccount.labels) -}}
+      {{- $_ := unset $idx "serviceAccount" -}}
+    {{- end -}}
+  {{- end -}}
 {{- end -}}
 
 {{- /* --- Dashboard cleanup --- */ -}}
@@ -204,7 +208,11 @@ Combines sizing profiles with credentials and other configurations
     {{- if not $dash.image.tag }}{{ $_ := unset $dash.image "tag" }}{{ end -}}
   {{- end -}}
   {{- if and $dash.service (not $dash.service.type) }}{{ $_ := unset $dash.service "type" }}{{ end -}}
-  {{- if and $dash.serviceAccount (not $dash.serviceAccount.create) }}{{ $_ := unset $dash "serviceAccount" }}{{ end -}}
+  {{- if $dash.serviceAccount -}}
+    {{- if and (not $dash.serviceAccount.create) (not $dash.serviceAccount.name) (not $dash.serviceAccount.annotations) (not $dash.serviceAccount.labels) -}}
+      {{- $_ := unset $dash "serviceAccount" -}}
+    {{- end -}}
+  {{- end -}}
 {{- end -}}
 
 {{- /* --- Manager cleanup --- */ -}}
