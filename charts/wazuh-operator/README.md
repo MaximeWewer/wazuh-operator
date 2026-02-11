@@ -1,15 +1,9 @@
 # wazuh-operator
 
-![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v1.0.0](https://img.shields.io/badge/AppVersion-v1.0.0-informational?style=flat-square)
-
-A Helm chart for Wazuh Kubernetes Operator
-
-**Homepage:** <https://github.com/MaximeWewer/wazuh-operator>
-
 ## Prerequisites
 
 - Kubernetes 1.25+
-- Helm 3.10+
+- Helm 3
 - (Optional) Prometheus Operator for ServiceMonitor support
 - (Optional) Custom CA bundle for webhook TLS
 
@@ -442,5 +436,5 @@ curl http://localhost:8080/metrics
 
 ## Support
 
-- GitHub Issues: <https://github.com/MaximeWewer/wazuh-operator/issues>
-- Documentation: <https://documentation.wazuh.com/>
+- GitHub Issues: https://github.com/MaximeWewer/wazuh-operator/issues
+- Documentation: https://documentation.wazuh.com/

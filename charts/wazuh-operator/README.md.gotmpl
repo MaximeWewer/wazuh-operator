@@ -1,17 +1,9 @@
 {{ template "chart.header" . }}
 
-{{ template "chart.deprecationWarning" . }}
-
-{{ template "chart.badgesSection" . }}
-
-{{ template "chart.description" . }}
-
-{{ template "chart.homepageLine" . }}
-
 ## Prerequisites
 
 - Kubernetes 1.25+
-- Helm 3.10+
+- Helm 3
 - (Optional) Prometheus Operator for ServiceMonitor support
 - (Optional) Custom CA bundle for webhook TLS
 

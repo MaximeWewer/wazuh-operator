@@ -1,15 +1,9 @@
 # wazuh-cluster
 
-![Version: 1.0.0](https://img.shields.io/badge/Version-1.0.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: v1.0.0](https://img.shields.io/badge/AppVersion-v1.0.0-informational?style=flat-square)
-
-Helm chart for deploying Wazuh clusters via the Wazuh Operator
-
-**Homepage:** <https://github.com/MaximeWewer/wazuh-operator>
-
 ## Prerequisites
 
 - Kubernetes 1.25+
-- Helm 3.0+
+- Helm 3
 - Wazuh Operator installed (use the `wazuh-operator` chart)
 
 ## Documentation
@@ -32,7 +26,7 @@ Helm chart for deploying Wazuh clusters via the Wazuh Operator
 helm install wazuh-operator ./charts/wazuh-operator
 ```
 
-1. Install the chart with a sizing profile:
+2. Install the chart with a sizing profile:
 
 ```bash
 helm install my-wazuh-cluster ./charts/wazuh-cluster \
