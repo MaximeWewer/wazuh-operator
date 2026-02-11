@@ -9,7 +9,7 @@ The Wazuh Operator is a Kubernetes operator built with Go and Kubebuilder, follo
 | Category                     | Technology                       | Version                  | Justification                                                                                               |
 | ---------------------------- | -------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------- |
 | **Core Language**            | Go                               | 1.25.7                   | Primary language for Kubernetes operators, native support for concurrency and efficient resource management |
-| **Operator Framework**       | Kubebuilder                      | controller-tools v0.19.0 | Industry-standard framework for building Kubernetes operators with code generation and scaffolding          |
+| **Operator Framework**       | Kubebuilder                      | controller-tools v0.20.0 | Industry-standard framework for building Kubernetes operators with code generation and scaffolding          |
 | **Controller Runtime**       | controller-runtime               | v0.23.1                  | Core library for building Kubernetes controllers with reconciliation loops and caching                      |
 | **Kubernetes Client**        | client-go                        | v0.35.0                  | Official Kubernetes Go client for API interactions                                                          |
 | **Kubernetes API**           | k8s.io/api                       | v0.35.0                  | Kubernetes API types and definitions                                                                        |
