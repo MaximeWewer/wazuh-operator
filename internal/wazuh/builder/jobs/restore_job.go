@@ -77,9 +77,24 @@ func (b *RestoreJobBuilder) resourceName() string {
 	return fmt.Sprintf("%s-restore", b.restore.Name)
 }
 
+func (b *RestoreJobBuilder) serviceAccountConfig() *wazuhv1.ServiceAccountConfig {
+	return b.restore.Spec.ServiceAccount
+}
+
 // serviceAccountName returns the ServiceAccount name
 func (b *RestoreJobBuilder) serviceAccountName() string {
+	if cfg := b.serviceAccountConfig(); cfg != nil && cfg.Name != "" {
+		return cfg.Name
+	}
 	return b.resourceName()
+}
+
+func (b *RestoreJobBuilder) ShouldCreateServiceAccount() bool {
+	cfg := b.serviceAccountConfig()
+	if cfg == nil {
+		return true
+	}
+	return cfg.Create
 }
 
 // buildRestorePaths returns the list of paths to restore based on components
@@ -621,11 +636,17 @@ func (b *RestoreJobBuilder) BuildServiceAccount() *corev1.ServiceAccount {
 		},
 	}
 
-	// Merge user-provided annotations (e.g., for cloud identity: IRSA, Workload Identity)
-	if len(b.restore.Spec.ServiceAccountAnnotations) > 0 {
-		sa.Annotations = make(map[string]string, len(b.restore.Spec.ServiceAccountAnnotations))
-		for k, v := range b.restore.Spec.ServiceAccountAnnotations {
-			sa.Annotations[k] = v
+	if cfg := b.serviceAccountConfig(); cfg != nil {
+		if len(cfg.Labels) > 0 {
+			for k, v := range cfg.Labels {
+				sa.Labels[k] = v
+			}
+		}
+		if len(cfg.Annotations) > 0 {
+			sa.Annotations = make(map[string]string, len(cfg.Annotations))
+			for k, v := range cfg.Annotations {
+				sa.Annotations[k] = v
+			}
 		}
 	}
 

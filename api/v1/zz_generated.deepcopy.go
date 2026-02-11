@@ -5718,12 +5718,10 @@ func (in *WazuhBackupSpec) DeepCopyInto(out *WazuhBackupSpec) {
 		*out = new(corev1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.ServiceAccountAnnotations != nil {
-		in, out := &in.ServiceAccountAnnotations, &out.ServiceAccountAnnotations
-		*out = make(map[string]string, len(*in))
-		for key, val := range *in {
-			(*out)[key] = val
-		}
+	if in.ServiceAccount != nil {
+		in, out := &in.ServiceAccount, &out.ServiceAccount
+		*out = new(ServiceAccountConfig)
+		(*in).DeepCopyInto(*out)
 	}
 }
 
@@ -7356,12 +7354,10 @@ func (in *WazuhRestoreSpec) DeepCopyInto(out *WazuhRestoreSpec) {
 		*out = new(corev1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.ServiceAccountAnnotations != nil {
-		in, out := &in.ServiceAccountAnnotations, &out.ServiceAccountAnnotations
-		*out = make(map[string]string, len(*in))
-		for key, val := range *in {
-			(*out)[key] = val
-		}
+	if in.ServiceAccount != nil {
+		in, out := &in.ServiceAccount, &out.ServiceAccount
+		*out = new(ServiceAccountConfig)
+		(*in).DeepCopyInto(*out)
 	}
 }
 

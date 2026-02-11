@@ -1152,7 +1152,7 @@ Manages scheduled or one-shot backups of Wazuh Manager data to S3, GCS, Azure, o
 | `backupTimeout` | string                | No       | `30m`   | Maximum backup duration                  |
 | `image`         | ImageSpec             | No       | -       | Custom backup image                      |
 | `resources`     | ResourceRequirements  | No       | -       | Container resources                      |
-| `serviceAccountAnnotations` | map[string]string | No | - | Annotations merged into the backup job ServiceAccount (for cloud identity) |
+| `serviceAccount` | [ServiceAccountConfig](#serviceaccountconfig) | No | - | ServiceAccount configuration for backup jobs |
 
 #### BackupComponents
 
@@ -1233,7 +1233,7 @@ Restores Wazuh Manager data from a backup archive (S3, GCS, Azure, or HDFS).
 | `restartAfterRestore` | bool                  | No       | `true`  | Restart manager after restore |
 | `restoreTimeout`      | string                | No       | `30m`   | Maximum restore duration      |
 | `resources`           | ResourceRequirements  | No       | -       | Container resources           |
-| `serviceAccountAnnotations` | map[string]string | No | - | Annotations merged into the restore job ServiceAccount (for cloud identity) |
+| `serviceAccount` | [ServiceAccountConfig](#serviceaccountconfig) | No | - | ServiceAccount configuration for restore jobs |
 
 #### RestoreSource
 
