@@ -1,0 +1,11 @@
+{{- if .Values.opensearchRepository.enabled }}
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchSnapshotRepository
+metadata:
+  name: {{ default (printf "%s-opensearch-repo" .Values.cluster.name) .Values.opensearchRepository.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "wazuh-cluster.labels" . | nindent 4 }}
+spec:
+  {{- toYaml .Values.opensearchRepository.spec | nindent 2 }}
+{{- end }}
