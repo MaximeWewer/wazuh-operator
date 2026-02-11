@@ -168,7 +168,7 @@ jobs:
             type=raw,value=latest,enable=${{ needs.prepare.outputs.is_prerelease == 'false' }}
           labels: |
             org.opencontainers.image.title=Wazuh Kubernetes Operator
-            org.opencontainers.image.description=Kubernetes Operator for Wazuh security monitoring
+            org.opencontainers.image.description=Kubernetes Operator for Wazuh
             org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
             org.opencontainers.image.vendor=${{ github.repository_owner }}
             org.opencontainers.image.licenses=Apache-2.0
