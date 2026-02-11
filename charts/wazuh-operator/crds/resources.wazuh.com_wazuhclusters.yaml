@@ -7324,6 +7324,34 @@ spec:
                         - LoadBalancer
                         type: string
                     type: object
+                  serviceAccount:
+                    description: |-
+                      ServiceAccount configuration for dashboard pods
+                      Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        description: Annotations on the ServiceAccount (e.g., iam.gke.io/gcp-service-account,
+                          eks.amazonaws.com/role-arn)
+                        type: object
+                      create:
+                        default: false
+                        description: |-
+                          Create: if true, the operator creates and manages the ServiceAccount.
+                          If false, only sets ServiceAccountName on PodSpec (SA must already exist).
+                        type: boolean
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: 'Labels on the ServiceAccount (e.g., azure.workload.identity/use:
+                          "true")'
+                        type: object
+                      name:
+                        description: Name is the ServiceAccount name. Auto-generated
+                          as "{cluster}-{component}" if empty and Create=true.
+                        type: string
+                    type: object
                   terminationGracePeriodSeconds:
                     description: Termination grace period in seconds for pods
                     format: int64
@@ -21218,6 +21246,34 @@ spec:
                             - remote_cluster_client
                             type: string
                           type: array
+                        serviceAccount:
+                          description: |-
+                            ServiceAccount configuration for this nodePool's pods
+                            If nil, inherits from indexer-level ServiceAccount configuration
+                          properties:
+                            annotations:
+                              additionalProperties:
+                                type: string
+                              description: Annotations on the ServiceAccount (e.g.,
+                                iam.gke.io/gcp-service-account, eks.amazonaws.com/role-arn)
+                              type: object
+                            create:
+                              default: false
+                              description: |-
+                                Create: if true, the operator creates and manages the ServiceAccount.
+                                If false, only sets ServiceAccountName on PodSpec (SA must already exist).
+                              type: boolean
+                            labels:
+                              additionalProperties:
+                                type: string
+                              description: 'Labels on the ServiceAccount (e.g., azure.workload.identity/use:
+                                "true")'
+                              type: object
+                            name:
+                              description: Name is the ServiceAccount name. Auto-generated
+                                as "{cluster}-{component}" if empty and Create=true.
+                              type: string
+                          type: object
                         storageClass:
                           description: |-
                             StorageClass is the StorageClass name for PVCs
@@ -21484,6 +21540,53 @@ spec:
                     format: int32
                     minimum: 1
                     type: integer
+                  repositoryPlugins:
+                    description: |-
+                      RepositoryPlugins defines OpenSearch repository plugins to install automatically
+                      Plugins are installed via init containers and credentials are stored in the OpenSearch keystore
+                    items:
+                      description: RepositoryPluginConfig defines an OpenSearch repository
+                        plugin to install
+                      properties:
+                        clientName:
+                          default: default
+                          description: ClientName is the named client for keystore
+                            settings (e.g., s3.client.<name>.access_key)
+                          type: string
+                        credentialsSecret:
+                          description: |-
+                            CredentialsSecret references a Secret containing plugin credentials
+                            When set, credentials are added to the OpenSearch keystore
+                            Not required for GCS Workload Identity or HDFS simple auth
+                          properties:
+                            keys:
+                              additionalProperties:
+                                type: string
+                              description: |-
+                                Keys maps Secret data keys to credential types
+                                Defaults per plugin if not specified:
+                                  S3: access-key → access_key, secret-key → secret_key
+                                  GCS: credentials-file → JSON service account file
+                                  Azure: account → account name, key → access key
+                              type: object
+                            name:
+                              description: Name is the Secret name
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        name:
+                          description: Name is the plugin name
+                          enum:
+                          - repository-s3
+                          - repository-gcs
+                          - repository-azure
+                          - repository-hdfs
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
                   resources:
                     description: Resources for indexer nodes (simple mode only, ignored
                       if nodePools used)
@@ -21838,6 +21941,34 @@ spec:
                         - ClusterIP
                         - NodePort
                         - LoadBalancer
+                        type: string
+                    type: object
+                  serviceAccount:
+                    description: |-
+                      ServiceAccount configuration for indexer pods
+                      Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+                    properties:
+                      annotations:
+                        additionalProperties:
+                          type: string
+                        description: Annotations on the ServiceAccount (e.g., iam.gke.io/gcp-service-account,
+                          eks.amazonaws.com/role-arn)
+                        type: object
+                      create:
+                        default: false
+                        description: |-
+                          Create: if true, the operator creates and manages the ServiceAccount.
+                          If false, only sets ServiceAccountName on PodSpec (SA must already exist).
+                        type: boolean
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: 'Labels on the ServiceAccount (e.g., azure.workload.identity/use:
+                          "true")'
+                        type: object
+                      name:
+                        description: Name is the ServiceAccount name. Auto-generated
+                          as "{cluster}-{component}" if empty and Create=true.
                         type: string
                     type: object
                   storageSize:
@@ -29445,6 +29576,34 @@ spec:
                             - LoadBalancer
                             type: string
                         type: object
+                      serviceAccount:
+                        description: |-
+                          ServiceAccount configuration for master pods
+                          Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            description: Annotations on the ServiceAccount (e.g.,
+                              iam.gke.io/gcp-service-account, eks.amazonaws.com/role-arn)
+                            type: object
+                          create:
+                            default: false
+                            description: |-
+                              Create: if true, the operator creates and manages the ServiceAccount.
+                              If false, only sets ServiceAccountName on PodSpec (SA must already exist).
+                            type: boolean
+                          labels:
+                            additionalProperties:
+                              type: string
+                            description: 'Labels on the ServiceAccount (e.g., azure.workload.identity/use:
+                              "true")'
+                            type: object
+                          name:
+                            description: Name is the ServiceAccount name. Auto-generated
+                              as "{cluster}-{component}" if empty and Create=true.
+                            type: string
+                        type: object
                       storageSize:
                         default: 50Gi
                         description: Storage size for master node
@@ -36988,6 +37147,34 @@ spec:
                             - ClusterIP
                             - NodePort
                             - LoadBalancer
+                            type: string
+                        type: object
+                      serviceAccount:
+                        description: |-
+                          ServiceAccount configuration for worker pods
+                          Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            description: Annotations on the ServiceAccount (e.g.,
+                              iam.gke.io/gcp-service-account, eks.amazonaws.com/role-arn)
+                            type: object
+                          create:
+                            default: false
+                            description: |-
+                              Create: if true, the operator creates and manages the ServiceAccount.
+                              If false, only sets ServiceAccountName on PodSpec (SA must already exist).
+                            type: boolean
+                          labels:
+                            additionalProperties:
+                              type: string
+                            description: 'Labels on the ServiceAccount (e.g., azure.workload.identity/use:
+                              "true")'
+                            type: object
+                          name:
+                            description: Name is the ServiceAccount name. Auto-generated
+                              as "{cluster}-{component}" if empty and Create=true.
                             type: string
                         type: object
                       storageSize:
