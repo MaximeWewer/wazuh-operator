@@ -31,8 +31,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/serviceaccount"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/deployments"
@@ -70,7 +73,19 @@ func (r *ManagerReconciler) resolveSecretKey(ctx context.Context, namespace, sec
 }
 
 // ReconcileStandalone reconciles a standalone WazuhManager resource
-func (r *ManagerReconciler) ReconcileStandalone(ctx context.Context, manager *wazuhv1.WazuhManager) error {
+func (r *ManagerReconciler) ReconcileStandalone(ctx context.Context, manager *wazuhv1.WazuhManager) (err error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "ManagerReconciler.ReconcileStandalone",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", manager.Name),
+			attribute.String("resource.namespace", manager.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if err != nil {
+			telemetry.RecordError(span, err)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Reconcile Master node ConfigMap

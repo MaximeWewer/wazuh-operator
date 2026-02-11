@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"go.opentelemetry.io/otel/attribute"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,6 +31,7 @@ import (
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -60,7 +62,19 @@ func (r *RestoreReconciler) WithClientFactory(factory *security.OpenSearchClient
 }
 
 // Reconcile reconciles an OpenSearch restore operation
-func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1.OpenSearchRestore) error {
+func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1.OpenSearchRestore) (reconcileErr error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "RestoreReconciler.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", restore.Name),
+			attribute.String("resource.namespace", restore.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if reconcileErr != nil {
+			telemetry.RecordError(span, reconcileErr)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Handle finalizer

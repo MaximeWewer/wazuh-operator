@@ -36,6 +36,7 @@ func TestLoadFromEnv(t *testing.T) {
 				Insecure:       false,
 				ServiceName:    "wazuh-operator",
 				ServiceVersion: "0.1.0",
+				SamplingRatio:  1.0,
 			},
 		},
 		{
@@ -45,12 +46,14 @@ func TestLoadFromEnv(t *testing.T) {
 				"OTEL_EXPORTER_OTLP_INSECURE": "true",
 				"OTEL_SERVICE_NAME":           "test-operator",
 				"OTEL_SERVICE_VERSION":        "1.0.0",
+				"OTEL_TRACES_SAMPLER_ARG":     "0.5",
 			},
 			expected: Config{
 				Endpoint:       "localhost:4317",
 				Insecure:       true,
 				ServiceName:    "test-operator",
 				ServiceVersion: "1.0.0",
+				SamplingRatio:  0.5,
 			},
 		},
 		{
@@ -63,6 +66,7 @@ func TestLoadFromEnv(t *testing.T) {
 				Insecure:       true,
 				ServiceName:    "wazuh-operator",
 				ServiceVersion: "0.1.0",
+				SamplingRatio:  1.0,
 			},
 		},
 	}
@@ -74,6 +78,7 @@ func TestLoadFromEnv(t *testing.T) {
 			os.Unsetenv("OTEL_EXPORTER_OTLP_INSECURE")
 			os.Unsetenv("OTEL_SERVICE_NAME")
 			os.Unsetenv("OTEL_SERVICE_VERSION")
+			os.Unsetenv("OTEL_TRACES_SAMPLER_ARG")
 
 			// Set test env vars
 			for k, v := range tt.envVars {
@@ -93,6 +98,9 @@ func TestLoadFromEnv(t *testing.T) {
 			}
 			if config.ServiceVersion != tt.expected.ServiceVersion {
 				t.Errorf("ServiceVersion = %v, want %v", config.ServiceVersion, tt.expected.ServiceVersion)
+			}
+			if config.SamplingRatio != tt.expected.SamplingRatio {
+				t.Errorf("SamplingRatio = %v, want %v", config.SamplingRatio, tt.expected.SamplingRatio)
 			}
 		})
 	}
@@ -148,5 +156,69 @@ func TestTracer(t *testing.T) {
 	tracer := Tracer()
 	if tracer == nil {
 		t.Error("Tracer() returned nil")
+	}
+}
+
+func TestSamplingRatioParsing(t *testing.T) {
+	tests := []struct {
+		name          string
+		envValue      string
+		expectedRatio float64
+	}{
+		{
+			name:          "absent defaults to 1.0",
+			envValue:      "",
+			expectedRatio: 1.0,
+		},
+		{
+			name:          "zero value",
+			envValue:      "0.0",
+			expectedRatio: 0.0,
+		},
+		{
+			name:          "half sampling",
+			envValue:      "0.5",
+			expectedRatio: 0.5,
+		},
+		{
+			name:          "full sampling",
+			envValue:      "1.0",
+			expectedRatio: 1.0,
+		},
+		{
+			name:          "invalid value defaults to 1.0",
+			envValue:      "invalid",
+			expectedRatio: 1.0,
+		},
+		{
+			name:          "negative value defaults to 1.0",
+			envValue:      "-0.5",
+			expectedRatio: 1.0,
+		},
+		{
+			name:          "value over 1.0 defaults to 1.0",
+			envValue:      "2.0",
+			expectedRatio: 1.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Clear all env vars
+			os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+			os.Unsetenv("OTEL_EXPORTER_OTLP_INSECURE")
+			os.Unsetenv("OTEL_SERVICE_NAME")
+			os.Unsetenv("OTEL_SERVICE_VERSION")
+			os.Unsetenv("OTEL_TRACES_SAMPLER_ARG")
+
+			if tt.envValue != "" {
+				os.Setenv("OTEL_TRACES_SAMPLER_ARG", tt.envValue)
+			}
+
+			config := LoadFromEnv()
+			if config.SamplingRatio != tt.expectedRatio {
+				t.Errorf("SamplingRatio = %v, want %v", config.SamplingRatio, tt.expectedRatio)
+			}
+		})
 	}
 }

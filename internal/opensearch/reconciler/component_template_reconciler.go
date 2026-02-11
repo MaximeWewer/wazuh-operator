@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"go.opentelemetry.io/otel/attribute"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,6 +32,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -56,7 +58,19 @@ func (r *ComponentTemplateReconciler) WithClientFactory(factory *security.OpenSe
 }
 
 // Reconcile reconciles an OpenSearch component template
-func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.OpenSearchComponentTemplate) error {
+func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.OpenSearchComponentTemplate) (reconcileErr error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "ComponentTemplateReconciler.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", template.Name),
+			attribute.String("resource.namespace", template.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if reconcileErr != nil {
+			telemetry.RecordError(span, reconcileErr)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Handle finalizer

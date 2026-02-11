@@ -35,17 +35,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
 	opensearchcerts "github.com/MaximeWewer/wazuh-operator/internal/certificates/opensearch"
+	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/deployments"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/hpa"
 	osservices "github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/services"
-	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/serviceaccount"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -72,7 +75,19 @@ func (r *DashboardReconciler) WithRecorder(recorder record.EventRecorder) *Dashb
 }
 
 // Reconcile reconciles the OpenSearch Dashboard
-func (r *DashboardReconciler) Reconcile(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+func (r *DashboardReconciler) Reconcile(ctx context.Context, cluster *wazuhv1.WazuhCluster) (reconcileErr error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "DashboardReconciler.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", cluster.Name),
+			attribute.String("resource.namespace", cluster.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if reconcileErr != nil {
+			telemetry.RecordError(span, reconcileErr)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Reconcile Secrets

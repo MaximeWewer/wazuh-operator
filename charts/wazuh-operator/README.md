@@ -209,6 +209,7 @@ helm uninstall wazuh-operator --namespace wazuh-system
 | telemetry.enabled | bool | `false` | Enable OpenTelemetry distributed tracing |
 | telemetry.endpoint | string | `""` | OTLP exporter endpoint (gRPC). Examples: "jaeger-collector.observability:4317", "otel-collector.monitoring:4317" |
 | telemetry.insecure | bool | `true` | Use insecure connection (no TLS). Set to true for local development or service mesh. |
+| telemetry.samplingRatio | string | `"1.0"` | Trace sampling ratio (0.0-1.0). 1.0 = sample all, 0.5 = 50%. |
 | telemetry.serviceName | string | `"wazuh-operator"` | Service name reported in traces |
 | telemetry.serviceVersion | string | `""` | Service version reported in traces (defaults to chart appVersion) |
 

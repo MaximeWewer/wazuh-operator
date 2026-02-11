@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 
+	"go.opentelemetry.io/otel/attribute"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,6 +33,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -57,7 +59,19 @@ func (r *SnapshotPolicyReconciler) WithClientFactory(factory *security.OpenSearc
 }
 
 // Reconcile reconciles an OpenSearch snapshot policy
-func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSearchSnapshotPolicy) error {
+func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSearchSnapshotPolicy) (reconcileErr error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "SnapshotPolicyReconciler.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", policy.Name),
+			attribute.String("resource.namespace", policy.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if reconcileErr != nil {
+			telemetry.RecordError(span, reconcileErr)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Handle finalizer

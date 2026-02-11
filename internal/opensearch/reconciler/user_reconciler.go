@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,6 +35,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -61,7 +63,19 @@ func (r *UserReconciler) WithClientFactory(factory *security.OpenSearchClientFac
 }
 
 // Reconcile reconciles an OpenSearch user
-func (r *UserReconciler) Reconcile(ctx context.Context, user *wazuhv1.OpenSearchUser) error {
+func (r *UserReconciler) Reconcile(ctx context.Context, user *wazuhv1.OpenSearchUser) (reconcileErr error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "UserReconciler.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", user.Name),
+			attribute.String("resource.namespace", user.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if reconcileErr != nil {
+			telemetry.RecordError(span, reconcileErr)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Handle finalizer

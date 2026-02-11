@@ -37,6 +37,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
 	wazuhcerts "github.com/MaximeWewer/wazuh-operator/internal/certificates/wazuh"
@@ -45,6 +47,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/serviceaccount"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/validation"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
@@ -95,13 +98,25 @@ func (r *ClusterReconciler) WithDecoderReconciler(dr *DecoderReconciler) *Cluste
 }
 
 // ReconcileCertificates reconciles TLS certificates for the cluster
-func (r *ClusterReconciler) ReconcileCertificates(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+func (r *ClusterReconciler) ReconcileCertificates(ctx context.Context, cluster *wazuhv1.WazuhCluster) (err error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "ClusterReconciler.ReconcileCertificates",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", cluster.Name),
+			attribute.String("resource.namespace", cluster.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if err != nil {
+			telemetry.RecordError(span, err)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Check if certificates already exist
 	certsSecretName := fmt.Sprintf("%s-manager-certs", cluster.Name)
 	found := &corev1.Secret{}
-	err := r.Get(ctx, types.NamespacedName{Name: certsSecretName, Namespace: cluster.Namespace}, found)
+	err = r.Get(ctx, types.NamespacedName{Name: certsSecretName, Namespace: cluster.Namespace}, found)
 
 	if err != nil && errors.IsNotFound(err) {
 		// Generate new certificates
@@ -223,7 +238,19 @@ type ManagerReconcileResult struct {
 }
 
 // ReconcileManager reconciles the Wazuh Manager (master and workers)
-func (r *ClusterReconciler) ReconcileManager(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+func (r *ClusterReconciler) ReconcileManager(ctx context.Context, cluster *wazuhv1.WazuhCluster) (err error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "ClusterReconciler.ReconcileManager",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", cluster.Name),
+			attribute.String("resource.namespace", cluster.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if err != nil {
+			telemetry.RecordError(span, err)
+		}
+	}()
+
 	return r.ReconcileManagerWithCertHashes(ctx, cluster, "", "")
 }
 
@@ -264,7 +291,19 @@ func (r *ClusterReconciler) ReconcileManagerWithCertHashes(ctx context.Context, 
 
 // ReconcileManagerNonBlocking reconciles the Wazuh Manager without blocking on rollouts
 // Returns pending rollouts that should be tracked and monitored by the caller
-func (r *ClusterReconciler) ReconcileManagerNonBlocking(ctx context.Context, cluster *wazuhv1.WazuhCluster, masterCertHash, workerCertHash string) ManagerReconcileResult {
+func (r *ClusterReconciler) ReconcileManagerNonBlocking(ctx context.Context, cluster *wazuhv1.WazuhCluster, masterCertHash, workerCertHash string) (result ManagerReconcileResult) {
+	ctx, span := telemetry.Tracer().Start(ctx, "ClusterReconciler.ReconcileManagerNonBlocking",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", cluster.Name),
+			attribute.String("resource.namespace", cluster.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if result.Error != nil {
+			telemetry.RecordError(span, result.Error)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 	var pendingRollouts []utils.PendingRollout
 
@@ -2126,7 +2165,19 @@ func (r *ClusterReconciler) ensureAPICredentialsSecret(ctx context.Context, clus
 // ReconcileLogRotation reconciles log rotation CronJob and RBAC resources
 // Creates or updates the CronJob, ServiceAccount, Role, and RoleBinding when log rotation is enabled
 // Deletes all log rotation resources when disabled
-func (r *ClusterReconciler) ReconcileLogRotation(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+func (r *ClusterReconciler) ReconcileLogRotation(ctx context.Context, cluster *wazuhv1.WazuhCluster) (err error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "ClusterReconciler.ReconcileLogRotation",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", cluster.Name),
+			attribute.String("resource.namespace", cluster.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if err != nil {
+			telemetry.RecordError(span, err)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Check if log rotation is enabled

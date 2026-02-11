@@ -32,7 +32,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
@@ -55,7 +58,19 @@ func NewFilebeatReconciler(c client.Client, scheme *runtime.Scheme, recorder rec
 }
 
 // Reconcile reconciles the WazuhFilebeat resource
-func (r *FilebeatReconciler) Reconcile(ctx context.Context, filebeat *wazuhv1.WazuhFilebeat) error {
+func (r *FilebeatReconciler) Reconcile(ctx context.Context, filebeat *wazuhv1.WazuhFilebeat) (err error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "FilebeatReconciler.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", filebeat.Name),
+			attribute.String("resource.namespace", filebeat.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if err != nil {
+			telemetry.RecordError(span, err)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 	log.Info("Reconciling WazuhFilebeat", "name", filebeat.Name, "namespace", filebeat.Namespace)
 

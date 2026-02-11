@@ -34,8 +34,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/validation"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -69,7 +72,19 @@ func NewRuleReconciler(c client.Client, scheme *runtime.Scheme, recorder record.
 }
 
 // Reconcile reconciles the Wazuh Rule
-func (r *RuleReconciler) Reconcile(ctx context.Context, rule *wazuhv1.WazuhRule) error {
+func (r *RuleReconciler) Reconcile(ctx context.Context, rule *wazuhv1.WazuhRule) (err error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "RuleReconciler.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", rule.Name),
+			attribute.String("resource.namespace", rule.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if err != nil {
+			telemetry.RecordError(span, err)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Initialize status if needed

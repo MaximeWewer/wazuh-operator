@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,6 +32,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/config"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -56,7 +58,19 @@ func (r *AuthConfigReconciler) WithSecurityAdminExecutor(executor *security.Secu
 }
 
 // Reconcile reconciles an OpenSearchAuthConfig
-func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv1.OpenSearchAuthConfig) error {
+func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv1.OpenSearchAuthConfig) (reconcileErr error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "AuthConfigReconciler.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", authConfig.Name),
+			attribute.String("resource.namespace", authConfig.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if reconcileErr != nil {
+			telemetry.RecordError(span, reconcileErr)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Resolve secrets

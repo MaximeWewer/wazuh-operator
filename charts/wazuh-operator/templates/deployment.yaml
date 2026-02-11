@@ -102,6 +102,8 @@ spec:
           value: {{ .Values.telemetry.serviceName | default "wazuh-operator" | quote }}
         - name: OTEL_SERVICE_VERSION
           value: {{ .Values.telemetry.serviceVersion | default .Chart.AppVersion | quote }}
+        - name: OTEL_TRACES_SAMPLER_ARG
+          value: {{ .Values.telemetry.samplingRatio | default "1.0" | quote }}
         {{- end }}
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ .Values.operator.clusterDomain | default "cluster.local" | quote }}

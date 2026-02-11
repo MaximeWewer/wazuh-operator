@@ -29,7 +29,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 )
 
@@ -48,7 +51,19 @@ func NewMonitoringReconciler(c client.Client, scheme *runtime.Scheme) *Monitorin
 }
 
 // Reconcile reconciles all monitoring resources for a WazuhCluster
-func (r *MonitoringReconciler) Reconcile(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+func (r *MonitoringReconciler) Reconcile(ctx context.Context, cluster *wazuhv1.WazuhCluster) (err error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "MonitoringReconciler.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", cluster.Name),
+			attribute.String("resource.namespace", cluster.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if err != nil {
+			telemetry.RecordError(span, err)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Check if monitoring is enabled

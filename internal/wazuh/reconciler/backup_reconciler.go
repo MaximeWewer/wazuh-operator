@@ -32,7 +32,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/jobs"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -57,7 +60,19 @@ func NewBackupReconciler(c client.Client, scheme *runtime.Scheme) *BackupReconci
 }
 
 // Reconcile reconciles a WazuhBackup resource
-func (r *BackupReconciler) Reconcile(ctx context.Context, backup *wazuhv1.WazuhBackup) error {
+func (r *BackupReconciler) Reconcile(ctx context.Context, backup *wazuhv1.WazuhBackup) (err error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "BackupReconciler.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", backup.Name),
+			attribute.String("resource.namespace", backup.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if err != nil {
+			telemetry.RecordError(span, err)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Handle finalizer

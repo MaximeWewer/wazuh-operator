@@ -59,6 +59,7 @@ import (
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
+	"github.com/MaximeWewer/wazuh-operator/pkg/logging"
 )
 
 const (
@@ -159,6 +160,13 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		metrics.RecordReconciliation("WazuhCluster", req.Namespace, reconcileResult, duration)
 	}()
 
+	defer func() {
+		if reconcileErr != nil {
+			telemetry.RecordError(span, reconcileErr)
+		}
+	}()
+
+	ctx = logf.IntoContext(ctx, logging.WithTraceID(ctx))
 	log := logf.FromContext(ctx)
 
 	// Fetch the WazuhCluster instance
@@ -169,7 +177,6 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "Failed to get WazuhCluster")
-		telemetry.RecordError(span, err)
 		metrics.RecordReconciliationError("WazuhCluster", req.Namespace, "get_failed")
 		return ctrl.Result{}, err
 	}
@@ -1401,9 +1408,9 @@ func (r *WazuhClusterReconciler) recordCertificateExpiryDaysMetrics(ctx context.
 	log := logf.FromContext(ctx)
 
 	type certInfo struct {
-		certType  string
+		certType   string
 		secretName string
-		certKey   string
+		certKey    string
 	}
 
 	certs := []certInfo{

@@ -25,6 +25,7 @@ import (
 
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
+	"github.com/MaximeWewer/wazuh-operator/pkg/logging"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -74,6 +75,13 @@ func (r *OpenSearchAuthConfigReconciler) Reconcile(ctx context.Context, req ctrl
 		metrics.RecordReconciliation("OpenSearchAuthConfig", req.Namespace, reconcileResult, duration)
 	}()
 
+	defer func() {
+		if reconcileErr != nil {
+			telemetry.RecordError(span, reconcileErr)
+		}
+	}()
+
+	ctx = logf.IntoContext(ctx, logging.WithTraceID(ctx))
 	log := logf.FromContext(ctx)
 
 	// Fetch the OpenSearchAuthConfig instance

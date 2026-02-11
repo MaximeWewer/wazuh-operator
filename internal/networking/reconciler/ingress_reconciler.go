@@ -28,8 +28,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/networking/builder/ingresses"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 )
 
 // IngressReconciler handles reconciliation of Ingress resources for Wazuh components
@@ -47,7 +50,19 @@ func NewIngressReconciler(c client.Client, scheme *runtime.Scheme) *IngressRecon
 }
 
 // Reconcile reconciles Ingress resources for the cluster
-func (r *IngressReconciler) Reconcile(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+func (r *IngressReconciler) Reconcile(ctx context.Context, cluster *wazuhv1.WazuhCluster) (err error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "IngressReconciler.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", cluster.Name),
+			attribute.String("resource.namespace", cluster.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if err != nil {
+			telemetry.RecordError(span, err)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Reconcile Dashboard Ingress

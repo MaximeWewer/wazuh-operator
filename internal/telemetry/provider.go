@@ -73,11 +73,22 @@ func InitProvider(ctx context.Context, config Config) (*sdktrace.TracerProvider,
 		return nil, fmt.Errorf("failed to create resource: %w", err)
 	}
 
+	// Select sampler based on configured ratio
+	var sampler sdktrace.Sampler
+	switch {
+	case config.SamplingRatio >= 1.0:
+		sampler = sdktrace.AlwaysSample()
+	case config.SamplingRatio <= 0:
+		sampler = sdktrace.NeverSample()
+	default:
+		sampler = sdktrace.ParentBased(sdktrace.TraceIDRatioBased(config.SamplingRatio))
+	}
+
 	// Create TracerProvider
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(exporter),
 		sdktrace.WithResource(res),
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+		sdktrace.WithSampler(sampler),
 	)
 
 	// Set global TracerProvider and propagator

@@ -26,6 +26,7 @@ import (
 	"sort"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/crypto/bcrypt"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -61,6 +62,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/pdb"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/serviceaccount"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/storage"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -99,7 +101,19 @@ func (r *IndexerReconciler) WithRecorder(recorder record.EventRecorder) *Indexer
 }
 
 // Reconcile reconciles the OpenSearch Indexer
-func (r *IndexerReconciler) Reconcile(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+func (r *IndexerReconciler) Reconcile(ctx context.Context, cluster *wazuhv1.WazuhCluster) (reconcileErr error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "IndexerReconciler.Reconcile",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", cluster.Name),
+			attribute.String("resource.namespace", cluster.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if reconcileErr != nil {
+			telemetry.RecordError(span, reconcileErr)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Detect topology mode
@@ -801,7 +815,19 @@ type IndexerReconcileResult struct {
 
 // ReconcileNonBlocking reconciles the OpenSearch Indexer without blocking on rollouts
 // Returns a pending rollout that should be tracked and monitored by the caller
-func (r *IndexerReconciler) ReconcileNonBlocking(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) IndexerReconcileResult {
+func (r *IndexerReconciler) ReconcileNonBlocking(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) (result IndexerReconcileResult) {
+	ctx, span := telemetry.Tracer().Start(ctx, "IndexerReconciler.ReconcileNonBlocking",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", cluster.Name),
+			attribute.String("resource.namespace", cluster.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if result.Error != nil {
+			telemetry.RecordError(span, result.Error)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 
 	// Reconcile Secrets

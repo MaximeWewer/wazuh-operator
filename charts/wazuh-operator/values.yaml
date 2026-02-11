@@ -318,6 +318,9 @@ telemetry:
   # -- Service version reported in traces (defaults to chart appVersion)
   serviceVersion: ""
 
+  # -- Trace sampling ratio (0.0-1.0). 1.0 = sample all, 0.5 = 50%.
+  samplingRatio: "1.0"
+
 # @section Gateway API Configuration
 
 gatewayAPI:

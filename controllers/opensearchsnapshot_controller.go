@@ -31,6 +31,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
+	"github.com/MaximeWewer/wazuh-operator/pkg/logging"
 )
 
 // OpenSearchSnapshotReconciler reconciles a OpenSearchSnapshot object
@@ -67,6 +68,13 @@ func (r *OpenSearchSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.R
 		metrics.RecordReconciliation("OpenSearchSnapshot", req.Namespace, reconcileResult, duration)
 	}()
 
+	defer func() {
+		if reconcileErr != nil {
+			telemetry.RecordError(span, reconcileErr)
+		}
+	}()
+
+	ctx = logf.IntoContext(ctx, logging.WithTraceID(ctx))
 	log := logf.FromContext(ctx)
 
 	// Fetch the OpenSearchSnapshot instance

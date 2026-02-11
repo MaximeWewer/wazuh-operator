@@ -33,6 +33,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
+	"github.com/MaximeWewer/wazuh-operator/pkg/logging"
 )
 
 // WazuhBackupReconciler reconciles a WazuhBackup object
@@ -74,6 +75,13 @@ func (r *WazuhBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		metrics.RecordReconciliation("WazuhBackup", req.Namespace, reconcileResult, duration)
 	}()
 
+	defer func() {
+		if reconcileErr != nil {
+			telemetry.RecordError(span, reconcileErr)
+		}
+	}()
+
+	ctx = logf.IntoContext(ctx, logging.WithTraceID(ctx))
 	log := logf.FromContext(ctx)
 
 	// Fetch the WazuhBackup instance

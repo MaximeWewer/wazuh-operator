@@ -19,6 +19,7 @@ package telemetry
 
 import (
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -36,6 +37,10 @@ type Config struct {
 
 	// ServiceVersion is the version of the service
 	ServiceVersion string
+
+	// SamplingRatio is the trace sampling ratio (0.0-1.0)
+	// 1.0 = sample all, 0.0 = sample none
+	SamplingRatio float64
 }
 
 // LoadFromEnv loads configuration from environment variables
@@ -59,6 +64,14 @@ func LoadFromEnv() Config {
 	// Check for insecure flag
 	insecure := os.Getenv("OTEL_EXPORTER_OTLP_INSECURE")
 	config.Insecure = strings.EqualFold(insecure, "true") || insecure == "1"
+
+	// Parse sampling ratio (default 1.0 = sample all)
+	config.SamplingRatio = 1.0
+	if samplerArg := os.Getenv("OTEL_TRACES_SAMPLER_ARG"); samplerArg != "" {
+		if ratio, err := strconv.ParseFloat(samplerArg, 64); err == nil && ratio >= 0 && ratio <= 1.0 {
+			config.SamplingRatio = ratio
+		}
+	}
 
 	return config
 }

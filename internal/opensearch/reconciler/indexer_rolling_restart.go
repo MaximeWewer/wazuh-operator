@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -29,6 +30,7 @@ import (
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/rolling"
+	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -37,7 +39,19 @@ import (
 // In advanced mode (NodePools), it iterates over each pool's StatefulSet.
 //
 // Returns nil result if no restart is needed.
-func (r *IndexerReconciler) OrchestrateRollingRestart(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*rolling.RestartResult, error) {
+func (r *IndexerReconciler) OrchestrateRollingRestart(ctx context.Context, cluster *wazuhv1.WazuhCluster) (_ *rolling.RestartResult, orchestrateErr error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "IndexerReconciler.OrchestrateRollingRestart",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", cluster.Name),
+			attribute.String("resource.namespace", cluster.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if orchestrateErr != nil {
+			telemetry.RecordError(span, orchestrateErr)
+		}
+	}()
+
 	log := logf.FromContext(ctx)
 	startTime := time.Now()
 
