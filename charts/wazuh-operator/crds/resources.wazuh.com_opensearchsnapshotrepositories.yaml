@@ -83,6 +83,10 @@ spec:
               settings:
                 description: Settings contains type-specific repository configuration
                 properties:
+                  applicationName:
+                    description: ApplicationName is the GCS application name (gcs
+                      type only)
+                    type: string
                   basePath:
                     description: BasePath is the path within the bucket
                     type: string
@@ -96,6 +100,13 @@ spec:
                   chunkSize:
                     description: ChunkSize is the chunk size for large files (e.g.,
                       "1gb")
+                    type: string
+                  client:
+                    default: default
+                    description: |-
+                      Client is the named client for keystore-based credentials
+                      Corresponds to the clientName in RepositoryPluginConfig
+                      Used by S3, GCS, and Azure repository types
                     type: string
                   compress:
                     default: true
@@ -127,6 +138,18 @@ spec:
                   endpoint:
                     description: Endpoint is a custom endpoint (MinIO, S3-compatible)
                     type: string
+                  endpointSuffix:
+                    description: |-
+                      EndpointSuffix is the Azure endpoint suffix for sovereign clouds (azure type only)
+                      Example: "core.chinacloudapi.cn" for Azure China
+                    type: string
+                  hadoopConf:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      HadoopConf is extra Hadoop configuration for HDFS (hdfs type only)
+                      Keys are prefixed with "conf." when sent to OpenSearch
+                    type: object
                   location:
                     description: Location is the filesystem path (fs type only)
                     type: string
@@ -138,14 +161,29 @@ spec:
                     description: MaxSnapshotBytesPerSec limits snapshot bandwidth
                       (e.g., "40mb")
                     type: string
+                  path:
+                    description: Path is the HDFS directory path (hdfs type only)
+                    type: string
                   pathStyleAccess:
                     description: PathStyleAccess enables path-style access (MinIO)
                     type: boolean
+                  protocol:
+                    description: |-
+                      Protocol is the connection protocol (s3 type only)
+                      Use "http" for MinIO or other S3-compatible services without TLS
+                    enum:
+                    - http
+                    - https
+                    type: string
                   readonly:
                     description: ReadOnly marks the repository as read-only
                     type: boolean
                   region:
                     description: Region is the cloud region (s3)
+                    type: string
+                  securityPrincipal:
+                    description: SecurityPrincipal is the Kerberos principal for HDFS
+                      (hdfs type only)
                     type: string
                   serverSideEncryption:
                     description: ServerSideEncryption enables server-side encryption
@@ -155,15 +193,28 @@ spec:
                     description: StorageClass is the S3 storage class (e.g., "standard",
                       "reduced_redundancy")
                     type: string
+                  uri:
+                    description: |-
+                      URI is the HDFS namenode URI (hdfs type only)
+                      Example: "hdfs://namenode:8020"
+                    type: string
+                  useKeystore:
+                    description: |-
+                      UseKeystore indicates that credentials are stored in the OpenSearch keystore
+                      When true, inline credentials (access_key/secret_key) are not set in repository settings
+                      The operator expects the keystore to be populated via RepositoryPlugins in WazuhCluster
+                    type: boolean
                 type: object
               type:
                 description: |-
                   Type is the repository type
-                  Note: s3 type requires repository-s3 plugin to be installed in OpenSearch
+                  Note: s3/gcs/azure/hdfs types require the corresponding repository plugin to be installed
                 enum:
                 - s3
                 - azure
                 - fs
+                - gcs
+                - hdfs
                 type: string
               verify:
                 default: true

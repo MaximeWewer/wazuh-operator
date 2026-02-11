@@ -213,15 +213,39 @@ spec:
                   If empty, a one-shot backup Job is created instead of CronJob
                   Example: "0 2 * * *" for daily at 2 AM
                 type: string
+              serviceAccountAnnotations:
+                additionalProperties:
+                  type: string
+                description: |-
+                  ServiceAccountAnnotations are merged into the backup job ServiceAccount
+                  Useful for cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+                type: object
               storage:
                 description: Storage defines where backups are stored
                 properties:
+                  azure:
+                    description: Azure contains Azure-specific backup configuration
+                    properties:
+                      accountName:
+                        description: AccountName is the Azure Storage account name
+                        type: string
+                      container:
+                        description: Container is the Azure Blob Storage container
+                          name (overrides Bucket)
+                        type: string
+                      endpointSuffix:
+                        description: EndpointSuffix is the Azure endpoint suffix for
+                          sovereign clouds
+                        type: string
+                    type: object
                   bucket:
-                    description: Bucket is the S3 bucket name
+                    description: Bucket is the bucket or container name (S3, GCS,
+                      Azure)
                     type: string
                   credentialsSecret:
-                    description: CredentialsSecret references the Secret containing
-                      S3 credentials
+                    description: |-
+                      CredentialsSecret references the Secret containing storage credentials
+                      Optional for GCS Workload Identity or HDFS simple auth
                     properties:
                       accessKeyKey:
                         default: access-key
@@ -246,6 +270,28 @@ spec:
                     description: ForcePathStyle enables path-style S3 access (required
                       for MinIO)
                     type: boolean
+                  gcs:
+                    description: GCS contains GCS-specific backup configuration
+                    properties:
+                      project:
+                        description: Project is the GCP project ID
+                        type: string
+                    type: object
+                  hdfs:
+                    description: HDFS contains HDFS-specific backup configuration
+                    properties:
+                      path:
+                        description: Path is the HDFS directory path for backups
+                        type: string
+                      uri:
+                        description: |-
+                          URI is the HDFS namenode WebHDFS URI
+                          Example: "http://namenode:9870/webhdfs/v1"
+                        type: string
+                    required:
+                    - path
+                    - uri
+                    type: object
                   prefix:
                     default: '{{ .ClusterName }}/{{ .Namespace }}'
                     description: |-
@@ -253,16 +299,17 @@ spec:
                       Supports Go templates: {{ .ClusterName }}, {{ .Namespace }}, {{ .Date }}
                     type: string
                   region:
-                    description: Region is the AWS region (for S3)
+                    description: Region is the AWS region (S3 only)
                     type: string
                   type:
-                    description: Type is the storage type
+                    description: Type is the storage backend type
                     enum:
                     - s3
+                    - gcs
+                    - azure
+                    - hdfs
                     type: string
                 required:
-                - bucket
-                - credentialsSecret
                 - type
                 type: object
               suspend:
