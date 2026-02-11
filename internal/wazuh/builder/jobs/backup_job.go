@@ -159,10 +159,10 @@ func (b *BackupJobBuilder) buildRcloneConfig() string {
 			project = fmt.Sprintf("project_number=%s ", storage.GCS.Project)
 		}
 		if storage.CredentialsSecret != nil {
-			return fmt.Sprintf(`rclone config create remote gcs %sservice_account_file=/mnt/credentials/credentials-file`, project)
+			return fmt.Sprintf(`rclone config create remote gcs %sservice_account_file=/mnt/credentials/credentials-file bucket_policy_only=true`, project)
 		}
 		// Workload Identity / ADC: use env_auth to avoid OAuth prompt
-		return fmt.Sprintf(`rclone config create remote gcs %senv_auth=true`, project)
+		return fmt.Sprintf(`rclone config create remote gcs %senv_auth=true bucket_policy_only=true`, project)
 
 	case constants.RepositoryTypeAzure:
 		account := ""

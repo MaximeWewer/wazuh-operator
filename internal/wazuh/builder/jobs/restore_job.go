@@ -177,9 +177,10 @@ func (b *RestoreJobBuilder) buildRcloneConfig() string {
 			project = fmt.Sprintf("project_number=%s ", gcs.Project)
 		}
 		if gcs.CredentialsSecret != nil {
-			return fmt.Sprintf(`rclone config create remote gcs %sservice_account_file=/mnt/credentials/credentials-file`, project)
+			return fmt.Sprintf(`rclone config create remote gcs %sservice_account_file=/mnt/credentials/credentials-file bucket_policy_only=true`, project)
 		}
-		return fmt.Sprintf(`rclone config create remote gcs %s`, project)
+		// Workload Identity / ADC: use env_auth to avoid OAuth prompt
+		return fmt.Sprintf(`rclone config create remote gcs %senv_auth=true bucket_policy_only=true`, project)
 	}
 
 	if source.Azure != nil {
