@@ -61,7 +61,7 @@ Deploy Jaeger in your cluster:
 ```bash
 # Install Jaeger operator
 kubectl create namespace observability
-kubectl apply -f https://github.com/jaegertracing/jaeger-operator/releases/download/v1.51.0/jaeger-operator.yaml -n observability
+kubectl apply -f https://github.com/jaegertracing/jaeger-operator/releases/download/v1.65.0/jaeger-operator.yaml -n observability
 
 # Create Jaeger instance
 kubectl apply -f - <<EOF
@@ -73,7 +73,7 @@ metadata:
 spec:
   strategy: allInOne
   allInOne:
-    image: jaegertracing/all-in-one:1.51
+    image: jaegertracing/all-in-one:latest
 EOF
 ```
 
