@@ -1,0 +1,11 @@
+{{- if .Values.wazuhRestore.enabled }}
+apiVersion: resources.wazuh.com/v1
+kind: WazuhRestore
+metadata:
+  name: {{ default (printf "%s-restore" .Values.cluster.name) .Values.wazuhRestore.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "wazuh-cluster.labels" . | nindent 4 }}
+spec:
+  {{- include "wazuh-cluster.specWithClusterRef" (dict "spec" .Values.wazuhRestore.spec "clusterName" .Values.cluster.name) | nindent 2 }}
+{{- end }}

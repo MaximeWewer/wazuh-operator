@@ -7,5 +7,5 @@ metadata:
   labels:
     {{- include "wazuh-cluster.labels" . | nindent 4 }}
 spec:
-  {{- toYaml .Values.wazuhBackup.spec | nindent 2 }}
+  {{- include "wazuh-cluster.specWithClusterRef" (dict "spec" .Values.wazuhBackup.spec "clusterName" .Values.cluster.name) | nindent 2 }}
 {{- end }}

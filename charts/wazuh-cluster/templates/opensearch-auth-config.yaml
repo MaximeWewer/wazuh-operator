@@ -1,0 +1,11 @@
+{{- if .Values.opensearchAuthConfig.enabled }}
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchAuthConfig
+metadata:
+  name: {{ default (printf "%s-auth-config" .Values.cluster.name) .Values.opensearchAuthConfig.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "wazuh-cluster.labels" . | nindent 4 }}
+spec:
+  {{- include "wazuh-cluster.specWithClusterRef" (dict "spec" .Values.opensearchAuthConfig.spec "clusterName" .Values.cluster.name) | nindent 2 }}
+{{- end }}

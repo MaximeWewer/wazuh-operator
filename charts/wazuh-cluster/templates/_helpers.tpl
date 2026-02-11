@@ -19,3 +19,14 @@ Common labels
 helm.sh/chart: {{ include "wazuh-cluster.chart" . }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
+
+{{/*
+Merge spec with a default clusterRef pointing to the cluster name.
+User-provided clusterRef in .spec takes precedence.
+Usage: include "wazuh-cluster.specWithClusterRef" (dict "spec" .spec "clusterName" $.Values.cluster.name)
+*/}}
+{{- define "wazuh-cluster.specWithClusterRef" -}}
+{{- $defaultClusterRef := dict "clusterRef" (dict "name" .clusterName) -}}
+{{- $spec := mustMergeOverwrite $defaultClusterRef (default dict .spec) -}}
+{{- toYaml $spec -}}
+{{- end -}}

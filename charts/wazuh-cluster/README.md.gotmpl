@@ -190,12 +190,192 @@ helm uninstall my-wazuh-cluster
 {{- end }}
 {{- end }}
 
-### Backup Configuration
+### OpenSearchSnapshotRepository
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 {{- range .Values }}
-{{- if or (hasPrefix "opensearchRepository" .Key) (hasPrefix "opensearchSnapshotPolicy" .Key) (hasPrefix "wazuhBackup" .Key) (hasPrefix "backupCredentials" .Key) }}
+{{- if hasPrefix "opensearchRepository" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### OpenSearchSnapshotPolicy
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "opensearchSnapshotPolicy" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### WazuhBackup
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "wazuhBackup" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### Backup Credentials
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "backupCredentials" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### OpenSearchUser
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "opensearchUsers" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### OpenSearchRole
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if eq "opensearchRoles" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### OpenSearchRoleMapping
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "opensearchRoleMappings" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### OpenSearchTenant
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "opensearchTenants" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### OpenSearchActionGroup
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "opensearchActionGroups" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### OpenSearchAuthConfig
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "opensearchAuthConfig" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### OpenSearchIndex
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if eq "opensearchIndices" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### OpenSearchIndexTemplate
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "opensearchIndexTemplates" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### OpenSearchComponentTemplate
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "opensearchComponentTemplates" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### OpenSearchISMPolicy
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "opensearchISMPolicies" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### OpenSearchSnapshot
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "opensearchSnapshots" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### OpenSearchRestore
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "opensearchRestores" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### WazuhRule
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "wazuhRules" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### WazuhDecoder
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "wazuhDecoders" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
+### WazuhRestore
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "wazuhRestore" .Key }}
 {{ template "chart.valuesTableRow" . }}
 {{- end }}
 {{- end }}

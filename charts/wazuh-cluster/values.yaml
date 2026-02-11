@@ -1087,6 +1087,194 @@ backupCredentials:
   # accessKeyId: "minioadmin"
   # secretAccessKey: "minioadmin"
 
+# @section OpenSearch Security Configuration
+# Manage OpenSearch security resources (users, roles, role mappings, tenants, action groups, auth config).
+# All resources automatically get a clusterRef pointing to cluster.name.
+
+# -- OpenSearch users to create
+# @default -- `[]`
+opensearchUsers: []
+# Example:
+#   - name: my-user
+#     spec:
+#       passwordSecret:
+#         secretName: my-user-password
+#       backendRoles:
+#         - readall
+
+# -- OpenSearch roles to create
+# @default -- `[]`
+opensearchRoles: []
+# Example:
+#   - name: custom-role
+#     spec:
+#       clusterPermissions:
+#         - cluster_monitor
+#       indexPermissions:
+#         - indexPatterns: ["wazuh-alerts-*"]
+#           allowedActions: ["read"]
+
+# -- OpenSearch role mappings to create
+# @default -- `[]`
+opensearchRoleMappings: []
+# Example:
+#   - name: custom-role-mapping
+#     spec:
+#       roleName: custom-role
+#       users:
+#         - my-user
+
+# -- OpenSearch tenants to create
+# @default -- `[]`
+opensearchTenants: []
+# Example:
+#   - name: my-tenant
+#     spec:
+#       description: "My custom tenant"
+
+# -- OpenSearch action groups to create
+# @default -- `[]`
+opensearchActionGroups: []
+# Example:
+#   - name: my-action-group
+#     spec:
+#       allowedActions:
+#         - indices:data/read/search
+
+# @extra opensearchAuthConfig OpenSearch authentication/authorization configuration (singleton)
+opensearchAuthConfig:
+  # -- Enable OpenSearchAuthConfig CRD creation
+  enabled: false
+  # name: my-auth-config
+  # spec:
+  #   authc:
+  #     basic_internal_auth_domain:
+  #       httpEnabled: true
+  #       order: 0
+  #       httpAuthenticator:
+  #         type: basic
+  #         challenge: true
+
+# @section OpenSearch Index Management Configuration
+# Manage OpenSearch indices, index templates, component templates, and ISM policies.
+
+# -- OpenSearch indices to create
+# @default -- `[]`
+opensearchIndices: []
+# Example:
+#   - name: my-index
+#     spec:
+#       settings:
+#         numberOfShards: 1
+#         numberOfReplicas: 1
+
+# -- OpenSearch index templates to create
+# @default -- `[]`
+opensearchIndexTemplates: []
+# Example:
+#   - name: my-index-template
+#     spec:
+#       indexPatterns:
+#         - "my-index-*"
+#       template:
+#         settings:
+#           numberOfShards: 1
+
+# -- OpenSearch component templates to create
+# @default -- `[]`
+opensearchComponentTemplates: []
+# Example:
+#   - name: my-component-template
+#     spec:
+#       template:
+#         settings:
+#           numberOfShards: 1
+
+# -- OpenSearch ISM policies to create
+# @default -- `[]`
+opensearchISMPolicies: []
+# Example:
+#   - name: hot-warm-delete
+#     spec:
+#       description: "Hot-warm-delete policy"
+#       defaultState: hot
+#       states:
+#         - name: hot
+#           actions: []
+#           transitions:
+#             - stateName: delete
+#               conditions:
+#                 minIndexAge: "30d"
+
+# @section OpenSearch Backup & Restore Configuration
+# Manage OpenSearch snapshots and restore operations.
+
+# -- OpenSearch snapshots to create
+# @default -- `[]`
+opensearchSnapshots: []
+# Example:
+#   - name: manual-snapshot
+#     spec:
+#       repository:
+#         name: minio-backups
+#       indices:
+#         - "wazuh-alerts-*"
+
+# -- OpenSearch restores to create
+# @default -- `[]`
+opensearchRestores: []
+# Example:
+#   - name: restore-snapshot
+#     spec:
+#       snapshot:
+#         name: manual-snapshot
+#       repository:
+#         name: minio-backups
+
+# @section Wazuh Configuration Management
+# Manage Wazuh rules and decoders.
+
+# -- Wazuh custom rules to create
+# @default -- `[]`
+wazuhRules: []
+# Example:
+#   - name: custom-ssh-rules
+#     spec:
+#       fileName: custom_ssh_rules.xml
+#       content: |
+#         <group name="custom_ssh,">
+#           <rule id="100001" level="10">
+#             <if_sid>5710</if_sid>
+#             <description>Custom SSH rule</description>
+#           </rule>
+#         </group>
+
+# -- Wazuh custom decoders to create
+# @default -- `[]`
+wazuhDecoders: []
+# Example:
+#   - name: custom-decoder
+#     spec:
+#       fileName: custom_decoder.xml
+#       content: |
+#         <decoder name="custom_decoder">
+#           <program_name>myapp</program_name>
+#         </decoder>
+
+# @section Wazuh Restore Configuration
+# Restore Wazuh Manager data from a backup.
+
+# @extra wazuhRestore Wazuh Manager Restore (singleton)
+wazuhRestore:
+  # -- Enable WazuhRestore CRD creation
+  enabled: false
+  # name: restore-backup
+  # spec:
+  #   backupName: daily-backup
+  #   components:
+  #     agentKeys: true
+  #     fimDatabase: true
+
 # @section Network Policy Configuration
 # Enable NetworkPolicies for Wazuh cluster components.
 # See [Network Security Guide](../../docs/usage/features/network-security.md) for details.

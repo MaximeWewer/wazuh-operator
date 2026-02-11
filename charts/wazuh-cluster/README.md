@@ -32,7 +32,7 @@ Helm chart for deploying Wazuh clusters via the Wazuh Operator
 helm install wazuh-operator ./charts/wazuh-operator
 ```
 
-2. Install the chart with a sizing profile:
+1. Install the chart with a sizing profile:
 
 ```bash
 helm install my-wazuh-cluster ./charts/wazuh-cluster \
@@ -437,14 +437,119 @@ helm uninstall my-wazuh-cluster
 | cluster.spec.drain.retry.maxAttempts | int | `3` | Maximum retry attempts |
 | cluster.spec.drain.retry.maxDelay | string | `"30m"` | Maximum delay between retries |
 
-### Backup Configuration
+### OpenSearchSnapshotRepository
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| opensearchRepository.enabled | bool | `false` | Enable OpenSearchSnapshotRepository CRD creation |
+
+### OpenSearchSnapshotPolicy
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| opensearchSnapshotPolicy.enabled | bool | `false` | Enable OpenSearchSnapshotPolicy CRD creation |
+
+### WazuhBackup
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| wazuhBackup.enabled | bool | `false` | Enable WazuhBackup CRD creation |
+
+### Backup Credentials
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | backupCredentials.enabled | bool | `false` | Enable backup credentials Secret creation |
-| opensearchRepository.enabled | bool | `false` | Enable OpenSearchSnapshotRepository CRD creation |
-| opensearchSnapshotPolicy.enabled | bool | `false` | Enable OpenSearchSnapshotPolicy CRD creation |
-| wazuhBackup.enabled | bool | `false` | Enable WazuhBackup CRD creation |
+
+### OpenSearchUser
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| opensearchUsers | list | `[]` | OpenSearch users to create |
+
+### OpenSearchRole
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| opensearchRoles | list | `[]` | OpenSearch roles to create |
+
+### OpenSearchRoleMapping
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| opensearchRoleMappings | list | `[]` | OpenSearch role mappings to create |
+
+### OpenSearchTenant
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| opensearchTenants | list | `[]` | OpenSearch tenants to create |
+
+### OpenSearchActionGroup
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| opensearchActionGroups | list | `[]` | OpenSearch action groups to create |
+
+### OpenSearchAuthConfig
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| opensearchAuthConfig.enabled | bool | `false` | Enable OpenSearchAuthConfig CRD creation |
+
+### OpenSearchIndex
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| opensearchIndices | list | `[]` | OpenSearch indices to create |
+
+### OpenSearchIndexTemplate
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| opensearchIndexTemplates | list | `[]` | OpenSearch index templates to create |
+
+### OpenSearchComponentTemplate
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| opensearchComponentTemplates | list | `[]` | OpenSearch component templates to create |
+
+### OpenSearchISMPolicy
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| opensearchISMPolicies | list | `[]` | OpenSearch ISM policies to create |
+
+### OpenSearchSnapshot
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| opensearchSnapshots | list | `[]` | OpenSearch snapshots to create |
+
+### OpenSearchRestore
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| opensearchRestores | list | `[]` | OpenSearch restores to create |
+
+### WazuhRule
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| wazuhRules | list | `[]` | Wazuh custom rules to create |
+
+### WazuhDecoder
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| wazuhDecoders | list | `[]` | Wazuh custom decoders to create |
+
+### WazuhRestore
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| wazuhRestore.enabled | bool | `false` | Enable WazuhRestore CRD creation |
 
 ### Network Policy Configuration
 
