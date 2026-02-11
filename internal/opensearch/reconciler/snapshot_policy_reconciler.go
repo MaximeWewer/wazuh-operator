@@ -121,32 +121,34 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 		log.V(1).Info("Repository validated", "repository", repoName)
 	}
 
-	// Check if policy exists
-	exists, err := snapshotAPI.Exists(ctx, policy.Name)
+	// Get policy (includes seq_no/primary_term when it exists)
+	policyInfo, err := snapshotAPI.GetPolicyInfo(ctx, policy.Name)
 	if err != nil {
-		if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check policy existence: %v", err)); updateErr != nil {
+		if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to get snapshot policy: %v", err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
-		return fmt.Errorf("failed to check snapshot policy existence: %w", err)
+		return fmt.Errorf("failed to get snapshot policy: %w", err)
 	}
 
 	// Build snapshot policy from spec
 	snapshotPolicy := r.buildSnapshotPolicy(policy)
 
-	if !exists {
+	if policyInfo == nil {
 		log.Info("Creating snapshot policy", "name", policy.Name, "repository", repoName)
+		if err := snapshotAPI.CreatePolicy(ctx, policy.Name, snapshotPolicy); err != nil {
+			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create snapshot policy: %v", err)); updateErr != nil {
+				log.Error(updateErr, "Failed to update status")
+			}
+			return fmt.Errorf("failed to create snapshot policy: %w", err)
+		}
 	} else {
 		log.Info("Updating snapshot policy", "name", policy.Name, "repository", repoName)
-	}
-	if err := snapshotAPI.CreatePolicy(ctx, policy.Name, snapshotPolicy); err != nil {
-		action := "create"
-		if exists {
-			action = "update"
+		if err := snapshotAPI.UpdatePolicy(ctx, policy.Name, snapshotPolicy, policyInfo.SeqNo, policyInfo.PrimaryTerm); err != nil {
+			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to update snapshot policy: %v", err)); updateErr != nil {
+				log.Error(updateErr, "Failed to update status")
+			}
+			return fmt.Errorf("failed to update snapshot policy: %w", err)
 		}
-		if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s snapshot policy: %v", action, err)); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		return fmt.Errorf("failed to %s snapshot policy: %w", action, err)
 	}
 
 	// Compute spec hash for drift detection

@@ -100,8 +100,15 @@ func (a *SnapshotAPI) CreatePolicy(ctx context.Context, policyID string, policy 
 	return nil
 }
 
-// GetPolicy retrieves a snapshot management policy
-func (a *SnapshotAPI) GetPolicy(ctx context.Context, policyID string) (*SnapshotPolicy, error) {
+// SnapshotPolicyInfo includes policy and version metadata for updates
+type SnapshotPolicyInfo struct {
+	Policy      SnapshotPolicy `json:"policy"`
+	SeqNo       int64          `json:"_seq_no"`
+	PrimaryTerm int64          `json:"_primary_term"`
+}
+
+// GetPolicyInfo retrieves a snapshot management policy with version metadata
+func (a *SnapshotAPI) GetPolicyInfo(ctx context.Context, policyID string) (*SnapshotPolicyInfo, error) {
 	resp, err := a.client.Get(ctx, "/_plugins/_sm/policies/"+policyID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get snapshot policy: %w", err)
@@ -117,14 +124,38 @@ func (a *SnapshotAPI) GetPolicy(ctx context.Context, policyID string) (*Snapshot
 		return nil, fmt.Errorf("failed to get snapshot policy: %s", string(body))
 	}
 
-	var result struct {
-		Policy SnapshotPolicy `json:"policy"`
-	}
+	var result SnapshotPolicyInfo
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode snapshot policy: %w", err)
 	}
 
-	return &result.Policy, nil
+	return &result, nil
+}
+
+// GetPolicy retrieves a snapshot management policy (without metadata)
+func (a *SnapshotAPI) GetPolicy(ctx context.Context, policyID string) (*SnapshotPolicy, error) {
+	info, err := a.GetPolicyInfo(ctx, policyID)
+	if err != nil || info == nil {
+		return nil, err
+	}
+	return &info.Policy, nil
+}
+
+// UpdatePolicy updates a snapshot policy using optimistic concurrency control
+func (a *SnapshotAPI) UpdatePolicy(ctx context.Context, policyID string, policy SnapshotPolicy, seqNo, primaryTerm int64) error {
+	path := fmt.Sprintf("/_plugins/_sm/policies/%s?if_seq_no=%d&if_primary_term=%d", policyID, seqNo, primaryTerm)
+	resp, err := a.client.Put(ctx, path, policy)
+	if err != nil {
+		return fmt.Errorf("failed to update snapshot policy: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to update snapshot policy: %s", string(body))
+	}
+
+	return nil
 }
 
 // DeletePolicy deletes a snapshot management policy
@@ -145,7 +176,7 @@ func (a *SnapshotAPI) DeletePolicy(ctx context.Context, policyID string) error {
 
 // Exists checks if a snapshot policy exists
 func (a *SnapshotAPI) Exists(ctx context.Context, policyID string) (bool, error) {
-	policy, err := a.GetPolicy(ctx, policyID)
+	policy, err := a.GetPolicyInfo(ctx, policyID)
 	if err != nil {
 		return false, err
 	}
