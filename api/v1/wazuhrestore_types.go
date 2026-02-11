@@ -62,10 +62,10 @@ type WazuhRestoreSpec struct {
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
-	// ServiceAccountAnnotations are merged into the restore job ServiceAccount
-	// Useful for cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
+	// ServiceAccount configuration for restore jobs
+	// Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
 	// +optional
-	ServiceAccountAnnotations map[string]string `json:"serviceAccountAnnotations,omitempty"`
+	ServiceAccount *ServiceAccountConfig `json:"serviceAccount,omitempty"`
 }
 
 // RestoreSource defines where to restore data from

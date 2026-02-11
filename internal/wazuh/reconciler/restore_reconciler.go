@@ -187,15 +187,19 @@ func (r *WazuhRestoreReconciler) validateSource(ctx context.Context, restore *wa
 func (r *WazuhRestoreReconciler) reconcileRBAC(ctx context.Context, restore *wazuhv1.WazuhRestore, builder *jobs.RestoreJobBuilder) error {
 	log := logf.FromContext(ctx)
 
-	// Reconcile ServiceAccount
-	sa := builder.BuildServiceAccount()
-	if err := controllerutil.SetControllerReference(restore, sa, r.Scheme); err != nil {
-		return fmt.Errorf("failed to set controller reference on ServiceAccount: %w", err)
+	if builder.ShouldCreateServiceAccount() {
+		// Reconcile ServiceAccount
+		sa := builder.BuildServiceAccount()
+		if err := controllerutil.SetControllerReference(restore, sa, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference on ServiceAccount: %w", err)
+		}
+		if err := r.createOrUpdate(ctx, sa); err != nil {
+			return fmt.Errorf("failed to reconcile ServiceAccount: %w", err)
+		}
+		log.V(1).Info("Reconciled ServiceAccount", "name", sa.Name)
+	} else {
+		log.V(1).Info("Skipping ServiceAccount creation for restore", "name", restore.Name)
 	}
-	if err := r.createOrUpdate(ctx, sa); err != nil {
-		return fmt.Errorf("failed to reconcile ServiceAccount: %w", err)
-	}
-	log.V(1).Info("Reconciled ServiceAccount", "name", sa.Name)
 
 	// Reconcile Role
 	role := builder.BuildRole()
