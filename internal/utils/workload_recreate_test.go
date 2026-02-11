@@ -18,6 +18,7 @@ package utils //nolint:revive // utils is a common package name
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -209,7 +210,7 @@ func TestRecreateStatefulSetOnError_NonImmutablePassThrough(t *testing.T) {
 	if recreated {
 		t.Fatal("expected recreated to be false for non-immutable error")
 	}
-	if recErr != originalErr {
+	if !errors.Is(recErr, originalErr) {
 		t.Fatalf("expected original error to be passed through, got: %v", recErr)
 	}
 

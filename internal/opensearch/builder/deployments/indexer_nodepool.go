@@ -740,8 +740,7 @@ ls -la /tmp/config/
 	if b.cluster != nil {
 		installer := plugins.NewFromCluster(b.cluster)
 		if installer != nil && installer.NeedsInstallation() {
-			initContainers = append(initContainers, installer.BuildInstallInitContainer())
-			initContainers = append(initContainers, installer.BuildKeystoreInitContainer())
+			initContainers = append(initContainers, installer.BuildInstallInitContainer(), installer.BuildKeystoreInitContainer())
 		}
 	}
 

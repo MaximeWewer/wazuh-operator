@@ -128,7 +128,6 @@ func (r *IndexerReconciler) orchestrateNodePoolRollingRestart(ctx context.Contex
 
 	// Aggregate result across all pools
 	var aggregatedTotalPods, aggregatedUpdatedPods int32
-	anyInProgress := false
 
 	for _, pool := range cluster.Spec.Indexer.NodePools {
 		stsName := constants.IndexerNodePoolName(cluster.Name, pool.Name)
@@ -155,7 +154,6 @@ func (r *IndexerReconciler) orchestrateNodePoolRollingRestart(ctx context.Contex
 		aggregatedUpdatedPods += result.UpdatedPods
 
 		if result.Phase == rolling.RestartPhaseInProgress {
-			anyInProgress = true
 			if result.CurrentPod != "" {
 				r.Recorder.Eventf(cluster, corev1.EventTypeNormal, constants.EventReasonRollingRestartProgress,
 					"Rolling restart: deleted indexer pod %s in pool %s (%d/%d updated)", result.CurrentPod, pool.Name, result.UpdatedPods, result.TotalPods)
@@ -169,15 +167,6 @@ func (r *IndexerReconciler) orchestrateNodePoolRollingRestart(ctx context.Contex
 				Message:     fmt.Sprintf("pool %s: %s", pool.Name, result.Message),
 			}, nil
 		}
-	}
-
-	if anyInProgress {
-		return &rolling.RestartResult{
-			Phase:       rolling.RestartPhaseInProgress,
-			TotalPods:   aggregatedTotalPods,
-			UpdatedPods: aggregatedUpdatedPods,
-			Message:     "rolling restart in progress across node pools",
-		}, nil
 	}
 
 	if aggregatedTotalPods == 0 {

@@ -187,7 +187,7 @@ func (r *ClusterReconciler) processVolumeExpansion(ctx context.Context, cluster 
 			"newSize", requestedSize)
 	}
 
-	return
+	return pvcsExpanded, pvcsPending, expansionNeeded, expansionError
 }
 
 // getManagerMasterPVCs lists all PVCs belonging to the manager master StatefulSet

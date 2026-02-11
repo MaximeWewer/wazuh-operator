@@ -58,15 +58,15 @@ type IndexerStatefulSetBuilder struct {
 	volumeMounts              []corev1.VolumeMount
 	javaOpts                  string
 	// Monitoring configuration
-	cluster 				  		*wazuhv1.WazuhCluster
+	cluster *wazuhv1.WazuhCluster
 	// Extra init containers
-	extraInitContainers       		[]corev1.Container
+	extraInitContainers []corev1.Container
 	// Extra sidecar containers
-	extraContainers 		  		[]corev1.Container
+	extraContainers []corev1.Container
 	// Termination grace period
-	terminationGracePeriodSeconds 	*int64
+	terminationGracePeriodSeconds *int64
 	// ServiceAccount name
-	serviceAccountName 		       	string
+	serviceAccountName string
 }
 
 // NewIndexerStatefulSetBuilder creates a new IndexerStatefulSetBuilder
@@ -761,8 +761,7 @@ fi`, config.VMMaxMapCount()),
 	if b.cluster != nil {
 		installer := plugins.NewFromCluster(b.cluster)
 		if installer != nil && installer.NeedsInstallation() {
-			initContainers = append(initContainers, installer.BuildInstallInitContainer())
-			initContainers = append(initContainers, installer.BuildKeystoreInitContainer())
+			initContainers = append(initContainers, installer.BuildInstallInitContainer(), installer.BuildKeystoreInitContainer())
 		}
 	}
 

@@ -62,7 +62,7 @@ func IsDeploymentImmutableError(err error) bool {
 // RecreateStatefulSetOnError deletes a StatefulSet if the error is immutable-field related.
 // Returns (true, nil) when the resource was deleted; the caller should requeue so the
 // normal Get→IsNotFound→Create path re-creates it on the next reconciliation cycle.
-func RecreateStatefulSetOnError(ctx context.Context, c client.Client, recorder record.EventRecorder, desired *appsv1.StatefulSet, existing *appsv1.StatefulSet, err error) (bool, error) {
+func RecreateStatefulSetOnError(ctx context.Context, c client.Client, recorder record.EventRecorder, desired, existing *appsv1.StatefulSet, err error) (bool, error) {
 	if !IsStatefulSetImmutableError(err) {
 		return false, err
 	}
@@ -89,7 +89,7 @@ func RecreateStatefulSetOnError(ctx context.Context, c client.Client, recorder r
 // RecreateDeploymentOnError deletes a Deployment if the error is immutable-field related.
 // Returns (true, nil) when the resource was deleted; the caller should requeue so the
 // normal Get→IsNotFound→Create path re-creates it on the next reconciliation cycle.
-func RecreateDeploymentOnError(ctx context.Context, c client.Client, recorder record.EventRecorder, desired *appsv1.Deployment, existing *appsv1.Deployment, err error) (bool, error) {
+func RecreateDeploymentOnError(ctx context.Context, c client.Client, recorder record.EventRecorder, desired, existing *appsv1.Deployment, err error) (bool, error) {
 	if !IsDeploymentImmutableError(err) {
 		return false, err
 	}

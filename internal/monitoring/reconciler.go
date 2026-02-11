@@ -154,17 +154,23 @@ func (r *MonitoringReconciler) reconcileServiceMonitor(ctx context.Context, clus
 // cleanupMonitoringResources removes all monitoring resources when monitoring is disabled
 func (r *MonitoringReconciler) cleanupMonitoringResources(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
+	var errs []error
 
 	// Delete Manager ServiceMonitor
 	if err := r.deleteServiceMonitorIfExists(ctx, cluster.Namespace, fmt.Sprintf("%s-manager-metrics", cluster.Name)); err != nil {
 		log.Error(err, "Failed to delete Manager ServiceMonitor")
+		errs = append(errs, err)
 	}
 
 	// Delete Indexer ServiceMonitor
 	if err := r.deleteServiceMonitorIfExists(ctx, cluster.Namespace, fmt.Sprintf("%s-indexer-metrics", cluster.Name)); err != nil {
 		log.Error(err, "Failed to delete Indexer ServiceMonitor")
+		errs = append(errs, err)
 	}
 
+	if len(errs) > 0 {
+		return fmt.Errorf("failed to cleanup monitoring resources: %v", errs)
+	}
 	return nil
 }
 

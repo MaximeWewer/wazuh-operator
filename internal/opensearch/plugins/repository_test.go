@@ -319,7 +319,7 @@ func TestGetKeystoreVolume(t *testing.T) {
 	if vol.Name != keystoreVolumeName {
 		t.Errorf("expected volume name %s, got %s", keystoreVolumeName, vol.Name)
 	}
-	if vol.VolumeSource.EmptyDir == nil {
+	if vol.EmptyDir == nil {
 		t.Error("keystore volume should be emptyDir")
 	}
 }
