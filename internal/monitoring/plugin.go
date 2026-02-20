@@ -80,13 +80,22 @@ set -e
 # Wazuh Version: %s
 # Plugin Version: %s
 
+TARGET_VERSION="%s"
+MARKER_FILE="/mnt/plugins/.plugins-initialized"
+
 echo "Preparing plugins directory..."
 
-# Check if plugins have already been copied to persistent volume
-if [ -f "/mnt/plugins/.plugins-initialized" ]; then
-    echo "Plugins already initialized in persistent volume"
-    ls -la /mnt/plugins/ | head -25
-    exit 0
+# Check if plugins are already initialized with the correct version
+if [ -f "$MARKER_FILE" ]; then
+    INSTALLED_VERSION=$(cat "$MARKER_FILE")
+    if [ "$INSTALLED_VERSION" = "$TARGET_VERSION" ]; then
+        echo "Plugins already initialized with version $TARGET_VERSION"
+        ls -la /mnt/plugins/ | head -25
+        exit 0
+    fi
+    echo "Version mismatch: installed=$INSTALLED_VERSION, target=$TARGET_VERSION"
+    echo "Cleaning plugins directory for upgrade..."
+    rm -rf /mnt/plugins/*
 fi
 
 echo "Copying built-in plugins to persistent volume..."
@@ -108,11 +117,11 @@ else
     echo "WARNING: prometheus-exporter plugin not found after installation"
 fi
 
-# Mark plugins as initialized
-touch /mnt/plugins/.plugins-initialized
-echo "Plugins initialization completed"
+# Write the target version to marker file
+echo "$TARGET_VERSION" > "$MARKER_FILE"
+echo "Plugins initialization completed (version $TARGET_VERSION)"
 ls -la /mnt/plugins/ | head -25
-`, c.WazuhVersion, c.PluginVersion, c.PluginVersion, downloadURL)
+`, c.WazuhVersion, c.PluginVersion, c.PluginVersion, c.PluginVersion, downloadURL)
 
 	return corev1.Container{
 		Name:    "install-prometheus-exporter",
