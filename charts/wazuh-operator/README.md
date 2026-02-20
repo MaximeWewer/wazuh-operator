@@ -165,6 +165,7 @@ helm uninstall wazuh-operator --namespace wazuh-system
 | operator.serviceMonitor.scrapeTimeout | string | `"10s"` | Scrape timeout |
 | operator.tolerations | list | `[]` | Tolerations for operator pod |
 | operator.vmMaxMapCount | int | `262144` | vm.max_map_count kernel parameter for OpenSearch. Init container sets this if system value is lower. |
+| operator.watchNamespaces | list | `[]` | List of namespaces to watch. Empty list watches all namespaces (cluster-scoped RBAC). Non-empty list watches only listed namespaces (namespace-scoped RBAC). |
 
 ### RBAC Configuration
 
@@ -172,8 +173,6 @@ helm uninstall wazuh-operator --namespace wazuh-system
 |-----|------|---------|-------------|
 | rbac.create | bool | `true` | Create RBAC resources |
 | rbac.extraRules | list | `[]` | Additional rules for the operator role |
-| rbac.namespaceScoped.enabled | bool | `false` | Enable namespace-scoped RBAC (creates Role/RoleBinding per namespace) |
-| rbac.namespaceScoped.namespaces | list | `[]` | List of namespaces the operator should manage (empty = release namespace only) |
 | rbac.roleName | string | `""` | Role name (auto-generated if empty) |
 
 ### Namespace Configuration
@@ -361,17 +360,18 @@ networkPolicy:
     - wazuh-prod
 ```
 
-### Namespace-Scoped RBAC (Multi-Tenant)
+### Namespace-Scoped Deployment
 
 ```yaml
-rbac:
-  namespaceScoped:
-    enabled: true
-    namespaces:
-      - wazuh-prod
-      - wazuh-staging
-      - wazuh-dev
+operator:
+  watchNamespaces:
+    - wazuh-prod
+    - wazuh-staging
+    - wazuh-dev
 ```
+
+> **Note:** When `operator.watchNamespaces` is set, the operator creates namespace-scoped
+> Role/RoleBinding per namespace instead of cluster-wide ClusterRole/ClusterRoleBinding.
 
 ## Deployment Modes
 

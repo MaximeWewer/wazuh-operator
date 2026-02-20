@@ -299,17 +299,18 @@ networkPolicy:
     - wazuh-prod
 ```
 
-### Namespace-Scoped RBAC (Multi-Tenant)
+### Namespace-Scoped Deployment
 
 ```yaml
-rbac:
-  namespaceScoped:
-    enabled: true
-    namespaces:
-      - wazuh-prod
-      - wazuh-staging
-      - wazuh-dev
+operator:
+  watchNamespaces:
+    - wazuh-prod
+    - wazuh-staging
+    - wazuh-dev
 ```
+
+> **Note:** When `operator.watchNamespaces` is set, the operator creates namespace-scoped
+> Role/RoleBinding per namespace instead of cluster-wide ClusterRole/ClusterRoleBinding.
 
 ## Deployment Modes
 

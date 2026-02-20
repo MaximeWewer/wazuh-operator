@@ -1,5 +1,5 @@
-{{- if and (include "wazuh-operator.installOperator" .) .Values.rbac.create .Values.rbac.namespaceScoped.enabled }}
-{{- $namespaces := .Values.rbac.namespaceScoped.namespaces }}
+{{- if and (include "wazuh-operator.installOperator" .) .Values.rbac.create .Values.operator.watchNamespaces }}
+{{- $namespaces := .Values.operator.watchNamespaces }}
 {{- $fullName := include "wazuh-operator.fullname" . }}
 {{- $labels := include "wazuh-operator.labels" . }}
 {{- $operatorNamespace := include "wazuh-operator.namespace" . }}
