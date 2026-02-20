@@ -372,13 +372,13 @@ helm uninstall my-wazuh-cluster
 | cluster.spec.tls.certConfig.ecdsaCurve | string | `"P256"` | ECDSA curve (only used when keyAlgorithm is "ECDSA"): P256, P384, P521 |
 | cluster.spec.tls.certConfig.filebeatRenewalThreshold | string | `"30d"` | Renew filebeat certificates when this much time remains before expiry |
 | cluster.spec.tls.certConfig.filebeatValidity | string | `"365d"` | Filebeat certificate validity duration (requires manager pod restart on renewal) |
+| cluster.spec.tls.certConfig.indexerRenewalThreshold | string | `"30d"` | Renew indexer node certificates when this much time remains before expiry |
+| cluster.spec.tls.certConfig.indexerValidity | string | `"365d"` | Indexer node certificate validity duration |
 | cluster.spec.tls.certConfig.keyAlgorithm | string | `"RSA"` | Key algorithm: "RSA" (2048-bit) or "ECDSA" (P-256) |
 | cluster.spec.tls.certConfig.locality | string | `"San Francisco"` | Locality (city) |
 | cluster.spec.tls.certConfig.organization | string | `"Wazuh"` | Organization name |
 | cluster.spec.tls.certConfig.organizationalUnit | string | `"Security"` | Organizational Unit |
-| cluster.spec.tls.certConfig.renewalThreshold | string | `"30d"` | Renew indexer node certificates when this much time remains before expiry |
 | cluster.spec.tls.certConfig.state | string | `"California"` | State or Province |
-| cluster.spec.tls.certConfig.validity | string | `"365d"` | Indexer node certificate validity duration |
 | cluster.spec.tls.customCerts.adminSecretRef.key | string | `"tls.crt"` | Key in the secret |
 | cluster.spec.tls.customCerts.adminSecretRef.name | string | `""` | Secret name containing admin certificates |
 | cluster.spec.tls.customCerts.caSecretRef.key | string | `"ca.crt"` | Key in the secret |
@@ -406,7 +406,7 @@ helm uninstall my-wazuh-cluster
 | cluster.spec.monitoring.wazuhExporter.apiProtocol | string | `"https"` | API protocol for connecting to Wazuh API |
 | cluster.spec.monitoring.wazuhExporter.apiVerifySSL | bool | `false` | Verify SSL when connecting to Wazuh API |
 | cluster.spec.monitoring.wazuhExporter.enabled | bool | `true` | Enable Wazuh exporter |
-| cluster.spec.monitoring.wazuhExporter.image | string | `"pytoshka/wazuh-prometheus-exporter:latest"` | Wazuh exporter image |
+| cluster.spec.monitoring.wazuhExporter.image | string | `"kennyopennix/wazuh-exporter:latest"` | Wazuh exporter image |
 | cluster.spec.monitoring.wazuhExporter.logLevel | string | `"INFO"` | Exporter log level |
 | cluster.spec.monitoring.wazuhExporter.port | int | `9090` | Wazuh exporter metrics port |
 | cluster.spec.monitoring.wazuhExporter.skipLastLogs | bool | `false` | Skip last logs metric |

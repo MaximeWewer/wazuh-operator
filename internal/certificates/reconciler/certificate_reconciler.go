@@ -101,16 +101,16 @@ func (r *CertificateReconciler) getCertOptions(cluster *wazuhv1.WazuhCluster) *c
 	if cluster.Spec.TLS != nil && cluster.Spec.TLS.CertConfig != nil {
 		cfg := cluster.Spec.TLS.CertConfig
 
-		// Set node cert validity from CRD
-		if cfg.Validity != "" {
-			if d, err := certificates.ParseCertDuration(cfg.Validity); err == nil {
+		// Set indexer node cert validity from CRD
+		if cfg.IndexerValidity != "" {
+			if d, err := certificates.ParseCertDuration(cfg.IndexerValidity); err == nil {
 				opts.NodeValidity = d
 			}
 		}
 
-		// Set node cert renewal threshold from CRD
-		if cfg.RenewalThreshold != "" {
-			if d, err := certificates.ParseCertDuration(cfg.RenewalThreshold); err == nil {
+		// Set indexer node cert renewal threshold from CRD
+		if cfg.IndexerRenewalThreshold != "" {
+			if d, err := certificates.ParseCertDuration(cfg.IndexerRenewalThreshold); err == nil {
 				opts.RenewalThreshold = d
 			}
 		}

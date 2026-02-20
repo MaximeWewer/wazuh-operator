@@ -854,10 +854,10 @@ cluster:
 
         # -- Indexer node certificate validity duration
         # @default -- `"365d"`
-        validity: "365d"
+        indexerValidity: "365d"
         # -- Renew indexer node certificates when this much time remains before expiry
         # @default -- `"30d"`
-        renewalThreshold: "30d"
+        indexerRenewalThreshold: "30d"
 
         # -- Admin certificate validity duration (used for OpenSearch security API)
         # @default -- `"365d"`

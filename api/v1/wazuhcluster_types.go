@@ -658,22 +658,22 @@ type CertificateConfig struct {
 	// +kubebuilder:default="Security"
 	OrganizationalUnit string `json:"organizationalUnit,omitempty"`
 
-	// Validity for node certificates as a duration string
+	// IndexerValidity for indexer node certificates as a duration string
 	// Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
 	// Examples: "365d" (1 year), "24h" (1 day), "30m" (30 minutes)
 	// +optional
 	// +kubebuilder:default="365d"
 	// +kubebuilder:validation:Pattern=`^\d+[dhm]$`
-	Validity string `json:"validity,omitempty"`
+	IndexerValidity string `json:"indexerValidity,omitempty"`
 
-	// RenewalThreshold for node certificates as a duration string
+	// IndexerRenewalThreshold for indexer node certificates as a duration string
 	// Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
 	// Examples: "30d", "12h", "30m"
 	// Certificates will be renewed when they expire within this duration
 	// +optional
 	// +kubebuilder:default="30d"
 	// +kubebuilder:validation:Pattern=`^\d+[dhm]$`
-	RenewalThreshold string `json:"renewalThreshold,omitempty"`
+	IndexerRenewalThreshold string `json:"indexerRenewalThreshold,omitempty"`
 
 	// CAValidity for the Certificate Authority certificate as a duration string
 	// Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
