@@ -47,6 +47,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
 	certreconciler "github.com/MaximeWewer/wazuh-operator/internal/certificates/reconciler"
+	"github.com/MaximeWewer/wazuh-operator/internal/health"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
 	networkingreconciler "github.com/MaximeWewer/wazuh-operator/internal/networking/reconciler"
@@ -111,6 +112,10 @@ type WazuhClusterReconciler struct {
 	// MaxConcurrentReconciles is the maximum number of concurrent Reconciles
 	// which can be run. Defaults to 1.
 	MaxConcurrentReconciles int
+
+	// Watchdog is touched after each successful reconcile so the readiness
+	// probe can detect a stuck reconcile loop.
+	Watchdog *health.Watchdog
 
 	// agentMetricsInFlight prevents concurrent agent metrics goroutines
 	agentMetricsInFlight atomic.Bool
@@ -745,6 +750,11 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		"requeueAfter", requeueInterval,
 		"hasPendingRollouts", hasPendingRollouts,
 		"hasRollingRestart", hasRollingRestart)
+
+	// Signal the health watchdog that the reconcile loop is alive
+	if r.Watchdog != nil {
+		r.Watchdog.Touch()
+	}
 
 	return ctrl.Result{RequeueAfter: requeueInterval}, nil
 }

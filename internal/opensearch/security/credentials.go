@@ -222,4 +222,3 @@ func (c *CredentialManager) ComputeCredentialsHash(ctx context.Context, cluster 
 	hash := sha256.Sum256([]byte(data))
 	return fmt.Sprintf("%x", hash[:8]), nil // Use first 8 bytes for a shorter hash
 }
-

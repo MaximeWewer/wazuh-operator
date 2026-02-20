@@ -757,22 +757,22 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 
 	// Extract spec values for hash computation
 	var (
-		replicas                  int32
-		version                   = cluster.Spec.Version
-		resources                 *corev1.ResourceRequirements
-		image                     string
-		nodeSelector              map[string]string
-		tolerations               []corev1.Toleration
-		affinity                  *corev1.Affinity
-		topologySpreadConstraints []corev1.TopologySpreadConstraint
-		env                       []corev1.EnvVar
-		envFrom                   []corev1.EnvFromSource
+		replicas                      int32
+		version                       = cluster.Spec.Version
+		resources                     *corev1.ResourceRequirements
+		image                         string
+		nodeSelector                  map[string]string
+		tolerations                   []corev1.Toleration
+		affinity                      *corev1.Affinity
+		topologySpreadConstraints     []corev1.TopologySpreadConstraint
+		env                           []corev1.EnvVar
+		envFrom                       []corev1.EnvFromSource
 		annotations                   map[string]string
 		podAnnotations                map[string]string
 		securityContext               *corev1.PodSecurityContext
 		containerSecurityContext      *corev1.SecurityContext
 		terminationGracePeriodSeconds *int64
-		imagePullPolicy              corev1.PullPolicy
+		imagePullPolicy               corev1.PullPolicy
 	)
 	imagePullSecrets := cluster.Spec.ImagePullSecrets
 

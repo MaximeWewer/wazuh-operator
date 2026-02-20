@@ -88,8 +88,8 @@ type IndexerSpec struct {
 	// Security and lifecycle
 	SecurityContext               *corev1.PodSecurityContext `json:"securityContext,omitempty"`
 	ContainerSecurityContext      *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
-	TerminationGracePeriodSeconds *int64                    `json:"terminationGracePeriodSeconds,omitempty"`
-	ImagePullPolicy               corev1.PullPolicy         `json:"imagePullPolicy,omitempty"`
+	TerminationGracePeriodSeconds *int64                     `json:"terminationGracePeriodSeconds,omitempty"`
+	ImagePullPolicy               corev1.PullPolicy          `json:"imagePullPolicy,omitempty"`
 }
 
 // DashboardSpec contains fields from WazuhCluster.Spec.Dashboard used for hash computation
@@ -119,9 +119,9 @@ type DashboardSpec struct {
 	// Security and lifecycle
 	SecurityContext               *corev1.PodSecurityContext `json:"securityContext,omitempty"`
 	ContainerSecurityContext      *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
-	TerminationGracePeriodSeconds *int64                    `json:"terminationGracePeriodSeconds,omitempty"`
-	ImagePullPolicy               corev1.PullPolicy         `json:"imagePullPolicy,omitempty"`
-	EnableSSL                     bool                      `json:"enableSSL,omitempty"`
+	TerminationGracePeriodSeconds *int64                     `json:"terminationGracePeriodSeconds,omitempty"`
+	ImagePullPolicy               corev1.PullPolicy          `json:"imagePullPolicy,omitempty"`
+	EnableSSL                     bool                       `json:"enableSSL,omitempty"`
 }
 
 // ManagerMasterSpec contains fields from WazuhCluster.Spec.Manager.Master used for hash computation
@@ -154,8 +154,8 @@ type ManagerMasterSpec struct {
 	// Security and lifecycle
 	SecurityContext               *corev1.PodSecurityContext `json:"securityContext,omitempty"`
 	ContainerSecurityContext      *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
-	TerminationGracePeriodSeconds *int64                    `json:"terminationGracePeriodSeconds,omitempty"`
-	ImagePullPolicy               corev1.PullPolicy         `json:"imagePullPolicy,omitempty"`
+	TerminationGracePeriodSeconds *int64                     `json:"terminationGracePeriodSeconds,omitempty"`
+	ImagePullPolicy               corev1.PullPolicy          `json:"imagePullPolicy,omitempty"`
 }
 
 // ManagerWorkersSpec contains fields from WazuhCluster.Spec.Manager.Workers used for hash computation
@@ -187,8 +187,8 @@ type ManagerWorkersSpec struct {
 	// Security and lifecycle
 	SecurityContext               *corev1.PodSecurityContext `json:"securityContext,omitempty"`
 	ContainerSecurityContext      *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
-	TerminationGracePeriodSeconds *int64                    `json:"terminationGracePeriodSeconds,omitempty"`
-	ImagePullPolicy               corev1.PullPolicy         `json:"imagePullPolicy,omitempty"`
+	TerminationGracePeriodSeconds *int64                     `json:"terminationGracePeriodSeconds,omitempty"`
+	ImagePullPolicy               corev1.PullPolicy          `json:"imagePullPolicy,omitempty"`
 }
 
 // ComputeSpecHash computes a SHA256 hash of spec fields for change detection
@@ -242,29 +242,29 @@ func ComputeSecretHash(data map[string][]byte) string {
 
 // IndexerSpecInput contains all input parameters for computing indexer spec hash
 type IndexerSpecInput struct {
-	Replicas                  int32
-	Version                   string
-	Resources                 *corev1.ResourceRequirements
-	StorageSize               string
-	JavaOpts                  string
-	Image                     string
-	NodeSelector              map[string]string
-	Tolerations               []corev1.Toleration
-	Affinity                  *corev1.Affinity
-	ImagePullSecrets          []corev1.LocalObjectReference
-	TopologySpreadConstraints []corev1.TopologySpreadConstraint
-	Env                       []corev1.EnvVar
-	EnvFrom                   []corev1.EnvFromSource
-	Labels                    map[string]string
-	Annotations               map[string]string
-	PodAnnotations            map[string]string
-	ExtraVolumes              []corev1.Volume
-	ExtraVolumeMounts         []corev1.VolumeMount
-	ExtraInitContainers       []corev1.Container
-	ExtraContainers           []corev1.Container
-	IndexerExporter           *IndexerExporterHashInput
-	RepositoryPlugins         []RepositoryPluginHashInput
-	ServiceAccountName        string
+	Replicas                      int32
+	Version                       string
+	Resources                     *corev1.ResourceRequirements
+	StorageSize                   string
+	JavaOpts                      string
+	Image                         string
+	NodeSelector                  map[string]string
+	Tolerations                   []corev1.Toleration
+	Affinity                      *corev1.Affinity
+	ImagePullSecrets              []corev1.LocalObjectReference
+	TopologySpreadConstraints     []corev1.TopologySpreadConstraint
+	Env                           []corev1.EnvVar
+	EnvFrom                       []corev1.EnvFromSource
+	Labels                        map[string]string
+	Annotations                   map[string]string
+	PodAnnotations                map[string]string
+	ExtraVolumes                  []corev1.Volume
+	ExtraVolumeMounts             []corev1.VolumeMount
+	ExtraInitContainers           []corev1.Container
+	ExtraContainers               []corev1.Container
+	IndexerExporter               *IndexerExporterHashInput
+	RepositoryPlugins             []RepositoryPluginHashInput
+	ServiceAccountName            string
 	SecurityContext               *corev1.PodSecurityContext
 	ContainerSecurityContext      *corev1.SecurityContext
 	TerminationGracePeriodSeconds *int64
@@ -291,25 +291,25 @@ func ComputeIndexerSpecHashFull(input IndexerSpecInput) (string, error) {
 
 // DashboardSpecInput contains all input parameters for computing dashboard spec hash
 type DashboardSpecInput struct {
-	Replicas                  int32
-	Version                   string
-	Resources                 *corev1.ResourceRequirements
-	Image                     string
-	NodeSelector              map[string]string
-	Tolerations               []corev1.Toleration
-	Affinity                  *corev1.Affinity
-	ImagePullSecrets          []corev1.LocalObjectReference
-	TopologySpreadConstraints []corev1.TopologySpreadConstraint
-	Env                       []corev1.EnvVar
-	EnvFrom                   []corev1.EnvFromSource
-	Labels                    map[string]string
-	Annotations               map[string]string
-	PodAnnotations            map[string]string
-	ExtraVolumes              []corev1.Volume
-	ExtraVolumeMounts         []corev1.VolumeMount
-	ExtraInitContainers       []corev1.Container
-	ExtraContainers           []corev1.Container
-	ServiceAccountName        string
+	Replicas                      int32
+	Version                       string
+	Resources                     *corev1.ResourceRequirements
+	Image                         string
+	NodeSelector                  map[string]string
+	Tolerations                   []corev1.Toleration
+	Affinity                      *corev1.Affinity
+	ImagePullSecrets              []corev1.LocalObjectReference
+	TopologySpreadConstraints     []corev1.TopologySpreadConstraint
+	Env                           []corev1.EnvVar
+	EnvFrom                       []corev1.EnvFromSource
+	Labels                        map[string]string
+	Annotations                   map[string]string
+	PodAnnotations                map[string]string
+	ExtraVolumes                  []corev1.Volume
+	ExtraVolumeMounts             []corev1.VolumeMount
+	ExtraInitContainers           []corev1.Container
+	ExtraContainers               []corev1.Container
+	ServiceAccountName            string
 	SecurityContext               *corev1.PodSecurityContext
 	ContainerSecurityContext      *corev1.SecurityContext
 	TerminationGracePeriodSeconds *int64
@@ -335,27 +335,27 @@ func ComputeDashboardSpecHashFull(input DashboardSpecInput) (string, error) {
 
 // ManagerMasterSpecInput contains all input parameters for computing manager master spec hash
 type ManagerMasterSpecInput struct {
-	Version                   string
-	Resources                 *corev1.ResourceRequirements
-	StorageSize               string
-	Image                     string
-	NodeSelector              map[string]string
-	Tolerations               []corev1.Toleration
-	Affinity                  *corev1.Affinity
-	ImagePullSecrets          []corev1.LocalObjectReference
-	TopologySpreadConstraints []corev1.TopologySpreadConstraint
-	Env                       []corev1.EnvVar
-	EnvFrom                   []corev1.EnvFromSource
-	Labels                    map[string]string
-	Annotations               map[string]string
-	PodAnnotations            map[string]string
-	ExtraConfig               string
-	ExtraVolumes              []corev1.Volume
-	ExtraVolumeMounts         []corev1.VolumeMount
-	ExtraInitContainers       []corev1.Container
-	ExtraContainers           []corev1.Container
-	WazuhExporter             *WazuhExporterHashInput
-	ServiceAccountName        string
+	Version                       string
+	Resources                     *corev1.ResourceRequirements
+	StorageSize                   string
+	Image                         string
+	NodeSelector                  map[string]string
+	Tolerations                   []corev1.Toleration
+	Affinity                      *corev1.Affinity
+	ImagePullSecrets              []corev1.LocalObjectReference
+	TopologySpreadConstraints     []corev1.TopologySpreadConstraint
+	Env                           []corev1.EnvVar
+	EnvFrom                       []corev1.EnvFromSource
+	Labels                        map[string]string
+	Annotations                   map[string]string
+	PodAnnotations                map[string]string
+	ExtraConfig                   string
+	ExtraVolumes                  []corev1.Volume
+	ExtraVolumeMounts             []corev1.VolumeMount
+	ExtraInitContainers           []corev1.Container
+	ExtraContainers               []corev1.Container
+	WazuhExporter                 *WazuhExporterHashInput
+	ServiceAccountName            string
 	SecurityContext               *corev1.PodSecurityContext
 	ContainerSecurityContext      *corev1.SecurityContext
 	TerminationGracePeriodSeconds *int64
@@ -383,27 +383,27 @@ func ComputeManagerMasterSpecHashFull(input ManagerMasterSpecInput) (string, err
 
 // ManagerWorkersSpecInput contains all input parameters for computing manager workers spec hash
 type ManagerWorkersSpecInput struct {
-	Replicas                  int32
-	Version                   string
-	Resources                 *corev1.ResourceRequirements
-	StorageSize               string
-	Image                     string
-	NodeSelector              map[string]string
-	Tolerations               []corev1.Toleration
-	Affinity                  *corev1.Affinity
-	ImagePullSecrets          []corev1.LocalObjectReference
-	TopologySpreadConstraints []corev1.TopologySpreadConstraint
-	Env                       []corev1.EnvVar
-	EnvFrom                   []corev1.EnvFromSource
-	Labels                    map[string]string
-	Annotations               map[string]string
-	PodAnnotations            map[string]string
-	ExtraConfig               string
-	ExtraVolumes              []corev1.Volume
-	ExtraVolumeMounts         []corev1.VolumeMount
-	ExtraInitContainers       []corev1.Container
-	ExtraContainers           []corev1.Container
-	ServiceAccountName        string
+	Replicas                      int32
+	Version                       string
+	Resources                     *corev1.ResourceRequirements
+	StorageSize                   string
+	Image                         string
+	NodeSelector                  map[string]string
+	Tolerations                   []corev1.Toleration
+	Affinity                      *corev1.Affinity
+	ImagePullSecrets              []corev1.LocalObjectReference
+	TopologySpreadConstraints     []corev1.TopologySpreadConstraint
+	Env                           []corev1.EnvVar
+	EnvFrom                       []corev1.EnvFromSource
+	Labels                        map[string]string
+	Annotations                   map[string]string
+	PodAnnotations                map[string]string
+	ExtraConfig                   string
+	ExtraVolumes                  []corev1.Volume
+	ExtraVolumeMounts             []corev1.VolumeMount
+	ExtraInitContainers           []corev1.Container
+	ExtraContainers               []corev1.Container
+	ServiceAccountName            string
 	SecurityContext               *corev1.PodSecurityContext
 	ContainerSecurityContext      *corev1.SecurityContext
 	TerminationGracePeriodSeconds *int64

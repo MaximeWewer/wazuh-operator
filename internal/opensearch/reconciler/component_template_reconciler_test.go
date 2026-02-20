@@ -33,10 +33,10 @@ func TestComponentTemplateReconciler_buildComponentTemplate(t *testing.T) {
 	r := NewComponentTemplateReconciler(client, scheme)
 
 	tests := []struct {
-		name           string
-		template       *wazuhv1.OpenSearchComponentTemplate
-		wantSettings   bool
-		wantMappings   bool
+		name         string
+		template     *wazuhv1.OpenSearchComponentTemplate
+		wantSettings bool
+		wantMappings bool
 	}{
 		{
 			name: "component template with settings only",

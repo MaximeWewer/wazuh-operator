@@ -46,6 +46,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/controllers"
+	"github.com/MaximeWewer/wazuh-operator/internal/health"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
 
@@ -280,6 +281,9 @@ func main() {
 			"message", gatewayAPIStatus.Message)
 	}
 
+	// Create reconcile watchdog for health checks
+	reconcileWatchdog := health.NewWatchdog(5 * time.Minute)
+
 	// Create shared OpenSearch client factory for all standalone controllers
 	osClientFactory := security.NewOpenSearchClientFactory(mgr.GetClient())
 
@@ -324,6 +328,7 @@ func main() {
 		TCPRouteAvailable:       gatewayAPIStatus.TCPRouteAvailable,
 		UDPRouteAvailable:       gatewayAPIStatus.UDPRouteAvailable,
 		MaxConcurrentReconciles: maxConcurrentReconciles,
+		Watchdog:                reconcileWatchdog,
 	}
 	if err := wazuhClusterReconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WazuhCluster")
@@ -561,12 +566,29 @@ func main() {
 
 	// +kubebuilder:scaffold:builder
 
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+	// Liveness: simple ping (restart only if process is dead)
+	if err := mgr.AddHealthzCheck("ping", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+
+	// Readiness: operator is fully functional
+	if err := mgr.AddReadyzCheck("ping", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("informer-sync", health.InformerSyncChecker(mgr)); err != nil {
+		setupLog.Error(err, "unable to set up informer-sync ready check")
+		os.Exit(1)
+	}
+	if enableLeaderElection {
+		if err := mgr.AddReadyzCheck("leader-election", health.LeaderElectionChecker(mgr)); err != nil {
+			setupLog.Error(err, "unable to set up leader-election ready check")
+			os.Exit(1)
+		}
+	}
+	if err := mgr.AddReadyzCheck("reconcile-watchdog", health.WatchdogChecker(reconcileWatchdog)); err != nil {
+		setupLog.Error(err, "unable to set up reconcile-watchdog ready check")
 		os.Exit(1)
 	}
 

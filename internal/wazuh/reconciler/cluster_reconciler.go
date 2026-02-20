@@ -359,18 +359,18 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 	// Extract master spec fields with defaults
 	var (
-		version                   = cluster.Spec.Version
-		resources                 *corev1.ResourceRequirements
-		storageSize               = constants.DefaultManagerStorageSize
-		nodeSelector              map[string]string
-		tolerations               []corev1.Toleration
-		affinity                  *corev1.Affinity
-		topologySpreadConstraints []corev1.TopologySpreadConstraint
-		extraVolumes              []corev1.Volume
-		extraVolumeMounts         []corev1.VolumeMount
-		extraInitContainers       []corev1.Container
-		extraContainers           []corev1.Container
-		extraConfig               string
+		version                             = cluster.Spec.Version
+		resources                           *corev1.ResourceRequirements
+		storageSize                         = constants.DefaultManagerStorageSize
+		nodeSelector                        map[string]string
+		tolerations                         []corev1.Toleration
+		affinity                            *corev1.Affinity
+		topologySpreadConstraints           []corev1.TopologySpreadConstraint
+		extraVolumes                        []corev1.Volume
+		extraVolumeMounts                   []corev1.VolumeMount
+		extraInitContainers                 []corev1.Container
+		extraContainers                     []corev1.Container
+		extraConfig                         string
 		annotations                         map[string]string
 		podAnnotations                      map[string]string
 		masterSecurityContext               *corev1.PodSecurityContext
@@ -981,22 +981,22 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 
 	// Compute specHash for change detection (version is included in image tag)
 	specHash, err := patch.ComputeManagerWorkersSpecHashFull(patch.ManagerWorkersSpecInput{
-		Replicas:                  replicas,
-		Version:                   version,
-		Resources:                 resources,
-		StorageSize:               storageSize,
-		NodeSelector:              nodeSelector,
-		Tolerations:               tolerations,
-		Affinity:                  affinity,
-		ImagePullSecrets:          workerImagePullSecrets,
-		TopologySpreadConstraints: topologySpreadConstraints,
-		Env:                       workerEnv,
-		EnvFrom:                   workerEnvFrom,
-		Annotations:               annotations,
-		PodAnnotations:            workerPodAnnotations,
-		ExtraConfig:               workerExtraConfig,
-		ExtraVolumes:              workerExtraVolumes,
-		ExtraVolumeMounts:         workerExtraVolumeMounts,
+		Replicas:                      replicas,
+		Version:                       version,
+		Resources:                     resources,
+		StorageSize:                   storageSize,
+		NodeSelector:                  nodeSelector,
+		Tolerations:                   tolerations,
+		Affinity:                      affinity,
+		ImagePullSecrets:              workerImagePullSecrets,
+		TopologySpreadConstraints:     topologySpreadConstraints,
+		Env:                           workerEnv,
+		EnvFrom:                       workerEnvFrom,
+		Annotations:                   annotations,
+		PodAnnotations:                workerPodAnnotations,
+		ExtraConfig:                   workerExtraConfig,
+		ExtraVolumes:                  workerExtraVolumes,
+		ExtraVolumeMounts:             workerExtraVolumeMounts,
 		ExtraInitContainers:           workerExtraInitContainers,
 		ExtraContainers:               workerExtraContainers,
 		ServiceAccountName:            workerSAName,

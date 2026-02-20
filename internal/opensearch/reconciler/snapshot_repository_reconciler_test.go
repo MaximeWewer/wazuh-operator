@@ -35,12 +35,12 @@ func TestSnapshotRepositoryReconciler_buildRepositorySettings(t *testing.T) {
 	_ = wazuhv1.AddToScheme(scheme)
 
 	tests := []struct {
-		name         string
-		repo         *wazuhv1.OpenSearchSnapshotRepository
-		secret       *corev1.Secret
-		wantKeys     []string
-		wantErr      bool
-		checkValues  map[string]any
+		name        string
+		repo        *wazuhv1.OpenSearchSnapshotRepository
+		secret      *corev1.Secret
+		wantKeys    []string
+		wantErr     bool
+		checkValues map[string]any
 	}{
 		{
 			name: "S3 repository with full settings",
@@ -162,10 +162,10 @@ func TestSnapshotRepositoryReconciler_buildRepositorySettings(t *testing.T) {
 			},
 			wantKeys: []string{"uri", "path", "security.principal", "conf.dfs.replication"},
 			checkValues: map[string]any{
-				"uri":                    "hdfs://namenode:8020",
-				"path":                   "/opensearch/snapshots",
-				"security.principal":     "opensearch@REALM",
-				"conf.dfs.replication":   "3",
+				"uri":                  "hdfs://namenode:8020",
+				"path":                 "/opensearch/snapshots",
+				"security.principal":   "opensearch@REALM",
+				"conf.dfs.replication": "3",
 			},
 		},
 		{

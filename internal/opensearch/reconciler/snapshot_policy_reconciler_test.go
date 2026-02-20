@@ -36,16 +36,16 @@ func TestSnapshotPolicyReconciler_buildSnapshotPolicy(t *testing.T) {
 	int32Ptr := func(i int32) *int32 { return &i }
 
 	tests := []struct {
-		name           string
-		policy         *wazuhv1.OpenSearchSnapshotPolicy
-		wantDesc       string
-		wantEnabled    bool
-		wantRepo       string
-		wantIndices    string
-		wantCron       string
-		wantTimezone   string
-		wantTimeLimit  string
-		wantDeletion   bool
+		name          string
+		policy        *wazuhv1.OpenSearchSnapshotPolicy
+		wantDesc      string
+		wantEnabled   bool
+		wantRepo      string
+		wantIndices   string
+		wantCron      string
+		wantTimezone  string
+		wantTimeLimit string
+		wantDeletion  bool
 	}{
 		{
 			name: "minimal policy with creation schedule",
