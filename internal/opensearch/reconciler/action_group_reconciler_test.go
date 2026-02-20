@@ -30,7 +30,7 @@ func TestActionGroupReconciler_buildActionGroup(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewActionGroupReconciler(client, scheme)
+	r := NewActionGroupReconciler(client, scheme, nil)
 
 	tests := []struct {
 		name           string
@@ -124,7 +124,7 @@ func TestActionGroupReconciler_buildActionGroup_Values(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewActionGroupReconciler(client, scheme)
+	r := NewActionGroupReconciler(client, scheme, nil)
 
 	ag := &wazuhv1.OpenSearchActionGroup{
 		ObjectMeta: metav1.ObjectMeta{

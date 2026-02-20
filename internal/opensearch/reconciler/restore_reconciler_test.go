@@ -30,7 +30,7 @@ func TestNewRestoreReconciler(t *testing.T) {
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-	r := NewRestoreReconciler(client, scheme)
+	r := NewRestoreReconciler(client, scheme, nil)
 
 	if r == nil {
 		t.Fatal("NewRestoreReconciler() returned nil")
@@ -51,7 +51,7 @@ func TestRestoreReconciler_WithClientFactory(t *testing.T) {
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-	r := NewRestoreReconciler(client, scheme)
+	r := NewRestoreReconciler(client, scheme, nil)
 
 	// WithClientFactory should return the same reconciler for chaining
 	result := r.WithClientFactory(nil)

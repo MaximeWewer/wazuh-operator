@@ -21,8 +21,10 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/otel/attribute"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -40,14 +42,16 @@ import (
 type PolicyReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
 	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewPolicyReconciler creates a new PolicyReconciler
-func NewPolicyReconciler(c client.Client, scheme *runtime.Scheme) *PolicyReconciler {
+func NewPolicyReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *PolicyReconciler {
 	return &PolicyReconciler{
-		Client: c,
-		Scheme: scheme,
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: recorder,
 	}
 }
 
@@ -92,6 +96,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSe
 
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, policy.Spec.ClusterRef, policy.Namespace)
 	if err != nil {
+		r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
@@ -104,6 +109,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSe
 		if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check policy existence: %v", err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
+		r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check ISM policy existence: %v", err))
 		return fmt.Errorf("failed to check policy existence: %w", err)
 	}
 
@@ -116,6 +122,7 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSe
 			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create ISM policy: %v", err)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
+			r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to create ISM policy: %v", err))
 			return fmt.Errorf("failed to create ISM policy: %w", err)
 		}
 	} else {
@@ -125,15 +132,19 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSe
 			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to get ISM policy for update: %v", err)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
+			r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get ISM policy for update: %v", err))
 			return fmt.Errorf("failed to get ISM policy for update: %w", err)
 		}
 		if err := ismAPI.Update(ctx, policy.Name, ismPolicy, existing.SeqNo, existing.PrimaryTerm); err != nil {
 			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to update ISM policy: %v", err)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
+			r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to update ISM policy: %v", err))
 			return fmt.Errorf("failed to update ISM policy: %w", err)
 		}
 	}
+
+	r.recordEvent(policy, corev1.EventTypeNormal, "Synced", "ISM policy reconciled successfully")
 
 	// Compute spec hash for drift detection
 	specHash, hashErr := patch.ComputeSpecHash(policy.Spec)
@@ -157,6 +168,13 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSe
 
 	log.Info("ISM policy reconciliation completed", "name", policy.Name)
 	return nil
+}
+
+// recordEvent emits an event if the recorder is available
+func (r *PolicyReconciler) recordEvent(policy *wazuhv1.OpenSearchISMPolicy, eventType, reason, message string) {
+	if r.Recorder != nil {
+		r.Recorder.Event(policy, eventType, reason, message)
+	}
 }
 
 // buildISMPolicy converts the CRD spec to an ISM policy
@@ -256,9 +274,11 @@ func (r *PolicyReconciler) Delete(ctx context.Context, policy *wazuhv1.OpenSearc
 
 	ismAPI := api.NewISMAPI(apiClient)
 	if err := ismAPI.Delete(ctx, policy.Name); err != nil {
+		r.recordEvent(policy, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete ISM policy: %v", err))
 		return fmt.Errorf("failed to delete ISM policy: %w", err)
 	}
 
+	r.recordEvent(policy, corev1.EventTypeNormal, "Deleted", "ISM policy deleted from OpenSearch")
 	log.Info("Deleted OpenSearch ISM policy", "name", policy.Name)
 	return nil
 }

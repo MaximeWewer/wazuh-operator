@@ -30,7 +30,7 @@ func TestPolicyReconciler_buildISMPolicy(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewPolicyReconciler(client, scheme)
+	r := NewPolicyReconciler(client, scheme, nil)
 
 	tests := []struct {
 		name             string
@@ -182,7 +182,7 @@ func TestPolicyReconciler_buildISMPolicy_StateDetails(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewPolicyReconciler(client, scheme)
+	r := NewPolicyReconciler(client, scheme, nil)
 
 	policy := &wazuhv1.OpenSearchISMPolicy{
 		ObjectMeta: metav1.ObjectMeta{
@@ -257,7 +257,7 @@ func TestPolicyReconciler_buildISMPolicy_NilConditions(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewPolicyReconciler(client, scheme)
+	r := NewPolicyReconciler(client, scheme, nil)
 
 	policy := &wazuhv1.OpenSearchISMPolicy{
 		ObjectMeta: metav1.ObjectMeta{

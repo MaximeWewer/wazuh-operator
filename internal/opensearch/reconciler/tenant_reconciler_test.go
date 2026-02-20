@@ -30,7 +30,7 @@ func TestTenantReconciler_buildTenant(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewTenantReconciler(client, scheme)
+	r := NewTenantReconciler(client, scheme, nil)
 
 	tests := []struct {
 		name     string

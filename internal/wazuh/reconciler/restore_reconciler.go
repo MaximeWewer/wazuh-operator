@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -48,14 +49,16 @@ const (
 // WazuhRestoreReconciler handles reconciliation of WazuhRestore resources
 type WazuhRestoreReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // NewWazuhRestoreReconciler creates a new WazuhRestoreReconciler
-func NewWazuhRestoreReconciler(c client.Client, scheme *runtime.Scheme) *WazuhRestoreReconciler {
+func NewWazuhRestoreReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *WazuhRestoreReconciler {
 	return &WazuhRestoreReconciler{
-		Client: c,
-		Scheme: scheme,
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: recorder,
 	}
 }
 
@@ -102,14 +105,17 @@ func (r *WazuhRestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1
 	}
 	if err := r.Get(ctx, clusterKey, cluster); err != nil {
 		if errors.IsNotFound(err) {
+			r.recordEvent(restore, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("WazuhCluster '%s' not found", restore.Spec.ClusterRef.Name))
 			return r.updateStatus(ctx, restore, wazuhv1.WazuhRestorePhaseFailed,
 				fmt.Sprintf("WazuhCluster '%s' not found", restore.Spec.ClusterRef.Name))
 		}
+		r.recordEvent(restore, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get WazuhCluster: %v", err))
 		return fmt.Errorf("failed to get WazuhCluster: %w", err)
 	}
 
 	// Validate source configuration
 	if err := r.validateSource(ctx, restore); err != nil {
+		r.recordEvent(restore, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Invalid source configuration: %v", err))
 		return r.updateStatus(ctx, restore, wazuhv1.WazuhRestorePhaseFailed,
 			fmt.Sprintf("Invalid source configuration: %v", err))
 	}
@@ -117,16 +123,25 @@ func (r *WazuhRestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1
 	// Build RBAC resources
 	builder := jobs.NewRestoreJobBuilder(restore)
 	if err := r.reconcileRBAC(ctx, restore, builder); err != nil {
+		r.recordEvent(restore, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to reconcile RBAC: %v", err))
 		return fmt.Errorf("failed to reconcile RBAC: %w", err)
 	}
 
 	// Create the restore Job
 	if err := r.reconcileJob(ctx, restore, builder); err != nil {
+		r.recordEvent(restore, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to reconcile Job: %v", err))
 		return fmt.Errorf("failed to reconcile Job: %w", err)
 	}
 
 	log.Info("Successfully reconciled WazuhRestore", "name", restore.Name, "phase", restore.Status.Phase)
 	return nil
+}
+
+// recordEvent emits an event if the recorder is available
+func (r *WazuhRestoreReconciler) recordEvent(restore *wazuhv1.WazuhRestore, eventType, reason, message string) {
+	if r.Recorder != nil {
+		r.Recorder.Event(restore, eventType, reason, message)
+	}
 }
 
 // validateSource validates the restore source configuration
@@ -272,6 +287,7 @@ func (r *WazuhRestoreReconciler) reconcileJob(ctx context.Context, restore *wazu
 		}
 
 		log.Info("Restore completed successfully", "name", restore.Name, "duration", restore.Status.Duration)
+		r.recordEvent(restore, corev1.EventTypeNormal, "Synced", "Restore completed successfully")
 		return r.updateStatus(ctx, restore, wazuhv1.WazuhRestorePhaseCompleted, "Restore completed successfully")
 	}
 
@@ -285,6 +301,7 @@ func (r *WazuhRestoreReconciler) reconcileJob(ctx context.Context, restore *wazu
 		}
 
 		log.Error(nil, "Restore job failed", "name", restore.Name)
+		r.recordEvent(restore, corev1.EventTypeWarning, "SyncFailed", "Restore job failed")
 		return r.updateStatus(ctx, restore, wazuhv1.WazuhRestorePhaseFailed, "Restore job failed")
 	}
 
@@ -338,6 +355,7 @@ func (r *WazuhRestoreReconciler) handleDeletion(ctx context.Context, restore *wa
 	log.Info("Handling deletion of WazuhRestore", "name", restore.Name)
 
 	// Kubernetes garbage collection will handle owned resources
+	r.recordEvent(restore, corev1.EventTypeNormal, "Deleted", "Restore resources cleaned up")
 	controllerutil.RemoveFinalizer(restore, WazuhRestoreFinalizer)
 	if err := r.Update(ctx, restore); err != nil {
 		return fmt.Errorf("failed to remove finalizer: %w", err)

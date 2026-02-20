@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -40,14 +41,16 @@ import (
 type AuthConfigReconciler struct {
 	client.Client
 	Scheme                *runtime.Scheme
+	Recorder              record.EventRecorder
 	SecurityAdminExecutor *security.SecurityAdminExecutor
 }
 
 // NewAuthConfigReconciler creates a new AuthConfigReconciler
-func NewAuthConfigReconciler(c client.Client, scheme *runtime.Scheme) *AuthConfigReconciler {
+func NewAuthConfigReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *AuthConfigReconciler {
 	return &AuthConfigReconciler{
-		Client: c,
-		Scheme: scheme,
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: recorder,
 	}
 }
 
@@ -76,11 +79,13 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 	// Resolve secrets
 	secrets, err := r.resolveSecrets(ctx, authConfig)
 	if err != nil {
+		r.recordEvent(authConfig, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to resolve secrets: %v", err))
 		return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to resolve secrets: %v", err))
 	}
 
 	// Validate configuration
 	if err := r.validateConfig(authConfig, secrets); err != nil {
+		r.recordEvent(authConfig, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Validation failed: %v", err))
 		return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Validation failed: %v", err))
 	}
 
@@ -90,6 +95,7 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 
 	// Reconcile indexer security config
 	if err := r.reconcileIndexerSecurityConfig(ctx, authConfig, clusterName, namespace, secrets); err != nil {
+		r.recordEvent(authConfig, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to reconcile indexer config: %v", err))
 		return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to reconcile indexer config: %v", err))
 	}
 
@@ -104,6 +110,7 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 
 	// Reconcile dashboard config
 	if err := r.reconcileDashboardConfig(ctx, authConfig, clusterName, namespace, secrets); err != nil {
+		r.recordEvent(authConfig, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to reconcile dashboard config: %v", err))
 		return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to reconcile dashboard config: %v", err))
 	}
 
@@ -111,7 +118,15 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 		"name", authConfig.Name,
 		"activeAuthDomains", r.getActiveAuthDomains(authConfig))
 
+	r.recordEvent(authConfig, corev1.EventTypeNormal, "Synced", "Authentication configuration applied successfully")
 	return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseReady, "Authentication configuration applied")
+}
+
+// recordEvent emits an event if the recorder is available
+func (r *AuthConfigReconciler) recordEvent(authConfig *wazuhv1.OpenSearchAuthConfig, eventType, reason, message string) {
+	if r.Recorder != nil {
+		r.Recorder.Event(authConfig, eventType, reason, message)
+	}
 }
 
 // resolveSecrets resolves all secret references in the auth config

@@ -21,8 +21,10 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/otel/attribute"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -40,14 +42,16 @@ import (
 type TenantReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
 	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewTenantReconciler creates a new TenantReconciler
-func NewTenantReconciler(c client.Client, scheme *runtime.Scheme) *TenantReconciler {
+func NewTenantReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *TenantReconciler {
 	return &TenantReconciler{
-		Client: c,
-		Scheme: scheme,
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: recorder,
 	}
 }
 
@@ -93,6 +97,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSe
 	// Get OpenSearch client dynamically from cluster reference
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, tenant.Spec.ClusterRef, tenant.Namespace)
 	if err != nil {
+		r.recordEvent(tenant, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
@@ -105,6 +110,7 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSe
 		if updateErr := r.updateStatus(ctx, tenant, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check tenant existence: %v", err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
+		r.recordEvent(tenant, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check tenant existence: %v", err))
 		return fmt.Errorf("failed to check tenant existence: %w", err)
 	}
 
@@ -124,8 +130,11 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSe
 		if updateErr := r.updateStatus(ctx, tenant, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s tenant: %v", action, err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
+		r.recordEvent(tenant, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to %s tenant: %v", action, err))
 		return fmt.Errorf("failed to %s tenant: %w", action, err)
 	}
+
+	r.recordEvent(tenant, corev1.EventTypeNormal, "Synced", "Tenant reconciled successfully")
 
 	// Compute spec hash for drift detection
 	specHash, hashErr := patch.ComputeSpecHash(tenant.Spec)
@@ -149,6 +158,13 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSe
 
 	log.Info("Tenant reconciliation completed", "name", tenant.Name)
 	return nil
+}
+
+// recordEvent emits an event if the recorder is available
+func (r *TenantReconciler) recordEvent(tenant *wazuhv1.OpenSearchTenant, eventType, reason, message string) {
+	if r.Recorder != nil {
+		r.Recorder.Event(tenant, eventType, reason, message)
+	}
 }
 
 // buildTenant converts the CRD spec to a tenant
@@ -199,9 +215,11 @@ func (r *TenantReconciler) Delete(ctx context.Context, tenant *wazuhv1.OpenSearc
 
 	securityAPI := api.NewSecurityAPI(apiClient)
 	if err := securityAPI.DeleteTenant(ctx, tenant.Name); err != nil {
+		r.recordEvent(tenant, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete tenant: %v", err))
 		return fmt.Errorf("failed to delete tenant: %w", err)
 	}
 
+	r.recordEvent(tenant, corev1.EventTypeNormal, "Deleted", "Tenant deleted from OpenSearch")
 	log.Info("Deleted OpenSearch tenant", "name", tenant.Name)
 	return nil
 }

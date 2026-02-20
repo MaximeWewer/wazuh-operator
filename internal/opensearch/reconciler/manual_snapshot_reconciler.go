@@ -22,9 +22,11 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -45,14 +47,16 @@ const (
 type ManualSnapshotReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
 	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewManualSnapshotReconciler creates a new ManualSnapshotReconciler
-func NewManualSnapshotReconciler(c client.Client, scheme *runtime.Scheme) *ManualSnapshotReconciler {
+func NewManualSnapshotReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *ManualSnapshotReconciler {
 	return &ManualSnapshotReconciler{
-		Client: c,
-		Scheme: scheme,
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: recorder,
 	}
 }
 
@@ -97,6 +101,7 @@ func (r *ManualSnapshotReconciler) Reconcile(ctx context.Context, snapshot *wazu
 
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, snapshot.Spec.ClusterRef, snapshot.Namespace)
 	if err != nil {
+		r.recordEvent(snapshot, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
@@ -105,9 +110,11 @@ func (r *ManualSnapshotReconciler) Reconcile(ctx context.Context, snapshot *wazu
 	// Validate repository exists
 	repo, err := snapshotsAPI.GetRepository(ctx, snapshot.Spec.Repository)
 	if err != nil {
+		r.recordEvent(snapshot, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check repository: %v", err))
 		return r.updateStatus(ctx, snapshot, wazuhv1.SnapshotPhaseFailed, "", fmt.Sprintf("Failed to check repository: %v", err))
 	}
 	if repo == nil {
+		r.recordEvent(snapshot, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Repository '%s' not found", snapshot.Spec.Repository))
 		return r.updateStatus(ctx, snapshot, wazuhv1.SnapshotPhaseFailed, "", fmt.Sprintf("Repository '%s' not found", snapshot.Spec.Repository))
 	}
 
@@ -142,6 +149,7 @@ func (r *ManualSnapshotReconciler) Reconcile(ctx context.Context, snapshot *wazu
 		}
 
 		if err := snapshotsAPI.CreateSnapshot(ctx, snapshot.Spec.Repository, snapshotName, osSnapshot); err != nil {
+			r.recordEvent(snapshot, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to create snapshot: %v", err))
 			return r.updateStatus(ctx, snapshot, wazuhv1.SnapshotPhaseFailed, "", fmt.Sprintf("Failed to create snapshot: %v", err))
 		}
 
@@ -150,6 +158,13 @@ func (r *ManualSnapshotReconciler) Reconcile(ctx context.Context, snapshot *wazu
 
 	// Poll snapshot status
 	return r.updateSnapshotStatus(ctx, snapshot, snapshotsAPI)
+}
+
+// recordEvent emits an event if the recorder is available
+func (r *ManualSnapshotReconciler) recordEvent(snapshot *wazuhv1.OpenSearchSnapshot, eventType, reason, message string) {
+	if r.Recorder != nil {
+		r.Recorder.Event(snapshot, eventType, reason, message)
+	}
 }
 
 // generateSnapshotName generates a unique snapshot name with timestamp
@@ -205,6 +220,7 @@ func (r *ManualSnapshotReconciler) updateSnapshotStatus(ctx context.Context, sna
 	case constants.OpenSearchSnapshotStateSuccess:
 		phase = wazuhv1.SnapshotPhaseCompleted
 		message = "Snapshot completed successfully"
+		r.recordEvent(snapshot, corev1.EventTypeNormal, "Synced", "Snapshot completed successfully")
 		now := metav1.Now()
 		snapshot.Status.EndTime = &now
 		if snapshot.Status.StartTime != nil {
@@ -214,6 +230,7 @@ func (r *ManualSnapshotReconciler) updateSnapshotStatus(ctx context.Context, sna
 	case constants.OpenSearchSnapshotStateFailed:
 		phase = wazuhv1.SnapshotPhaseFailed
 		message = "Snapshot failed"
+		r.recordEvent(snapshot, corev1.EventTypeWarning, "SyncFailed", "Snapshot failed")
 		now := metav1.Now()
 		snapshot.Status.EndTime = &now
 	case constants.OpenSearchSnapshotStatePartial:
@@ -247,6 +264,7 @@ func (r *ManualSnapshotReconciler) handleDeletion(ctx context.Context, snapshot 
 		"repository", snapshot.Spec.Repository)
 
 	// Remove finalizer
+	r.recordEvent(snapshot, corev1.EventTypeNormal, "Deleted", "Snapshot CRD deleted, snapshot data retained in repository")
 	controllerutil.RemoveFinalizer(snapshot, ManualSnapshotFinalizer)
 	if err := r.Update(ctx, snapshot); err != nil {
 		return fmt.Errorf("failed to remove finalizer: %w", err)

@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -48,14 +49,16 @@ const (
 // BackupReconciler handles reconciliation of WazuhBackup resources
 type BackupReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // NewBackupReconciler creates a new BackupReconciler
-func NewBackupReconciler(c client.Client, scheme *runtime.Scheme) *BackupReconciler {
+func NewBackupReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *BackupReconciler {
 	return &BackupReconciler{
-		Client: c,
-		Scheme: scheme,
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: recorder,
 	}
 }
 
@@ -96,9 +99,11 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, backup *wazuhv1.WazuhB
 	}
 	if err := r.Get(ctx, clusterKey, cluster); err != nil {
 		if errors.IsNotFound(err) {
+			r.recordEvent(backup, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("WazuhCluster '%s' not found", backup.Spec.ClusterRef.Name))
 			return r.updateStatus(ctx, backup, wazuhv1.BackupPhaseFailed,
 				fmt.Sprintf("WazuhCluster '%s' not found", backup.Spec.ClusterRef.Name))
 		}
+		r.recordEvent(backup, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get WazuhCluster: %v", err))
 		return fmt.Errorf("failed to get WazuhCluster: %w", err)
 	}
 
@@ -111,6 +116,7 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, backup *wazuhv1.WazuhB
 		}
 		if err := r.Get(ctx, credsKey, credsSecret); err != nil {
 			if errors.IsNotFound(err) {
+				r.recordEvent(backup, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Credentials Secret '%s' not found", backup.Spec.Storage.CredentialsSecret.Name))
 				return r.updateStatus(ctx, backup, wazuhv1.BackupPhaseFailed,
 					fmt.Sprintf("Credentials Secret '%s' not found", backup.Spec.Storage.CredentialsSecret.Name))
 			}
@@ -121,16 +127,19 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, backup *wazuhv1.WazuhB
 	// Build RBAC resources
 	builder := jobs.NewBackupJobBuilder(backup)
 	if err := r.reconcileRBAC(ctx, backup, builder); err != nil {
+		r.recordEvent(backup, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to reconcile RBAC: %v", err))
 		return fmt.Errorf("failed to reconcile RBAC: %w", err)
 	}
 
 	// Reconcile Job or CronJob based on schedule
 	if backup.IsScheduled() {
 		if err := r.reconcileCronJob(ctx, backup, builder); err != nil {
+			r.recordEvent(backup, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to reconcile CronJob: %v", err))
 			return fmt.Errorf("failed to reconcile CronJob: %w", err)
 		}
 	} else {
 		if err := r.reconcileJob(ctx, backup, builder); err != nil {
+			r.recordEvent(backup, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to reconcile Job: %v", err))
 			return fmt.Errorf("failed to reconcile Job: %w", err)
 		}
 	}
@@ -146,8 +155,16 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, backup *wazuhv1.WazuhB
 		message = "Backup suspended"
 	}
 
+	r.recordEvent(backup, corev1.EventTypeNormal, "Synced", fmt.Sprintf("Backup reconciled successfully (%s)", message))
 	log.Info("Successfully reconciled WazuhBackup", "name", backup.Name, "phase", phase)
 	return r.updateStatus(ctx, backup, phase, message)
+}
+
+// recordEvent emits an event if the recorder is available
+func (r *BackupReconciler) recordEvent(backup *wazuhv1.WazuhBackup, eventType, reason, message string) {
+	if r.Recorder != nil {
+		r.Recorder.Event(backup, eventType, reason, message)
+	}
 }
 
 // reconcileRBAC ensures ServiceAccount, Role, and RoleBinding exist
@@ -325,6 +342,7 @@ func (r *BackupReconciler) handleDeletion(ctx context.Context, backup *wazuhv1.W
 
 	// Kubernetes garbage collection will handle owned resources (Job, CronJob, RBAC)
 	// Remove the finalizer
+	r.recordEvent(backup, corev1.EventTypeNormal, "Deleted", "Backup resources cleaned up")
 	controllerutil.RemoveFinalizer(backup, WazuhBackupFinalizer)
 	if err := r.Update(ctx, backup); err != nil {
 		return fmt.Errorf("failed to remove finalizer: %w", err)

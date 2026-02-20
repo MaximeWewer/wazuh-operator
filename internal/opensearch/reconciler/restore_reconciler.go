@@ -21,9 +21,11 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/otel/attribute"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -44,14 +46,16 @@ const (
 type RestoreReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
 	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewRestoreReconciler creates a new RestoreReconciler
-func NewRestoreReconciler(c client.Client, scheme *runtime.Scheme) *RestoreReconciler {
+func NewRestoreReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *RestoreReconciler {
 	return &RestoreReconciler{
-		Client: c,
-		Scheme: scheme,
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: recorder,
 	}
 }
 
@@ -101,6 +105,7 @@ func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1.Open
 
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, restore.Spec.ClusterRef, restore.Namespace)
 	if err != nil {
+		r.recordEvent(restore, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
@@ -115,9 +120,11 @@ func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1.Open
 		// Validate repository exists
 		repo, err := snapshotsAPI.GetRepository(ctx, restore.Spec.Repository)
 		if err != nil {
+			r.recordEvent(restore, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check repository: %v", err))
 			return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseFailed, fmt.Sprintf("Failed to check repository: %v", err))
 		}
 		if repo == nil {
+			r.recordEvent(restore, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Repository '%s' not found", restore.Spec.Repository))
 			return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseFailed, fmt.Sprintf("Repository '%s' not found", restore.Spec.Repository))
 		}
 
@@ -170,6 +177,7 @@ func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1.Open
 		// Execute restore
 		result, err := snapshotsAPI.RestoreSnapshot(ctx, restore.Spec.Repository, restore.Spec.Snapshot, opts)
 		if err != nil {
+			r.recordEvent(restore, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to restore snapshot: %v", err))
 			return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseFailed, fmt.Sprintf("Failed to restore snapshot: %v", err))
 		}
 
@@ -188,6 +196,13 @@ func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1.Open
 
 	// Monitor restore progress
 	return r.monitorRestoreProgress(ctx, restore, snapshotsAPI)
+}
+
+// recordEvent emits an event if the recorder is available
+func (r *RestoreReconciler) recordEvent(restore *wazuhv1.OpenSearchRestore, eventType, reason, message string) {
+	if r.Recorder != nil {
+		r.Recorder.Event(restore, eventType, reason, message)
+	}
 }
 
 // monitorRestoreProgress monitors the restore operation progress
@@ -248,6 +263,7 @@ func (r *RestoreReconciler) monitorRestoreProgress(ctx context.Context, restore 
 			restore.Status.Duration = formatDuration(duration)
 		}
 
+		r.recordEvent(restore, corev1.EventTypeNormal, "Synced", "Restore completed successfully")
 		log.Info("Restore completed", "indices", restore.Status.RestoredIndices, "duration", restore.Status.Duration)
 		return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseCompleted, "Restore completed successfully")
 	}
@@ -266,6 +282,7 @@ func (r *RestoreReconciler) handleDeletion(ctx context.Context, restore *wazuhv1
 		"restoredIndices", restore.Status.RestoredIndices)
 
 	// Remove finalizer
+	r.recordEvent(restore, corev1.EventTypeNormal, "Deleted", "Restore CRD deleted, restored data retained")
 	controllerutil.RemoveFinalizer(restore, RestoreFinalizer)
 	if err := r.Update(ctx, restore); err != nil {
 		return fmt.Errorf("failed to remove finalizer: %w", err)

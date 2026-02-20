@@ -320,7 +320,7 @@ func TestSnapshotRepositoryReconciler_buildRepositorySettings(t *testing.T) {
 				objs = append(objs, tt.secret)
 			}
 			c := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objs...).Build()
-			r := NewSnapshotRepositoryReconciler(c, scheme)
+			r := NewSnapshotRepositoryReconciler(c, scheme, nil)
 
 			got, err := r.buildRepositorySettings(context.Background(), tt.repo)
 			if (err != nil) != tt.wantErr {
@@ -452,7 +452,7 @@ func TestSnapshotRepositoryReconciler_loadCredentials(t *testing.T) {
 				objs = append(objs, tt.secret)
 			}
 			c := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objs...).Build()
-			r := NewSnapshotRepositoryReconciler(c, scheme)
+			r := NewSnapshotRepositoryReconciler(c, scheme, nil)
 
 			accessKey, secretKey, err := r.loadCredentials(context.Background(), "default", tt.ref)
 			if (err != nil) != tt.wantErr {

@@ -30,7 +30,7 @@ func TestTemplateReconciler_buildIndexTemplate(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewTemplateReconciler(client, scheme)
+	r := NewTemplateReconciler(client, scheme, nil)
 
 	tests := []struct {
 		name            string
@@ -152,7 +152,7 @@ func TestTemplateReconciler_buildIndexTemplate_TemplateDetails(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewTemplateReconciler(client, scheme)
+	r := NewTemplateReconciler(client, scheme, nil)
 
 	template := &wazuhv1.OpenSearchIndexTemplate{
 		ObjectMeta: metav1.ObjectMeta{
@@ -228,7 +228,7 @@ func TestTemplateReconciler_buildIndexTemplate_NilTemplate(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewTemplateReconciler(client, scheme)
+	r := NewTemplateReconciler(client, scheme, nil)
 
 	template := &wazuhv1.OpenSearchIndexTemplate{
 		ObjectMeta: metav1.ObjectMeta{

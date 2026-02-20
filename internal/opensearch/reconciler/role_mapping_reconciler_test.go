@@ -30,7 +30,7 @@ func TestRoleMappingReconciler_buildRoleMapping(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewRoleMappingReconciler(client, scheme)
+	r := NewRoleMappingReconciler(client, scheme, nil)
 
 	tests := []struct {
 		name                string
@@ -164,7 +164,7 @@ func TestRoleMappingReconciler_buildRoleMapping_Values(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewRoleMappingReconciler(client, scheme)
+	r := NewRoleMappingReconciler(client, scheme, nil)
 
 	mapping := &wazuhv1.OpenSearchRoleMapping{
 		ObjectMeta: metav1.ObjectMeta{

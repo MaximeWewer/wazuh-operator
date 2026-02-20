@@ -31,7 +31,7 @@ func TestManualSnapshotReconciler_generateSnapshotName(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewManualSnapshotReconciler(client, scheme)
+	r := NewManualSnapshotReconciler(client, scheme, nil)
 
 	tests := []struct {
 		name     string
@@ -72,7 +72,7 @@ func TestManualSnapshotReconciler_generateSnapshotName_Uniqueness(t *testing.T) 
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewManualSnapshotReconciler(client, scheme)
+	r := NewManualSnapshotReconciler(client, scheme, nil)
 
 	// Generate two names with a small delay to verify they include timestamps
 	name1 := r.generateSnapshotName("test")

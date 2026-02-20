@@ -22,8 +22,10 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/otel/attribute"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -41,14 +43,16 @@ import (
 type TemplateReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
 	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewTemplateReconciler creates a new TemplateReconciler
-func NewTemplateReconciler(c client.Client, scheme *runtime.Scheme) *TemplateReconciler {
+func NewTemplateReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *TemplateReconciler {
 	return &TemplateReconciler{
-		Client: c,
-		Scheme: scheme,
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: recorder,
 	}
 }
 
@@ -93,6 +97,7 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.Op
 
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, template.Spec.ClusterRef, template.Namespace)
 	if err != nil {
+		r.recordEvent(template, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
@@ -105,6 +110,7 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.Op
 		if updateErr := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check template existence: %v", err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
+		r.recordEvent(template, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check index template existence: %v", err))
 		return fmt.Errorf("failed to check template existence: %w", err)
 	}
 
@@ -125,8 +131,11 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.Op
 		if updateErr := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s template: %v", action, err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
+		r.recordEvent(template, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to %s index template: %v", action, err))
 		return fmt.Errorf("failed to %s index template: %w", action, err)
 	}
+
+	r.recordEvent(template, corev1.EventTypeNormal, "Synced", "Index template reconciled successfully")
 
 	// Compute spec hash for drift detection
 	specHash, hashErr := patch.ComputeSpecHash(template.Spec)
@@ -150,6 +159,13 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.Op
 
 	log.Info("Index template reconciliation completed", "name", template.Name)
 	return nil
+}
+
+// recordEvent emits an event if the recorder is available
+func (r *TemplateReconciler) recordEvent(template *wazuhv1.OpenSearchIndexTemplate, eventType, reason, message string) {
+	if r.Recorder != nil {
+		r.Recorder.Event(template, eventType, reason, message)
+	}
 }
 
 // buildIndexTemplate converts the CRD spec to an index template
@@ -242,9 +258,11 @@ func (r *TemplateReconciler) Delete(ctx context.Context, template *wazuhv1.OpenS
 
 	templatesAPI := api.NewTemplatesAPI(apiClient)
 	if err := templatesAPI.DeleteIndexTemplate(ctx, template.Name); err != nil {
+		r.recordEvent(template, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete index template: %v", err))
 		return fmt.Errorf("failed to delete index template: %w", err)
 	}
 
+	r.recordEvent(template, corev1.EventTypeNormal, "Deleted", "Index template deleted from OpenSearch")
 	log.Info("Deleted OpenSearch index template", "name", template.Name)
 	return nil
 }

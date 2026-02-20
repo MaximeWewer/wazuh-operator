@@ -21,8 +21,10 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/otel/attribute"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -40,14 +42,16 @@ import (
 type ActionGroupReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
 	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewActionGroupReconciler creates a new ActionGroupReconciler
-func NewActionGroupReconciler(c client.Client, scheme *runtime.Scheme) *ActionGroupReconciler {
+func NewActionGroupReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *ActionGroupReconciler {
 	return &ActionGroupReconciler{
-		Client: c,
-		Scheme: scheme,
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: recorder,
 	}
 }
 
@@ -93,6 +97,7 @@ func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenS
 	// Get OpenSearch client dynamically from cluster reference
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, ag.Spec.ClusterRef, ag.Namespace)
 	if err != nil {
+		r.recordEvent(ag, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
@@ -105,6 +110,7 @@ func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenS
 		if updateErr := r.updateStatus(ctx, ag, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check action group existence: %v", err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
+		r.recordEvent(ag, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check action group existence: %v", err))
 		return fmt.Errorf("failed to check action group existence: %w", err)
 	}
 
@@ -124,8 +130,11 @@ func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenS
 		if updateErr := r.updateStatus(ctx, ag, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s action group: %v", action, err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
+		r.recordEvent(ag, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to %s action group: %v", action, err))
 		return fmt.Errorf("failed to %s action group: %w", action, err)
 	}
+
+	r.recordEvent(ag, corev1.EventTypeNormal, "Synced", "Action group reconciled successfully")
 
 	// Compute spec hash for drift detection
 	specHash, hashErr := patch.ComputeSpecHash(ag.Spec)
@@ -149,6 +158,13 @@ func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenS
 
 	log.Info("Action group reconciliation completed", "name", ag.Name)
 	return nil
+}
+
+// recordEvent emits an event if the recorder is available
+func (r *ActionGroupReconciler) recordEvent(ag *wazuhv1.OpenSearchActionGroup, eventType, reason, message string) {
+	if r.Recorder != nil {
+		r.Recorder.Event(ag, eventType, reason, message)
+	}
 }
 
 // buildActionGroup converts the CRD spec to an action group
@@ -201,9 +217,11 @@ func (r *ActionGroupReconciler) Delete(ctx context.Context, ag *wazuhv1.OpenSear
 
 	securityAPI := api.NewSecurityAPI(apiClient)
 	if err := securityAPI.DeleteActionGroup(ctx, ag.Name); err != nil {
+		r.recordEvent(ag, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete action group: %v", err))
 		return fmt.Errorf("failed to delete action group: %w", err)
 	}
 
+	r.recordEvent(ag, corev1.EventTypeNormal, "Deleted", "Action group deleted from OpenSearch")
 	log.Info("Deleted OpenSearch action group", "name", ag.Name)
 	return nil
 }

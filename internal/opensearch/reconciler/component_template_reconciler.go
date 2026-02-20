@@ -21,8 +21,10 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/otel/attribute"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -40,14 +42,16 @@ import (
 type ComponentTemplateReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
 	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewComponentTemplateReconciler creates a new ComponentTemplateReconciler
-func NewComponentTemplateReconciler(c client.Client, scheme *runtime.Scheme) *ComponentTemplateReconciler {
+func NewComponentTemplateReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *ComponentTemplateReconciler {
 	return &ComponentTemplateReconciler{
-		Client: c,
-		Scheme: scheme,
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: recorder,
 	}
 }
 
@@ -92,6 +96,7 @@ func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *w
 
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, template.Spec.ClusterRef, template.Namespace)
 	if err != nil {
+		r.recordEvent(template, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
@@ -104,6 +109,7 @@ func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *w
 		if updateErr := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check template existence: %v", err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
+		r.recordEvent(template, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check component template existence: %v", err))
 		return fmt.Errorf("failed to check component template existence: %w", err)
 	}
 
@@ -124,8 +130,11 @@ func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *w
 		if updateErr := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s template: %v", action, err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
+		r.recordEvent(template, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to %s component template: %v", action, err))
 		return fmt.Errorf("failed to %s component template: %w", action, err)
 	}
+
+	r.recordEvent(template, corev1.EventTypeNormal, "Synced", "Component template reconciled successfully")
 
 	// Compute spec hash for drift detection
 	specHash, hashErr := patch.ComputeSpecHash(template.Spec)
@@ -149,6 +158,13 @@ func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *w
 
 	log.Info("Component template reconciliation completed", "name", template.Name)
 	return nil
+}
+
+// recordEvent emits an event if the recorder is available
+func (r *ComponentTemplateReconciler) recordEvent(template *wazuhv1.OpenSearchComponentTemplate, eventType, reason, message string) {
+	if r.Recorder != nil {
+		r.Recorder.Event(template, eventType, reason, message)
+	}
 }
 
 // buildComponentTemplate converts the CRD spec to a component template
@@ -210,9 +226,11 @@ func (r *ComponentTemplateReconciler) Delete(ctx context.Context, template *wazu
 
 	templatesAPI := api.NewTemplatesAPI(apiClient)
 	if err := templatesAPI.DeleteComponentTemplate(ctx, template.Name); err != nil {
+		r.recordEvent(template, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete component template: %v", err))
 		return fmt.Errorf("failed to delete component template: %w", err)
 	}
 
+	r.recordEvent(template, corev1.EventTypeNormal, "Deleted", "Component template deleted from OpenSearch")
 	log.Info("Deleted OpenSearch component template", "name", template.Name)
 	return nil
 }

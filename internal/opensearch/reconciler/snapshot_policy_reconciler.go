@@ -22,8 +22,10 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -41,14 +43,16 @@ import (
 type SnapshotPolicyReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
 	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewSnapshotPolicyReconciler creates a new SnapshotPolicyReconciler
-func NewSnapshotPolicyReconciler(c client.Client, scheme *runtime.Scheme) *SnapshotPolicyReconciler {
+func NewSnapshotPolicyReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *SnapshotPolicyReconciler {
 	return &SnapshotPolicyReconciler{
-		Client: c,
-		Scheme: scheme,
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: recorder,
 	}
 }
 
@@ -93,6 +97,7 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, policy.Spec.ClusterRef, policy.Namespace)
 	if err != nil {
+		r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
@@ -109,6 +114,7 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check repository '%s': %v", repoName, err)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
+			r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check repository '%s': %v", repoName, err))
 			return fmt.Errorf("failed to check repository '%s': %w", repoName, err)
 		}
 		if repo == nil {
@@ -127,6 +133,7 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 		if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to get snapshot policy: %v", err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
+		r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get snapshot policy: %v", err))
 		return fmt.Errorf("failed to get snapshot policy: %w", err)
 	}
 
@@ -139,6 +146,7 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create snapshot policy: %v", err)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
+			r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to create snapshot policy: %v", err))
 			return fmt.Errorf("failed to create snapshot policy: %w", err)
 		}
 	} else {
@@ -147,9 +155,12 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to update snapshot policy: %v", err)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
+			r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to update snapshot policy: %v", err))
 			return fmt.Errorf("failed to update snapshot policy: %w", err)
 		}
 	}
+
+	r.recordEvent(policy, corev1.EventTypeNormal, "Synced", "Snapshot policy reconciled successfully")
 
 	// Compute spec hash for drift detection
 	specHash, hashErr := patch.ComputeSpecHash(policy.Spec)
@@ -173,6 +184,13 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 
 	log.Info("Snapshot policy reconciliation completed", "name", policy.Name, "repository", repoName)
 	return nil
+}
+
+// recordEvent emits an event if the recorder is available
+func (r *SnapshotPolicyReconciler) recordEvent(policy *wazuhv1.OpenSearchSnapshotPolicy, eventType, reason, message string) {
+	if r.Recorder != nil {
+		r.Recorder.Event(policy, eventType, reason, message)
+	}
 }
 
 // buildSnapshotPolicy converts the CRD spec to a snapshot policy
@@ -274,9 +292,11 @@ func (r *SnapshotPolicyReconciler) Delete(ctx context.Context, policy *wazuhv1.O
 
 	snapshotAPI := api.NewSnapshotAPI(apiClient)
 	if err := snapshotAPI.DeletePolicy(ctx, policy.Name); err != nil {
+		r.recordEvent(policy, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete snapshot policy: %v", err))
 		return fmt.Errorf("failed to delete snapshot policy: %w", err)
 	}
 
+	r.recordEvent(policy, corev1.EventTypeNormal, "Deleted", "Snapshot policy deleted from OpenSearch")
 	log.Info("Deleted OpenSearch snapshot policy", "name", policy.Name)
 	return nil
 }

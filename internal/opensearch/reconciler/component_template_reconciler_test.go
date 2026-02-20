@@ -30,7 +30,7 @@ func TestComponentTemplateReconciler_buildComponentTemplate(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewComponentTemplateReconciler(client, scheme)
+	r := NewComponentTemplateReconciler(client, scheme, nil)
 
 	tests := []struct {
 		name         string
@@ -136,7 +136,7 @@ func TestComponentTemplateReconciler_buildComponentTemplate_RawPassthrough(t *te
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewComponentTemplateReconciler(client, scheme)
+	r := NewComponentTemplateReconciler(client, scheme, nil)
 
 	settingsJSON := []byte(`{"index":{"number_of_shards":5,"number_of_replicas":2}}`)
 	mappingsJSON := []byte(`{"properties":{"@timestamp":{"type":"date"},"message":{"type":"text"}}}`)

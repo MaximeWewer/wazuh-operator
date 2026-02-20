@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -46,14 +47,16 @@ const (
 type SnapshotRepositoryReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
 	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewSnapshotRepositoryReconciler creates a new SnapshotRepositoryReconciler
-func NewSnapshotRepositoryReconciler(c client.Client, scheme *runtime.Scheme) *SnapshotRepositoryReconciler {
+func NewSnapshotRepositoryReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *SnapshotRepositoryReconciler {
 	return &SnapshotRepositoryReconciler{
-		Client: c,
-		Scheme: scheme,
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: recorder,
 	}
 }
 
@@ -98,6 +101,7 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, repo.Spec.ClusterRef, repo.Namespace)
 	if err != nil {
+		r.recordEvent(repo, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
@@ -110,6 +114,7 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 		if updateErr := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseFailed, fmt.Sprintf("Failed to check repository: %v", err), false); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
+		r.recordEvent(repo, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check repository existence: %v", err))
 		return fmt.Errorf("failed to check repository existence: %w", err)
 	}
 
@@ -119,6 +124,7 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 		if updateErr := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseFailed, fmt.Sprintf("Failed to build settings: %v", err), false); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
+		r.recordEvent(repo, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to build repository settings: %v", err))
 		return fmt.Errorf("failed to build repository settings: %w", err)
 	}
 
@@ -138,6 +144,7 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 			if updateErr := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseFailed, fmt.Sprintf("Failed to create repository: %v", err), false); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
+			r.recordEvent(repo, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to create repository: %v", err))
 			return fmt.Errorf("failed to create repository: %w", err)
 		}
 	} else {
@@ -147,6 +154,7 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 			if updateErr := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseFailed, fmt.Sprintf("Failed to update repository: %v", err), false); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
+			r.recordEvent(repo, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to update repository: %v", err))
 			return fmt.Errorf("failed to update repository: %w", err)
 		}
 	}
@@ -171,6 +179,7 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 			if updateErr := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseFailed, fmt.Sprintf("Repository verification failed: %v", err), false); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
+			r.recordEvent(repo, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Repository verification failed: %v", err))
 			return fmt.Errorf("repository verification failed: %w", err)
 		}
 		verified = true
@@ -208,6 +217,8 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
+	r.recordEvent(repo, corev1.EventTypeNormal, "Synced", "Snapshot repository reconciled successfully")
+
 	log.Info("Snapshot repository reconciliation completed", "name", repo.Name, "verified", verified, "snapshots", snapshotCount)
 	return nil
 }
@@ -230,9 +241,11 @@ func (r *SnapshotRepositoryReconciler) handleDeletion(ctx context.Context, repo 
 
 			// Delete the repository from OpenSearch
 			if err := snapshotsAPI.DeleteRepository(ctx, repo.Name); err != nil {
+				r.recordEvent(repo, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete repository: %v", err))
 				log.Error(err, "Failed to delete repository from OpenSearch", "name", repo.Name)
 				// Continue with finalizer removal even if deletion fails
 			} else {
+				r.recordEvent(repo, corev1.EventTypeNormal, "Deleted", "Snapshot repository deleted from OpenSearch")
 				log.Info("Deleted repository from OpenSearch", "name", repo.Name)
 			}
 		}
@@ -245,6 +258,13 @@ func (r *SnapshotRepositoryReconciler) handleDeletion(ctx context.Context, repo 
 	}
 
 	return nil
+}
+
+// recordEvent emits an event if the recorder is available
+func (r *SnapshotRepositoryReconciler) recordEvent(repo *wazuhv1.OpenSearchSnapshotRepository, eventType, reason, message string) {
+	if r.Recorder != nil {
+		r.Recorder.Event(repo, eventType, reason, message)
+	}
 }
 
 // buildRepositorySettings builds the OpenSearch repository settings from the CRD spec

@@ -30,7 +30,7 @@ func TestSnapshotPolicyReconciler_buildSnapshotPolicy(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewSnapshotPolicyReconciler(client, scheme)
+	r := NewSnapshotPolicyReconciler(client, scheme, nil)
 
 	// Helper to create int32 pointer
 	int32Ptr := func(i int32) *int32 { return &i }
@@ -191,7 +191,7 @@ func TestSnapshotPolicyReconciler_buildSnapshotPolicy_DeletionDetails(t *testing
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewSnapshotPolicyReconciler(client, scheme)
+	r := NewSnapshotPolicyReconciler(client, scheme, nil)
 
 	int32Ptr := func(i int32) *int32 { return &i }
 
@@ -251,7 +251,7 @@ func TestSnapshotPolicyReconciler_buildSnapshotPolicy_DeletionWithoutSchedule(t 
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	r := NewSnapshotPolicyReconciler(client, scheme)
+	r := NewSnapshotPolicyReconciler(client, scheme, nil)
 
 	policy := &wazuhv1.OpenSearchSnapshotPolicy{
 		ObjectMeta: metav1.ObjectMeta{

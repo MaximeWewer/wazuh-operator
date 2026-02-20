@@ -21,8 +21,10 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/otel/attribute"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -40,14 +42,16 @@ import (
 type RoleMappingReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
+	Recorder      record.EventRecorder
 	ClientFactory *security.OpenSearchClientFactory
 }
 
 // NewRoleMappingReconciler creates a new RoleMappingReconciler
-func NewRoleMappingReconciler(c client.Client, scheme *runtime.Scheme) *RoleMappingReconciler {
+func NewRoleMappingReconciler(c client.Client, scheme *runtime.Scheme, recorder record.EventRecorder) *RoleMappingReconciler {
 	return &RoleMappingReconciler{
-		Client: c,
-		Scheme: scheme,
+		Client:   c,
+		Scheme:   scheme,
+		Recorder: recorder,
 	}
 }
 
@@ -92,6 +96,7 @@ func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.
 
 	apiClient, err := r.ClientFactory.GetClientForRef(ctx, mapping.Spec.ClusterRef, mapping.Namespace)
 	if err != nil {
+		r.recordEvent(mapping, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)
 	}
 
@@ -103,6 +108,7 @@ func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.
 		if updateErr := r.updateStatus(ctx, mapping, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check role mapping existence: %v", err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
+		r.recordEvent(mapping, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check role mapping existence: %v", err))
 		return fmt.Errorf("failed to check role mapping existence: %w", err)
 	}
 
@@ -122,8 +128,11 @@ func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.
 		if updateErr := r.updateStatus(ctx, mapping, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s role mapping: %v", action, err)); updateErr != nil {
 			log.Error(updateErr, "Failed to update status")
 		}
+		r.recordEvent(mapping, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to %s role mapping: %v", action, err))
 		return fmt.Errorf("failed to %s role mapping: %w", action, err)
 	}
+
+	r.recordEvent(mapping, corev1.EventTypeNormal, "Synced", "Role mapping reconciled successfully")
 
 	// Compute spec hash for drift detection
 	specHash, hashErr := patch.ComputeSpecHash(mapping.Spec)
@@ -147,6 +156,13 @@ func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.
 
 	log.Info("Role mapping reconciliation completed", "name", mapping.Name)
 	return nil
+}
+
+// recordEvent emits an event if the recorder is available
+func (r *RoleMappingReconciler) recordEvent(mapping *wazuhv1.OpenSearchRoleMapping, eventType, reason, message string) {
+	if r.Recorder != nil {
+		r.Recorder.Event(mapping, eventType, reason, message)
+	}
 }
 
 // buildRoleMapping converts the CRD spec to a role mapping
@@ -201,9 +217,11 @@ func (r *RoleMappingReconciler) Delete(ctx context.Context, mapping *wazuhv1.Ope
 
 	securityAPI := api.NewSecurityAPI(apiClient)
 	if err := securityAPI.DeleteRoleMapping(ctx, mapping.Name); err != nil {
+		r.recordEvent(mapping, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete role mapping: %v", err))
 		return fmt.Errorf("failed to delete role mapping: %w", err)
 	}
 
+	r.recordEvent(mapping, corev1.EventTypeNormal, "Deleted", "Role mapping deleted from OpenSearch")
 	log.Info("Deleted OpenSearch role mapping", "name", mapping.Name)
 	return nil
 }
