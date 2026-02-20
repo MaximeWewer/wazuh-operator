@@ -146,8 +146,10 @@ linters:
         - G101  # Potential hardcoded credentials (many false positives)
         - G104  # Unhandled errors (covered by errcheck)
         - G115  # Integer overflow conversion (safe in K8s context)
+        - G117  # Exported struct field matches secret pattern (Password fields in CRD types and API clients are intentional)
         - G304  # File path from tainted input (required for config loading)
         - G402  # TLS InsecureSkipVerify (intentional for self-signed certs)
+        - G704  # SSRF via taint analysis (HTTP calls to operator-managed cluster-internal URLs)
 
     errorlint:
       errorf: true
@@ -264,6 +266,20 @@ linters:
         linters:
           - revive
         text: "exported:"
+
+      # Exclude package naming warnings for established packages
+      - path: "internal/metrics/"
+        text: "var-naming: avoid package names that conflict"
+        linters:
+          - revive
+      - path: "pkg/version/"
+        text: "var-naming: avoid package names that conflict"
+        linters:
+          - revive
+      - path: "internal/opensearch/api/"
+        text: "var-naming: avoid meaningless package names"
+        linters:
+          - revive
 
       # Exclude deprecated usage warnings
       - text: "SA1019:"

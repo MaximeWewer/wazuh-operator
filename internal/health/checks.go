@@ -16,7 +16,7 @@ import (
 // resources reliably and should not be considered ready.
 func InformerSyncChecker(mgr manager.Manager) healthz.Checker {
 	return func(_ *http.Request) error {
-		// Use an already-cancelled context so WaitForCacheSync returns
+		// Use an already-canceled context so WaitForCacheSync returns
 		// immediately with the current sync state instead of blocking.
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()

@@ -231,7 +231,7 @@ func (c *RolesConfig) Build() string {
 	sb.WriteString("  config_version: 2\n\n")
 
 	for _, role := range c.Roles {
-		sb.WriteString(fmt.Sprintf("%s:\n", role.Name))
+		fmt.Fprintf(&sb, "%s:\n", role.Name)
 
 		if role.Reserved {
 			sb.WriteString("  reserved: true\n")
@@ -242,13 +242,13 @@ func (c *RolesConfig) Build() string {
 		}
 
 		if role.Description != "" {
-			sb.WriteString(fmt.Sprintf("  description: \"%s\"\n", role.Description))
+			fmt.Fprintf(&sb, "  description: \"%s\"\n", role.Description)
 		}
 
 		if len(role.ClusterPermissions) > 0 {
 			sb.WriteString("  cluster_permissions:\n")
 			for _, perm := range role.ClusterPermissions {
-				sb.WriteString(fmt.Sprintf("    - \"%s\"\n", perm))
+				fmt.Fprintf(&sb, "    - \"%s\"\n", perm)
 			}
 		}
 
@@ -257,27 +257,27 @@ func (c *RolesConfig) Build() string {
 			for _, ip := range role.IndexPermissions {
 				sb.WriteString("    - index_patterns:\n")
 				for _, pattern := range ip.IndexPatterns {
-					sb.WriteString(fmt.Sprintf("        - \"%s\"\n", pattern))
+					fmt.Fprintf(&sb, "        - \"%s\"\n", pattern)
 				}
 				if len(ip.AllowedActions) > 0 {
 					sb.WriteString("      allowed_actions:\n")
 					for _, action := range ip.AllowedActions {
-						sb.WriteString(fmt.Sprintf("        - \"%s\"\n", action))
+						fmt.Fprintf(&sb, "        - \"%s\"\n", action)
 					}
 				}
 				if ip.DocumentLevelSecurity != "" {
-					sb.WriteString(fmt.Sprintf("      dls: \"%s\"\n", ip.DocumentLevelSecurity))
+					fmt.Fprintf(&sb, "      dls: \"%s\"\n", ip.DocumentLevelSecurity)
 				}
 				if ip.FieldLevelSecurity != nil {
 					sb.WriteString("      fls:\n")
 					if len(ip.FieldLevelSecurity.Include) > 0 {
 						for _, field := range ip.FieldLevelSecurity.Include {
-							sb.WriteString(fmt.Sprintf("        - \"%s\"\n", field))
+							fmt.Fprintf(&sb, "        - \"%s\"\n", field)
 						}
 					}
 					if len(ip.FieldLevelSecurity.Exclude) > 0 {
 						for _, field := range ip.FieldLevelSecurity.Exclude {
-							sb.WriteString(fmt.Sprintf("        - \"~%s\"\n", field))
+							fmt.Fprintf(&sb, "        - \"~%s\"\n", field)
 						}
 					}
 				}
@@ -289,12 +289,12 @@ func (c *RolesConfig) Build() string {
 			for _, tp := range role.TenantPermissions {
 				sb.WriteString("    - tenant_patterns:\n")
 				for _, pattern := range tp.TenantPatterns {
-					sb.WriteString(fmt.Sprintf("        - \"%s\"\n", pattern))
+					fmt.Fprintf(&sb, "        - \"%s\"\n", pattern)
 				}
 				if len(tp.AllowedActions) > 0 {
 					sb.WriteString("      allowed_actions:\n")
 					for _, action := range tp.AllowedActions {
-						sb.WriteString(fmt.Sprintf("        - \"%s\"\n", action))
+						fmt.Fprintf(&sb, "        - \"%s\"\n", action)
 					}
 				}
 			}

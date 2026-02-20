@@ -139,7 +139,7 @@ func (c *RolesMappingConfig) Build() string {
 	sb.WriteString("  config_version: 2\n\n")
 
 	for _, mapping := range c.Mappings {
-		sb.WriteString(fmt.Sprintf("%s:\n", mapping.RoleName))
+		fmt.Fprintf(&sb, "%s:\n", mapping.RoleName)
 
 		if mapping.Reserved {
 			sb.WriteString("  reserved: true\n")
@@ -150,34 +150,34 @@ func (c *RolesMappingConfig) Build() string {
 		}
 
 		if mapping.Description != "" {
-			sb.WriteString(fmt.Sprintf("  description: \"%s\"\n", mapping.Description))
+			fmt.Fprintf(&sb, "  description: \"%s\"\n", mapping.Description)
 		}
 
 		if len(mapping.BackendRoles) > 0 {
 			sb.WriteString("  backend_roles:\n")
 			for _, role := range mapping.BackendRoles {
-				sb.WriteString(fmt.Sprintf("    - \"%s\"\n", role))
+				fmt.Fprintf(&sb, "    - \"%s\"\n", role)
 			}
 		}
 
 		if len(mapping.Hosts) > 0 {
 			sb.WriteString("  hosts:\n")
 			for _, host := range mapping.Hosts {
-				sb.WriteString(fmt.Sprintf("    - \"%s\"\n", host))
+				fmt.Fprintf(&sb, "    - \"%s\"\n", host)
 			}
 		}
 
 		if len(mapping.Users) > 0 {
 			sb.WriteString("  users:\n")
 			for _, user := range mapping.Users {
-				sb.WriteString(fmt.Sprintf("    - \"%s\"\n", user))
+				fmt.Fprintf(&sb, "    - \"%s\"\n", user)
 			}
 		}
 
 		if len(mapping.AndBackendRoles) > 0 {
 			sb.WriteString("  and_backend_roles:\n")
 			for _, role := range mapping.AndBackendRoles {
-				sb.WriteString(fmt.Sprintf("    - \"%s\"\n", role))
+				fmt.Fprintf(&sb, "    - \"%s\"\n", role)
 			}
 		}
 

@@ -83,7 +83,7 @@ func (b *DashboardAuthConfigBuilder) BuildAuthSection() (string, error) {
 	// Determine auth type
 	authType := b.determineAuthType()
 
-	sb.WriteString(fmt.Sprintf("opensearch_security.auth.type: \"%s\"\n", authType))
+	fmt.Fprintf(&sb, "opensearch_security.auth.type: \"%s\"\n", authType)
 
 	// Build auth-specific configuration
 	if b.authConfig.OIDC != nil && b.authConfig.OIDC.Enabled {
@@ -162,61 +162,61 @@ func (b *DashboardAuthConfigBuilder) buildOIDCDashboardConfig() (string, error) 
 	sb.WriteString("\n# OpenID Connect Configuration\n")
 
 	// Connect URL
-	sb.WriteString(fmt.Sprintf("opensearch_security.openid.connect_url: \"%s\"\n", spec.ConnectURL))
+	fmt.Fprintf(&sb, "opensearch_security.openid.connect_url: \"%s\"\n", spec.ConnectURL)
 
 	// Client ID
-	sb.WriteString(fmt.Sprintf("opensearch_security.openid.client_id: \"%s\"\n", spec.ClientID))
+	fmt.Fprintf(&sb, "opensearch_security.openid.client_id: \"%s\"\n", spec.ClientID)
 
 	// Client secret from resolved secrets
 	if secret, ok := b.resolvedSecrets["oidc_client_secret"]; ok && secret != "" {
-		sb.WriteString(fmt.Sprintf("opensearch_security.openid.client_secret: \"%s\"\n", secret))
+		fmt.Fprintf(&sb, "opensearch_security.openid.client_secret: \"%s\"\n", secret)
 	}
 
 	// Scope
 	if spec.Scope != "" {
-		sb.WriteString(fmt.Sprintf("opensearch_security.openid.scope: \"%s\"\n", spec.Scope))
+		fmt.Fprintf(&sb, "opensearch_security.openid.scope: \"%s\"\n", spec.Scope)
 	}
 
 	// Logout URL
 	if spec.LogoutURL != "" {
-		sb.WriteString(fmt.Sprintf("opensearch_security.openid.logout_url: \"%s\"\n", spec.LogoutURL))
+		fmt.Fprintf(&sb, "opensearch_security.openid.logout_url: \"%s\"\n", spec.LogoutURL)
 	}
 
 	// Dashboard-specific OIDC settings
 	if spec.Dashboard != nil {
 		if spec.Dashboard.RootURL != "" {
-			sb.WriteString(fmt.Sprintf("opensearch_security.openid.root_url: \"%s\"\n", spec.Dashboard.RootURL))
+			fmt.Fprintf(&sb, "opensearch_security.openid.root_url: \"%s\"\n", spec.Dashboard.RootURL)
 		}
 
 		if spec.Dashboard.LoginEndpoint != "" {
-			sb.WriteString(fmt.Sprintf("opensearch_security.openid.login_endpoint: \"%s\"\n", spec.Dashboard.LoginEndpoint))
+			fmt.Fprintf(&sb, "opensearch_security.openid.login_endpoint: \"%s\"\n", spec.Dashboard.LoginEndpoint)
 		}
 
 		if spec.Dashboard.LogoutEndpoint != "" {
-			sb.WriteString(fmt.Sprintf("opensearch_security.openid.logout_endpoint: \"%s\"\n", spec.Dashboard.LogoutEndpoint))
+			fmt.Fprintf(&sb, "opensearch_security.openid.logout_endpoint: \"%s\"\n", spec.Dashboard.LogoutEndpoint)
 		}
 
 		// Cookie settings
 		if spec.Dashboard.CookiePrefix != "" {
-			sb.WriteString(fmt.Sprintf("opensearch_security.cookie.prefix: \"%s\"\n", spec.Dashboard.CookiePrefix))
+			fmt.Fprintf(&sb, "opensearch_security.cookie.prefix: \"%s\"\n", spec.Dashboard.CookiePrefix)
 		}
 
 		// Cookie password - auto-generate if not provided
 		if secret, ok := b.resolvedSecrets["oidc_cookie_password"]; ok && secret != "" {
-			sb.WriteString(fmt.Sprintf("opensearch_security.openid.cookie.password: \"%s\"\n", secret))
+			fmt.Fprintf(&sb, "opensearch_security.openid.cookie.password: \"%s\"\n", secret)
 		} else {
 			// Generate a random cookie password
 			cookiePassword, err := utils.GenerateRandomPassword(32)
 			if err != nil {
 				return "", fmt.Errorf("failed to generate OIDC cookie password: %w", err)
 			}
-			sb.WriteString(fmt.Sprintf("opensearch_security.openid.cookie.password: \"%s\"\n", cookiePassword))
+			fmt.Fprintf(&sb, "opensearch_security.openid.cookie.password: \"%s\"\n", cookiePassword)
 		}
 
 		// Additional cookies
 		if len(spec.Dashboard.AdditionalCookies) > 0 {
 			sb.WriteString("opensearch_security.openid.extra_storage.cookie_prefix: security_authentication_oidc\n")
-			sb.WriteString(fmt.Sprintf("opensearch_security.openid.extra_storage.additional_cookies: %d\n", len(spec.Dashboard.AdditionalCookies)))
+			fmt.Fprintf(&sb, "opensearch_security.openid.extra_storage.additional_cookies: %d\n", len(spec.Dashboard.AdditionalCookies))
 		}
 	}
 
@@ -236,21 +236,21 @@ func (b *DashboardAuthConfigBuilder) buildSAMLDashboardConfig() string {
 
 	// Exchange key for signing SAML messages
 	if secret, ok := b.resolvedSecrets["saml_exchange_key"]; ok && secret != "" {
-		sb.WriteString(fmt.Sprintf("opensearch_security.saml.exchange_key: \"%s\"\n", secret))
+		fmt.Fprintf(&sb, "opensearch_security.saml.exchange_key: \"%s\"\n", secret)
 	}
 
 	// Dashboard-specific SAML settings
 	if spec.Dashboard != nil {
 		// Authn context
 		if spec.Dashboard.RequestedAuthnContextRef != "" {
-			sb.WriteString(fmt.Sprintf("opensearch_security.saml.requestedAuthnContextRef: \"%s\"\n", spec.Dashboard.RequestedAuthnContextRef))
+			fmt.Fprintf(&sb, "opensearch_security.saml.requestedAuthnContextRef: \"%s\"\n", spec.Dashboard.RequestedAuthnContextRef)
 		}
 
 		// XSRF allowlist for SAML ACS endpoint
 		if len(spec.Dashboard.XSRFAllowlist) > 0 {
 			sb.WriteString("server.xsrf.allowlist:\n")
 			for _, path := range spec.Dashboard.XSRFAllowlist {
-				sb.WriteString(fmt.Sprintf("  - \"%s\"\n", path))
+				fmt.Fprintf(&sb, "  - \"%s\"\n", path)
 			}
 		} else {
 			// Default SAML ACS endpoint
@@ -316,7 +316,7 @@ func (b *DashboardAuthConfigBuilder) buildMultiAuthConfig() string {
 		for i, m := range methods {
 			types[i] = fmt.Sprintf("\"%s\"", m.name)
 		}
-		sb.WriteString(fmt.Sprintf("opensearch_security.auth.type: [%s]\n", strings.Join(types, ", ")))
+		fmt.Fprintf(&sb, "opensearch_security.auth.type: [%s]\n", strings.Join(types, ", "))
 	}
 
 	// Anonymous auth disable

@@ -155,8 +155,8 @@ func (c *InternalUsersConfig) Build() string {
 	sb.WriteString("  config_version: 2\n\n")
 
 	for _, user := range c.Users {
-		sb.WriteString(fmt.Sprintf("%s:\n", user.Username))
-		sb.WriteString(fmt.Sprintf("  hash: \"%s\"\n", user.Hash))
+		fmt.Fprintf(&sb, "%s:\n", user.Username)
+		fmt.Fprintf(&sb, "  hash: \"%s\"\n", user.Hash)
 
 		if user.Reserved {
 			sb.WriteString("  reserved: true\n")
@@ -169,18 +169,18 @@ func (c *InternalUsersConfig) Build() string {
 		if len(user.BackendRoles) > 0 {
 			sb.WriteString("  backend_roles:\n")
 			for _, role := range user.BackendRoles {
-				sb.WriteString(fmt.Sprintf("    - \"%s\"\n", role))
+				fmt.Fprintf(&sb, "    - \"%s\"\n", role)
 			}
 		}
 
 		if user.Description != "" {
-			sb.WriteString(fmt.Sprintf("  description: \"%s\"\n", user.Description))
+			fmt.Fprintf(&sb, "  description: \"%s\"\n", user.Description)
 		}
 
 		if len(user.Attributes) > 0 {
 			sb.WriteString("  attributes:\n")
 			for k, v := range user.Attributes {
-				sb.WriteString(fmt.Sprintf("    %s: \"%s\"\n", k, v))
+				fmt.Fprintf(&sb, "    %s: \"%s\"\n", k, v)
 			}
 		}
 

@@ -150,18 +150,18 @@ func (b *AuthConfigBuilder) buildAuthzDomains() []AuthDomainConfig {
 func (b *AuthConfigBuilder) formatAuthDomain(domain AuthDomainConfig) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("      %s:\n", domain.Name))
+	fmt.Fprintf(&sb, "      %s:\n", domain.Name)
 	if domain.Description != "" {
-		sb.WriteString(fmt.Sprintf("        description: \"%s\"\n", domain.Description))
+		fmt.Fprintf(&sb, "        description: \"%s\"\n", domain.Description)
 	}
-	sb.WriteString(fmt.Sprintf("        http_enabled: %t\n", domain.HTTPEnabled))
-	sb.WriteString(fmt.Sprintf("        transport_enabled: %t\n", domain.TransportEnabled))
-	sb.WriteString(fmt.Sprintf("        order: %d\n", domain.Order))
+	fmt.Fprintf(&sb, "        http_enabled: %t\n", domain.HTTPEnabled)
+	fmt.Fprintf(&sb, "        transport_enabled: %t\n", domain.TransportEnabled)
+	fmt.Fprintf(&sb, "        order: %d\n", domain.Order)
 
 	// HTTP authenticator
 	sb.WriteString("        http_authenticator:\n")
-	sb.WriteString(fmt.Sprintf("          type: \"%s\"\n", domain.AuthenticatorType))
-	sb.WriteString(fmt.Sprintf("          challenge: %t\n", domain.Challenge))
+	fmt.Fprintf(&sb, "          type: \"%s\"\n", domain.AuthenticatorType)
+	fmt.Fprintf(&sb, "          challenge: %t\n", domain.Challenge)
 
 	// Authenticator config if present
 	if len(domain.AuthenticatorConfig) > 0 {
@@ -171,7 +171,7 @@ func (b *AuthConfigBuilder) formatAuthDomain(domain AuthDomainConfig) string {
 
 	// Authentication backend
 	sb.WriteString("        authentication_backend:\n")
-	sb.WriteString(fmt.Sprintf("          type: \"%s\"\n", domain.BackendType))
+	fmt.Fprintf(&sb, "          type: \"%s\"\n", domain.BackendType)
 
 	// Backend config if present
 	if len(domain.BackendConfig) > 0 {
@@ -186,15 +186,15 @@ func (b *AuthConfigBuilder) formatAuthDomain(domain AuthDomainConfig) string {
 func (b *AuthConfigBuilder) formatAuthzDomain(domain AuthDomainConfig) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("      %s:\n", domain.Name))
+	fmt.Fprintf(&sb, "      %s:\n", domain.Name)
 	if domain.Description != "" {
-		sb.WriteString(fmt.Sprintf("        description: \"%s\"\n", domain.Description))
+		fmt.Fprintf(&sb, "        description: \"%s\"\n", domain.Description)
 	}
-	sb.WriteString(fmt.Sprintf("        http_enabled: %t\n", domain.HTTPEnabled))
+	fmt.Fprintf(&sb, "        http_enabled: %t\n", domain.HTTPEnabled)
 
 	// Authorization backend
 	sb.WriteString("        authorization_backend:\n")
-	sb.WriteString(fmt.Sprintf("          type: \"%s\"\n", domain.BackendType))
+	fmt.Fprintf(&sb, "          type: \"%s\"\n", domain.BackendType)
 
 	if len(domain.BackendConfig) > 0 {
 		sb.WriteString("          config:\n")
@@ -257,24 +257,24 @@ func formatConfigMap(config map[string]any, indent int) string {
 		switch v := value.(type) {
 		case string:
 			if strings.Contains(v, "\n") || strings.Contains(v, ":") || strings.Contains(v, "#") {
-				sb.WriteString(fmt.Sprintf("%s%s: \"%s\"\n", prefix, key, v))
+				fmt.Fprintf(&sb, "%s%s: \"%s\"\n", prefix, key, v)
 			} else {
-				sb.WriteString(fmt.Sprintf("%s%s: %s\n", prefix, key, v))
+				fmt.Fprintf(&sb, "%s%s: %s\n", prefix, key, v)
 			}
 		case bool:
-			sb.WriteString(fmt.Sprintf("%s%s: %t\n", prefix, key, v))
+			fmt.Fprintf(&sb, "%s%s: %t\n", prefix, key, v)
 		case int:
-			sb.WriteString(fmt.Sprintf("%s%s: %d\n", prefix, key, v))
+			fmt.Fprintf(&sb, "%s%s: %d\n", prefix, key, v)
 		case []string:
-			sb.WriteString(fmt.Sprintf("%s%s:\n", prefix, key))
+			fmt.Fprintf(&sb, "%s%s:\n", prefix, key)
 			for _, item := range v {
-				sb.WriteString(fmt.Sprintf("%s  - \"%s\"\n", prefix, item))
+				fmt.Fprintf(&sb, "%s  - \"%s\"\n", prefix, item)
 			}
 		case map[string]any:
-			sb.WriteString(fmt.Sprintf("%s%s:\n", prefix, key))
+			fmt.Fprintf(&sb, "%s%s:\n", prefix, key)
 			sb.WriteString(formatConfigMap(v, indent+2))
 		default:
-			sb.WriteString(fmt.Sprintf("%s%s: %v\n", prefix, key, v))
+			fmt.Fprintf(&sb, "%s%s: %v\n", prefix, key, v)
 		}
 	}
 

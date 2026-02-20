@@ -327,21 +327,21 @@ func (b *DashboardConfigMapBuilder) buildWazuhConfig() string {
 				password = endpoint.Password
 			}
 
-			sb.WriteString(fmt.Sprintf("  - %s:\n", endpoint.ID))
-			sb.WriteString(fmt.Sprintf("      url: %s\n", endpoint.URL))
-			sb.WriteString(fmt.Sprintf("      port: %d\n", port))
-			sb.WriteString(fmt.Sprintf("      username: %s\n", username))
-			sb.WriteString(fmt.Sprintf("      password: %s\n", password))
-			sb.WriteString(fmt.Sprintf("      run_as: %v\n", endpoint.RunAs))
+			fmt.Fprintf(&sb, "  - %s:\n", endpoint.ID)
+			fmt.Fprintf(&sb, "      url: %s\n", endpoint.URL)
+			fmt.Fprintf(&sb, "      port: %d\n", port)
+			fmt.Fprintf(&sb, "      username: %s\n", username)
+			fmt.Fprintf(&sb, "      password: %s\n", password)
+			fmt.Fprintf(&sb, "      run_as: %v\n", endpoint.RunAs)
 		}
 	} else {
 		// Default host configuration
 		// Use defaultApiEndpoint if configured, otherwise use hardcoded defaults
 		sb.WriteString("  - default:\n")
 		if b.managerAPIURL != "" {
-			sb.WriteString(fmt.Sprintf("      url: %s\n", b.managerAPIURL))
+			fmt.Fprintf(&sb, "      url: %s\n", b.managerAPIURL)
 		} else {
-			sb.WriteString(fmt.Sprintf("      url: https://%s\n", dns.ServiceFQDN(b.clusterName+"-manager-master", b.namespace)))
+			fmt.Fprintf(&sb, "      url: https://%s\n", dns.ServiceFQDN(b.clusterName+"-manager-master", b.namespace))
 		}
 
 		// Port configuration
@@ -353,7 +353,7 @@ func (b *DashboardConfigMapBuilder) buildWazuhConfig() string {
 			}
 			runAs = b.wazuhPlugin.DefaultAPIEndpoint.RunAs
 		}
-		sb.WriteString(fmt.Sprintf("      port: %d\n", port))
+		fmt.Fprintf(&sb, "      port: %d\n", port)
 
 		// Credentials: try resolved from secret - password MUST be provided
 		username := constants.DefaultWazuhAPIUsername
@@ -366,9 +366,9 @@ func (b *DashboardConfigMapBuilder) buildWazuhConfig() string {
 				password = resolvedPwd
 			}
 		}
-		sb.WriteString(fmt.Sprintf("      username: %s\n", username))
-		sb.WriteString(fmt.Sprintf("      password: %s\n", password))
-		sb.WriteString(fmt.Sprintf("      run_as: %v\n", runAs))
+		fmt.Fprintf(&sb, "      username: %s\n", username)
+		fmt.Fprintf(&sb, "      password: %s\n", password)
+		fmt.Fprintf(&sb, "      run_as: %v\n", runAs)
 	}
 
 	// Add additional settings if wazuhPlugin is configured
@@ -377,103 +377,103 @@ func (b *DashboardConfigMapBuilder) buildWazuhConfig() string {
 
 		// Pattern
 		if b.wazuhPlugin.Pattern != "" {
-			sb.WriteString(fmt.Sprintf("pattern: %s\n", b.wazuhPlugin.Pattern))
+			fmt.Fprintf(&sb, "pattern: %s\n", b.wazuhPlugin.Pattern)
 		}
 
 		// Timeout
 		if b.wazuhPlugin.Timeout > 0 {
-			sb.WriteString(fmt.Sprintf("timeout: %d\n", b.wazuhPlugin.Timeout))
+			fmt.Fprintf(&sb, "timeout: %d\n", b.wazuhPlugin.Timeout)
 		}
 
 		// IP Selector
-		sb.WriteString(fmt.Sprintf("ip.selector: %v\n", b.wazuhPlugin.IPSelector))
+		fmt.Fprintf(&sb, "ip.selector: %v\n", b.wazuhPlugin.IPSelector)
 
 		// IP Ignore
 		if len(b.wazuhPlugin.IPIgnore) > 0 {
 			sb.WriteString("ip.ignore:\n")
 			for _, ignore := range b.wazuhPlugin.IPIgnore {
-				sb.WriteString(fmt.Sprintf("  - %s\n", ignore))
+				fmt.Fprintf(&sb, "  - %s\n", ignore)
 			}
 		}
 
 		// Hide Manager Alerts
-		sb.WriteString(fmt.Sprintf("hideManagerAlerts: %v\n", b.wazuhPlugin.HideManagerAlerts))
+		fmt.Fprintf(&sb, "hideManagerAlerts: %v\n", b.wazuhPlugin.HideManagerAlerts)
 
 		// Alerts Sample Prefix
 		if b.wazuhPlugin.AlertsSamplePrefix != "" {
-			sb.WriteString(fmt.Sprintf("alerts.sample.prefix: %s\n", b.wazuhPlugin.AlertsSamplePrefix))
+			fmt.Fprintf(&sb, "alerts.sample.prefix: %s\n", b.wazuhPlugin.AlertsSamplePrefix)
 		}
 
 		// Enrollment DNS
 		if b.wazuhPlugin.EnrollmentDNS != "" {
-			sb.WriteString(fmt.Sprintf("enrollment.dns: %s\n", b.wazuhPlugin.EnrollmentDNS))
+			fmt.Fprintf(&sb, "enrollment.dns: %s\n", b.wazuhPlugin.EnrollmentDNS)
 		}
 
 		// Enrollment Password
 		if b.wazuhPlugin.EnrollmentPassword != "" {
-			sb.WriteString(fmt.Sprintf("enrollment.password: %s\n", b.wazuhPlugin.EnrollmentPassword))
+			fmt.Fprintf(&sb, "enrollment.password: %s\n", b.wazuhPlugin.EnrollmentPassword)
 		}
 
 		// Cron Prefix
 		if b.wazuhPlugin.CronPrefix != "" {
-			sb.WriteString(fmt.Sprintf("cron.prefix: %s\n", b.wazuhPlugin.CronPrefix))
+			fmt.Fprintf(&sb, "cron.prefix: %s\n", b.wazuhPlugin.CronPrefix)
 		}
 
 		// Updates Disabled
-		sb.WriteString(fmt.Sprintf("wazuh.updates.disabled: %v\n", b.wazuhPlugin.UpdatesDisabled))
+		fmt.Fprintf(&sb, "wazuh.updates.disabled: %v\n", b.wazuhPlugin.UpdatesDisabled)
 
 		// Monitoring configuration
 		if b.wazuhPlugin.Monitoring != nil {
-			sb.WriteString(fmt.Sprintf("wazuh.monitoring.enabled: %v\n", b.wazuhPlugin.Monitoring.Enabled))
+			fmt.Fprintf(&sb, "wazuh.monitoring.enabled: %v\n", b.wazuhPlugin.Monitoring.Enabled)
 			if b.wazuhPlugin.Monitoring.Frequency > 0 {
-				sb.WriteString(fmt.Sprintf("wazuh.monitoring.frequency: %d\n", b.wazuhPlugin.Monitoring.Frequency))
+				fmt.Fprintf(&sb, "wazuh.monitoring.frequency: %d\n", b.wazuhPlugin.Monitoring.Frequency)
 			}
 			if b.wazuhPlugin.Monitoring.Pattern != "" {
-				sb.WriteString(fmt.Sprintf("wazuh.monitoring.pattern: %s\n", b.wazuhPlugin.Monitoring.Pattern))
+				fmt.Fprintf(&sb, "wazuh.monitoring.pattern: %s\n", b.wazuhPlugin.Monitoring.Pattern)
 			}
 			if b.wazuhPlugin.Monitoring.Creation != "" {
-				sb.WriteString(fmt.Sprintf("wazuh.monitoring.creation: %s\n", b.wazuhPlugin.Monitoring.Creation))
+				fmt.Fprintf(&sb, "wazuh.monitoring.creation: %s\n", b.wazuhPlugin.Monitoring.Creation)
 			}
 			if b.wazuhPlugin.Monitoring.Shards > 0 {
-				sb.WriteString(fmt.Sprintf("wazuh.monitoring.shards: %d\n", b.wazuhPlugin.Monitoring.Shards))
+				fmt.Fprintf(&sb, "wazuh.monitoring.shards: %d\n", b.wazuhPlugin.Monitoring.Shards)
 			}
-			sb.WriteString(fmt.Sprintf("wazuh.monitoring.replicas: %d\n", b.wazuhPlugin.Monitoring.Replicas))
+			fmt.Fprintf(&sb, "wazuh.monitoring.replicas: %d\n", b.wazuhPlugin.Monitoring.Replicas)
 		}
 
 		// Checks configuration
 		if b.wazuhPlugin.Checks != nil {
-			sb.WriteString(fmt.Sprintf("checks.pattern: %v\n", b.wazuhPlugin.Checks.Pattern))
-			sb.WriteString(fmt.Sprintf("checks.template: %v\n", b.wazuhPlugin.Checks.Template))
-			sb.WriteString(fmt.Sprintf("checks.api: %v\n", b.wazuhPlugin.Checks.API))
-			sb.WriteString(fmt.Sprintf("checks.setup: %v\n", b.wazuhPlugin.Checks.Setup))
-			sb.WriteString(fmt.Sprintf("checks.fields: %v\n", b.wazuhPlugin.Checks.Fields))
-			sb.WriteString(fmt.Sprintf("checks.metaFields: %v\n", b.wazuhPlugin.Checks.MetaFields))
-			sb.WriteString(fmt.Sprintf("checks.timeFilter: %v\n", b.wazuhPlugin.Checks.TimeFilter))
-			sb.WriteString(fmt.Sprintf("checks.maxBuckets: %v\n", b.wazuhPlugin.Checks.MaxBuckets))
+			fmt.Fprintf(&sb, "checks.pattern: %v\n", b.wazuhPlugin.Checks.Pattern)
+			fmt.Fprintf(&sb, "checks.template: %v\n", b.wazuhPlugin.Checks.Template)
+			fmt.Fprintf(&sb, "checks.api: %v\n", b.wazuhPlugin.Checks.API)
+			fmt.Fprintf(&sb, "checks.setup: %v\n", b.wazuhPlugin.Checks.Setup)
+			fmt.Fprintf(&sb, "checks.fields: %v\n", b.wazuhPlugin.Checks.Fields)
+			fmt.Fprintf(&sb, "checks.metaFields: %v\n", b.wazuhPlugin.Checks.MetaFields)
+			fmt.Fprintf(&sb, "checks.timeFilter: %v\n", b.wazuhPlugin.Checks.TimeFilter)
+			fmt.Fprintf(&sb, "checks.maxBuckets: %v\n", b.wazuhPlugin.Checks.MaxBuckets)
 		}
 
 		// Cron Statistics configuration
 		if b.wazuhPlugin.CronStatistics != nil {
-			sb.WriteString(fmt.Sprintf("cron.statistics.status: %v\n", b.wazuhPlugin.CronStatistics.Status))
+			fmt.Fprintf(&sb, "cron.statistics.status: %v\n", b.wazuhPlugin.CronStatistics.Status)
 			if len(b.wazuhPlugin.CronStatistics.APIs) > 0 {
 				sb.WriteString("cron.statistics.apis:\n")
 				for _, api := range b.wazuhPlugin.CronStatistics.APIs {
-					sb.WriteString(fmt.Sprintf("  - %s\n", api))
+					fmt.Fprintf(&sb, "  - %s\n", api)
 				}
 			}
 			if b.wazuhPlugin.CronStatistics.Interval != "" {
-				sb.WriteString(fmt.Sprintf("cron.statistics.interval: %s\n", b.wazuhPlugin.CronStatistics.Interval))
+				fmt.Fprintf(&sb, "cron.statistics.interval: %s\n", b.wazuhPlugin.CronStatistics.Interval)
 			}
 			if b.wazuhPlugin.CronStatistics.IndexName != "" {
-				sb.WriteString(fmt.Sprintf("cron.statistics.index.name: %s\n", b.wazuhPlugin.CronStatistics.IndexName))
+				fmt.Fprintf(&sb, "cron.statistics.index.name: %s\n", b.wazuhPlugin.CronStatistics.IndexName)
 			}
 			if b.wazuhPlugin.CronStatistics.IndexCreation != "" {
-				sb.WriteString(fmt.Sprintf("cron.statistics.index.creation: %s\n", b.wazuhPlugin.CronStatistics.IndexCreation))
+				fmt.Fprintf(&sb, "cron.statistics.index.creation: %s\n", b.wazuhPlugin.CronStatistics.IndexCreation)
 			}
 			if b.wazuhPlugin.CronStatistics.Shards > 0 {
-				sb.WriteString(fmt.Sprintf("cron.statistics.shards: %d\n", b.wazuhPlugin.CronStatistics.Shards))
+				fmt.Fprintf(&sb, "cron.statistics.shards: %d\n", b.wazuhPlugin.CronStatistics.Shards)
 			}
-			sb.WriteString(fmt.Sprintf("cron.statistics.index.replicas: %d\n", b.wazuhPlugin.CronStatistics.Replicas))
+			fmt.Fprintf(&sb, "cron.statistics.index.replicas: %d\n", b.wazuhPlugin.CronStatistics.Replicas)
 		}
 	}
 
