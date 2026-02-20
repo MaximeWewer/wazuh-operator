@@ -439,8 +439,33 @@ func (b *OSSECConfigBuilder) SetAuthdPassword(password string) *OSSECConfigBuild
 	return b
 }
 
-// BuildMasterConfig builds ossec.conf for a master node
+// BuildMasterConfig builds ossec.conf for a master node using default config values
 func BuildMasterConfig(clusterName, namespace, nodeName, clusterKey, extraConfig string) (string, error) {
+	return BuildMasterConfigWithConfig(clusterName, namespace, nodeName, clusterKey, extraConfig,
+		DefaultGlobalConfig(), DefaultAlertsConfig(), DefaultLoggingConfig(), DefaultRemoteConfig(), DefaultAuthConfig(), "",
+	)
+}
+
+// BuildMasterConfigWithConfig builds ossec.conf for a master node using provided config values
+func BuildMasterConfigWithConfig(clusterName, namespace, nodeName, clusterKey, extraConfig string,
+	global *GlobalConfig, alerts *AlertsConfig, logging *LoggingConfig, remote *RemoteConfig, auth *AuthConfig, authdPassword string,
+) (string, error) {
+	if global == nil {
+		global = DefaultGlobalConfig()
+	}
+	if alerts == nil {
+		alerts = DefaultAlertsConfig()
+	}
+	if logging == nil {
+		logging = DefaultLoggingConfig()
+	}
+	if remote == nil {
+		remote = DefaultRemoteConfig()
+	}
+	if auth == nil {
+		auth = DefaultAuthConfig()
+	}
+
 	config := &OSSECConfig{
 		NodeType:          NodeTypeMaster,
 		NodeName:          nodeName,
@@ -455,18 +480,45 @@ func BuildMasterConfig(clusterName, namespace, nodeName, clusterKey, extraConfig
 		ExtraConfig:       extraConfig,
 		IndexerHost:       fmt.Sprintf("%s-indexer", clusterName),
 		Namespace:         namespace,
-		Global:            DefaultGlobalConfig(),
-		Alerts:            DefaultAlertsConfig(),
-		Logging:           DefaultLoggingConfig(),
-		Remote:            DefaultRemoteConfig(),
-		Auth:              DefaultAuthConfig(),
+		Global:            global,
+		Alerts:            alerts,
+		Logging:           logging,
+		Remote:            remote,
+		Auth:              auth,
+		AuthdPassword:     authdPassword,
 	}
 	return NewOSSECConfigBuilder(config).Build()
 }
 
-// BuildWorkerConfig builds ossec.conf for a worker node
+// BuildWorkerConfig builds ossec.conf for a worker node using default config values
 // The master service name is computed from clusterName as "<clusterName>-manager-master"
 func BuildWorkerConfig(clusterName, namespace, nodeName, clusterKey string, masterPort int, extraConfig string) (string, error) {
+	return BuildWorkerConfigWithConfig(clusterName, namespace, nodeName, clusterKey, masterPort, extraConfig,
+		DefaultGlobalConfig(), DefaultAlertsConfig(), DefaultLoggingConfig(), DefaultRemoteConfig(), DefaultAuthConfig(), "",
+	)
+}
+
+// BuildWorkerConfigWithConfig builds ossec.conf for a worker node using provided config values
+// The master service name is computed from clusterName as "<clusterName>-manager-master"
+func BuildWorkerConfigWithConfig(clusterName, namespace, nodeName, clusterKey string, masterPort int, extraConfig string,
+	global *GlobalConfig, alerts *AlertsConfig, logging *LoggingConfig, remote *RemoteConfig, auth *AuthConfig, authdPassword string,
+) (string, error) {
+	if global == nil {
+		global = DefaultGlobalConfig()
+	}
+	if alerts == nil {
+		alerts = DefaultAlertsConfig()
+	}
+	if logging == nil {
+		logging = DefaultLoggingConfig()
+	}
+	if remote == nil {
+		remote = DefaultRemoteConfig()
+	}
+	if auth == nil {
+		auth = DefaultAuthConfig()
+	}
+
 	config := &OSSECConfig{
 		NodeType:          NodeTypeWorker,
 		NodeName:          nodeName,
@@ -482,11 +534,12 @@ func BuildWorkerConfig(clusterName, namespace, nodeName, clusterKey string, mast
 		ExtraConfig:       extraConfig,
 		IndexerHost:       fmt.Sprintf("%s-indexer", clusterName),
 		Namespace:         namespace,
-		Global:            DefaultGlobalConfig(),
-		Alerts:            DefaultAlertsConfig(),
-		Logging:           DefaultLoggingConfig(),
-		Remote:            DefaultRemoteConfig(),
-		Auth:              DefaultAuthConfig(),
+		Global:            global,
+		Alerts:            alerts,
+		Logging:           logging,
+		Remote:            remote,
+		Auth:              auth,
+		AuthdPassword:     authdPassword,
 	}
 	return NewOSSECConfigBuilder(config).Build()
 }

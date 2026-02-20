@@ -420,7 +420,24 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "master")
 
-	ossecConf, err := config.BuildMasterConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-master", "", extraConfig)
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, err := r.resolveManagerConfig(ctx, cluster)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve manager config: %w", err)
+	}
+
+	ossecConf, err := config.BuildMasterConfigWithConfig(
+		cluster.Name,
+		cluster.Namespace,
+		cluster.Name+"-manager-master",
+		"",
+		extraConfig,
+		globalCfg,
+		alertsCfg,
+		loggingCfg,
+		remoteCfg,
+		authCfg,
+		authdPassword,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build ossec.conf: %w", err)
 	}
@@ -870,7 +887,25 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "worker")
 
 	// Build ossec.conf for workers - master service name is computed from cluster name
-	ossecConf, err := config.BuildWorkerConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-worker", "", int(constants.PortManagerCluster), extraConfig)
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, err := r.resolveManagerConfig(ctx, cluster)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve manager config: %w", err)
+	}
+
+	ossecConf, err := config.BuildWorkerConfigWithConfig(
+		cluster.Name,
+		cluster.Namespace,
+		cluster.Name+"-manager-worker",
+		"",
+		int(constants.PortManagerCluster),
+		extraConfig,
+		globalCfg,
+		alertsCfg,
+		loggingCfg,
+		remoteCfg,
+		authCfg,
+		authdPassword,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build worker ossec.conf: %w", err)
 	}
@@ -1369,7 +1404,23 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "master")
 
 	// Generate ossec.conf
-	ossecConf, err := config.BuildMasterConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-master", "", extraConfig)
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, err := r.resolveManagerConfig(ctx, cluster)
+	if err != nil {
+		return fmt.Errorf("failed to resolve manager config: %w", err)
+	}
+	ossecConf, err := config.BuildMasterConfigWithConfig(
+		cluster.Name,
+		cluster.Namespace,
+		cluster.Name+"-manager-master",
+		"",
+		extraConfig,
+		globalCfg,
+		alertsCfg,
+		loggingCfg,
+		remoteCfg,
+		authCfg,
+		authdPassword,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to build ossec.conf: %w", err)
 	}
@@ -1676,7 +1727,24 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "worker")
 
 	// Build ossec.conf for workers - master service name is computed from cluster name
-	ossecConf, err := config.BuildWorkerConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-worker", "", int(constants.PortManagerCluster), extraConfig)
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, err := r.resolveManagerConfig(ctx, cluster)
+	if err != nil {
+		return fmt.Errorf("failed to resolve manager config: %w", err)
+	}
+	ossecConf, err := config.BuildWorkerConfigWithConfig(
+		cluster.Name,
+		cluster.Namespace,
+		cluster.Name+"-manager-worker",
+		"",
+		int(constants.PortManagerCluster),
+		extraConfig,
+		globalCfg,
+		alertsCfg,
+		loggingCfg,
+		remoteCfg,
+		authCfg,
+		authdPassword,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to build worker ossec.conf: %w", err)
 	}
@@ -2096,6 +2164,29 @@ func (r *ClusterReconciler) resolveSecretKey(ctx context.Context, namespace, sec
 		return "", fmt.Errorf("key %s not found in secret %s", key, secretName)
 	}
 	return string(value), nil
+}
+
+func (r *ClusterReconciler) resolveManagerConfig(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*config.GlobalConfig, *config.AlertsConfig, *config.LoggingConfig, *config.RemoteConfig, *config.AuthConfig, string, error) {
+	log := logf.FromContext(ctx)
+
+	var spec *wazuhv1.WazuhConfigSpec
+	if cluster.Spec.Manager != nil {
+		spec = cluster.Spec.Manager.Config
+	}
+
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg := config.WazuhConfigFromSpec(spec)
+
+	authdPassword := ""
+	if authCfg.UsePassword && authCfg.PasswordSecretRef != nil {
+		password, err := r.resolveSecretKey(ctx, cluster.Namespace, authCfg.PasswordSecretRef.Name, authCfg.PasswordSecretRef.Key)
+		if err != nil {
+			log.Error(err, "Failed to resolve authd password from secret", "secret", authCfg.PasswordSecretRef.Name)
+		} else {
+			authdPassword = password
+		}
+	}
+
+	return globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, nil
 }
 
 // ensureClusterKeySecret ensures the cluster key secret exists

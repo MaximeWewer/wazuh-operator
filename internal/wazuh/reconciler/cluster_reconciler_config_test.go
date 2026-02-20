@@ -1,0 +1,93 @@
+/*
+Copyright 2026.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package reconciler
+
+import (
+	"context"
+	"strings"
+	"testing"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/config"
+)
+
+func TestResolveManagerConfig_PropagatesGlobalConfig(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = wazuhv1.AddToScheme(scheme)
+
+	cluster := &wazuhv1.WazuhCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "default",
+		},
+		Spec: wazuhv1.WazuhClusterSpec{
+			Version: "4.14.2",
+			Manager: &wazuhv1.WazuhManagerClusterSpec{
+				Config: &wazuhv1.WazuhConfigSpec{
+					Global: &wazuhv1.OSSECGlobalSpec{
+						LogAll:     boolPtr(true),
+						LogAllJSON: boolPtr(true),
+					},
+				},
+			},
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cluster).
+		Build()
+
+	reconciler := NewClusterReconciler(client, scheme)
+
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, err := reconciler.resolveManagerConfig(context.Background(), cluster)
+	if err != nil {
+		t.Fatalf("resolveManagerConfig failed: %v", err)
+	}
+
+	ossecConf, err := config.BuildMasterConfigWithConfig(
+		cluster.Name,
+		cluster.Namespace,
+		cluster.Name+"-manager-master",
+		"",
+		"",
+		globalCfg,
+		alertsCfg,
+		loggingCfg,
+		remoteCfg,
+		authCfg,
+		authdPassword,
+	)
+	if err != nil {
+		t.Fatalf("BuildMasterConfigWithConfig failed: %v", err)
+	}
+
+	if !strings.Contains(ossecConf, "<logall>yes</logall>") {
+		t.Fatalf("expected logall to be enabled in ossec.conf, got: %s", ossecConf)
+	}
+	if !strings.Contains(ossecConf, "<logall_json>yes</logall_json>") {
+		t.Fatalf("expected logall_json to be enabled in ossec.conf, got: %s", ossecConf)
+	}
+}
+
+func boolPtr(v bool) *bool {
+	return &v
+}
