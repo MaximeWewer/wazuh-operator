@@ -22,9 +22,7 @@ import (
 	"fmt"
 	"sort"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -225,76 +223,3 @@ func (c *CredentialManager) ComputeCredentialsHash(ctx context.Context, cluster 
 	return fmt.Sprintf("%x", hash[:8]), nil // Use first 8 bytes for a shorter hash
 }
 
-// PropagateCredentials updates dashboard and manager with current credentials
-// This is done by updating an annotation to trigger rolling updates
-func (c *CredentialManager) PropagateCredentials(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
-	// Get current credentials hash
-	hash, err := c.ComputeCredentialsHash(ctx, cluster)
-	if err != nil {
-		return fmt.Errorf("failed to compute credentials hash: %w", err)
-	}
-
-	// Update dashboard deployment annotation
-	dashboardName := constants.DashboardName(cluster.Name)
-	if err := c.updateDeploymentAnnotation(ctx, cluster.Namespace, dashboardName, hash); err != nil {
-		return fmt.Errorf("failed to update dashboard annotation: %w", err)
-	}
-
-	// Update manager StatefulSet annotation (master)
-	masterName := constants.ManagerMasterName(cluster.Name)
-	if err := c.updateStatefulSetAnnotation(ctx, cluster.Namespace, masterName, hash); err != nil {
-		return fmt.Errorf("failed to update manager-master annotation: %w", err)
-	}
-
-	// Update manager StatefulSet annotation (workers)
-	workersName := constants.ManagerWorkersName(cluster.Name)
-	if err := c.updateStatefulSetAnnotation(ctx, cluster.Namespace, workersName, hash); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("failed to update manager-workers annotation: %w", err)
-		}
-		// Worker StatefulSet might not exist, ignore not-found
-	}
-
-	return nil
-}
-
-// updateDeploymentAnnotation updates the credentials hash annotation on a deployment's
-// pod template to trigger a rolling restart when credentials change.
-func (c *CredentialManager) updateDeploymentAnnotation(ctx context.Context, namespace, name, hash string) error {
-	key := types.NamespacedName{Name: name, Namespace: namespace}
-
-	var deployment appsv1.Deployment
-	if err := c.k8sClient.Get(ctx, key, &deployment); err != nil {
-		return err
-	}
-
-	if deployment.Spec.Template.Annotations == nil {
-		deployment.Spec.Template.Annotations = make(map[string]string)
-	}
-	deployment.Spec.Template.Annotations[GetCredentialsHashAnnotationKey()] = hash
-
-	return c.k8sClient.Update(ctx, &deployment)
-}
-
-// updateStatefulSetAnnotation updates the credentials hash annotation on a statefulset's
-// pod template to trigger a rolling restart when credentials change.
-func (c *CredentialManager) updateStatefulSetAnnotation(ctx context.Context, namespace, name, hash string) error {
-	key := types.NamespacedName{Name: name, Namespace: namespace}
-
-	var sts appsv1.StatefulSet
-	if err := c.k8sClient.Get(ctx, key, &sts); err != nil {
-		return err
-	}
-
-	if sts.Spec.Template.Annotations == nil {
-		sts.Spec.Template.Annotations = make(map[string]string)
-	}
-	sts.Spec.Template.Annotations[GetCredentialsHashAnnotationKey()] = hash
-
-	return c.k8sClient.Update(ctx, &sts)
-}
-
-// GetCredentialsHashAnnotationKey returns the annotation key for credentials hash
-func GetCredentialsHashAnnotationKey() string {
-	return "wazuh.com/credentials-hash"
-}
