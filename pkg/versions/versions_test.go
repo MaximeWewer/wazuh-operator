@@ -117,14 +117,14 @@ func TestGetWazuhVersionInfo(t *testing.T) {
 		{
 			name:                  "Wazuh 4.14.1",
 			wazuhVersion:          "4.14.1",
-			wantOpenSearchVersion: "2.19.1",
-			wantPluginVersion:     "2.19.1.0",
+			wantOpenSearchVersion: "2.19.3",
+			wantPluginVersion:     "2.19.3.0",
 		},
 		{
 			name:                  "Wazuh with v prefix",
 			wazuhVersion:          "v4.14.1",
-			wantOpenSearchVersion: "2.19.1",
-			wantPluginVersion:     "2.19.1.0",
+			wantOpenSearchVersion: "2.19.3",
+			wantPluginVersion:     "2.19.3.0",
 		},
 		{
 			name:         "Unsupported version",
@@ -174,7 +174,7 @@ func TestGetOpenSearchVersionFromWazuh(t *testing.T) {
 		{
 			name:         "Wazuh 4.14.1",
 			wazuhVersion: "4.14.1",
-			want:         "2.19.1",
+			want:         "2.19.3",
 		},
 		{
 			name:         "Unsupported version",
@@ -212,7 +212,7 @@ func TestGetPrometheusExporterPluginVersion(t *testing.T) {
 		{
 			name:         "Wazuh 4.14.1",
 			wazuhVersion: "4.14.1",
-			want:         "2.19.1.0",
+			want:         "2.19.3.0",
 		},
 	}
 
@@ -236,7 +236,7 @@ func TestGetPrometheusExporterDownloadURL(t *testing.T) {
 		t.Fatalf("GetPrometheusExporterDownloadURL() error = %v", err)
 	}
 
-	expected := "https://github.com/opensearch-project/opensearch-prometheus-exporter/releases/download/2.19.1.0/prometheus-exporter-2.19.1.0.zip"
+	expected := "https://github.com/opensearch-project/opensearch-prometheus-exporter/releases/download/2.19.3.0/prometheus-exporter-2.19.3.0.zip"
 	if url != expected {
 		t.Errorf("GetPrometheusExporterDownloadURL() = %v, want %v", url, expected)
 	}
@@ -278,7 +278,7 @@ func TestWazuhToOpenSearchVersion(t *testing.T) {
 		{
 			name:         "Wazuh 4.14.1 exact match",
 			wazuhVersion: "4.14.1",
-			wantVersion:  "2.19.1",
+			wantVersion:  "2.19.3",
 		},
 		{
 			name:         "Wazuh 4.8.0 fallback",

@@ -65,7 +65,7 @@ func TestGetOpenSearchVersionForWazuh(t *testing.T) {
 		expected     string
 	}{
 		{"4.9.0", "2.13.0"},
-		{"4.14.1", "2.19.1"},
+		{"4.14.1", "2.19.3"},
 		{"invalid", GetDefaultOpenSearchVersion()}, // Should fallback to default
 	}
 
@@ -86,7 +86,7 @@ func TestGetPrometheusExporterPluginVersionForWazuh(t *testing.T) {
 		expected     string
 	}{
 		{"4.9.0", "2.13.0.0"},
-		{"4.14.1", "2.19.1.0"},
+		{"4.14.1", "2.19.3.0"},
 		{"invalid", GetDefaultPrometheusExporterPluginVersion()}, // Should fallback to default
 	}
 
@@ -110,8 +110,8 @@ func TestGetVersionInfo(t *testing.T) {
 	if info.WazuhVersion != "4.14.1" {
 		t.Errorf("GetVersionInfo(4.14.1).WazuhVersion = %v, expected 4.14.1", info.WazuhVersion)
 	}
-	if info.OpenSearchVersion != "2.19.1" {
-		t.Errorf("GetVersionInfo(4.14.1).OpenSearchVersion = %v, expected 2.19.1", info.OpenSearchVersion)
+	if info.OpenSearchVersion != "2.19.3" {
+		t.Errorf("GetVersionInfo(4.14.1).OpenSearchVersion = %v, expected 2.19.3", info.OpenSearchVersion)
 	}
 
 	// Invalid version should return nil
