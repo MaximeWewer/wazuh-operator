@@ -79,8 +79,8 @@ To deploy a cluster, set 'cluster.enabled: true' in your values.yaml.
 NOTE: No inline passwords provided. The operator will auto-generate secure
 credentials at runtime. Retrieve them with:
 
-  kubectl get secret {{ .Values.cluster.name }}-wazuh-api -n {{ .Values.namespace }} -o jsonpath='{.data.password}' | base64 -d
-  kubectl get secret {{ .Values.cluster.name }}-indexer-admin -n {{ .Values.namespace }} -o jsonpath='{.data.password}' | base64 -d
+  kubectl get secret {{ .Values.cluster.name }}-api-credentials -n {{ .Values.namespace }} -o jsonpath='{.data.api-password}' | base64 -d
+  kubectl get secret {{ .Values.cluster.name }}-indexer-credentials -n {{ .Values.namespace }} -o jsonpath='{.data.admin-password}' | base64 -d
 {{- end }}
 
 Documentation:
