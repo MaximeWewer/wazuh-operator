@@ -303,7 +303,7 @@ spec:
       retentionDays: 7
 ```
 
-2. Increase storage:
+1. Increase storage:
 
 ```bash
 # If StorageClass supports expansion
@@ -325,7 +325,7 @@ spec:
     javaOpts: "-Xms2g -Xmx2g" # Reduce if needed
 ```
 
-2. Enable ISM policy for index cleanup:
+1. Enable ISM policy for index cleanup:
 
 ```yaml
 apiVersion: resources.wazuh.com/v1
@@ -358,7 +358,7 @@ kubectl exec -n wazuh wazuh-indexer-0 -- \
   "https://localhost:9200/_cat/indices?v&s=store.size:desc"
 ```
 
-2. Add more indexer replicas:
+1. Add more indexer replicas:
 
 ```yaml
 spec:
@@ -422,7 +422,7 @@ spec:
         type: LoadBalancer # or NodePort
 ```
 
-2. Check firewall rules for ports 1514, 1515
+1. Check firewall rules for ports 1514, 1515
 
 ## Credential Issues
 

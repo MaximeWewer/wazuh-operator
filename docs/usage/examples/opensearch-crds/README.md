@@ -27,13 +27,13 @@ This directory contains examples for managing OpenSearch security and index life
 kubectl apply -f user.yaml
 ```
 
-2. Create a role with read permissions:
+1. Create a role with read permissions:
 
 ```bash
 kubectl apply -f role.yaml
 ```
 
-3. Map the role to the user:
+1. Map the role to the user:
 
 ```bash
 kubectl apply -f rolemapping.yaml
@@ -47,7 +47,7 @@ kubectl apply -f rolemapping.yaml
 kubectl apply -f ismpolicy.yaml
 ```
 
-2. Create an index template that uses the policy:
+1. Create an index template that uses the policy:
 
 ```bash
 kubectl apply -f indextemplate.yaml

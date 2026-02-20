@@ -104,7 +104,7 @@ kubectl apply -f config/samples/wazuh_v1_wazuhcluster_minimal.yaml
 
 ### PR Title Format
 
-```
+```text
 <type>(<scope>): <description>
 
 Examples:

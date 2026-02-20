@@ -206,11 +206,13 @@ If experimental CRDs are not installed, TCP and UDP routes will fail with clear 
 ### "Gateway API support is disabled"
 
 If you see this warning:
-```
+
+```text
 GatewayAPI is configured but operator Gateway API support is disabled
 ```
 
 Enable Gateway API support in the operator:
+
 ```bash
 helm upgrade wazuh-operator ./charts/wazuh-operator --set gatewayAPI.enabled=true
 ```
@@ -218,6 +220,7 @@ helm upgrade wazuh-operator ./charts/wazuh-operator --set gatewayAPI.enabled=tru
 ### "Gateway API CRDs not installed"
 
 Install the required CRDs:
+
 ```bash
 # For HTTPRoute
 kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/latest/download/standard-install.yaml

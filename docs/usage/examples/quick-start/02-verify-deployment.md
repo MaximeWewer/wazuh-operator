@@ -44,7 +44,7 @@ kubectl get svc -n wazuh
 kubectl port-forward svc/wazuh-quickstart-dashboard 5601:5601 -n wazuh
 ```
 
-Then open: https://localhost:5601
+Then open: <https://localhost:5601>
 
 ### Option 2: NodePort (minikube)
 

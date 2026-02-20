@@ -196,7 +196,7 @@ For more details, see:
 
 After a successful deployment (profile S):
 
-```
+```text
 +-----------------------------------+
 |     Minikube Cluster              |
 |     (4 CPUs, 8GB RAM, 40GB disk)  |

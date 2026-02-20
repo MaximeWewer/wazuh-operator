@@ -339,7 +339,7 @@ All CRDs use Kubebuilder validation markers:
 
 ## Relationships
 
-```
+```text
 WazuhCluster (1) ─┬─> (1) WazuhManager ──> (1..N) Manager Pods
                   ├─> (0..N) WazuhWorker ──> Per-worker overrides
                   ├─> (1) OpenSearchIndexer ──> (1..N) Indexer Pods (StatefulSet)

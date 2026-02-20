@@ -26,7 +26,7 @@
 helm install wazuh-operator ./charts/wazuh-operator
 ```
 
-2. Install the chart with a sizing profile:
+1. Install the chart with a sizing profile:
 
 ```bash
 helm install my-wazuh-cluster ./charts/wazuh-cluster \

@@ -80,7 +80,7 @@ Controllers for managing Wazuh detection rules and decoders:
 
 The codebase separates domain logic from infrastructure:
 
-```
+```text
 internal/{wazuh,opensearch}/
 ├── config/                    # Domain logic: generates config file CONTENT
 │   ├── ossec_conf.go          # → string (ossec.conf content)

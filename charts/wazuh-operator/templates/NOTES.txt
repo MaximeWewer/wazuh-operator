@@ -1,5 +1,4 @@
-{{- include "wazuh-operator.validateDeploymentMode" . -}}
-{{ if eq .Values.deploymentMode "crds" }}
+{{- if and .Values.crds.install (not .Values.operator.enabled) }}
 ===============================================
   Wazuh Operator CRDs Installed
 ===============================================
@@ -39,7 +38,6 @@ Next steps:
 1. Deploy an operator instance to manage Wazuh clusters:
 
    helm install wazuh-operator ./charts/wazuh-operator \
-     --set deploymentMode=operator \
      --set crds.install=false \
      --namespace wazuh-system
 
@@ -49,7 +47,7 @@ Next steps:
      --set sizing.profile=M \
      --namespace wazuh-system
 
-{{ else if eq .Values.deploymentMode "operator" }}
+{{- else if and .Values.operator.enabled (not .Values.crds.install) }}
 ===============================================
   Wazuh Operator Deployed
 ===============================================
@@ -63,11 +61,9 @@ High Availability: Enabled (leader election active)
 
 The operator has been deployed successfully.
 The operator will automatically manage WazuhCluster resources.
-{{- if not .Values.crds.install }}
 
     NOTE: CRDs were not installed (crds.install=false)
     Make sure CRDs are installed separately before creating WazuhCluster resources.
-{{- end }}
 
 Check the operator status:
 
@@ -83,7 +79,7 @@ Deploy a Wazuh cluster using the wazuh-cluster chart:
     --set sizing.profile=M \
     --namespace wazuh-system
 
-{{ else }}
+{{- else if and .Values.operator.enabled .Values.crds.install }}
 ===============================================
   Wazuh Operator Installed (CRDs + Operator)
 ===============================================
@@ -147,7 +143,7 @@ Watch the cluster deployment:
   kubectl get wazuhcluster -A -w
   kubectl get pods -n wazuh -l app.kubernetes.io/name=wazuh -w
 
-{{ end }}
+{{- end }}
 {{- if .Values.operator.metrics.enabled }}
 
 Metrics:

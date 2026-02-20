@@ -19,49 +19,45 @@
 
 ### Quick Start (CRDs + Operator)
 
+> **Note:** Some CRDs exceed 256 KB and require `--server-side` apply.
+> Use `helm template | kubectl apply --server-side` instead of `helm install`.
+
 ```bash
-helm install wazuh-operator ./charts/wazuh-operator \
-  --namespace wazuh-system \
-  --create-namespace
+helm template wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-system | kubectl apply --server-side -f -
 ```
 
 ### Install CRDs Only
 
 ```bash
-helm install wazuh-crds ./charts/wazuh-operator \
-  --set deploymentMode=crds \
-  --namespace wazuh-system \
-  --create-namespace
+helm template wazuh-operator ./charts/wazuh-operator \
+  --set operator.enabled=false \
+  --namespace wazuh-system | kubectl apply --server-side -f -
 ```
 
 ### Install Operator Only
 
 ```bash
-helm install wazuh-operator ./charts/wazuh-operator \
-  --set deploymentMode=operator \
+helm template wazuh-operator ./charts/wazuh-operator \
   --set crds.install=false \
-  --namespace wazuh-system \
-  --create-namespace
+  --namespace wazuh-system | kubectl apply --server-side -f -
 ```
 
 ## Upgrading
 
 ```bash
-helm upgrade wazuh-operator ./charts/wazuh-operator \
-  --namespace wazuh-system
+helm template wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-system | kubectl apply --server-side -f -
 ```
 
 ### Upgrade CRDs
 
-CRDs are not automatically upgraded by Helm. To upgrade:
+CRDs are managed as regular templates and are upgraded with `helm template | kubectl apply --server-side`.
+To upgrade CRDs separately:
 
 ```bash
-# Method 1: Using Helm template
 helm template wazuh-operator ./charts/wazuh-operator \
-  --set deploymentMode=crds | kubectl apply -f -
-
-# Method 2: Using kubectl
-kubectl apply -f charts/wazuh-operator/crds/
+  --set operator.enabled=false | kubectl apply --server-side -f -
 ```
 
 ## Uninstallation
@@ -80,12 +76,6 @@ helm uninstall wazuh-operator --namespace wazuh-system
 |-----|------|---------|-------------|
 | fullnameOverride | string | `""` | Override the full name of the release |
 | nameOverride | string | `""` | Override the name of the chart |
-
-### Deployment Mode
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| deploymentMode | string | `"all"` | Deployment mode: "all" (CRDs + operator), "crds" (CRDs only), "operator" (operator only) |
 
 ### CRD Configuration
 
@@ -385,11 +375,11 @@ rbac:
 
 ## Deployment Modes
 
-| Mode       | Description            | Use Case                                     |
-| ---------- | ---------------------- | -------------------------------------------- |
-| `all`      | Deploy CRDs + Operator | First-time installation, single deployment   |
-| `crds`     | Deploy CRDs only       | Centralized CRD management, GitOps workflows |
-| `operator` | Deploy Operator only   | CRDs already exist, operator-only updates    |
+| Configuration                                     | Description            | Use Case                                     |
+| ------------------------------------------------- | ---------------------- | -------------------------------------------- |
+| `crds.install=true, operator.enabled=true`        | Deploy CRDs + Operator | First-time installation, single deployment   |
+| `crds.install=true, operator.enabled=false`       | Deploy CRDs only       | Centralized CRD management, GitOps workflows |
+| `crds.install=false, operator.enabled=true`       | Deploy Operator only   | CRDs already exist, operator-only updates    |
 
 ## Architecture
 

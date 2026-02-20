@@ -189,7 +189,7 @@ All logs emitted during a traced reconciliation automatically include `trace_id`
 
 Example log output:
 
-```
+```json
 {"level":"info","ts":"...","msg":"Reconciling indexer","trace_id":"abc123...","span_id":"def456..."}
 ```
 

@@ -114,24 +114,11 @@ Namespace name
 {{- end }}
 
 {{/*
-Return true if CRDs should be installed
-*/}}
-{{- define "wazuh-operator.installCRDs" -}}
-{{- if or (eq .Values.deploymentMode "crds") (eq .Values.deploymentMode "all") }}
-{{- if .Values.crds.install }}
-true
-{{- end }}
-{{- end }}
-{{- end }}
-
-{{/*
 Return true if Operator should be installed
 */}}
 {{- define "wazuh-operator.installOperator" -}}
-{{- if or (eq .Values.deploymentMode "operator") (eq .Values.deploymentMode "all") }}
 {{- if .Values.operator.enabled }}
 true
-{{- end }}
 {{- end }}
 {{- end }}
 
@@ -153,12 +140,3 @@ Common annotations
 {{- end }}
 {{- end }}
 
-{{/*
-Validate deployment mode
-*/}}
-{{- define "wazuh-operator.validateDeploymentMode" -}}
-{{- $validModes := list "operator" "crds" "all" }}
-{{- if not (has .Values.deploymentMode $validModes) }}
-{{- fail (printf "Invalid deploymentMode: %s. Must be one of: operator, crds, all" .Values.deploymentMode) }}
-{{- end }}
-{{- end }}

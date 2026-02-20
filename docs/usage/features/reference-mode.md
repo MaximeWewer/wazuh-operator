@@ -160,7 +160,7 @@ spec:
 
 If a referenced CR doesn't exist:
 
-```
+```text
 Condition: Progressing=False
 Reason: ManagerRefResolutionFailed
 Message: referenced WazuhManager wazuh/shared-manager not found

@@ -71,7 +71,7 @@ The Wazuh exporter provides metrics including:
 
 Example metrics:
 
-```
+```text
 wazuh_agents_active_total 150
 wazuh_agents_disconnected_total 5
 wazuh_cluster_nodes_total 3
@@ -101,7 +101,7 @@ The indexer exporter provides metrics including:
 
 Example metrics:
 
-```
+```text
 opensearch_cluster_health_status{cluster="wazuh"} 1
 opensearch_indices_docs_total{index="wazuh-alerts-*"} 1000000
 opensearch_jvm_memory_used_bytes{node="indexer-0"} 536870912

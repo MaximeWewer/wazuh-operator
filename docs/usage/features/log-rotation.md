@@ -61,7 +61,7 @@ With `retentionDays: 7` and `maxFileSizeMB: 100`:
 
 The schedule uses standard cron format:
 
-```
+```text
 ┌───────────── minute (0 - 59)
 │ ┌───────────── hour (0 - 23)
 │ │ ┌───────────── day of month (1 - 31)
@@ -106,7 +106,7 @@ logRotation:
 
 The CronJob selects manager pods using the label:
 
-```
+```text
 app.kubernetes.io/component=wazuh-manager
 ```
 
@@ -165,6 +165,7 @@ kubectl create job --from=cronjob/<cluster-name>-log-rotation manual-test -n waz
    ```
 
 2. Verify the schedule is correct:
+
    ```bash
    kubectl describe cronjob <cluster-name>-log-rotation -n wazuh
    ```

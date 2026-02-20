@@ -4,7 +4,7 @@ This directory contains ready-to-use examples for deploying Wazuh clusters using
 
 ## Directory Structure
 
-```
+```text
 examples/
 ├── quick-start/         # Minimal examples to get started quickly
 ├── production/          # Production-ready configurations

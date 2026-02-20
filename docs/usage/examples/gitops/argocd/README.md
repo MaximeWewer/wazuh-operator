@@ -15,7 +15,7 @@ This directory contains ArgoCD Application manifests for deploying Wazuh Operato
 kubectl apply -f operator-application.yaml
 ```
 
-2. **Install a Wazuh cluster Application**:
+1. **Install a Wazuh cluster Application**:
 
 ```bash
 kubectl apply -f cluster-application.yaml
@@ -59,6 +59,7 @@ spec:
 ## Multi-Environment Setup
 
 For multiple environments, create separate Applications with different:
+
 - `spec.destination.namespace`
 - `spec.source.helm.values`
 - `spec.source.targetRevision` (for different versions)

@@ -72,7 +72,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 ### File Organization
 
-```
+```text
 controllers/
 ├── wazuhcluster_controller.go       # Main orchestrating controller
 ├── wazuh*_controller.go             # Wazuh component controllers
@@ -216,7 +216,7 @@ func (r *MyReconciler) updateStatus(ctx context.Context, resource *v1.MyResource
 
 ### Test File Naming
 
-```
+```text
 mypackage/
 ├── myfile.go
 └── myfile_test.go

@@ -322,6 +322,7 @@ kubectl get configmap -n wazuh -l app.kubernetes.io/component=filebeat
    ```
 
 2. Check the WazuhFilebeat events:
+
    ```bash
    kubectl describe wazuhfilebeat wazuh-filebeat -n wazuh
    ```

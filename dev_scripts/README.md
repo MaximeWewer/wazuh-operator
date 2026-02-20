@@ -270,7 +270,7 @@ make docker-build IMG=wazuh-operator:dev
 
 ## Deployment Architecture
 
-```
+```text
 +-----------------------------------+
 |         Minikube Cluster          |
 |                                   |

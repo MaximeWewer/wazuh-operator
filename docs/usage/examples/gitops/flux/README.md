@@ -17,13 +17,13 @@ kubectl apply -f helm-repository.yaml
 kubectl apply -f git-repository.yaml
 ```
 
-2. **Install the operator HelmRelease**:
+1. **Install the operator HelmRelease**:
 
 ```bash
 kubectl apply -f operator-helmrelease.yaml
 ```
 
-3. **Install a Wazuh cluster HelmRelease**:
+1. **Install a Wazuh cluster HelmRelease**:
 
 ```bash
 kubectl apply -f cluster-helmrelease.yaml
@@ -60,7 +60,7 @@ spec:
 
 For multiple environments, create separate directories:
 
-```
+```text
 flux/
 ├── base/
 │   ├── operator-helmrelease.yaml

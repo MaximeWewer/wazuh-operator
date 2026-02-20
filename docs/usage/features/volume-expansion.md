@@ -212,6 +212,7 @@ kubectl rollout restart statefulset wazuh-indexer -n wazuh
    The operator needs permissions to patch PVCs and read StorageClasses.
 
 3. **Check operator logs**:
+
    ```bash
    kubectl logs -l app.kubernetes.io/name=wazuh-operator -n wazuh-system
    ```
@@ -231,6 +232,7 @@ kubectl rollout restart statefulset wazuh-indexer -n wazuh
    ```
 
 3. **Restart pods for filesystem resize**:
+
    ```bash
    kubectl delete pod wazuh-indexer-0 -n wazuh
    ```

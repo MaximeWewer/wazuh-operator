@@ -2,7 +2,7 @@
 
 ## Project Structure
 
-```
+```text
 wazuh-operator/
 ├── api/v1/                                        # CRD Type Definitions - v1 Storage Version (32 files)
 │   ├── wazuhcluster_types.go                      # Main orchestrating CRD

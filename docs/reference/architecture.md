@@ -120,7 +120,7 @@ flowchart TD
 
 **Organization**:
 
-```
+```text
 internal/
 ├── wazuh/                  # Wazuh-specific logic (NO cross-domain imports)
 │   ├── reconciler/         # Helper reconcilers (cluster, manager, worker, rules, etc.)

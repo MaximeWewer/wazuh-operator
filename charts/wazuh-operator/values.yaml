@@ -9,11 +9,6 @@ nameOverride: ""
 # -- Override the full name of the release
 fullnameOverride: ""
 
-# @section Deployment Mode Configuration
-
-# -- Deployment mode: "all" (CRDs + operator), "crds" (CRDs only), "operator" (operator only)
-deploymentMode: "all"
-
 # @section CRD Configuration
 
 crds:

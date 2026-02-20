@@ -15,32 +15,34 @@ Secrets:
 {{- if $esoEnabled }}
   Using External Secrets Operator for credentials
   {{- if and .Values.externalSecrets.indexerAdmin .Values.externalSecrets.indexerAdmin.name }}
-  - indexerAdmin: {{ .Values.externalSecrets.indexerAdmin.name }} (ExternalSecret)
+
+- indexerAdmin: {{ .Values.externalSecrets.indexerAdmin.name }} (ExternalSecret)
   {{- end }}
   {{- if and .Values.externalSecrets.wazuhApi .Values.externalSecrets.wazuhApi.name }}
-  - wazuhApi: {{ .Values.externalSecrets.wazuhApi.name }} (ExternalSecret)
+- wazuhApi: {{ .Values.externalSecrets.wazuhApi.name }} (ExternalSecret)
   {{- end }}
   {{- if and .Values.externalSecrets.wazuhAuthd .Values.externalSecrets.wazuhAuthd.name }}
-  - wazuhAuthd: {{ .Values.externalSecrets.wazuhAuthd.name }} (ExternalSecret)
+- wazuhAuthd: {{ .Values.externalSecrets.wazuhAuthd.name }} (ExternalSecret)
   {{- end }}
 {{- else }}
   {{- if and .Values.secrets.wazuhApi .Values.secrets.wazuhApi.password }}
-  - wazuh-api-credentials (inline)
+- wazuh-api-credentials (inline)
   {{- end }}
   {{- if and .Values.secrets.indexerAdmin .Values.secrets.indexerAdmin.password }}
-  - indexer-admin-credentials (inline)
+- indexer-admin-credentials (inline)
   {{- end }}
   {{- if .Values.secrets.wazuhAuthd.enabled }}
-  - wazuh-authd-pass (inline)
+- wazuh-authd-pass (inline)
   {{- end }}
 {{- end }}
 
 {{- if .Values.networkPolicy.enabled }}
 
 Network Policies: Enabled
-  - Operator namespace: {{ .Values.networkPolicy.operatorNamespace }}
+
+- Operator namespace: {{ .Values.networkPolicy.operatorNamespace }}
   {{- if .Values.networkPolicy.manager.allowAgentConnections }}
-  - Agent connections: Allowed
+- Agent connections: Allowed
   {{- end }}
 {{- end }}
 
@@ -58,13 +60,15 @@ View detailed status:
 
 Access the Wazuh Dashboard (once deployed):
 
-  # Get the service
+# Get the service
+
   kubectl get svc {{ .Values.cluster.name }}-dashboard -n {{ .Values.namespace }}
 
-  # Port forward for local access
+# Port forward for local access
+
   kubectl port-forward -n {{ .Values.namespace }} svc/{{ .Values.cluster.name }}-dashboard 5601:5601
 
-  # Open https://localhost:5601 in your browser
+# Open <https://localhost:5601> in your browser
 
 {{- else }}
 
@@ -84,6 +88,7 @@ credentials at runtime. Retrieve them with:
 {{- end }}
 
 Documentation:
-  - Sizing Guide: https://github.com/MaximeWewer/wazuh-operator/blob/main/docs/usage/features/sizing.md
-  - User Guide: https://github.com/MaximeWewer/wazuh-operator/tree/main/docs/usage
-  - Wazuh Docs: https://documentation.wazuh.com/
+
+- Sizing Guide: <https://github.com/MaximeWewer/wazuh-operator/blob/main/docs/usage/features/sizing.md>
+- User Guide: <https://github.com/MaximeWewer/wazuh-operator/tree/main/docs/usage>
+- Wazuh Docs: <https://documentation.wazuh.com/>
