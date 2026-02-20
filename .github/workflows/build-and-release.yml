@@ -134,6 +134,7 @@ jobs:
           context: build/backup-tools
           file: build/backup-tools/Dockerfile
           push: true
+          provenance: false
           cache-from: type=gha,scope=backup-tools
           cache-to: type=gha,scope=backup-tools,mode=max
           tags: ${{ steps.meta.outputs.tags }}
@@ -188,12 +189,12 @@ jobs:
           file: build/operator/Dockerfile
           platforms: linux/amd64
           push: true
+          provenance: false
           build-args: |
             VERSION=${{ needs.prepare.outputs.version }}
             TARGETOS=linux
             TARGETARCH=amd64
           tags: ${{ steps.meta.outputs.tags }}
-          annotations: ${{ steps.meta.outputs.annotations }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=operator
           cache-to: type=gha,scope=operator,mode=max
