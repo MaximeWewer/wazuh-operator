@@ -562,6 +562,10 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "OpenSearchAuthConfig")
 			os.Exit(1)
 		}
+		if err := wazuhv1.SetupOpenSearchIndexerWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "OpenSearchIndexer")
+			os.Exit(1)
+		}
 	}
 
 	// +kubebuilder:scaffold:builder
