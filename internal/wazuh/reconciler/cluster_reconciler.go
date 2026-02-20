@@ -371,8 +371,12 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		extraInitContainers       []corev1.Container
 		extraContainers           []corev1.Container
 		extraConfig               string
-		annotations               map[string]string
-		podAnnotations            map[string]string
+		annotations                         map[string]string
+		podAnnotations                      map[string]string
+		masterSecurityContext               *corev1.PodSecurityContext
+		masterContainerSecurityContext      *corev1.SecurityContext
+		masterTerminationGracePeriodSeconds *int64
+		managerImagePullPolicy              corev1.PullPolicy
 	)
 
 	var env []corev1.EnvVar
@@ -399,6 +403,12 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		extraConfig = cluster.Spec.Manager.Master.ExtraConfig
 		annotations = cluster.Spec.Manager.Master.Annotations
 		podAnnotations = cluster.Spec.Manager.Master.PodAnnotations
+		masterSecurityContext = cluster.Spec.Manager.Master.SecurityContext
+		masterContainerSecurityContext = cluster.Spec.Manager.Master.ContainerSecurityContext
+		masterTerminationGracePeriodSeconds = cluster.Spec.Manager.Master.TerminationGracePeriodSeconds
+		if cluster.Spec.Manager.Image != nil && cluster.Spec.Manager.Image.PullPolicy != "" {
+			managerImagePullPolicy = cluster.Spec.Manager.Image.PullPolicy
+		}
 
 		// Apply cluster-level anti-affinity if enabled
 		if affinityutil.ShouldApplyAntiAffinity(cluster) {
@@ -491,25 +501,29 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 	// Compute specHash for change detection (version is included in image tag)
 	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
-		Version:                   version,
-		Resources:                 resources,
-		StorageSize:               storageSize,
-		NodeSelector:              nodeSelector,
-		Tolerations:               tolerations,
-		Affinity:                  affinity,
-		ImagePullSecrets:          imagePullSecrets,
-		TopologySpreadConstraints: topologySpreadConstraints,
-		Env:                       env,
-		EnvFrom:                   envFrom,
-		Annotations:               annotations,
-		PodAnnotations:            podAnnotations,
-		ExtraConfig:               extraConfig,
-		ExtraVolumes:              extraVolumes,
-		ExtraVolumeMounts:         extraVolumeMounts,
-		ExtraInitContainers:       extraInitContainers,
-		ExtraContainers:           extraContainers,
-		WazuhExporter:             toWazuhExporterHashInput(cluster),
-		ServiceAccountName:        masterSAName,
+		Version:                       version,
+		Resources:                     resources,
+		StorageSize:                   storageSize,
+		NodeSelector:                  nodeSelector,
+		Tolerations:                   tolerations,
+		Affinity:                      affinity,
+		ImagePullSecrets:              imagePullSecrets,
+		TopologySpreadConstraints:     topologySpreadConstraints,
+		Env:                           env,
+		EnvFrom:                       envFrom,
+		Annotations:                   annotations,
+		PodAnnotations:                podAnnotations,
+		ExtraConfig:                   extraConfig,
+		ExtraVolumes:                  extraVolumes,
+		ExtraVolumeMounts:             extraVolumeMounts,
+		ExtraInitContainers:           extraInitContainers,
+		ExtraContainers:               extraContainers,
+		WazuhExporter:                 toWazuhExporterHashInput(cluster),
+		ServiceAccountName:            masterSAName,
+		SecurityContext:               masterSecurityContext,
+		ContainerSecurityContext:      masterContainerSecurityContext,
+		TerminationGracePeriodSeconds: masterTerminationGracePeriodSeconds,
+		ImagePullPolicy:               managerImagePullPolicy,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
@@ -592,6 +606,10 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	// Set ServiceAccount name if configured
 	if masterSAName != "" {
 		stsBuilder.WithServiceAccountName(masterSAName)
+	}
+	// Set image pull policy if configured
+	if managerImagePullPolicy != "" {
+		stsBuilder.WithImagePullPolicy(managerImagePullPolicy)
 	}
 
 	// Mount rule ConfigMaps if RuleReconciler is configured
@@ -929,6 +947,10 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	var workerExtraContainers []corev1.Container
 	var workerEnv []corev1.EnvVar
 	var workerEnvFrom []corev1.EnvFromSource
+	var workerSecurityContext *corev1.PodSecurityContext
+	var workerContainerSecurityContext *corev1.SecurityContext
+	var workerTerminationGracePeriodSeconds *int64
+	var workerImagePullPolicy corev1.PullPolicy
 	if cluster.Spec.Manager != nil {
 		workerPodAnnotations = cluster.Spec.Manager.Workers.PodAnnotations
 		workerExtraConfig = cluster.Spec.Manager.Workers.ExtraConfig
@@ -938,6 +960,12 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		workerExtraContainers = cluster.Spec.Manager.Workers.ExtraContainers
 		workerEnv = cluster.Spec.Manager.Workers.Env
 		workerEnvFrom = cluster.Spec.Manager.Workers.EnvFrom
+		workerSecurityContext = cluster.Spec.Manager.Workers.SecurityContext
+		workerContainerSecurityContext = cluster.Spec.Manager.Workers.ContainerSecurityContext
+		workerTerminationGracePeriodSeconds = cluster.Spec.Manager.Workers.TerminationGracePeriodSeconds
+		if cluster.Spec.Manager.Image != nil && cluster.Spec.Manager.Image.PullPolicy != "" {
+			workerImagePullPolicy = cluster.Spec.Manager.Image.PullPolicy
+		}
 	}
 
 	// Reconcile ServiceAccount for workers if configured
@@ -969,9 +997,13 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		ExtraConfig:               workerExtraConfig,
 		ExtraVolumes:              workerExtraVolumes,
 		ExtraVolumeMounts:         workerExtraVolumeMounts,
-		ExtraInitContainers:       workerExtraInitContainers,
-		ExtraContainers:           workerExtraContainers,
-		ServiceAccountName:        workerSAName,
+		ExtraInitContainers:           workerExtraInitContainers,
+		ExtraContainers:               workerExtraContainers,
+		ServiceAccountName:            workerSAName,
+		SecurityContext:               workerSecurityContext,
+		ContainerSecurityContext:      workerContainerSecurityContext,
+		TerminationGracePeriodSeconds: workerTerminationGracePeriodSeconds,
+		ImagePullPolicy:               workerImagePullPolicy,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec hash")
@@ -1048,6 +1080,10 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	// Set ServiceAccount name if configured
 	if workerSAName != "" {
 		stsBuilder.WithServiceAccountName(workerSAName)
+	}
+	// Set image pull policy if configured
+	if workerImagePullPolicy != "" {
+		stsBuilder.WithImagePullPolicy(workerImagePullPolicy)
 	}
 
 	// Mount rule ConfigMaps if RuleReconciler is configured
@@ -1476,23 +1512,27 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	stsBuilder.WithTerminationGracePeriodSeconds(&legacyMasterTerminationGracePeriod)
 
 	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
-		Version:             cluster.Spec.Version,
-		Resources:           cluster.Spec.Manager.Master.Resources,
-		StorageSize:         cluster.Spec.Manager.Master.StorageSize,
-		Image:               "",
-		NodeSelector:        cluster.Spec.Manager.Master.NodeSelector,
-		Tolerations:         cluster.Spec.Manager.Master.Tolerations,
-		Affinity:            cluster.Spec.Manager.Master.Affinity,
-		ExtraVolumes:        extraVolumes,
-		ExtraVolumeMounts:   extraVolumeMounts,
-		ExtraInitContainers: extraInitContainers,
-		ExtraContainers:     extraContainers,
-		ExtraConfig:         extraConfig,
-		Env:                 cluster.Spec.Manager.Master.Env,
-		EnvFrom:             cluster.Spec.Manager.Master.EnvFrom,
-		Annotations:         cluster.Spec.Manager.Master.Annotations,
-		PodAnnotations:      cluster.Spec.Manager.Master.PodAnnotations,
-		WazuhExporter:       toWazuhExporterHashInput(cluster),
+		Version:                       cluster.Spec.Version,
+		Resources:                     cluster.Spec.Manager.Master.Resources,
+		StorageSize:                   cluster.Spec.Manager.Master.StorageSize,
+		Image:                         "",
+		NodeSelector:                  cluster.Spec.Manager.Master.NodeSelector,
+		Tolerations:                   cluster.Spec.Manager.Master.Tolerations,
+		Affinity:                      cluster.Spec.Manager.Master.Affinity,
+		ExtraVolumes:                  extraVolumes,
+		ExtraVolumeMounts:             extraVolumeMounts,
+		ExtraInitContainers:           extraInitContainers,
+		ExtraContainers:               extraContainers,
+		ExtraConfig:                   extraConfig,
+		Env:                           cluster.Spec.Manager.Master.Env,
+		EnvFrom:                       cluster.Spec.Manager.Master.EnvFrom,
+		Annotations:                   cluster.Spec.Manager.Master.Annotations,
+		PodAnnotations:                cluster.Spec.Manager.Master.PodAnnotations,
+		WazuhExporter:                 toWazuhExporterHashInput(cluster),
+		SecurityContext:               cluster.Spec.Manager.Master.SecurityContext,
+		ContainerSecurityContext:      cluster.Spec.Manager.Master.ContainerSecurityContext,
+		TerminationGracePeriodSeconds: cluster.Spec.Manager.Master.TerminationGracePeriodSeconds,
+		ImagePullPolicy:               legacyManagerImagePullPolicy(cluster),
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
@@ -1500,6 +1540,9 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	}
 	if specHash != "" {
 		stsBuilder.WithSpecHash(specHash)
+	}
+	if policy := legacyManagerImagePullPolicy(cluster); policy != "" {
+		stsBuilder.WithImagePullPolicy(policy)
 	}
 
 	sts := stsBuilder.Build()
@@ -1778,23 +1821,27 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 	stsBuilder.WithTerminationGracePeriodSeconds(&legacyWorkerTerminationGracePeriod)
 
 	specHash, err := patch.ComputeManagerWorkersSpecHashFull(patch.ManagerWorkersSpecInput{
-		Replicas:            workerReplicas2,
-		Version:             cluster.Spec.Version,
-		Resources:           cluster.Spec.Manager.Workers.Resources,
-		StorageSize:         cluster.Spec.Manager.Workers.StorageSize,
-		Image:               "",
-		NodeSelector:        cluster.Spec.Manager.Workers.NodeSelector,
-		Tolerations:         cluster.Spec.Manager.Workers.Tolerations,
-		Affinity:            cluster.Spec.Manager.Workers.Affinity,
-		ExtraVolumes:        extraVolumes,
-		ExtraVolumeMounts:   extraVolumeMounts,
-		ExtraInitContainers: extraInitContainers,
-		ExtraContainers:     extraContainers,
-		ExtraConfig:         extraConfig,
-		Env:                 cluster.Spec.Manager.Workers.Env,
-		EnvFrom:             cluster.Spec.Manager.Workers.EnvFrom,
-		Annotations:         cluster.Spec.Manager.Workers.Annotations,
-		PodAnnotations:      cluster.Spec.Manager.Workers.PodAnnotations,
+		Replicas:                      workerReplicas2,
+		Version:                       cluster.Spec.Version,
+		Resources:                     cluster.Spec.Manager.Workers.Resources,
+		StorageSize:                   cluster.Spec.Manager.Workers.StorageSize,
+		Image:                         "",
+		NodeSelector:                  cluster.Spec.Manager.Workers.NodeSelector,
+		Tolerations:                   cluster.Spec.Manager.Workers.Tolerations,
+		Affinity:                      cluster.Spec.Manager.Workers.Affinity,
+		ExtraVolumes:                  extraVolumes,
+		ExtraVolumeMounts:             extraVolumeMounts,
+		ExtraInitContainers:           extraInitContainers,
+		ExtraContainers:               extraContainers,
+		ExtraConfig:                   extraConfig,
+		Env:                           cluster.Spec.Manager.Workers.Env,
+		EnvFrom:                       cluster.Spec.Manager.Workers.EnvFrom,
+		Annotations:                   cluster.Spec.Manager.Workers.Annotations,
+		PodAnnotations:                cluster.Spec.Manager.Workers.PodAnnotations,
+		SecurityContext:               cluster.Spec.Manager.Workers.SecurityContext,
+		ContainerSecurityContext:      cluster.Spec.Manager.Workers.ContainerSecurityContext,
+		TerminationGracePeriodSeconds: cluster.Spec.Manager.Workers.TerminationGracePeriodSeconds,
+		ImagePullPolicy:               legacyManagerImagePullPolicy(cluster),
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec hash")
@@ -1802,6 +1849,9 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 	}
 	if specHash != "" {
 		stsBuilder.WithSpecHash(specHash)
+	}
+	if policy := legacyManagerImagePullPolicy(cluster); policy != "" {
+		stsBuilder.WithImagePullPolicy(policy)
 	}
 
 	sts := stsBuilder.Build()
@@ -2376,6 +2426,14 @@ func toWazuhExporterHashInput(cluster *wazuhv1.WazuhCluster) *patch.WazuhExporte
 		SkipLastRegisteredAgent: e.SkipLastRegisteredAgent,
 		SkipWazuhAPIInfo:        e.SkipWazuhAPIInfo,
 	}
+}
+
+// legacyManagerImagePullPolicy extracts the image pull policy from the manager image spec
+func legacyManagerImagePullPolicy(cluster *wazuhv1.WazuhCluster) corev1.PullPolicy {
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Image != nil {
+		return cluster.Spec.Manager.Image.PullPolicy
+	}
+	return ""
 }
 
 // convertRuleConfigMaps converts RuleConfigMapInfo from the rule reconciler to RuleConfigMapRef for the builder

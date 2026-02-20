@@ -59,6 +59,8 @@ type DashboardDeploymentBuilder struct {
 	extraContainers []corev1.Container
 	// Service account name
 	serviceAccountName string
+	// Image pull policy
+	imagePullPolicy corev1.PullPolicy
 }
 
 // NewDashboardDeploymentBuilder creates a new DashboardDeploymentBuilder
@@ -100,6 +102,12 @@ func (b *DashboardDeploymentBuilder) WithResources(resources *corev1.ResourceReq
 // WithImage sets the container image
 func (b *DashboardDeploymentBuilder) WithImage(image string) *DashboardDeploymentBuilder {
 	b.image = image
+	return b
+}
+
+// WithImagePullPolicy sets the image pull policy for the main container
+func (b *DashboardDeploymentBuilder) WithImagePullPolicy(policy corev1.PullPolicy) *DashboardDeploymentBuilder {
+	b.imagePullPolicy = policy
 	return b
 }
 
@@ -269,6 +277,12 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 		}
 	}
 
+	// Default image pull policy if not set
+	imagePullPolicy := b.imagePullPolicy
+	if imagePullPolicy == "" {
+		imagePullPolicy = corev1.PullIfNotPresent
+	}
+
 	// Default resources if not set
 	resources := b.resources
 	if resources == nil {
@@ -331,7 +345,7 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 		{
 			Name:            "dashboard",
 			Image:           image,
-			ImagePullPolicy: corev1.PullIfNotPresent,
+			ImagePullPolicy: imagePullPolicy,
 			Resources:       *resources,
 			SecurityContext: &corev1.SecurityContext{
 				AllowPrivilegeEscalation: func() *bool { b := true; return &b }(),

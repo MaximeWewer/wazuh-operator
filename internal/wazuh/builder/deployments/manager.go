@@ -69,6 +69,8 @@ type ManagerStatefulSetBuilder struct {
 	terminationGracePeriodSeconds *int64
 	// Service account name
 	serviceAccountName string
+	// Image pull policy
+	imagePullPolicy corev1.PullPolicy
 }
 
 // RuleConfigMapRef holds information about a rule ConfigMap to mount
@@ -132,6 +134,12 @@ func (b *ManagerStatefulSetBuilder) WithResources(resources *corev1.ResourceRequ
 // WithImage sets the container image
 func (b *ManagerStatefulSetBuilder) WithImage(image string) *ManagerStatefulSetBuilder {
 	b.image = image
+	return b
+}
+
+// WithImagePullPolicy sets the image pull policy for the main container
+func (b *ManagerStatefulSetBuilder) WithImagePullPolicy(policy corev1.PullPolicy) *ManagerStatefulSetBuilder {
+	b.imagePullPolicy = policy
 	return b
 }
 
@@ -326,6 +334,12 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		image = fmt.Sprintf("wazuh/wazuh-manager:%s", b.version)
 	}
 
+	// Default image pull policy if not set
+	imagePullPolicy := b.imagePullPolicy
+	if imagePullPolicy == "" {
+		imagePullPolicy = corev1.PullIfNotPresent
+	}
+
 	// Default resources if not set
 	resources := b.resources
 	if resources == nil {
@@ -366,7 +380,7 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		{
 			Name:            constants.ContainerNameWazuhManager,
 			Image:           image,
-			ImagePullPolicy: corev1.PullIfNotPresent,
+			ImagePullPolicy: imagePullPolicy,
 			Resources:       *resources,
 			// SecurityContext: Wazuh manager image runs multiple services via s6 supervisor
 			// (wazuh-manager, filebeat, etc.) which require root privileges and SYS_CHROOT capability

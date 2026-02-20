@@ -410,6 +410,9 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 			deployBuilder.WithResources(cluster.Spec.Dashboard.Resources)
 		}
 		deployBuilder.WithEnableSSL(cluster.Spec.Dashboard.EnableSSL)
+		if cluster.Spec.Dashboard.Image != nil && cluster.Spec.Dashboard.Image.PullPolicy != "" {
+			deployBuilder.WithImagePullPolicy(cluster.Spec.Dashboard.Image.PullPolicy)
+		}
 		if len(cluster.Spec.Dashboard.Annotations) > 0 {
 			deployBuilder.WithAnnotations(cluster.Spec.Dashboard.Annotations)
 		}
@@ -764,8 +767,12 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		topologySpreadConstraints []corev1.TopologySpreadConstraint
 		env                       []corev1.EnvVar
 		envFrom                   []corev1.EnvFromSource
-		annotations               map[string]string
-		podAnnotations            map[string]string
+		annotations                   map[string]string
+		podAnnotations                map[string]string
+		securityContext               *corev1.PodSecurityContext
+		containerSecurityContext      *corev1.SecurityContext
+		terminationGracePeriodSeconds *int64
+		imagePullPolicy              corev1.PullPolicy
 	)
 	imagePullSecrets := cluster.Spec.ImagePullSecrets
 
@@ -780,6 +787,12 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		envFrom = cluster.Spec.Dashboard.EnvFrom
 		annotations = cluster.Spec.Dashboard.Annotations
 		podAnnotations = cluster.Spec.Dashboard.PodAnnotations
+		securityContext = cluster.Spec.Dashboard.SecurityContext
+		containerSecurityContext = cluster.Spec.Dashboard.ContainerSecurityContext
+		terminationGracePeriodSeconds = cluster.Spec.Dashboard.TerminationGracePeriodSeconds
+		if cluster.Spec.Dashboard.Image != nil && cluster.Spec.Dashboard.Image.PullPolicy != "" {
+			imagePullPolicy = cluster.Spec.Dashboard.Image.PullPolicy
+		}
 	}
 
 	// Extract extra volumes, init containers, and sidecar containers
@@ -805,26 +818,37 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		dashboardSAName = saName
 	}
 
+	// Extract enableSSL before hash computation (defaults to true via kubebuilder)
+	enableSSL := true
+	if cluster.Spec.Dashboard != nil {
+		enableSSL = cluster.Spec.Dashboard.EnableSSL
+	}
+
 	// Compute spec hash for change detection (includes all configurable fields)
 	specHash, err := patch.ComputeDashboardSpecHashFull(patch.DashboardSpecInput{
-		Replicas:                  replicas,
-		Version:                   version,
-		Resources:                 resources,
-		Image:                     image,
-		NodeSelector:              nodeSelector,
-		Tolerations:               tolerations,
-		Affinity:                  affinity,
-		ImagePullSecrets:          imagePullSecrets,
-		TopologySpreadConstraints: topologySpreadConstraints,
-		Env:                       env,
-		EnvFrom:                   envFrom,
-		Annotations:               annotations,
-		PodAnnotations:            podAnnotations,
-		ExtraVolumes:              extraVolumes,
-		ExtraVolumeMounts:         extraVolumeMounts,
-		ExtraInitContainers:       extraInitContainers,
-		ExtraContainers:           extraContainers,
-		ServiceAccountName:        dashboardSAName,
+		Replicas:                      replicas,
+		Version:                       version,
+		Resources:                     resources,
+		Image:                         image,
+		NodeSelector:                  nodeSelector,
+		Tolerations:                   tolerations,
+		Affinity:                      affinity,
+		ImagePullSecrets:              imagePullSecrets,
+		TopologySpreadConstraints:     topologySpreadConstraints,
+		Env:                           env,
+		EnvFrom:                       envFrom,
+		Annotations:                   annotations,
+		PodAnnotations:                podAnnotations,
+		ExtraVolumes:                  extraVolumes,
+		ExtraVolumeMounts:             extraVolumeMounts,
+		ExtraInitContainers:           extraInitContainers,
+		ExtraContainers:               extraContainers,
+		ServiceAccountName:            dashboardSAName,
+		SecurityContext:               securityContext,
+		ContainerSecurityContext:      containerSecurityContext,
+		TerminationGracePeriodSeconds: terminationGracePeriodSeconds,
+		ImagePullPolicy:               imagePullPolicy,
+		EnableSSL:                     enableSSL,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute dashboard spec hash, continuing without spec tracking")
@@ -835,11 +859,10 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 	configHash := r.getConfigHash(ctx, cluster)
 
 	deployBuilder := deployments.NewDashboardDeploymentBuilder(cluster.Name, cluster.Namespace)
-	enableSSL := true
-	if cluster.Spec.Dashboard != nil {
-		enableSSL = cluster.Spec.Dashboard.EnableSSL
-	}
 	deployBuilder.WithEnableSSL(enableSSL)
+	if imagePullPolicy != "" {
+		deployBuilder.WithImagePullPolicy(imagePullPolicy)
+	}
 
 	if cluster.Spec.Version != "" {
 		deployBuilder.WithVersion(cluster.Spec.Version)
@@ -1266,6 +1289,9 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 		deployBuilder.WithResources(dashboard.Spec.Resources)
 	}
 	deployBuilder.WithEnableSSL(dashboard.Spec.EnableSSL)
+	if dashboard.Spec.Image != nil && dashboard.Spec.Image.PullPolicy != "" {
+		deployBuilder.WithImagePullPolicy(dashboard.Spec.Image.PullPolicy)
+	}
 	if dashboard.Spec.Tolerations != nil {
 		deployBuilder.WithTolerations(dashboard.Spec.Tolerations)
 	}

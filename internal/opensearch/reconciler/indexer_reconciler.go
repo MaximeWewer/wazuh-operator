@@ -640,6 +640,11 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 	}
 	stsBuilder.WithTerminationGracePeriodSeconds(&terminationGracePeriod)
 
+	// Set image pull policy if configured
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Image != nil && cluster.Spec.Indexer.Image.PullPolicy != "" {
+		stsBuilder.WithImagePullPolicy(cluster.Spec.Indexer.Image.PullPolicy)
+	}
+
 	sts := stsBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for indexer statefulset: %w", err)
@@ -881,8 +886,12 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		topologySpreadConstraints []corev1.TopologySpreadConstraint
 		env                       []corev1.EnvVar
 		envFrom                   []corev1.EnvFromSource
-		annotations               map[string]string
-		podAnnotations            map[string]string
+		annotations                   map[string]string
+		podAnnotations                map[string]string
+		securityContext               *corev1.PodSecurityContext
+		containerSecurityContext      *corev1.SecurityContext
+		terminationGracePeriodSeconds *int64
+		imagePullPolicy              corev1.PullPolicy
 	)
 	version := cluster.Spec.Version
 	imagePullSecrets := cluster.Spec.ImagePullSecrets
@@ -906,6 +915,12 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		envFrom = cluster.Spec.Indexer.EnvFrom
 		annotations = cluster.Spec.Indexer.Annotations
 		podAnnotations = cluster.Spec.Indexer.PodAnnotations
+		securityContext = cluster.Spec.Indexer.SecurityContext
+		containerSecurityContext = cluster.Spec.Indexer.ContainerSecurityContext
+		terminationGracePeriodSeconds = cluster.Spec.Indexer.TerminationGracePeriodSeconds
+		if cluster.Spec.Indexer.Image != nil && cluster.Spec.Indexer.Image.PullPolicy != "" {
+			imagePullPolicy = cluster.Spec.Indexer.Image.PullPolicy
+		}
 
 		// Apply cluster-level anti-affinity if enabled
 		if affinityutil.ShouldApplyIndexerAntiAffinity(cluster) {
@@ -975,8 +990,12 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		ExtraInitContainers:       extraInitContainers,
 		ExtraContainers:           extraContainers,
 		IndexerExporter:           toIndexerExporterHashInput(cluster),
-		RepositoryPlugins:         repoPluginsHash,
-		ServiceAccountName:        indexerSAName,
+		RepositoryPlugins:             repoPluginsHash,
+		ServiceAccountName:            indexerSAName,
+		SecurityContext:               securityContext,
+		ContainerSecurityContext:      containerSecurityContext,
+		TerminationGracePeriodSeconds: terminationGracePeriodSeconds,
+		ImagePullPolicy:               imagePullPolicy,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute indexer spec hash, proceeding without spec hash tracking")
@@ -1076,6 +1095,11 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 	// Set ServiceAccount name if configured
 	if indexerSAName != "" {
 		stsBuilder.WithServiceAccountName(indexerSAName)
+	}
+
+	// Set image pull policy if configured
+	if imagePullPolicy != "" {
+		stsBuilder.WithImagePullPolicy(imagePullPolicy)
 	}
 
 	sts := stsBuilder.Build()
@@ -1810,6 +1834,9 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 	}
 	if len(indexer.Spec.PodAnnotations) > 0 {
 		stsBuilder.WithPodAnnotations(indexer.Spec.PodAnnotations)
+	}
+	if indexer.Spec.Image != nil && indexer.Spec.Image.PullPolicy != "" {
+		stsBuilder.WithImagePullPolicy(indexer.Spec.Image.PullPolicy)
 	}
 
 	sts := stsBuilder.Build()

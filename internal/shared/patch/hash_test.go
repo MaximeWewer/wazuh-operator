@@ -320,3 +320,174 @@ func TestComputeIndexerSpecHash_IndexerExporterChange(t *testing.T) {
 		t.Errorf("Expected different hashes when exporter version changes, got same hash: %s", hash2)
 	}
 }
+
+// TestComputeIndexerSpecHash_SecurityContextChange tests that SecurityContext changes produce different hashes
+func TestComputeIndexerSpecHash_SecurityContextChange(t *testing.T) {
+	base := IndexerSpecInput{
+		Replicas:    3,
+		Version:     "2.11.1",
+		StorageSize: "50Gi",
+		JavaOpts:    "-Xms1g -Xmx1g",
+	}
+
+	// No SecurityContext
+	hash1, err := ComputeIndexerSpecHashFull(base)
+	if err != nil {
+		t.Fatalf("ComputeIndexerSpecHashFull failed: %v", err)
+	}
+
+	// With SecurityContext
+	runAsUser := int64(1000)
+	withSC := base
+	withSC.SecurityContext = &corev1.PodSecurityContext{
+		RunAsUser: &runAsUser,
+	}
+	hash2, err := ComputeIndexerSpecHashFull(withSC)
+	if err != nil {
+		t.Fatalf("ComputeIndexerSpecHashFull failed: %v", err)
+	}
+
+	if hash1 == hash2 {
+		t.Errorf("Expected different hashes when SecurityContext is added, got same hash: %s", hash1)
+	}
+}
+
+// TestComputeIndexerSpecHash_TerminationGracePeriodChange tests that TerminationGracePeriodSeconds changes produce different hashes
+func TestComputeIndexerSpecHash_TerminationGracePeriodChange(t *testing.T) {
+	base := IndexerSpecInput{
+		Replicas:    3,
+		Version:     "2.11.1",
+		StorageSize: "50Gi",
+		JavaOpts:    "-Xms1g -Xmx1g",
+	}
+
+	// No TerminationGracePeriodSeconds
+	hash1, err := ComputeIndexerSpecHashFull(base)
+	if err != nil {
+		t.Fatalf("ComputeIndexerSpecHashFull failed: %v", err)
+	}
+
+	// With TerminationGracePeriodSeconds = 60
+	gracePeriod := int64(60)
+	withGP := base
+	withGP.TerminationGracePeriodSeconds = &gracePeriod
+	hash2, err := ComputeIndexerSpecHashFull(withGP)
+	if err != nil {
+		t.Fatalf("ComputeIndexerSpecHashFull failed: %v", err)
+	}
+
+	if hash1 == hash2 {
+		t.Errorf("Expected different hashes when TerminationGracePeriodSeconds is set, got same hash: %s", hash1)
+	}
+}
+
+// TestComputeDashboardSpecHash_EnableSSLChange tests that EnableSSL changes produce different hashes
+func TestComputeDashboardSpecHash_EnableSSLChange(t *testing.T) {
+	base := DashboardSpecInput{
+		Replicas: 1,
+		Version:  "2.11.1",
+	}
+
+	// EnableSSL = false (zero value, omitted)
+	hash1, err := ComputeDashboardSpecHashFull(base)
+	if err != nil {
+		t.Fatalf("ComputeDashboardSpecHashFull failed: %v", err)
+	}
+
+	// EnableSSL = true
+	withSSL := base
+	withSSL.EnableSSL = true
+	hash2, err := ComputeDashboardSpecHashFull(withSSL)
+	if err != nil {
+		t.Fatalf("ComputeDashboardSpecHashFull failed: %v", err)
+	}
+
+	if hash1 == hash2 {
+		t.Errorf("Expected different hashes when EnableSSL changes, got same hash: %s", hash1)
+	}
+}
+
+// TestComputeManagerMasterSpecHash_SecurityContextChange tests that SecurityContext changes produce different hashes for master
+func TestComputeManagerMasterSpecHash_SecurityContextChange(t *testing.T) {
+	base := ManagerMasterSpecInput{
+		Version:     "4.9.2",
+		StorageSize: "10Gi",
+	}
+
+	// No SecurityContext
+	hash1, err := ComputeManagerMasterSpecHashFull(base)
+	if err != nil {
+		t.Fatalf("ComputeManagerMasterSpecHashFull failed: %v", err)
+	}
+
+	// With SecurityContext
+	runAsUser := int64(1000)
+	withSC := base
+	withSC.SecurityContext = &corev1.PodSecurityContext{
+		RunAsUser: &runAsUser,
+	}
+	hash2, err := ComputeManagerMasterSpecHashFull(withSC)
+	if err != nil {
+		t.Fatalf("ComputeManagerMasterSpecHashFull failed: %v", err)
+	}
+
+	if hash1 == hash2 {
+		t.Errorf("Expected different hashes when SecurityContext is added, got same hash: %s", hash1)
+	}
+}
+
+// TestComputeManagerWorkersSpecHash_TerminationGracePeriodChange tests that TerminationGracePeriodSeconds changes produce different hashes for workers
+func TestComputeManagerWorkersSpecHash_TerminationGracePeriodChange(t *testing.T) {
+	base := ManagerWorkersSpecInput{
+		Replicas:    2,
+		Version:     "4.9.2",
+		StorageSize: "10Gi",
+	}
+
+	// No TerminationGracePeriodSeconds
+	hash1, err := ComputeManagerWorkersSpecHashFull(base)
+	if err != nil {
+		t.Fatalf("ComputeManagerWorkersSpecHashFull failed: %v", err)
+	}
+
+	// With TerminationGracePeriodSeconds = 120
+	gracePeriod := int64(120)
+	withGP := base
+	withGP.TerminationGracePeriodSeconds = &gracePeriod
+	hash2, err := ComputeManagerWorkersSpecHashFull(withGP)
+	if err != nil {
+		t.Fatalf("ComputeManagerWorkersSpecHashFull failed: %v", err)
+	}
+
+	if hash1 == hash2 {
+		t.Errorf("Expected different hashes when TerminationGracePeriodSeconds is set, got same hash: %s", hash1)
+	}
+}
+
+// TestComputeIndexerSpecHash_ImagePullPolicyChange tests that ImagePullPolicy changes produce different hashes
+func TestComputeIndexerSpecHash_ImagePullPolicyChange(t *testing.T) {
+	base := IndexerSpecInput{
+		Replicas:    3,
+		Version:     "2.11.1",
+		StorageSize: "50Gi",
+		JavaOpts:    "-Xms1g -Xmx1g",
+	}
+
+	// No ImagePullPolicy (empty = omitted)
+	hash1, err := ComputeIndexerSpecHashFull(base)
+	if err != nil {
+		t.Fatalf("ComputeIndexerSpecHashFull failed: %v", err)
+	}
+
+	// With ImagePullPolicy = Always
+	withPolicy := base
+	withPolicy.ImagePullPolicy = corev1.PullAlways
+	hash2, err := ComputeIndexerSpecHashFull(withPolicy)
+	if err != nil {
+		t.Fatalf("ComputeIndexerSpecHashFull failed: %v", err)
+	}
+
+	if hash1 == hash2 {
+		t.Errorf("Expected different hashes when ImagePullPolicy is set, got same hash: %s", hash1)
+	}
+}

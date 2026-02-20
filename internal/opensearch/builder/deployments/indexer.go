@@ -67,6 +67,8 @@ type IndexerStatefulSetBuilder struct {
 	terminationGracePeriodSeconds *int64
 	// ServiceAccount name
 	serviceAccountName string
+	// Image pull policy
+	imagePullPolicy corev1.PullPolicy
 }
 
 // NewIndexerStatefulSetBuilder creates a new IndexerStatefulSetBuilder
@@ -118,6 +120,12 @@ func (b *IndexerStatefulSetBuilder) WithResources(resources *corev1.ResourceRequ
 // WithImage sets the container image
 func (b *IndexerStatefulSetBuilder) WithImage(image string) *IndexerStatefulSetBuilder {
 	b.image = image
+	return b
+}
+
+// WithImagePullPolicy sets the image pull policy for the main container
+func (b *IndexerStatefulSetBuilder) WithImagePullPolicy(policy corev1.PullPolicy) *IndexerStatefulSetBuilder {
+	b.imagePullPolicy = policy
 	return b
 }
 
@@ -278,6 +286,12 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		image = fmt.Sprintf("%s:%s", constants.DefaultWazuhIndexerImage, b.version)
 	}
 
+	// Default image pull policy if not set
+	imagePullPolicy := b.imagePullPolicy
+	if imagePullPolicy == "" {
+		imagePullPolicy = corev1.PullIfNotPresent
+	}
+
 	// Default resources if not set
 	resources := b.resources
 	if resources == nil {
@@ -315,7 +329,7 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		{
 			Name:            constants.ContainerNameOpenSearch,
 			Image:           image,
-			ImagePullPolicy: corev1.PullIfNotPresent,
+			ImagePullPolicy: imagePullPolicy,
 			Resources:       *resources,
 			SecurityContext: &corev1.SecurityContext{
 				AllowPrivilegeEscalation: boolPtr(false),

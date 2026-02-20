@@ -85,6 +85,11 @@ type IndexerSpec struct {
 	RepositoryPlugins []RepositoryPluginHashInput `json:"repositoryPlugins,omitempty"`
 	// ServiceAccount name
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+	// Security and lifecycle
+	SecurityContext               *corev1.PodSecurityContext `json:"securityContext,omitempty"`
+	ContainerSecurityContext      *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	TerminationGracePeriodSeconds *int64                    `json:"terminationGracePeriodSeconds,omitempty"`
+	ImagePullPolicy               corev1.PullPolicy         `json:"imagePullPolicy,omitempty"`
 }
 
 // DashboardSpec contains fields from WazuhCluster.Spec.Dashboard used for hash computation
@@ -111,6 +116,12 @@ type DashboardSpec struct {
 	ExtraContainers     []corev1.Container   `json:"extraContainers,omitempty"`
 	// ServiceAccount name
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+	// Security and lifecycle
+	SecurityContext               *corev1.PodSecurityContext `json:"securityContext,omitempty"`
+	ContainerSecurityContext      *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	TerminationGracePeriodSeconds *int64                    `json:"terminationGracePeriodSeconds,omitempty"`
+	ImagePullPolicy               corev1.PullPolicy         `json:"imagePullPolicy,omitempty"`
+	EnableSSL                     bool                      `json:"enableSSL,omitempty"`
 }
 
 // ManagerMasterSpec contains fields from WazuhCluster.Spec.Manager.Master used for hash computation
@@ -140,6 +151,11 @@ type ManagerMasterSpec struct {
 	WazuhExporter *WazuhExporterHashInput `json:"wazuhExporter,omitempty"`
 	// ServiceAccount name
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+	// Security and lifecycle
+	SecurityContext               *corev1.PodSecurityContext `json:"securityContext,omitempty"`
+	ContainerSecurityContext      *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	TerminationGracePeriodSeconds *int64                    `json:"terminationGracePeriodSeconds,omitempty"`
+	ImagePullPolicy               corev1.PullPolicy         `json:"imagePullPolicy,omitempty"`
 }
 
 // ManagerWorkersSpec contains fields from WazuhCluster.Spec.Manager.Workers used for hash computation
@@ -168,6 +184,11 @@ type ManagerWorkersSpec struct {
 	ExtraContainers     []corev1.Container   `json:"extraContainers,omitempty"`
 	// ServiceAccount name
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+	// Security and lifecycle
+	SecurityContext               *corev1.PodSecurityContext `json:"securityContext,omitempty"`
+	ContainerSecurityContext      *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
+	TerminationGracePeriodSeconds *int64                    `json:"terminationGracePeriodSeconds,omitempty"`
+	ImagePullPolicy               corev1.PullPolicy         `json:"imagePullPolicy,omitempty"`
 }
 
 // ComputeSpecHash computes a SHA256 hash of spec fields for change detection
@@ -244,6 +265,10 @@ type IndexerSpecInput struct {
 	IndexerExporter           *IndexerExporterHashInput
 	RepositoryPlugins         []RepositoryPluginHashInput
 	ServiceAccountName        string
+	SecurityContext               *corev1.PodSecurityContext
+	ContainerSecurityContext      *corev1.SecurityContext
+	TerminationGracePeriodSeconds *int64
+	ImagePullPolicy               corev1.PullPolicy
 }
 
 // ComputeIndexerSpecHash computes the spec hash for an Indexer component
@@ -285,6 +310,11 @@ type DashboardSpecInput struct {
 	ExtraInitContainers       []corev1.Container
 	ExtraContainers           []corev1.Container
 	ServiceAccountName        string
+	SecurityContext               *corev1.PodSecurityContext
+	ContainerSecurityContext      *corev1.SecurityContext
+	TerminationGracePeriodSeconds *int64
+	ImagePullPolicy               corev1.PullPolicy
+	EnableSSL                     bool
 }
 
 // ComputeDashboardSpecHash computes the spec hash for a Dashboard component
@@ -326,6 +356,10 @@ type ManagerMasterSpecInput struct {
 	ExtraContainers           []corev1.Container
 	WazuhExporter             *WazuhExporterHashInput
 	ServiceAccountName        string
+	SecurityContext               *corev1.PodSecurityContext
+	ContainerSecurityContext      *corev1.SecurityContext
+	TerminationGracePeriodSeconds *int64
+	ImagePullPolicy               corev1.PullPolicy
 }
 
 // ComputeManagerMasterSpecHash computes the spec hash for a Manager Master component
@@ -370,6 +404,10 @@ type ManagerWorkersSpecInput struct {
 	ExtraInitContainers       []corev1.Container
 	ExtraContainers           []corev1.Container
 	ServiceAccountName        string
+	SecurityContext               *corev1.PodSecurityContext
+	ContainerSecurityContext      *corev1.SecurityContext
+	TerminationGracePeriodSeconds *int64
+	ImagePullPolicy               corev1.PullPolicy
 }
 
 // ComputeManagerWorkersSpecHash computes the spec hash for Manager Workers component

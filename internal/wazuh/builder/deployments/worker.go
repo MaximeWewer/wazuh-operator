@@ -64,6 +64,8 @@ type WorkerStatefulSetBuilder struct {
 	terminationGracePeriodSeconds *int64
 	// Service account name
 	serviceAccountName string
+	// Image pull policy
+	imagePullPolicy corev1.PullPolicy
 }
 
 // NewWorkerStatefulSetBuilder creates a new WorkerStatefulSetBuilder
@@ -116,6 +118,12 @@ func (b *WorkerStatefulSetBuilder) WithResources(resources *corev1.ResourceRequi
 // WithImage sets the container image
 func (b *WorkerStatefulSetBuilder) WithImage(image string) *WorkerStatefulSetBuilder {
 	b.image = image
+	return b
+}
+
+// WithImagePullPolicy sets the image pull policy for the main container
+func (b *WorkerStatefulSetBuilder) WithImagePullPolicy(policy corev1.PullPolicy) *WorkerStatefulSetBuilder {
+	b.imagePullPolicy = policy
 	return b
 }
 
@@ -309,6 +317,12 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		image = fmt.Sprintf("wazuh/wazuh-manager:%s", b.version)
 	}
 
+	// Default image pull policy if not set
+	imagePullPolicy := b.imagePullPolicy
+	if imagePullPolicy == "" {
+		imagePullPolicy = corev1.PullIfNotPresent
+	}
+
 	// Default resources if not set
 	resources := b.resources
 	if resources == nil {
@@ -349,7 +363,7 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		{
 			Name:            constants.ContainerNameWazuhManager,
 			Image:           image,
-			ImagePullPolicy: corev1.PullIfNotPresent,
+			ImagePullPolicy: imagePullPolicy,
 			Resources:       *resources,
 			// SecurityContext: Wazuh manager image runs multiple services via s6 supervisor
 			// (wazuh-manager, filebeat, etc.) which require root privileges and SYS_CHROOT capability
