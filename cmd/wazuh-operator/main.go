@@ -310,7 +310,7 @@ func main() {
 			WithRuleReconciler(ruleReconciler).
 			WithDecoderReconciler(decoderReconciler),
 		CertificateReconciler:   certReconciler,
-		IndexerReconciler:       opensearchreconciler.NewIndexerReconciler(mgr.GetClient(), mgr.GetScheme()).WithClientFactory(osClientFactory),
+		IndexerReconciler:       opensearchreconciler.NewIndexerReconciler(mgr.GetClient(), mgr.GetScheme()).WithClientFactory(osClientFactory).WithSecurityAdminExecutor(securityAdminExecutor),
 		DashboardReconciler:     opensearchreconciler.NewDashboardReconciler(mgr.GetClient(), mgr.GetScheme()),
 		WorkerReconciler:        wazuhreconciler.NewWorkerReconciler(mgr.GetClient(), mgr.GetScheme()),
 		MonitoringReconciler:    monitoring.NewMonitoringReconciler(mgr.GetClient(), mgr.GetScheme()),
@@ -515,7 +515,7 @@ func main() {
 	if err := (&controllers.OpenSearchIndexerReconciler{
 		Client:            mgr.GetClient(),
 		Scheme:            mgr.GetScheme(),
-		IndexerReconciler: opensearchreconciler.NewIndexerReconciler(mgr.GetClient(), mgr.GetScheme()).WithClientFactory(osClientFactory),
+		IndexerReconciler: opensearchreconciler.NewIndexerReconciler(mgr.GetClient(), mgr.GetScheme()).WithClientFactory(osClientFactory).WithSecurityAdminExecutor(securityAdminExecutor),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchIndexer")
 		os.Exit(1)

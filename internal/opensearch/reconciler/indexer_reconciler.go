@@ -72,7 +72,8 @@ type IndexerReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	Recorder      record.EventRecorder
-	ClientFactory *security.OpenSearchClientFactory
+	ClientFactory          *security.OpenSearchClientFactory
+	SecurityAdminExecutor  *security.SecurityAdminExecutor
 
 	// drainer handles indexer drain operations for safe scale-down
 	drainer *drain.IndexerDrainerImpl
@@ -91,6 +92,12 @@ func NewIndexerReconciler(c client.Client, scheme *runtime.Scheme) *IndexerRecon
 // WithClientFactory sets the shared OpenSearch client factory
 func (r *IndexerReconciler) WithClientFactory(factory *security.OpenSearchClientFactory) *IndexerReconciler {
 	r.ClientFactory = factory
+	return r
+}
+
+// WithSecurityAdminExecutor sets the SecurityAdminExecutor for credential recovery
+func (r *IndexerReconciler) WithSecurityAdminExecutor(executor *security.SecurityAdminExecutor) *IndexerReconciler {
+	r.SecurityAdminExecutor = executor
 	return r
 }
 
@@ -2125,8 +2132,23 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 	// Try to create OpenSearch client and update users
 	osClient, err := r.getClientFactory().GetClientForCluster(ctx, cluster)
 	if err != nil {
-		// Auth failed - this is expected on first startup before security auto-init
-		log.V(1).Info("Failed to create OpenSearch client for security sync (expected on first startup)", "error", err)
+		// Auth failed - try securityadmin.sh to force-push internal_users.yml
+		// This handles the case where PVCs survive CR deletion but credential secrets
+		// are regenerated, causing a password mismatch with the security index.
+		if r.SecurityAdminExecutor != nil {
+			log.Info("REST API auth failed, attempting credential recovery via securityadmin.sh")
+			if saErr := r.SecurityAdminExecutor.ApplyInternalUsers(ctx, cluster.Name, cluster.Namespace, cluster.Spec.Version); saErr != nil {
+				log.Error(saErr, "securityadmin.sh credential recovery failed")
+				return nil // Will retry on next reconciliation
+			}
+			log.Info("Credentials pushed via securityadmin.sh, will sync via REST API on next reconciliation")
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeNormal, "SecurityCredentialsRecovered",
+					"Recovered credentials via securityadmin.sh after auth failure (PVC reuse detected)")
+			}
+		} else {
+			log.V(1).Info("Failed to create OpenSearch client for security sync (expected on first startup)", "error", err)
+		}
 		return nil
 	}
 
@@ -2143,6 +2165,30 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 		return nil
 	}
 	resp.Body.Close()
+
+	// Check for auth failure (401/403) - indicates credential mismatch with security index
+	// This happens when PVCs survive CR deletion and contain old password hashes
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		log.Info("REST API returned auth error during credential sync, attempting recovery via securityadmin.sh",
+			"statusCode", resp.StatusCode)
+		if r.SecurityAdminExecutor != nil {
+			if saErr := r.SecurityAdminExecutor.ApplyInternalUsers(ctx, cluster.Name, cluster.Namespace, cluster.Spec.Version); saErr != nil {
+				log.Error(saErr, "securityadmin.sh credential recovery failed")
+				return nil // Will retry on next reconciliation
+			}
+			log.Info("Credentials pushed via securityadmin.sh, will sync via REST API on next reconciliation")
+			if r.Recorder != nil {
+				r.Recorder.Event(cluster, corev1.EventTypeNormal, "SecurityCredentialsRecovered",
+					"Recovered credentials via securityadmin.sh after REST API auth failure (PVC reuse detected)")
+			}
+
+			// Restart the dashboard to break out of CrashLoopBackOff.
+			// The dashboard already has the correct password from the secret, but may be stuck
+			// in exponential backoff after repeated auth failures against the indexer.
+			r.restartDashboard(ctx, cluster)
+		}
+		return nil
+	}
 
 	// Update kibanaserver user
 	log.Info("Syncing kibanaserver user to security index")
@@ -2170,6 +2216,31 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 	}
 
 	return nil
+}
+
+// restartDashboard triggers a rolling restart of the dashboard deployment by patching
+// an annotation on the pod template. This is used after credential recovery to break
+// the dashboard out of CrashLoopBackOff.
+func (r *IndexerReconciler) restartDashboard(ctx context.Context, cluster *wazuhv1.WazuhCluster) {
+	log := logf.FromContext(ctx)
+
+	dashboardName := constants.DashboardName(cluster.Name)
+	var deployment appsv1.Deployment
+	if err := r.Get(ctx, types.NamespacedName{Name: dashboardName, Namespace: cluster.Namespace}, &deployment); err != nil {
+		log.V(1).Info("Dashboard deployment not found, skipping restart", "error", err)
+		return
+	}
+
+	if deployment.Spec.Template.Annotations == nil {
+		deployment.Spec.Template.Annotations = make(map[string]string)
+	}
+	deployment.Spec.Template.Annotations["wazuh.com/credential-recovery-restart"] = time.Now().Format(time.RFC3339)
+
+	if err := r.Update(ctx, &deployment); err != nil {
+		log.Error(err, "Failed to restart dashboard after credential recovery")
+		return
+	}
+	log.Info("Dashboard restart triggered after credential recovery", "deployment", dashboardName)
 }
 
 // CheckSecurityInitialization checks if OpenSearch security is initialized

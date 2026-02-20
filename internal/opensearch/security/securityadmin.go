@@ -67,13 +67,17 @@ func (e *SecurityAdminExecutor) ApplySecurityConfig(ctx context.Context, cluster
 	}
 
 	// Build the securityadmin.sh command
+	// Use bash -c with OPENSEARCH_JAVA_HOME since the container may not have 'which'
 	cmd := []string{
-		"/usr/share/opensearch/plugins/opensearch-security/tools/securityadmin.sh",
-		"-f", "/usr/share/wazuh-indexer/opensearch-security/config.yml",
-		"-icl", "-nhnv",
-		"-cacert", constants.PathIndexerCerts + "/ca.crt",
-		"-cert", constants.PathIndexerAdminCerts + "/tls.crt",
-		"-key", constants.PathIndexerAdminCerts + "/tls.key",
+		"bash", "-c",
+		fmt.Sprintf("OPENSEARCH_JAVA_HOME=/usr/share/wazuh-indexer/jdk "+
+			"/usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh "+
+			"-f /usr/share/wazuh-indexer/opensearch-security/config.yml "+
+			"-icl -nhnv "+
+			"-cacert %s/ca.crt "+
+			"-cert %s/tls.crt "+
+			"-key %s/tls.key",
+			constants.PathIndexerCerts, constants.PathIndexerAdminCerts, constants.PathIndexerAdminCerts),
 	}
 
 	log.Info("Executing securityadmin.sh", "pod", podName)
@@ -92,6 +96,64 @@ func (e *SecurityAdminExecutor) ApplySecurityConfig(ctx context.Context, cluster
 		"stdout", stdout)
 
 	return nil
+}
+
+// ApplyInternalUsers runs securityadmin.sh on the first indexer pod to push internal_users.yml
+// into the OpenSearch security index. This is used to recover from credential mismatches
+// when PVCs survive CR deletion but credential secrets are regenerated.
+func (e *SecurityAdminExecutor) ApplyInternalUsers(ctx context.Context, clusterName, namespace, wazuhVersion string) error {
+	log := logf.FromContext(ctx).WithValues("cluster", clusterName, "namespace", namespace)
+
+	// Target the first indexer pod
+	podName := fmt.Sprintf("%s-indexer-0", clusterName)
+
+	// Verify pod exists and is running
+	pod := &corev1.Pod{}
+	if err := e.k8sClient.Get(ctx, types.NamespacedName{Name: podName, Namespace: namespace}, pod); err != nil {
+		return fmt.Errorf("failed to get indexer pod %s: %w", podName, err)
+	}
+
+	if pod.Status.Phase != corev1.PodRunning {
+		return fmt.Errorf("indexer pod %s is not running (phase: %s)", podName, pod.Status.Phase)
+	}
+
+	// Build the securityadmin.sh command targeting internal_users.yml
+	cmd := buildInternalUsersCommand(wazuhVersion)
+
+	log.Info("Executing securityadmin.sh to push internal_users.yml", "pod", podName)
+
+	// Execute the command
+	stdout, stderr, err := e.execInPod(ctx, namespace, podName, cmd)
+	if err != nil {
+		log.Error(err, "securityadmin.sh internal_users push failed",
+			"stdout", stdout,
+			"stderr", stderr)
+		return fmt.Errorf("securityadmin.sh failed: %w (stderr: %s)", err, stderr)
+	}
+
+	log.Info("securityadmin.sh internal_users push succeeded",
+		"pod", podName,
+		"stdout", stdout)
+
+	return nil
+}
+
+// buildInternalUsersCommand constructs the securityadmin.sh command for pushing internal_users.yml
+// Uses bash -c with OPENSEARCH_JAVA_HOME since the container may not have 'which'
+func buildInternalUsersCommand(wazuhVersion string) []string {
+	securityConfigDir := constants.IndexerSecurityConfigDir(wazuhVersion)
+	return []string{
+		"bash", "-c",
+		fmt.Sprintf("OPENSEARCH_JAVA_HOME=/usr/share/wazuh-indexer/jdk "+
+			"/usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh "+
+			"-f %s/internal_users.yml "+
+			"-t internalusers "+
+			"-icl -nhnv "+
+			"-cacert %s/ca.crt "+
+			"-cert %s/tls.crt "+
+			"-key %s/tls.key",
+			securityConfigDir, constants.PathIndexerCerts, constants.PathIndexerAdminCerts, constants.PathIndexerAdminCerts),
+	}
 }
 
 // execInPod executes a command in a pod and returns stdout, stderr, and error
