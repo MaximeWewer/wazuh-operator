@@ -1177,15 +1177,18 @@ func (r *DashboardReconciler) createOrUpdate(ctx context.Context, obj client.Obj
 	})
 }
 
-// updateDeploymentWithRetry updates a Deployment with retry-on-conflict, always using the latest resourceVersion.
+// updateDeploymentWithRetry updates a Deployment with retry-on-conflict.
+// It merges mutable fields from desired into the current server object rather than
+// doing a full PUT replacement, which avoids issues with server-defaulted fields
+// causing silent update failures.
 func (r *DashboardReconciler) updateDeploymentWithRetry(ctx context.Context, desired *appsv1.Deployment) error {
 	return utils.RetryOnConflict(ctx, func() error {
 		current := &appsv1.Deployment{}
 		if err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, current); err != nil {
 			return err
 		}
-		desired.SetResourceVersion(current.GetResourceVersion())
-		return r.Update(ctx, desired)
+		patch.MergeDeploymentUpdate(current, desired)
+		return r.Update(ctx, current)
 	})
 }
 

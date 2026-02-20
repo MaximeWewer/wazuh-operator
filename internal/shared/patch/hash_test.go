@@ -21,6 +21,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // TestComputeManagerMasterSpecHash_VersionChange tests that version changes produce different hashes
@@ -461,6 +462,100 @@ func TestComputeManagerWorkersSpecHash_TerminationGracePeriodChange(t *testing.T
 
 	if hash1 == hash2 {
 		t.Errorf("Expected different hashes when TerminationGracePeriodSeconds is set, got same hash: %s", hash1)
+	}
+}
+
+// TestComputeSpecHash_Deterministic verifies that ComputeSpecHash produces identical hashes
+// across multiple invocations for the same input, even with map fields and complex nested types.
+// This is the regression test for the hot reconciliation loop caused by non-deterministic hashing.
+func TestComputeSpecHash_Deterministic(t *testing.T) {
+	runAsUser := int64(1000)
+	gracePeriod := int64(60)
+
+	input := IndexerSpecInput{
+		Replicas:    3,
+		Version:     "2.11.1",
+		StorageSize: "50Gi",
+		JavaOpts:    "-Xms1g -Xmx1g",
+		Image:       "wazuh/wazuh-indexer:2.11.1",
+		Resources: &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceMemory: resource.MustParse("2Gi"),
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceMemory: resource.MustParse("4Gi"),
+				corev1.ResourceCPU:    resource.MustParse("2"),
+			},
+		},
+		NodeSelector: map[string]string{
+			"kubernetes.io/os": "linux",
+			"node-role":        "indexer",
+			"topology.zone":    "us-east-1a",
+			"disktype":         "ssd",
+			"environment":      "production",
+		},
+		Labels: map[string]string{
+			"app":        "wazuh-indexer",
+			"component":  "indexer",
+			"version":    "2.11.1",
+			"managed-by": "wazuh-operator",
+		},
+		Annotations: map[string]string{
+			"wazuh.com/cluster":  "my-cluster",
+			"wazuh.com/role":     "indexer",
+			"prometheus.io/port": "9200",
+		},
+		PodAnnotations: map[string]string{
+			"sidecar.istio.io/inject":          "true",
+			"vault.hashicorp.com/agent-inject": "true",
+		},
+		Affinity: &corev1.Affinity{
+			PodAntiAffinity: &corev1.PodAntiAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+					{
+						Weight: 100,
+						PodAffinityTerm: corev1.PodAffinityTerm{
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"app":       "wazuh-indexer",
+									"component": "indexer",
+								},
+							},
+							TopologyKey: "kubernetes.io/hostname",
+						},
+					},
+				},
+			},
+		},
+		SecurityContext: &corev1.PodSecurityContext{
+			RunAsUser: &runAsUser,
+		},
+		TerminationGracePeriodSeconds: &gracePeriod,
+		ImagePullPolicy:               corev1.PullAlways,
+		IndexerExporter: &IndexerExporterHashInput{
+			Enabled: true,
+			Version: "2.11.1.0",
+		},
+		RepositoryPlugins: []RepositoryPluginHashInput{
+			{Name: "s3", ClientName: "default", CredentialsSecret: "s3-creds"},
+		},
+	}
+
+	// Compute hash 100 times and verify all are identical
+	firstHash, err := ComputeIndexerSpecHashFull(input)
+	if err != nil {
+		t.Fatalf("ComputeIndexerSpecHashFull failed: %v", err)
+	}
+
+	for i := 0; i < 100; i++ {
+		hash, err := ComputeIndexerSpecHashFull(input)
+		if err != nil {
+			t.Fatalf("ComputeIndexerSpecHashFull failed on iteration %d: %v", i, err)
+		}
+		if hash != firstHash {
+			t.Fatalf("Non-deterministic hash detected on iteration %d: got %s, expected %s", i, hash, firstHash)
+		}
 	}
 }
 
