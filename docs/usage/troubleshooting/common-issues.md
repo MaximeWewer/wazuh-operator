@@ -440,6 +440,33 @@ kubectl get secret -n wazuh wazuh-indexer-credentials \
   -o jsonpath='{.data.admin-password}' | base64 -d | grep '\\'
 ```
 
+### Credential Mismatch After CR Recreation (PVC Reuse)
+
+**Symptoms**: After deleting and recreating a WazuhCluster, the indexer starts but authentication fails. Operator logs show `Authentication finally failed for admin` or REST API returns 401/403 errors during credential sync.
+
+**Causes**:
+
+1. PVCs survived the CR deletion (default behavior with `Retain` or `Delete` reclaim policy on StatefulSet PVCs)
+2. Operator generated new random passwords on recreation
+3. OpenSearch security index on the PVC still contains old password hashes
+4. OpenSearch only reads `internal_users.yml` on first init (when security index doesn't exist)
+
+**Solutions**:
+
+The operator automatically recovers from this situation using `securityadmin.sh` (authenticates via TLS admin certificates). Check operator logs:
+
+```bash
+# Look for automatic recovery
+kubectl logs -n <operator-namespace> deploy/wazuh-operator-controller-manager | grep -E "securityadmin|credential"
+
+# Expected sequence:
+# "REST API returned auth error during credential sync, attempting recovery via securityadmin.sh"
+# "Credentials pushed via securityadmin.sh"
+# "Dashboard restart triggered after credential recovery"
+```
+
+If automatic recovery doesn't work, see the manual recovery steps in [Credentials Management](../features/credentials.md#manual-recovery).
+
 ### Secret Not Being Created
 
 ```bash

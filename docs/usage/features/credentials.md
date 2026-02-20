@@ -154,6 +154,61 @@ spec:
 | `<cluster>-indexer-certs` | `root-ca.pem`, `admin.pem`, `admin-key.pem` | Indexer TLS certificates |
 | `<cluster>-dashboard-certs` | `root-ca.pem`, `dashboard.pem`, `dashboard-key.pem` | Dashboard TLS certificates |
 
+## Credential Recovery (PVC Reuse)
+
+When a WazuhCluster CR is deleted and recreated, PersistentVolumeClaims (PVCs) may survive the deletion (depending on your `reclaimPolicy`). In this scenario:
+
+1. The operator generates **new random passwords** for the recreated cluster
+2. The OpenSearch security index on the existing PVC still contains the **old password hashes**
+3. OpenSearch only reads `internal_users.yml` from disk on first initialization (when the security index doesn't exist)
+
+This causes an authentication mismatch: the new passwords don't match the old hashes stored in the security index.
+
+### Automatic Recovery
+
+The operator automatically detects and recovers from this situation:
+
+1. During credential synchronization, the operator attempts to update passwords via the OpenSearch REST API
+2. If the REST API returns a `401 Unauthorized` or `403 Forbidden` error, the operator detects the mismatch
+3. The operator falls back to `securityadmin.sh`, which authenticates using **TLS admin certificates** (not passwords) to force-push the new `internal_users.yml` into the OpenSearch security index
+4. The dashboard deployment is automatically restarted to pick up the new credentials
+5. On the next reconciliation cycle, the REST API succeeds with the new passwords
+
+You can observe this recovery in the operator logs:
+
+```
+REST API returned auth error during credential sync, attempting recovery via securityadmin.sh
+Credentials pushed via securityadmin.sh, will sync via REST API on next reconciliation
+Dashboard restart triggered after credential recovery
+```
+
+A Kubernetes event `SecurityCredentialsRecovered` is also emitted on the WazuhCluster resource.
+
+### Manual Recovery
+
+If automatic recovery fails for any reason:
+
+```bash
+# 1. Check the operator logs for errors
+kubectl logs -n <operator-namespace> deploy/wazuh-operator-controller-manager | grep securityadmin
+
+# 2. Verify the indexer pod is running
+kubectl get pods -n <namespace> -l app.kubernetes.io/component=wazuh-indexer
+
+# 3. Manually run securityadmin.sh if needed
+kubectl exec -n <namespace> <cluster-name>-indexer-0 -- bash -c \
+  "OPENSEARCH_JAVA_HOME=/usr/share/wazuh-indexer/jdk \
+   /usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh \
+   -f /usr/share/wazuh-indexer/config/opensearch-security/internal_users.yml \
+   -t internalusers -icl -nhnv \
+   -cacert /usr/share/wazuh-indexer/config/certs/ca.crt \
+   -cert /usr/share/wazuh-indexer/config/certs/admin/tls.crt \
+   -key /usr/share/wazuh-indexer/config/certs/admin/tls.key"
+
+# 4. Restart the dashboard to pick up the new credentials
+kubectl rollout restart deployment/<cluster-name>-dashboard -n <namespace>
+```
+
 ## Security Best Practices
 
 ### 1. Never Commit Credentials

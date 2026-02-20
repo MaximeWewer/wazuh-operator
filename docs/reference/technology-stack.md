@@ -11,9 +11,9 @@ The Wazuh Operator is a Kubernetes operator built with Go and Kubebuilder, follo
 | **Core Language**            | Go                               | 1.25.7                   | Primary language for Kubernetes operators, native support for concurrency and efficient resource management |
 | **Operator Framework**       | Kubebuilder                      | controller-tools v0.20.0 | Industry-standard framework for building Kubernetes operators with code generation and scaffolding          |
 | **Controller Runtime**       | controller-runtime               | v0.23.1                  | Core library for building Kubernetes controllers with reconciliation loops and caching                      |
-| **Kubernetes Client**        | client-go                        | v0.35.0                  | Official Kubernetes Go client for API interactions                                                          |
-| **Kubernetes API**           | k8s.io/api                       | v0.35.0                  | Kubernetes API types and definitions                                                                        |
-| **Kubernetes Machinery**     | k8s.io/apimachinery              | v0.35.0                  | Generic building blocks for Kubernetes APIs (schema, runtime, etc.)                                         |
+| **Kubernetes Client**        | client-go                        | v0.35.1                  | Official Kubernetes Go client for API interactions                                                          |
+| **Kubernetes API**           | k8s.io/api                       | v0.35.1                  | Kubernetes API types and definitions                                                                        |
+| **Kubernetes Machinery**     | k8s.io/apimachinery              | v0.35.1                  | Generic building blocks for Kubernetes APIs (schema, runtime, etc.)                                         |
 | **Gateway API**              | sigs.k8s.io/gateway-api          | v1.4.1                   | Kubernetes Gateway API for advanced traffic routing (HTTPRoute, TCPRoute, UDPRoute)                         |
 | **Testing Framework**        | Ginkgo                           | v2.28.1                  | BDD-style testing framework for Go                                                                          |
 | **Testing Assertions**       | Gomega                           | v1.39.1                  | Matcher library for expressive test assertions                                                              |
@@ -119,7 +119,7 @@ make test       # Run unit tests
 
 ## Development Tools
 
-- **controller-gen**: Code and manifest generation (v0.17.0)
+- **controller-gen**: Code and manifest generation (v0.20.0)
 - **golangci-lint**: Linting and static analysis (.golangci.yml)
 - **Make**: Build automation with targets for development, testing, deployment
 - **Docker**: Container image building and local testing

@@ -92,6 +92,36 @@ Beyond the spec hash, reconcilers also detect changes via:
 - **Cert hash**: Computed from TLS certificate secrets
 - **Annotation comparison**: Direct comparison via `utils.HashMap()` for StatefulSet and pod template annotations
 
+## Credential Recovery Flow
+
+When PVCs survive CR deletion, the operator detects and recovers from credential mismatches:
+
+```mermaid
+flowchart TD
+    A["reconcileSecurityInitJob()<br/>Credential sync step"]
+    B["PutJSON: Update admin password<br/>via OpenSearch REST API"]
+    C{"Response status?"}
+    D["Success (200)<br/>Update credentialsHash in status"]
+    E["Auth error (401/403)<br/>PVC credential mismatch detected"]
+    F["securityadmin.sh<br/>Push internal_users.yml via TLS admin cert<br/>(bypasses password auth)"]
+    G{"securityadmin.sh<br/>succeeded?"}
+    H["Restart dashboard deployment<br/>(patch annotation to break CrashLoopBackOff)"]
+    I["Emit SecurityCredentialsRecovered event"]
+    J["Return nil<br/>Next reconciliation will retry REST API"]
+    K["Log error<br/>Return nil (will retry on next reconciliation)"]
+
+    A --> B --> C
+    C -->|200| D
+    C -->|401/403| E --> F --> G
+    G -->|Yes| H --> I --> J
+    G -->|No| K
+```
+
+Key points:
+- `securityadmin.sh` authenticates using **TLS admin certificates**, not passwords
+- The dashboard is restarted via annotation patch to escape CrashLoopBackOff
+- On the next reconciliation cycle, the REST API succeeds with the new passwords
+
 ## Resource Creation Pattern
 
 Each component follows the same pattern:

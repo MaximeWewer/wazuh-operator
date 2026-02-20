@@ -25,7 +25,7 @@ spec:
     enabled: true
     wazuhExporter:
       enabled: true
-      image: "pytoshka/wazuh-prometheus-exporter:latest"
+      image: "kennyopennix/wazuh-exporter:latest"
       port: 9090
       apiProtocol: "https"
       apiVerifySSL: false
@@ -49,7 +49,7 @@ The Wazuh exporter is deployed as a sidecar container on the manager master pod.
 | Field                     | Type                 | Default                                     | Description                        |
 | ------------------------- | -------------------- | ------------------------------------------- | ---------------------------------- |
 | `enabled`                 | bool                 | `false`                                     | Enable Wazuh exporter sidecar      |
-| `image`                   | string               | `pytoshka/wazuh-prometheus-exporter:latest` | Exporter image                     |
+| `image`                   | string               | `kennyopennix/wazuh-exporter:latest` | Exporter image                     |
 | `port`                    | int32                | `9090`                                      | Metrics port                       |
 | `apiProtocol`             | string               | `https`                                     | Wazuh API protocol                 |
 | `apiVerifySSL`            | bool                 | `false`                                     | Verify SSL certificates            |

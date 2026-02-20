@@ -10,7 +10,7 @@ The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framewor
 
 - **Language**: Go 1.25.7
 - **Framework**: Kubebuilder v4 with controller-runtime v0.23.1
-- **Kubernetes API**: client-go v0.35.0, k8s.io/api v0.35.0
+- **Kubernetes API**: client-go v0.35.1, k8s.io/api v0.35.1
 - **Gateway API**: sigs.k8s.io/gateway-api v1.4.1
 - **Testing**: Ginkgo v2.28.1 + Gomega v1.39.1
 - **Monitoring**: Prometheus (prometheus-operator v0.89.0 APIs, prometheus/client_golang v1.23.2)

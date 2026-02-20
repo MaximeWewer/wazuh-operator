@@ -24,7 +24,7 @@ spec:
     wazuhExporter:
       enabled: true
       # Docker image for the exporter
-      image: "pytoshka/wazuh-prometheus-exporter:latest"
+      image: "kennyopennix/wazuh-exporter:latest"
       # Port for metrics endpoint
       port: 9090
       # Wazuh API protocol
