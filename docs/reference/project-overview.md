@@ -10,7 +10,7 @@
 - **Purpose**: Kubernetes operator for Wazuh security platform
 - **License**: Apache License 2.0
 - **Repository**: <https://github.com/MaximeWewer/wazuh-operator>
-- **Language**: Go 1.25.7
+- **Language**: Go 1.26.0
 - **Framework**: Kubebuilder v4 with controller-runtime
 - **Target**: Kubernetes 1.25+
 
@@ -18,7 +18,7 @@
 
 For detailed technology decisions and justifications, see [Technology Stack](technology-stack.md).
 
-**Key Technologies**: Go 1.25.7, Kubebuilder v4, controller-runtime, Ginkgo/Gomega, Prometheus, OpenTelemetry
+**Key Technologies**: Go 1.26.0, Kubebuilder v4, controller-runtime, Ginkgo/Gomega, Prometheus, OpenTelemetry
 
 ## Architecture Type
 

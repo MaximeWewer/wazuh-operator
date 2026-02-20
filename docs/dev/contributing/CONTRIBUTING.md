@@ -6,7 +6,7 @@ Thank you for your interest in contributing to the Wazuh Operator!
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - Docker
 - kubectl
 - A Kubernetes cluster (minikube recommended for development)

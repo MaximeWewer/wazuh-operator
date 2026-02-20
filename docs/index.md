@@ -22,7 +22,7 @@ kubectl get wazuhcluster -n wazuh
 | Property        | Value                                       |
 | --------------- | ------------------------------------------- |
 | **Type**        | Kubernetes Operator                         |
-| **Language**    | Go 1.25.7                                   |
+| **Language**    | Go 1.26.0                                   |
 | **Framework**   | Kubebuilder v4 + controller-runtime         |
 | **CRDs**        | 25 Custom Resource Definitions              |
 | **Controllers** | 25 reconciliation controllers               |

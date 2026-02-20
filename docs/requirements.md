@@ -24,7 +24,7 @@ This document is the single source of truth for all prerequisites and requiremen
 
 | Tool                                                 | Minimum Version | Purpose                  |
 | ---------------------------------------------------- | --------------- | ------------------------ |
-| [Go](https://go.dev/dl/)                             | 1.25+           | Build operator           |
+| [Go](https://go.dev/dl/)                             | 1.26+           | Build operator           |
 | [Docker](https://docs.docker.com/get-docker/)        | 20.10+          | Container builds         |
 | [Make](https://www.gnu.org/software/make/)           | 3.81+           | Build automation         |
 | [Minikube](https://minikube.sigs.k8s.io/docs/start/) | 1.30+           | Local testing (optional) |

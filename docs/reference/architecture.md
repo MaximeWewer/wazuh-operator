@@ -8,7 +8,7 @@ The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framewor
 
 ### Core Technologies
 
-- **Language**: Go 1.25.7
+- **Language**: Go 1.26.0
 - **Framework**: Kubebuilder v4 with controller-runtime v0.23.1
 - **Kubernetes API**: client-go v0.35.1, k8s.io/api v0.35.1
 - **Gateway API**: sigs.k8s.io/gateway-api v1.4.1
@@ -20,7 +20,7 @@ The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framewor
 ### Build & Deployment
 
 - **Build Tool**: Make
-- **Container**: Multi-stage Docker (golang:1.25-alpine → distroless/static:nonroot)
+- **Container**: Multi-stage Docker (golang:1.26-alpine → distroless/static:nonroot)
 - **Package Manager**: Helm (charts published to GHCR)
 - **Code Generation**: controller-gen v0.20.0
 
