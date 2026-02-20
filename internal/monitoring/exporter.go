@@ -113,12 +113,26 @@ func (c *WazuhExporterConfig) BuildExporterContainer() corev1.Container {
 
 	// Build startup command that waits for Wazuh API to be available
 	// This prevents the exporter from crashing before the manager is ready
+	// Uses Python instead of curl since the exporter image is Python-based
 	startupScript := fmt.Sprintf(`
 echo "Waiting for Wazuh API to be available..."
 max_attempts=%d
 attempt=0
 while [ $attempt -lt $max_attempts ]; do
-    if curl -sk -u "$WAZUH_API_USERNAME:$WAZUH_API_PASSWORD" "https://localhost:%s/security/user/authenticate" | grep -q '"data"'; then
+    if python -c "
+import urllib.request, ssl, base64, json, sys
+try:
+    creds = base64.b64encode(('$WAZUH_API_USERNAME:$WAZUH_API_PASSWORD').encode()).decode()
+    req = urllib.request.Request('https://localhost:%s/security/user/authenticate', headers={'Authorization': 'Basic ' + creds})
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    resp = urllib.request.urlopen(req, context=ctx, timeout=5)
+    data = json.loads(resp.read())
+    sys.exit(0 if 'data' in data else 1)
+except Exception:
+    sys.exit(1)
+" 2>/dev/null; then
         echo "Wazuh API is ready!"
         break
     fi
