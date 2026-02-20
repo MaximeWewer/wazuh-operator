@@ -430,7 +430,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare.outputs.tag }}
-          name: ${{ needs.prepare.outputs.version }}
+          name: ${{ needs.prepare.outputs.tag }}
           body_path: release_notes.md
           draft: false
           prerelease: ${{ needs.prepare.outputs.is_prerelease }}
