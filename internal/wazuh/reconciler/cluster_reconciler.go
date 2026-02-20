@@ -2059,15 +2059,18 @@ func (r *ClusterReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 	})
 }
 
-// updateStatefulSetWithRetry updates a StatefulSet with retry-on-conflict, always using the latest resourceVersion.
+// updateStatefulSetWithRetry updates a StatefulSet with retry-on-conflict.
+// It merges mutable fields from desired into the current server object rather than
+// doing a full PUT replacement, which avoids issues with server-defaulted immutable
+// fields (e.g. VolumeClaimTemplates) causing silent update failures.
 func (r *ClusterReconciler) updateStatefulSetWithRetry(ctx context.Context, desired *appsv1.StatefulSet) error {
 	return utils.RetryOnConflict(ctx, func() error {
 		current := &appsv1.StatefulSet{}
 		if err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, current); err != nil {
 			return err
 		}
-		desired.SetResourceVersion(current.GetResourceVersion())
-		return r.Update(ctx, desired)
+		patch.MergeStatefulSetUpdate(current, desired)
+		return r.Update(ctx, current)
 	})
 }
 

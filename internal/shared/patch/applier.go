@@ -92,10 +92,7 @@ func (a *Applier) ApplyStatefulSet(ctx context.Context, desired *appsv1.Stateful
 		return err
 	}
 
-	// Preserve ResourceVersion for update
-	desired.ResourceVersion = current.ResourceVersion
-
-	// Set spec hash annotation
+	// Set spec hash annotation on desired before merge
 	if specHash != "" {
 		if desired.Annotations == nil {
 			desired.Annotations = make(map[string]string)
@@ -103,13 +100,18 @@ func (a *Applier) ApplyStatefulSet(ctx context.Context, desired *appsv1.Stateful
 		desired.Annotations[constants.AnnotationSpecHash] = specHash
 	}
 
+	// Merge mutable fields from desired into current rather than doing a full PUT replacement.
+	// This preserves server-defaulted immutable fields (e.g. VolumeClaimTemplates)
+	// that may differ from the freshly-built object.
+	MergeStatefulSetUpdate(current, desired)
+
 	logger.Info("Updating StatefulSet",
 		"reason", result.Reason,
 		"message", result.Message,
 		"changedFields", result.ChangedFields,
 	)
 
-	if err := a.client.Update(ctx, desired); err != nil {
+	if err := a.client.Update(ctx, current); err != nil {
 		return NewUpdateFailedError("StatefulSet", desired.Name, err)
 	}
 
@@ -194,10 +196,7 @@ func (a *Applier) ApplyDeployment(ctx context.Context, desired *appsv1.Deploymen
 		return err
 	}
 
-	// Preserve ResourceVersion for update
-	desired.ResourceVersion = current.ResourceVersion
-
-	// Set spec hash annotation
+	// Set spec hash annotation on desired before merge
 	if specHash != "" {
 		if desired.Annotations == nil {
 			desired.Annotations = make(map[string]string)
@@ -205,12 +204,16 @@ func (a *Applier) ApplyDeployment(ctx context.Context, desired *appsv1.Deploymen
 		desired.Annotations[constants.AnnotationSpecHash] = specHash
 	}
 
+	// Merge mutable fields from desired into current rather than doing a full PUT replacement.
+	// This preserves server-managed fields that may differ from the freshly-built object.
+	MergeDeploymentUpdate(current, desired)
+
 	logger.Info("Updating Deployment",
 		"reason", result.Reason,
 		"message", result.Message,
 	)
 
-	if err := a.client.Update(ctx, desired); err != nil {
+	if err := a.client.Update(ctx, current); err != nil {
 		return NewUpdateFailedError("Deployment", desired.Name, err)
 	}
 

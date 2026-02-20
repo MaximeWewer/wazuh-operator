@@ -39,6 +39,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	shareddrain "github.com/MaximeWewer/wazuh-operator/internal/shared/drain"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/serviceaccount"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
@@ -355,15 +356,18 @@ func (r *WorkerReconciler) createOrUpdate(ctx context.Context, obj client.Object
 	})
 }
 
-// updateStatefulSetWithRetry updates a StatefulSet with retry-on-conflict, always using the latest resourceVersion.
+// updateStatefulSetWithRetry updates a StatefulSet with retry-on-conflict.
+// It merges mutable fields from desired into the current server object rather than
+// doing a full PUT replacement, which avoids issues with server-defaulted immutable
+// fields (e.g. VolumeClaimTemplates) causing silent update failures.
 func (r *WorkerReconciler) updateStatefulSetWithRetry(ctx context.Context, desired *appsv1.StatefulSet) error {
 	return utils.RetryOnConflict(ctx, func() error {
 		current := &appsv1.StatefulSet{}
 		if err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, current); err != nil {
 			return err
 		}
-		desired.SetResourceVersion(current.GetResourceVersion())
-		return r.Update(ctx, desired)
+		patch.MergeStatefulSetUpdate(current, desired)
+		return r.Update(ctx, current)
 	})
 }
 
