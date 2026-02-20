@@ -200,7 +200,7 @@ func (c *WazuhExporterConfig) buildEnvVars() []corev1.EnvVar {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: c.APICredentialsRef,
 					},
-					Key: constants.SecretKeyUsername,
+					Key: constants.SecretKeyAPIUsername,
 				},
 			},
 		},
@@ -211,7 +211,7 @@ func (c *WazuhExporterConfig) buildEnvVars() []corev1.EnvVar {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: c.APICredentialsRef,
 					},
-					Key: constants.SecretKeyPassword,
+					Key: constants.SecretKeyAPIPassword,
 				},
 			},
 		},
