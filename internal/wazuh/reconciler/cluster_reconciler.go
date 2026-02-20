@@ -527,6 +527,11 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	if storageSize != "" {
 		stsBuilder.WithStorageSize(storageSize)
 	}
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.StorageClass != nil && *cluster.Spec.Manager.Master.StorageClass != "" {
+		stsBuilder.WithStorageClassName(*cluster.Spec.Manager.Master.StorageClass)
+	} else if cluster.Spec.StorageClassName != nil && *cluster.Spec.StorageClassName != "" {
+		stsBuilder.WithStorageClassName(*cluster.Spec.StorageClassName)
+	}
 	if nodeSelector != nil {
 		stsBuilder.WithNodeSelector(nodeSelector)
 	}
@@ -984,6 +989,11 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	}
 	if storageSize != "" {
 		stsBuilder.WithStorageSize(storageSize)
+	}
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.StorageClass != nil && *cluster.Spec.Manager.Workers.StorageClass != "" {
+		stsBuilder.WithStorageClassName(*cluster.Spec.Manager.Workers.StorageClass)
+	} else if cluster.Spec.StorageClassName != nil && *cluster.Spec.StorageClassName != "" {
+		stsBuilder.WithStorageClassName(*cluster.Spec.StorageClassName)
 	}
 	if nodeSelector != nil {
 		stsBuilder.WithNodeSelector(nodeSelector)

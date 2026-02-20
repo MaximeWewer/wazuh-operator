@@ -6691,6 +6691,11 @@ func (in *WazuhIndexerClusterSpec) DeepCopyInto(out *WazuhIndexerClusterSpec) {
 		*out = new(corev1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.StorageClass != nil {
+		in, out := &in.StorageClass, &out.StorageClass
+		*out = new(string)
+		**out = **in
+	}
 	if in.Image != nil {
 		in, out := &in.Image, &out.Image
 		*out = new(ImageSpec)
@@ -7083,6 +7088,11 @@ func (in *WazuhMasterSpec) DeepCopyInto(out *WazuhMasterSpec) {
 		in, out := &in.Resources, &out.Resources
 		*out = new(corev1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.StorageClass != nil {
+		in, out := &in.StorageClass, &out.StorageClass
+		*out = new(string)
+		**out = **in
 	}
 	if in.Service != nil {
 		in, out := &in.Service, &out.Service
@@ -7758,6 +7768,11 @@ func (in *WazuhWorkerSpec) DeepCopyInto(out *WazuhWorkerSpec) {
 		in, out := &in.Resources, &out.Resources
 		*out = new(corev1.ResourceRequirements)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.StorageClass != nil {
+		in, out := &in.StorageClass, &out.StorageClass
+		*out = new(string)
+		**out = **in
 	}
 	if in.Service != nil {
 		in, out := &in.Service, &out.Service

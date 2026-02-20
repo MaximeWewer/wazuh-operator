@@ -158,6 +158,9 @@ cluster:
       #   requests: { cpu: "2", memory: "4Gi" }
       #   limits: { cpu: "4", memory: "8Gi" }
 
+      # -- Override global storageClassName for indexer PVCs (e.g., "fast-ssd")
+      # storageClass: ""
+
       # @extra cluster.spec.indexer.image Indexer image override
       image:
         # -- Indexer image repository (leave empty for operator default)
@@ -300,6 +303,7 @@ cluster:
       #     replicas: 3
       #     roles: [cluster_manager]
       #     storageSize: 20Gi
+      #     storageClass: "fast-ssd"  # overrides indexer.storageClass and global storageClassName
       #     javaOpts: "-Xms2g -Xmx2g"
       #     resources:
       #       requests: { cpu: "1", memory: "4Gi" }
@@ -308,6 +312,7 @@ cluster:
       #     replicas: 3
       #     roles: [data, ingest]
       #     storageSize: 100Gi
+      #     storageClass: "high-iops"
 
     # @section Manager Configuration
 
@@ -444,6 +449,9 @@ cluster:
         #   requests: { cpu: "1", memory: "2Gi" }
         #   limits: { cpu: "2", memory: "4Gi" }
 
+        # -- Override global storageClassName for master PVCs (e.g., "standard")
+        # storageClass: ""
+
         # -- Master termination grace period (seconds)
         # @default -- `90`
         terminationGracePeriodSeconds: 0
@@ -536,6 +544,9 @@ cluster:
         # resources:
         #   requests: { cpu: "1", memory: "2Gi" }
         #   limits: { cpu: "2", memory: "4Gi" }
+
+        # -- Override global storageClassName for worker PVCs (e.g., "standard")
+        # storageClass: ""
 
         # -- Workers termination grace period (seconds)
         # @default -- `90`

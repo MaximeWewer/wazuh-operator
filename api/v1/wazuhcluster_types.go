@@ -225,6 +225,11 @@ type WazuhIndexerClusterSpec struct {
 	// +kubebuilder:default="50Gi"
 	StorageSize string `json:"storageSize,omitempty"`
 
+	// StorageClass overrides the cluster-level storageClassName for indexer PVCs
+	// If not specified, uses cluster-level storageClassName
+	// +optional
+	StorageClass *string `json:"storageClass,omitempty"`
+
 	// Image override
 	// +optional
 	Image *ImageSpec `json:"image,omitempty"`

@@ -610,7 +610,9 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 		if cluster.Spec.Indexer.StorageSize != "" {
 			stsBuilder.WithStorageSize(cluster.Spec.Indexer.StorageSize)
 		}
-		if cluster.Spec.StorageClassName != nil && *cluster.Spec.StorageClassName != "" {
+		if cluster.Spec.Indexer.StorageClass != nil && *cluster.Spec.Indexer.StorageClass != "" {
+			stsBuilder.WithStorageClassName(*cluster.Spec.Indexer.StorageClass)
+		} else if cluster.Spec.StorageClassName != nil && *cluster.Spec.StorageClassName != "" {
 			stsBuilder.WithStorageClassName(*cluster.Spec.StorageClassName)
 		}
 		if cluster.Spec.Indexer.JavaOpts != "" {
@@ -1003,7 +1005,9 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		if cluster.Spec.Indexer.StorageSize != "" {
 			stsBuilder.WithStorageSize(storageSize)
 		}
-		if cluster.Spec.StorageClassName != nil && *cluster.Spec.StorageClassName != "" {
+		if cluster.Spec.Indexer.StorageClass != nil && *cluster.Spec.Indexer.StorageClass != "" {
+			stsBuilder.WithStorageClassName(*cluster.Spec.Indexer.StorageClass)
+		} else if cluster.Spec.StorageClassName != nil && *cluster.Spec.StorageClassName != "" {
 			stsBuilder.WithStorageClassName(*cluster.Spec.StorageClassName)
 		}
 		if cluster.Spec.Indexer.JavaOpts != "" {
@@ -2718,8 +2722,12 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 	if pool.StorageSize != "" {
 		stsBuilder.WithStorageSize(pool.StorageSize)
 	}
-	if pool.StorageClass != nil {
+	if pool.StorageClass != nil && *pool.StorageClass != "" {
 		stsBuilder.WithStorageClassName(*pool.StorageClass)
+	} else if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.StorageClass != nil && *cluster.Spec.Indexer.StorageClass != "" {
+		stsBuilder.WithStorageClassName(*cluster.Spec.Indexer.StorageClass)
+	} else if cluster.Spec.StorageClassName != nil && *cluster.Spec.StorageClassName != "" {
+		stsBuilder.WithStorageClassName(*cluster.Spec.StorageClassName)
 	}
 	if pool.JavaOpts != "" {
 		stsBuilder.WithJavaOpts(pool.JavaOpts)

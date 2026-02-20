@@ -54,6 +54,11 @@ type WazuhMasterSpec struct {
 	// +kubebuilder:default="50Gi"
 	StorageSize string `json:"storageSize,omitempty"`
 
+	// StorageClass overrides the cluster-level storageClassName for master PVCs
+	// If not specified, uses cluster-level storageClassName
+	// +optional
+	StorageClass *string `json:"storageClass,omitempty"`
+
 	// Service configuration
 	// +optional
 	Service *ServiceSpec `json:"service,omitempty"`
@@ -165,6 +170,11 @@ type WazuhWorkerSpec struct {
 	// Storage size for worker nodes
 	// +kubebuilder:default="50Gi"
 	StorageSize string `json:"storageSize,omitempty"`
+
+	// StorageClass overrides the cluster-level storageClassName for worker PVCs
+	// If not specified, uses cluster-level storageClassName
+	// +optional
+	StorageClass *string `json:"storageClass,omitempty"`
 
 	// Service configuration
 	// +optional
