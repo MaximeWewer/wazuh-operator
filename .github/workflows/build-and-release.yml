@@ -80,6 +80,10 @@ jobs:
             TAG="v${VERSION}"
           fi
 
+          # Ensure semver: strip leading zeros from segments (e.g., 2026.02.1 -> 2026.2.1)
+          VERSION=$(echo "${VERSION}" | awk -F. '{printf "%d.%d.%d", $1, $2, $3}')
+          TAG="v${VERSION}"
+
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "tag=${TAG}" >> $GITHUB_OUTPUT
 
@@ -364,6 +368,7 @@ jobs:
           IMAGE_LOWER: ${{ needs.prepare.outputs.image_name_lower }}
           OWNER_LOWER: ${{ needs.prepare.outputs.repository_owner_lower }}
           REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git fetch --tags
 
@@ -372,48 +377,44 @@ jobs:
           {
             echo "## Wazuh Operator ${VERSION}"
             echo ""
-            echo "### What's Changed"
-            echo ""
           } > release_notes.md
 
           if [ -n "${PREVIOUS_TAG}" ]; then
-            echo "Changes since ${PREVIOUS_TAG}:" >> release_notes.md
+            echo "### Recent commits" >> release_notes.md
+            echo "" >> release_notes.md
+            git log "${PREVIOUS_TAG}..HEAD" --no-merges --pretty=format:"- %h %s" --max-count=5 >> release_notes.md
             echo "" >> release_notes.md
 
-            COMMITS=$(git log "${PREVIOUS_TAG}..HEAD" --no-merges --pretty=format:"- %h: %s" --max-count=20)
-
-            if [ -n "${COMMITS}" ]; then
-              echo "${COMMITS}" >> release_notes.md
-            else
-              echo "No changes found." >> release_notes.md
-            fi
+            echo "" >> release_notes.md
+            echo "### Recent pull requests" >> release_notes.md
+            echo "" >> release_notes.md
+            gh pr list --repo "${REPO}" --state merged --limit 5 \
+              --json number,title --jq '.[] | "- #\(.number) \(.title)"' >> release_notes.md
+            echo "" >> release_notes.md
           else
             echo "Initial release" >> release_notes.md
+            echo "" >> release_notes.md
           fi
 
           {
-            echo ""
             echo "### Docker Images"
-            echo ""
-            echo "Pull the operator image:"
             echo ""
             echo "\`\`\`bash"
             echo "docker pull ${REGISTRY}/${IMAGE_LOWER}:${VERSION}"
             echo "\`\`\`"
             echo ""
-            echo "Supported platforms:"
-            echo "- linux/amd64"
-            echo ""
             echo "### Helm Charts (OCI Registry)"
+            echo ""
+            echo "Due to CRD size, use \`helm template\` + \`kubectl apply\` instead of \`helm install\`:"
             echo ""
             echo "\`\`\`bash"
             echo "# Install the operator"
-            echo "helm install wazuh-operator oci://${REGISTRY}/${OWNER_LOWER}/charts/wazuh-operator \\"
-            echo "  --version ${VERSION}"
+            echo "helm template wazuh-operator oci://${REGISTRY}/${OWNER_LOWER}/charts/wazuh-operator \\"
+            echo "  --version ${VERSION} --namespace wazuh-system | kubectl apply -f -"
             echo ""
             echo "# Install a Wazuh cluster"
-            echo "helm install wazuh-cluster oci://${REGISTRY}/${OWNER_LOWER}/charts/wazuh-cluster \\"
-            echo "  --version ${VERSION}"
+            echo "helm template wazuh-cluster oci://${REGISTRY}/${OWNER_LOWER}/charts/wazuh-cluster \\"
+            echo "  --version ${VERSION} | kubectl apply -f -"
             echo "\`\`\`"
             echo ""
             echo "---"
@@ -443,6 +444,7 @@ jobs:
       - name: Generate release summary
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
+          TAG: ${{ needs.prepare.outputs.tag }}
           IMAGE_LOWER: ${{ needs.prepare.outputs.image_name_lower }}
           OWNER_LOWER: ${{ needs.prepare.outputs.repository_owner_lower }}
           REPO: ${{ github.repository }}
@@ -461,7 +463,7 @@ jobs:
             echo "- Cluster: \`oci://${REGISTRY}/${OWNER_LOWER}/charts/wazuh-cluster:${VERSION}\`"
             echo ""
             echo "### Links"
-            echo "- [GitHub Release](https://github.com/${REPO}/releases/tag/${VERSION})"
+            echo "- [GitHub Release](https://github.com/${REPO}/releases/tag/${TAG})"
             echo "- [Docker Image](https://${REGISTRY}/${IMAGE_LOWER})"
           } >> "$GITHUB_STEP_SUMMARY"
 
