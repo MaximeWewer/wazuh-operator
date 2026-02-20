@@ -20,9 +20,20 @@ help: ## Display this help.
 
 ##@ Development
 
+CRD_TEMPLATES_DIR := charts/wazuh-operator/templates/crds
+CRD_TMP_DIR := $(shell mktemp -d)
+
 .PHONY: manifests
-manifests: controller-gen ## Generate CRDs directly into Helm chart.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=charts/wazuh-operator/crds
+manifests: controller-gen ## Generate CRDs and wrap them with Helm conditional into templates/crds.
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=$(CRD_TMP_DIR)
+	@mkdir -p $(CRD_TEMPLATES_DIR)
+	@rm -f $(CRD_TEMPLATES_DIR)/*.yaml
+	@for f in $(CRD_TMP_DIR)/*.yaml; do \
+		name=$$(basename $$f); \
+		{ echo '{{- if .Values.crds.install }}'; cat $$f; echo '{{- end }}'; } > $(CRD_TEMPLATES_DIR)/$$name; \
+	done
+	@rm -rf $(CRD_TMP_DIR)
+	@echo "CRDs generated and wrapped in $(CRD_TEMPLATES_DIR)"
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -92,11 +103,15 @@ HELM_NAMESPACE_CLUSTER ?= wazuh-system
 
 .PHONY: install
 install: manifests ## Install CRDs into the K8s cluster.
-	kubectl apply --server-side -f charts/wazuh-operator/crds/
+	@for f in $(CRD_TEMPLATES_DIR)/*.yaml; do \
+		sed '1d;$$d' $$f | kubectl apply --server-side -f -; \
+	done
 
 .PHONY: uninstall
 uninstall: ## Uninstall CRDs from the K8s cluster.
-	-kubectl delete -f charts/wazuh-operator/crds/
+	@for f in $(CRD_TEMPLATES_DIR)/*.yaml; do \
+		-sed '1d;$$d' $$f | kubectl delete -f -; \
+	done
 
 .PHONY: deploy
 deploy: manifests ## Deploy operator using Helm.
@@ -131,7 +146,9 @@ clean-crds: ## Remove old CRDs from cluster
 	-kubectl delete wazuhclusters.resources.wazuh.com --all --all-namespaces
 	-kubectl delete wazuhrules.resources.wazuh.com --all --all-namespaces
 	-kubectl delete wazuhdecoders.resources.wazuh.com --all --all-namespaces
-	-kubectl delete -f charts/wazuh-operator/crds/ --ignore-not-found=true
+	@for f in $(CRD_TEMPLATES_DIR)/*.yaml; do \
+		sed '1d;$$d' $$f | kubectl delete --ignore-not-found=true -f - || true; \
+	done
 	@echo "CRDs cleaned"
 
 .PHONY: clean-all

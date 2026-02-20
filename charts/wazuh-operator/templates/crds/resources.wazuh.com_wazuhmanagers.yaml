@@ -7342,6 +7342,11 @@ spec:
                           as "{cluster}-{component}" if empty and Create=true.
                         type: string
                     type: object
+                  storageClass:
+                    description: |-
+                      StorageClass overrides the cluster-level storageClassName for master PVCs
+                      If not specified, uses cluster-level storageClassName
+                    type: string
                   storageSize:
                     default: 50Gi
                     description: Storage size for master node
@@ -14618,6 +14623,11 @@ spec:
                           as "{cluster}-{component}" if empty and Create=true.
                         type: string
                     type: object
+                  storageClass:
+                    description: |-
+                      StorageClass overrides the cluster-level storageClassName for worker PVCs
+                      If not specified, uses cluster-level storageClassName
+                    type: string
                   storageSize:
                     default: 50Gi
                     description: Storage size for worker nodes
