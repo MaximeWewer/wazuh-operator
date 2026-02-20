@@ -508,7 +508,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		ExtraVolumeMounts:         extraVolumeMounts,
 		ExtraInitContainers:       extraInitContainers,
 		ExtraContainers:           extraContainers,
-		MonitoringEnabled:         cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Enabled,
+		WazuhExporter:             toWazuhExporterHashInput(cluster),
 		ServiceAccountName:        masterSAName,
 	})
 	if err != nil {
@@ -1492,7 +1492,7 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 		EnvFrom:             cluster.Spec.Manager.Master.EnvFrom,
 		Annotations:         cluster.Spec.Manager.Master.Annotations,
 		PodAnnotations:      cluster.Spec.Manager.Master.PodAnnotations,
-		MonitoringEnabled:   cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Enabled,
+		WazuhExporter:       toWazuhExporterHashInput(cluster),
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
@@ -2355,6 +2355,27 @@ func (r *ClusterReconciler) createOrUpdateCronJob(ctx context.Context, cronJob *
 	log.V(1).Info("Updating CronJob", "name", cronJob.Name)
 	cronJob.SetResourceVersion(existing.GetResourceVersion())
 	return r.Update(ctx, cronJob)
+}
+
+// toWazuhExporterHashInput converts the cluster's WazuhExporter config to a hash input struct.
+func toWazuhExporterHashInput(cluster *wazuhv1.WazuhCluster) *patch.WazuhExporterHashInput {
+	if cluster.Spec.Monitoring == nil || !cluster.Spec.Monitoring.Enabled ||
+		cluster.Spec.Monitoring.WazuhExporter == nil {
+		return nil
+	}
+	e := cluster.Spec.Monitoring.WazuhExporter
+	return &patch.WazuhExporterHashInput{
+		Enabled:                 e.Enabled,
+		Image:                   e.Image,
+		Port:                    e.Port,
+		Resources:               e.Resources,
+		APIProtocol:             e.APIProtocol,
+		APIVerifySSL:            e.APIVerifySSL,
+		LogLevel:                e.LogLevel,
+		SkipLastLogs:            e.SkipLastLogs,
+		SkipLastRegisteredAgent: e.SkipLastRegisteredAgent,
+		SkipWazuhAPIInfo:        e.SkipWazuhAPIInfo,
+	}
 }
 
 // convertRuleConfigMaps converts RuleConfigMapInfo from the rule reconciler to RuleConfigMapRef for the builder

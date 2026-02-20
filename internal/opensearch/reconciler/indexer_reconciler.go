@@ -887,9 +887,6 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 	version := cluster.Spec.Version
 	imagePullSecrets := cluster.Spec.ImagePullSecrets
 
-	// Check if monitoring is enabled
-	monitoringEnabled := cluster.Spec.Monitoring != nil && cluster.Spec.Monitoring.Enabled
-
 	if cluster.Spec.Indexer != nil {
 		if cluster.Spec.Indexer.Replicas > 0 {
 			replicas = cluster.Spec.Indexer.Replicas
@@ -977,7 +974,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		ExtraVolumeMounts:         extraVolumeMounts,
 		ExtraInitContainers:       extraInitContainers,
 		ExtraContainers:           extraContainers,
-		MonitoringEnabled:         monitoringEnabled,
+		IndexerExporter:           toIndexerExporterHashInput(cluster),
 		RepositoryPlugins:         repoPluginsHash,
 		ServiceAccountName:        indexerSAName,
 	})
@@ -1689,6 +1686,19 @@ func (r *IndexerReconciler) updateStatefulSetWithRetry(ctx context.Context, desi
 		desired.SetResourceVersion(current.GetResourceVersion())
 		return r.Update(ctx, desired)
 	})
+}
+
+// toIndexerExporterHashInput converts the cluster's IndexerExporter config to a hash input struct.
+func toIndexerExporterHashInput(cluster *wazuhv1.WazuhCluster) *patch.IndexerExporterHashInput {
+	if cluster.Spec.Monitoring == nil || !cluster.Spec.Monitoring.Enabled ||
+		cluster.Spec.Monitoring.IndexerExporter == nil {
+		return nil
+	}
+	e := cluster.Spec.Monitoring.IndexerExporter
+	return &patch.IndexerExporterHashInput{
+		Enabled: e.Enabled,
+		Version: e.Version,
+	}
 }
 
 // getStatefulSetPhase returns the phase of a StatefulSet

@@ -35,6 +35,26 @@ type RepositoryPluginHashInput struct {
 	CredentialsSecret string `json:"credentialsSecret,omitempty"` // Secret name only (for change detection)
 }
 
+// WazuhExporterHashInput mirrors WazuhExporterConfig for hash computation.
+type WazuhExporterHashInput struct {
+	Enabled                 bool                         `json:"enabled"`
+	Image                   string                       `json:"image,omitempty"`
+	Port                    int32                        `json:"port,omitempty"`
+	Resources               *corev1.ResourceRequirements `json:"resources,omitempty"`
+	APIProtocol             string                       `json:"apiProtocol,omitempty"`
+	APIVerifySSL            bool                         `json:"apiVerifySSL,omitempty"`
+	LogLevel                string                       `json:"logLevel,omitempty"`
+	SkipLastLogs            bool                         `json:"skipLastLogs,omitempty"`
+	SkipLastRegisteredAgent bool                         `json:"skipLastRegisteredAgent,omitempty"`
+	SkipWazuhAPIInfo        bool                         `json:"skipWazuhAPIInfo,omitempty"`
+}
+
+// IndexerExporterHashInput mirrors IndexerExporterConfig for hash computation.
+type IndexerExporterHashInput struct {
+	Enabled bool   `json:"enabled"`
+	Version string `json:"version,omitempty"`
+}
+
 // IndexerSpec contains fields from WazuhCluster.Spec.Indexer used for hash computation
 type IndexerSpec struct {
 	Replicas                  int32                             `json:"replicas,omitempty"`
@@ -60,7 +80,7 @@ type IndexerSpec struct {
 	ExtraInitContainers []corev1.Container   `json:"extraInitContainers,omitempty"`
 	ExtraContainers     []corev1.Container   `json:"extraContainers,omitempty"`
 	// Monitoring configuration
-	MonitoringEnabled bool `json:"monitoringEnabled,omitempty"`
+	IndexerExporter *IndexerExporterHashInput `json:"indexerExporter,omitempty"`
 	// Repository plugins configuration
 	RepositoryPlugins []RepositoryPluginHashInput `json:"repositoryPlugins,omitempty"`
 	// ServiceAccount name
@@ -117,7 +137,7 @@ type ManagerMasterSpec struct {
 	ExtraInitContainers []corev1.Container   `json:"extraInitContainers,omitempty"`
 	ExtraContainers     []corev1.Container   `json:"extraContainers,omitempty"`
 	// Monitoring configuration
-	MonitoringEnabled bool `json:"monitoringEnabled,omitempty"`
+	WazuhExporter *WazuhExporterHashInput `json:"wazuhExporter,omitempty"`
 	// ServiceAccount name
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 }
@@ -221,7 +241,7 @@ type IndexerSpecInput struct {
 	ExtraVolumeMounts         []corev1.VolumeMount
 	ExtraInitContainers       []corev1.Container
 	ExtraContainers           []corev1.Container
-	MonitoringEnabled         bool
+	IndexerExporter           *IndexerExporterHashInput
 	RepositoryPlugins         []RepositoryPluginHashInput
 	ServiceAccountName        string
 }
@@ -304,7 +324,7 @@ type ManagerMasterSpecInput struct {
 	ExtraVolumeMounts         []corev1.VolumeMount
 	ExtraInitContainers       []corev1.Container
 	ExtraContainers           []corev1.Container
-	MonitoringEnabled         bool
+	WazuhExporter             *WazuhExporterHashInput
 	ServiceAccountName        string
 }
 

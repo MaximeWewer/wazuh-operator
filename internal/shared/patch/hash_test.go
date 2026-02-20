@@ -228,3 +228,95 @@ func TestComputeIndexerSpecHash_StorageChange(t *testing.T) {
 		t.Errorf("Expected different hashes for different storage sizes, got same hash: %s", hash1)
 	}
 }
+
+// TestComputeManagerMasterSpecHash_WazuhExporterChange tests that wazuh exporter config changes produce different hashes
+func TestComputeManagerMasterSpecHash_WazuhExporterChange(t *testing.T) {
+	base := ManagerMasterSpecInput{
+		Version:     "4.9.2",
+		StorageSize: "10Gi",
+	}
+
+	// No exporter
+	hash1, err := ComputeManagerMasterSpecHashFull(base)
+	if err != nil {
+		t.Fatalf("ComputeManagerMasterSpecHashFull failed: %v", err)
+	}
+
+	// With exporter enabled
+	withExporter := base
+	withExporter.WazuhExporter = &WazuhExporterHashInput{
+		Enabled: true,
+		Image:   "pytoshka/wazuh-prometheus-exporter:latest",
+		Port:    9090,
+	}
+	hash2, err := ComputeManagerMasterSpecHashFull(withExporter)
+	if err != nil {
+		t.Fatalf("ComputeManagerMasterSpecHashFull failed: %v", err)
+	}
+
+	if hash1 == hash2 {
+		t.Errorf("Expected different hashes when wazuh exporter is added, got same hash: %s", hash1)
+	}
+
+	// Change exporter image
+	changedImage := withExporter
+	changedImage.WazuhExporter = &WazuhExporterHashInput{
+		Enabled: true,
+		Image:   "pytoshka/wazuh-prometheus-exporter:v2",
+		Port:    9090,
+	}
+	hash3, err := ComputeManagerMasterSpecHashFull(changedImage)
+	if err != nil {
+		t.Fatalf("ComputeManagerMasterSpecHashFull failed: %v", err)
+	}
+
+	if hash2 == hash3 {
+		t.Errorf("Expected different hashes when exporter image changes, got same hash: %s", hash2)
+	}
+}
+
+// TestComputeIndexerSpecHash_IndexerExporterChange tests that indexer exporter config changes produce different hashes
+func TestComputeIndexerSpecHash_IndexerExporterChange(t *testing.T) {
+	base := IndexerSpecInput{
+		Replicas:    3,
+		Version:     "2.11.1",
+		StorageSize: "50Gi",
+		JavaOpts:    "-Xms1g -Xmx1g",
+	}
+
+	// No exporter
+	hash1, err := ComputeIndexerSpecHashFull(base)
+	if err != nil {
+		t.Fatalf("ComputeIndexerSpecHashFull failed: %v", err)
+	}
+
+	// With exporter enabled
+	withExporter := base
+	withExporter.IndexerExporter = &IndexerExporterHashInput{
+		Enabled: true,
+		Version: "2.11.1.0",
+	}
+	hash2, err := ComputeIndexerSpecHashFull(withExporter)
+	if err != nil {
+		t.Fatalf("ComputeIndexerSpecHashFull failed: %v", err)
+	}
+
+	if hash1 == hash2 {
+		t.Errorf("Expected different hashes when indexer exporter is added, got same hash: %s", hash1)
+	}
+
+	// Change exporter version
+	changedVersion := base
+	changedVersion.IndexerExporter = &IndexerExporterHashInput{
+		Enabled: true,
+		Version: "2.12.0.0",
+	}
+	hash3, err := ComputeIndexerSpecHashFull(changedVersion)
+	if err != nil {
+		t.Fatalf("ComputeIndexerSpecHashFull failed: %v", err)
+	}
+
+	if hash2 == hash3 {
+		t.Errorf("Expected different hashes when exporter version changes, got same hash: %s", hash2)
+	}
+}
