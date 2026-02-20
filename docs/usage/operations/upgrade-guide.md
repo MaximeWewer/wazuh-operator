@@ -281,6 +281,36 @@ kubectl get crd wazuhclusters.resources.wazuh.com -o yaml | grep -A 5 'storedVer
 kubectl replace -f config/crd/ --force
 ```
 
+### Namespace Stuck Terminating After API Version Change
+
+If you previously deployed with an older API version (e.g., `v1alpha1`) and upgraded
+CRDs to `v1`, Kubernetes cannot convert or delete old resources stored with the
+previous version. The namespace stays in `Terminating` with an error like:
+
+```text
+failed to list resources.wazuh.com/v1, Kind=WazuhCluster: request to convert
+CR from an invalid group/version: resources.wazuh.com/v1alpha1
+```
+
+To resolve:
+
+```bash
+# 1. Delete all Wazuh/OpenSearch CRDs to clear stored version tracking
+kubectl delete crds $(kubectl get crds -o name | grep resources.wazuh.com)
+
+# 2. Remove the finalizer from the stuck namespace
+kubectl get namespace <namespace> -o json \
+  | jq '.spec.finalizers = []' \
+  | kubectl replace --raw "/api/v1/namespaces/<namespace>/finalize" -f -
+
+# 3. Reinstall CRDs with the current version
+helm template wazuh-operator ./charts/wazuh-operator \
+  --set operator.enabled=false | kubectl apply --server-side -f -
+```
+
+> **Prevention:** Always delete all WazuhCluster resources and CRDs before
+> upgrading across API versions (e.g., `v1alpha1` to `v1`).
+
 ## Best Practices
 
 1. **Always backup before upgrading**

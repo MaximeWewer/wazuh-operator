@@ -335,7 +335,8 @@ rbac:
 kubectl get crds | grep resources.wazuh.com
 
 # Install if missing
-helm upgrade wazuh-operator ./charts/wazuh-operator --set crds.install=true --force
+helm template wazuh-operator ./charts/wazuh-operator \
+  --set operator.enabled=false | kubectl apply --server-side -f -
 ```
 
 ### Operator Not Starting
@@ -352,6 +353,33 @@ kubectl auth can-i create wazuhclusters.resources.wazuh.com \
   --as=system:serviceaccount:wazuh-system:wazuh-operator
 ```
 
+### Namespace Stuck Terminating After CRD API Version Upgrade
+
+If you previously deployed with an older API version (e.g., `v1alpha1`) and upgraded
+CRDs to `v1`, Kubernetes may fail to delete old resources stored with the previous
+version, causing the namespace to stay in `Terminating` state with an error like:
+
+```text
+failed to list resources.wazuh.com/v1, Kind=WazuhCluster: request to convert
+CR from an invalid group/version: resources.wazuh.com/v1alpha1
+```
+
+To resolve this:
+
+```bash
+# 1. Delete all Wazuh CRDs to remove the stored version tracking
+kubectl delete crds $(kubectl get crds -o name | grep resources.wazuh.com)
+
+# 2. If the namespace is still stuck, remove its finalizer
+kubectl get namespace <namespace> -o json \
+  | jq '.spec.finalizers = []' \
+  | kubectl replace --raw "/api/v1/namespaces/<namespace>/finalize" -f -
+
+# 3. Reinstall CRDs with the current version
+helm template wazuh-operator ./charts/wazuh-operator \
+  --set operator.enabled=false | kubectl apply --server-side -f -
+```
+
 ### Metrics Not Available
 
 ```bash
@@ -365,5 +393,5 @@ curl http://localhost:8080/metrics
 
 ## Support
 
-- GitHub Issues: https://github.com/MaximeWewer/wazuh-operator/issues
-- Documentation: https://documentation.wazuh.com/
+- [GitHub Issues](https://github.com/MaximeWewer/wazuh-operator/issues)
+- [Wazuh Documentation](https://documentation.wazuh.com/)
