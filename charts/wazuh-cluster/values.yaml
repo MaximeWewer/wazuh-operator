@@ -969,7 +969,7 @@ cluster:
         # -- Enable Wazuh exporter
         enabled: true
         # -- Wazuh exporter image
-        image: "pytoshka/wazuh-prometheus-exporter:latest"
+        image: "kennyopennix/wazuh-exporter:latest"
         # -- Wazuh exporter metrics port
         port: 9090
         # -- API protocol for connecting to Wazuh API
