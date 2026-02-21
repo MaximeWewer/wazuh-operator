@@ -17,7 +17,7 @@ metadata:
 spec:
   interval: 30m
   releaseName: wazuh-operator
-  targetNamespace: wazuh-system
+  targetNamespace: wazuh-operator
 
   chart:
     spec:

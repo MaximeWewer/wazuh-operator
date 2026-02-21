@@ -21,7 +21,7 @@ NC='\033[0m'
 # Configuration
 MINIKUBE_PROFILE="${MINIKUBE_PROFILE:-wazuh-dev}"
 OPERATOR_IMAGE="${OPERATOR_IMAGE:-wazuh-operator}"
-OPERATOR_NAMESPACE="${OPERATOR_NAMESPACE:-wazuh-system}"
+OPERATOR_NAMESPACE="${OPERATOR_NAMESPACE:-wazuh-operator}"
 CLUSTER_NAMESPACE="${CLUSTER_NAMESPACE:-wazuh}"
 CLUSTER_NAME="${CLUSTER_NAME:-wazuh-cluster}"
 
@@ -55,22 +55,16 @@ cleanup_helm_releases() {
     CURRENT_CONTEXT=$(kubectl config current-context 2>/dev/null || echo "")
     if [[ "${CURRENT_CONTEXT}" == "${MINIKUBE_PROFILE}" ]]; then
         # Delete cluster
-        if helm list -n "${CLUSTER_NAMESPACE}" 2>/dev/null | grep -q "${CLUSTER_NAME}"; then
-            log_info "Uninstalling Wazuh Cluster: ${CLUSTER_NAME}"
-            helm uninstall "${CLUSTER_NAME}" -n "${CLUSTER_NAMESPACE}" || true
-            log_success "Cluster uninstalled"
-        else
-            log_info "Cluster not found, skipping"
-        fi
+        log_info "Deleting Wazuh Cluster resources: ${CLUSTER_NAME}"
+        helm template "${CLUSTER_NAME}" ./charts/wazuh-cluster \
+            --namespace "${CLUSTER_NAMESPACE}" 2>/dev/null | kubectl delete -f - 2>/dev/null || true
+        log_success "Cluster deleted"
 
         # Delete operator
-        if helm list -n "${OPERATOR_NAMESPACE}" 2>/dev/null | grep -q "wazuh-operator"; then
-            log_info "Uninstalling Wazuh Operator"
-            helm uninstall wazuh-operator -n "${OPERATOR_NAMESPACE}" || true
-            log_success "Operator uninstalled"
-        else
-            log_info "Operator not found, skipping"
-        fi
+        log_info "Deleting Wazuh Operator resources"
+        helm template wazuh-operator ./charts/wazuh-operator \
+            --namespace "${OPERATOR_NAMESPACE}" 2>/dev/null | kubectl delete -f - 2>/dev/null || true
+        log_success "Operator deleted"
 
         # Delete namespaces
         log_info "Deleting namespaces..."

@@ -202,7 +202,7 @@ After a successful deployment (profile S):
 |     (4 CPUs, 8GB RAM, 40GB disk)  |
 |                                   |
 |  +-----------------------------+  |
-|  |  Namespace: wazuh-system    |  |
+|  |  Namespace: wazuh-operator    |  |
 |  |  - Wazuh Operator (1 replica)|  |
 |  +-----------------------------+  |
 |                                   |

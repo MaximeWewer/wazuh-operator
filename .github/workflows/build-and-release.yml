@@ -411,7 +411,7 @@ jobs:
             echo "\`\`\`bash"
             echo "# Install the operator"
             echo "helm template wazuh-operator oci://${REGISTRY}/${OWNER_LOWER}/charts/wazuh-operator \\"
-            echo "  --version ${VERSION} --namespace wazuh-system | kubectl apply -f -"
+            echo "  --version ${VERSION} --namespace wazuh-operator | kubectl apply -f -"
             echo ""
             echo "# Install a Wazuh cluster"
             echo "helm template wazuh-cluster oci://${REGISTRY}/${OWNER_LOWER}/charts/wazuh-cluster \\"

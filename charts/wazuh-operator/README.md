@@ -24,7 +24,7 @@
 
 ```bash
 helm template wazuh-operator ./charts/wazuh-operator \
-  --namespace wazuh-system | kubectl apply --server-side -f -
+  --namespace wazuh-operator | kubectl apply --server-side -f -
 ```
 
 ### Install CRDs Only
@@ -32,7 +32,7 @@ helm template wazuh-operator ./charts/wazuh-operator \
 ```bash
 helm template wazuh-operator ./charts/wazuh-operator \
   --set operator.enabled=false \
-  --namespace wazuh-system | kubectl apply --server-side -f -
+  --namespace wazuh-operator | kubectl apply --server-side -f -
 ```
 
 ### Install Operator Only
@@ -40,14 +40,14 @@ helm template wazuh-operator ./charts/wazuh-operator \
 ```bash
 helm template wazuh-operator ./charts/wazuh-operator \
   --set crds.install=false \
-  --namespace wazuh-system | kubectl apply --server-side -f -
+  --namespace wazuh-operator | kubectl apply --server-side -f -
 ```
 
 ## Upgrading
 
 ```bash
 helm template wazuh-operator ./charts/wazuh-operator \
-  --namespace wazuh-system | kubectl apply --server-side -f -
+  --namespace wazuh-operator | kubectl apply --server-side -f -
 ```
 
 ### Upgrade CRDs
@@ -63,7 +63,7 @@ helm template wazuh-operator ./charts/wazuh-operator \
 ## Uninstallation
 
 ```bash
-helm uninstall wazuh-operator --namespace wazuh-system
+kubectl delete -f <(helm template wazuh-operator ./charts/wazuh-operator --namespace wazuh-operator)
 ```
 
 > **Warning:** If `crds.keep=true` (default), CRDs will not be deleted automatically.
@@ -405,14 +405,14 @@ helm template wazuh-operator ./charts/wazuh-operator \
 
 ```bash
 # Check logs
-kubectl logs -n wazuh-system deployment/wazuh-operator-controller-manager
+kubectl logs -n wazuh-operator deployment/wazuh-operator-controller-manager
 
 # Check events
-kubectl describe pod -n wazuh-system -l app.kubernetes.io/name=wazuh-operator
+kubectl describe pod -n wazuh-operator -l app.kubernetes.io/name=wazuh-operator
 
 # Verify RBAC
 kubectl auth can-i create wazuhclusters.resources.wazuh.com \
-  --as=system:serviceaccount:wazuh-system:wazuh-operator
+  --as=system:serviceaccount:wazuh-operator:wazuh-operator
 ```
 
 ### Namespace Stuck Terminating After CRD API Version Upgrade
@@ -446,10 +446,10 @@ helm template wazuh-operator ./charts/wazuh-operator \
 
 ```bash
 # Verify metrics enabled
-helm get values wazuh-operator -n wazuh-system
+helm get values wazuh-operator -n wazuh-operator
 
 # Test endpoint
-kubectl port-forward -n wazuh-system svc/wazuh-operator-metrics 8080:8080
+kubectl port-forward -n wazuh-operator svc/wazuh-operator-metrics 8080:8080
 curl http://localhost:8080/metrics
 ```
 

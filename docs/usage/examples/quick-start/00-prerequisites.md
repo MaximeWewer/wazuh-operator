@@ -12,7 +12,7 @@ Before deploying a Wazuh cluster, ensure your environment meets these requiremen
 ## Wazuh Operator
 
 - [ ] CRDs installed: `kubectl get crd wazuhclusters.resources.wazuh.com`
-- [ ] Operator running: `kubectl get pods -n wazuh-operator-system`
+- [ ] Operator running: `kubectl get pods -n wazuh-operator`
 
 ### Install the Operator
 
@@ -23,7 +23,8 @@ If not already installed:
 kubectl apply -f https://raw.githubusercontent.com/MaximeWewer/wazuh-operator/main/config/crd/bases/
 
 # Install operator via Helm
-helm install wazuh-operator ./charts/wazuh-operator -n wazuh-operator-system --create-namespace
+helm template wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-operator | kubectl apply -f -
 ```
 
 ## Verify Prerequisites
@@ -36,8 +37,8 @@ kubectl version --short
 kubectl get sc
 
 # Check operator status
-kubectl get pods -n wazuh-operator-system
-kubectl logs -f deploy/wazuh-operator-controller-manager -n wazuh-operator-system
+kubectl get pods -n wazuh-operator
+kubectl logs -f deploy/wazuh-operator-controller-manager -n wazuh-operator
 ```
 
 ## Next Steps

@@ -65,7 +65,7 @@ spec:
     # Network policies
     networkPolicy:
       enabled: true
-      operatorNamespace: wazuh-system
+      operatorNamespace: wazuh-operator
 
   # Values from Secrets (recommended for credentials)
   valuesFrom:

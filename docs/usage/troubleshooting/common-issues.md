@@ -132,12 +132,13 @@ kubectl rollout restart statefulset/wazuh-indexer -n wazuh
 kubectl get cm coredns -n kube-system -o yaml | grep -A5 "kubernetes"
 
 # 2. Verify operator configuration
-kubectl get deploy -n wazuh-system wazuh-operator-controller-manager -o yaml | grep KUBERNETES_CLUSTER_DOMAIN
+kubectl get deploy -n wazuh-operator wazuh-operator-controller-manager -o yaml | grep KUBERNETES_CLUSTER_DOMAIN
 
 # 3. If mismatch, upgrade operator with correct domain
-helm upgrade wazuh-operator ./charts/wazuh-operator \
-  --namespace wazuh-system \
-  --set operator.clusterDomain=your.custom.domain
+helm template wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-operator \
+  --set operator.clusterDomain=your.custom.domain \
+  | kubectl apply --server-side -f -
 
 # 4. Force certificate regeneration
 kubectl delete secret -n wazuh -l app.kubernetes.io/component=certificates
@@ -250,7 +251,7 @@ kubectl describe pod -n wazuh wazuh-manager-master-0 | grep -A 10 "Init Containe
 kubectl get wazuhcluster -n wazuh -o yaml | grep -A 5 "hotReload"
 
 # For Wazuh 4.9-4.11: check operator has pods/exec permission
-kubectl auth can-i create pods/exec --as=system:serviceaccount:wazuh-operator-system:wazuh-operator-controller-manager
+kubectl auth can-i create pods/exec --as=system:serviceaccount:wazuh-operator:wazuh-operator-controller-manager
 
 # For Wazuh 4.9-4.11: check opensearch.yml has the correct setting
 kubectl exec -n wazuh wazuh-indexer-0 -- \
@@ -376,10 +377,10 @@ spec:
 
 ```bash
 # Check operator logs
-kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager
+kubectl logs -n wazuh-operator deploy/wazuh-operator-controller-manager
 
 # Restart operator
-kubectl rollout restart deployment/wazuh-operator-controller-manager -n wazuh-system
+kubectl rollout restart deployment/wazuh-operator-controller-manager -n wazuh-operator
 ```
 
 ### "object has been modified" Errors
@@ -471,7 +472,7 @@ If automatic recovery doesn't work, see the manual recovery steps in [Credential
 
 ```bash
 # Check operator logs
-kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager
+kubectl logs -n wazuh-operator deploy/wazuh-operator-controller-manager
 
 # Check WazuhCluster status
 kubectl describe wazuhcluster wazuh -n wazuh
@@ -510,14 +511,14 @@ kubectl get servicemonitor -n wazuh
 
 ```bash
 # Check endpoint connectivity
-kubectl exec -it deploy/wazuh-operator-controller-manager -n wazuh-system -- \
+kubectl exec -it deploy/wazuh-operator-controller-manager -n wazuh-operator -- \
   nc -zv jaeger-collector.observability 4317
 
 # Check operator logs
-kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager | grep -i otel
+kubectl logs -n wazuh-operator deploy/wazuh-operator-controller-manager | grep -i otel
 
 # Verify environment variables
-kubectl get deploy wazuh-operator-controller-manager -n wazuh-system -o yaml | grep -A5 OTEL
+kubectl get deploy wazuh-operator-controller-manager -n wazuh-operator -o yaml | grep -A5 OTEL
 ```
 
 ## Getting Help

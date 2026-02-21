@@ -26,16 +26,15 @@ kubectl get storageclass  # StorageClass available
 # helm repo update
 
 # Or install from local charts
-helm install wazuh-operator ./charts/wazuh-operator \
-  --namespace wazuh-system \
-  --create-namespace
+helm template wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-operator | kubectl apply -f -
 ```
 
 #### Verify Installation
 
 ```bash
 # Check operator pod
-kubectl get pods -n wazuh-system
+kubectl get pods -n wazuh-operator
 
 # Expected output:
 # NAME                                              READY   STATUS    RESTARTS   AGE
@@ -46,11 +45,10 @@ kubectl get pods -n wazuh-system
 
 ```bash
 # Install with custom values
-helm install wazuh-operator ./charts/wazuh-operator \
-  --namespace wazuh-system \
-  --create-namespace \
+helm template wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-operator \
   --set operator.resources.limits.memory=1Gi \
-  --set operator.image.tag=v1.0.0
+  --set operator.image.tag=v1.0.0 | kubectl apply -f -
 ```
 
 Key values:
@@ -66,10 +64,9 @@ Key values:
 If your Kubernetes cluster uses a custom DNS domain (e.g., custom CoreDNS configuration), configure the operator accordingly:
 
 ```bash
-helm install wazuh-operator ./charts/wazuh-operator \
-  --namespace wazuh-system \
-  --create-namespace \
-  --set operator.clusterDomain=svc.company.internal
+helm template wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-operator \
+  --set operator.clusterDomain=svc.company.internal | kubectl apply -f -
 ```
 
 This setting affects all generated TLS certificates and service discovery. Common custom domains include:
@@ -148,15 +145,15 @@ kubectl get crds | grep wazuh
 ### Check Operator Logs
 
 ```bash
-kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager -f
+kubectl logs -n wazuh-operator deploy/wazuh-operator-controller-manager -f
 ```
 
 ### Deploy a Test Cluster
 
 ```bash
 # Using Helm
-helm install wazuh-cluster ./charts/wazuh-cluster \
-  --namespace wazuh-system
+helm template wazuh-cluster ./charts/wazuh-cluster \
+  --namespace wazuh | kubectl apply -f -
 
 # Or using kubectl
 kubectl create namespace wazuh
@@ -168,9 +165,9 @@ kubectl apply -f config/samples/wazuh_v1_wazuhcluster_minimal.yaml
 ### Helm Upgrade
 
 ```bash
-helm upgrade wazuh-operator ./charts/wazuh-operator \
-  --namespace wazuh-system \
-  --set operator.image.tag=v1.1.0
+helm template wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-operator \
+  --set operator.image.tag=v1.1.0 | kubectl apply -f -
 ```
 
 ### CRD Upgrade
@@ -187,7 +184,8 @@ kubectl apply -f config/crd/bases/
 
 ```bash
 # Helm
-helm uninstall wazuh-operator -n wazuh-system
+helm template wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-operator | kubectl delete -f -
 
 # kubectl
 kubectl delete -f config/manager/manager.yaml
@@ -208,10 +206,10 @@ kubectl delete -f config/crd/bases/
 
 ```bash
 # Check events
-kubectl describe pod -n wazuh-system -l app.kubernetes.io/name=wazuh-operator
+kubectl describe pod -n wazuh-operator -l app.kubernetes.io/name=wazuh-operator
 
 # Check logs
-kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager
+kubectl logs -n wazuh-operator deploy/wazuh-operator-controller-manager
 ```
 
 ### CRDs Not Found

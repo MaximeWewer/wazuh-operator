@@ -113,9 +113,9 @@ secrets:
 ```
 
 ```bash
-helm install wazuh-cluster oci://ghcr.io/maximewewer/charts/wazuh-cluster \
-  --namespace wazuh-system \
-  -f values.yaml
+helm template wazuh-cluster oci://ghcr.io/maximewewer/charts/wazuh-cluster \
+  --namespace wazuh \
+  -f values.yaml | kubectl apply -f -
 ```
 
 ### Via External Secrets

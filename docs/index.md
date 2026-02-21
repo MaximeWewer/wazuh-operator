@@ -6,12 +6,12 @@ Master documentation index for the Wazuh Kubernetes Operator.
 
 ```bash
 # Install operator
-helm install wazuh-operator oci://ghcr.io/maximewewer/charts/wazuh-operator \
-  -n wazuh-system --create-namespace
+helm template wazuh-operator oci://ghcr.io/maximewewer/charts/wazuh-operator \
+  --namespace wazuh-operator | kubectl apply -f -
 
 # Deploy cluster
-helm install wazuh-cluster oci://ghcr.io/maximewewer/charts/wazuh-cluster \
-  -n wazuh-system
+helm template wazuh-cluster oci://ghcr.io/maximewewer/charts/wazuh-cluster \
+  --namespace wazuh | kubectl apply -f -
 
 # Check status
 kubectl get wazuhcluster -n wazuh

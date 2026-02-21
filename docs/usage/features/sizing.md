@@ -32,9 +32,9 @@ Minimal profile for testing purposes only. **Not recommended for production.**
 **Use case:** Local development, CI/CD pipelines, quick testing
 
 ```bash
-helm install wazuh-cluster ./charts/wazuh-cluster \
+helm template wazuh-cluster ./charts/wazuh-cluster \
   --set sizing.profile=XS \
-  --namespace wazuh-system
+  --namespace wazuh | kubectl apply -f -
 ```
 
 ### S (Small) - Development/Test
@@ -57,9 +57,9 @@ Suitable for development environments and small test deployments.
 **Use case:** Development teams, small labs, up to 50 agents
 
 ```bash
-helm install wazuh-cluster ./charts/wazuh-cluster \
+helm template wazuh-cluster ./charts/wazuh-cluster \
   --set sizing.profile=S \
-  --namespace wazuh-system
+  --namespace wazuh | kubectl apply -f -
 ```
 
 ### M (Medium) - Small Production
@@ -82,9 +82,9 @@ Balanced profile for small production environments with high availability.
 **Use case:** Small production, 50-500 agents, requires 3+ node cluster
 
 ```bash
-helm install wazuh-cluster ./charts/wazuh-cluster \
+helm template wazuh-cluster ./charts/wazuh-cluster \
   --set sizing.profile=M \
-  --namespace wazuh-system
+  --namespace wazuh | kubectl apply -f -
 ```
 
 ### L (Large) - Production
@@ -107,9 +107,9 @@ High-capacity profile for production environments with high availability.
 **Use case:** Production environments, 500-5000 agents, requires 5+ node cluster
 
 ```bash
-helm install wazuh-cluster ./charts/wazuh-cluster \
+helm template wazuh-cluster ./charts/wazuh-cluster \
   --set sizing.profile=L \
-  --namespace wazuh-system
+  --namespace wazuh | kubectl apply -f -
 ```
 
 ### XL (Extra Large) - Enterprise
@@ -132,9 +132,9 @@ Enterprise-grade profile for large-scale deployments.
 **Use case:** Enterprise deployments, 5000+ agents, requires 10+ node cluster
 
 ```bash
-helm install wazuh-cluster ./charts/wazuh-cluster \
+helm template wazuh-cluster ./charts/wazuh-cluster \
   --set sizing.profile=XL \
-  --namespace wazuh-system
+  --namespace wazuh | kubectl apply -f -
 ```
 
 ## Profile Comparison
@@ -167,20 +167,20 @@ cluster:
 ### Custom Storage Class
 
 ```bash
-helm install wazuh-cluster ./charts/wazuh-cluster \
+helm template wazuh-cluster ./charts/wazuh-cluster \
   --set sizing.profile=M \
   --set sizing.storageClassName=gp3 \
-  --namespace wazuh-system
+  --namespace wazuh | kubectl apply -f -
 ```
 
 ### Override Specific Values
 
 ```bash
-helm install wazuh-cluster ./charts/wazuh-cluster \
+helm template wazuh-cluster ./charts/wazuh-cluster \
   --set sizing.profile=M \
   --set cluster.spec.indexer.replicas=5 \
   --set cluster.spec.indexer.storageSize=100Gi \
-  --namespace wazuh-system
+  --namespace wazuh | kubectl apply -f -
 ```
 
 ## Without Profiles

@@ -71,7 +71,7 @@ kubectl get secret wazuh-quickstart-indexer-credentials -n wazuh \
 kubectl describe pod <pod-name> -n wazuh
 
 # Check operator logs
-kubectl logs -f deploy/wazuh-operator-controller-manager -n wazuh-operator-system
+kubectl logs -f deploy/wazuh-operator-controller-manager -n wazuh-operator
 ```
 
 ### Dashboard not accessible

@@ -37,15 +37,15 @@ OpenSearch:
 Next steps:
 1. Deploy an operator instance to manage Wazuh clusters:
 
-   helm install wazuh-operator ./charts/wazuh-operator \
+   helm template wazuh-operator ./charts/wazuh-operator \
      --set crds.install=false \
-     --namespace wazuh-system
+     --namespace wazuh-operator | kubectl apply --server-side -f -
 
 2. Deploy a Wazuh cluster using the wazuh-cluster chart:
 
-   helm install my-wazuh ./charts/wazuh-cluster \
+   helm template my-wazuh ./charts/wazuh-cluster \
      --set sizing.profile=M \
-     --namespace wazuh-system
+     --namespace wazuh | kubectl apply --server-side -f -
 
 {{- else if and .Values.operator.enabled (not .Values.crds.install) }}
 ===============================================
@@ -75,9 +75,9 @@ View operator logs:
 
 Deploy a Wazuh cluster using the wazuh-cluster chart:
 
-  helm install my-wazuh ./charts/wazuh-cluster \
+  helm template my-wazuh ./charts/wazuh-cluster \
     --set sizing.profile=M \
-    --namespace wazuh-system
+    --namespace wazuh | kubectl apply --server-side -f -
 
 {{- else if and .Values.operator.enabled .Values.crds.install }}
 ===============================================
@@ -111,9 +111,9 @@ View installed CRDs:
 
 Deploy a Wazuh cluster using the wazuh-cluster chart (recommended):
 
-  helm install my-wazuh ./charts/wazuh-cluster \
+  helm template my-wazuh ./charts/wazuh-cluster \
     --set sizing.profile=M \
-    --namespace wazuh-system
+    --namespace wazuh | kubectl apply --server-side -f -
 
 Or create a WazuhCluster resource directly:
 

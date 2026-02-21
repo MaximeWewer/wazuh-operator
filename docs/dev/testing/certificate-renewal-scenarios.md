@@ -36,18 +36,17 @@ For even shorter testing periods, you can use a minimal cluster with the operato
 
 ```bash
 # Deploy operator
-helm upgrade --install wazuh-operator charts/wazuh-operator \
-  --namespace wazuh-operator-system \
-  --create-namespace
+helm template wazuh-operator charts/wazuh-operator \
+  --namespace wazuh-operator | kubectl apply -f -
 ```
 
 ### Test Cluster Deployment
 
 ```bash
 # Deploy minimal test cluster
-helm upgrade --install wazuh-test charts/wazuh-cluster \
-  --namespace wazuh-system \
-  -f charts/wazuh-cluster/examples/values-minimal.yaml
+helm template wazuh-test charts/wazuh-cluster \
+  --namespace wazuh-operator \
+  -f charts/wazuh-cluster/examples/values-minimal.yaml | kubectl apply -f -
 ```
 
 ## Certificate Timing (Default Production Settings)
@@ -182,7 +181,7 @@ kubectl get statefulset -n wazuh-test wazuh-test-indexer \
 
 ```bash
 # Watch operator logs
-kubectl logs -n wazuh-operator-system \
+kubectl logs -n wazuh-operator \
   deploy/wazuh-operator-controller-manager -f | \
   grep -E "(Waiting for|StatefulSet|certificate|renewal)"
 ```
@@ -203,7 +202,7 @@ kubectl logs -n wazuh-operator-system \
 
 ```bash
 # Watch for conflict errors
-kubectl logs -n wazuh-operator-system \
+kubectl logs -n wazuh-operator \
   deploy/wazuh-operator-controller-manager | \
   grep -i "modified"
 ```
@@ -346,7 +345,7 @@ sleep 60
 kubectl get pods -n wazuh-test -o custom-columns=NAME:.metadata.name,RESTARTS:.status.containerStatuses[0].restartCount
 
 # Verify the operator called the SSL reload API (check operator logs)
-kubectl logs -n wazuh-operator-system deploy/wazuh-operator-controller-manager | grep -i "ssl.*reload\|cert.*reload\|pods/exec"
+kubectl logs -n wazuh-operator deploy/wazuh-operator-controller-manager | grep -i "ssl.*reload\|cert.*reload\|pods/exec"
 ```
 
 **Expected Result**: Indexer pod restart count is **unchanged** (0 restarts). Operator logs show successful SSL reload API call.
@@ -448,7 +447,7 @@ kubectl get pods -n wazuh-test -w
 ### Watch Operator Logs
 
 ```bash
-kubectl logs -n wazuh-operator-system \
+kubectl logs -n wazuh-operator \
   deploy/wazuh-operator-controller-manager -f --tail=100
 ```
 
@@ -479,7 +478,7 @@ kubectl get secret -n wazuh-test wazuh-test-indexer-certs \
   -o jsonpath='{.metadata.resourceVersion}'
 
 # Check operator logs for renewal attempts
-kubectl logs -n wazuh-operator-system \
+kubectl logs -n wazuh-operator \
   deploy/wazuh-operator-controller-manager | \
   grep -E "(renewal|renew|expired)"
 ```
@@ -499,10 +498,10 @@ kubectl rollout status statefulset/wazuh-test-indexer -n wazuh-test
 
 ```bash
 # Check if reconciliation is blocked
-kubectl logs -n wazuh-operator-system \
+kubectl logs -n wazuh-operator \
   deploy/wazuh-operator-controller-manager | \
   tail -50 | grep -E "(Waiting|blocked|timeout)"
 
 # Check operator health
-kubectl get pods -n wazuh-operator-system
+kubectl get pods -n wazuh-operator
 ```

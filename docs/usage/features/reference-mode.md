@@ -197,7 +197,7 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: wazuh-operator-controller-manager
-  namespace: wazuh-operator-system
+  namespace: wazuh-operator
 ```
 
 ## Migration

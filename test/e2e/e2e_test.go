@@ -34,7 +34,7 @@ import (
 )
 
 // namespace where the project is deployed in
-const namespace = "wazuh-operator-system"
+const namespace = "wazuh-operator"
 
 // serviceAccountName created for the project
 const serviceAccountName = "wazuh-operator-controller-manager"

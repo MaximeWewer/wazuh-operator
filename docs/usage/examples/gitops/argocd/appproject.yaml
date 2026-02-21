@@ -22,7 +22,7 @@ spec:
   # Destination clusters and namespaces
   destinations:
     # Operator namespace
-    - namespace: wazuh-system
+    - namespace: wazuh-operator
       server: https://kubernetes.default.svc
     # Wazuh cluster namespaces
     - namespace: wazuh

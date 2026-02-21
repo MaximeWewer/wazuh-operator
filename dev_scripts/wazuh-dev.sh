@@ -137,7 +137,7 @@ cmd_port_forward() {
 }
 
 cmd_logs_operator() {
-    local namespace="${OPERATOR_NAMESPACE:-wazuh-system}"
+    local namespace="${OPERATOR_NAMESPACE:-wazuh-operator}"
     echo -e "${GREEN}Streaming operator logs...${NC}"
     kubectl logs -n "${namespace}" -l app.kubernetes.io/name=wazuh-operator -f
 }

@@ -16,7 +16,7 @@ Before upgrading, complete these steps:
 
 ```bash
 # 1. Check current versions
-helm list -n wazuh-system
+helm list -n wazuh-operator
 kubectl get wazuhcluster -A -o jsonpath='{range .items[*]}{.metadata.name}: {.spec.version}{"\n"}{end}'
 
 # 2. Review release notes for breaking changes
@@ -71,17 +71,18 @@ kubectl get wazuhcluster -n wazuh -o jsonpath='{.items[0].status.conditions}' | 
 # helm pull oci://ghcr.io/maximewewer/charts/wazuh-operator --version <new-version>
 
 # Upgrade with existing values
-helm upgrade wazuh-operator ./charts/wazuh-operator \
-  --namespace wazuh-system \
-  --reuse-values
+helm template wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-operator \
+  | kubectl apply --server-side -f -
 
-# Or upgrade with new values
-helm upgrade wazuh-operator ./charts/wazuh-operator \
-  --namespace wazuh-system \
-  -f custom-values.yaml
+# Or upgrade with custom values
+helm template wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-operator \
+  -f custom-values.yaml \
+  | kubectl apply --server-side -f -
 
 # Verify upgrade
-kubectl rollout status deployment/wazuh-operator-controller-manager -n wazuh-system
+kubectl rollout status deployment/wazuh-operator-controller-manager -n wazuh-operator
 ```
 
 ### Method 2: kubectl Apply
@@ -101,13 +102,13 @@ kubectl apply -f config/manager/
 
 ```bash
 # Check operator logs
-kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager --tail=50
+kubectl logs -n wazuh-operator deploy/wazuh-operator-controller-manager --tail=50
 
 # Verify all clusters are reconciling
 kubectl get wazuhcluster -A
 
 # Check for errors
-kubectl get events -n wazuh-system --sort-by='.lastTimestamp' | tail -10
+kubectl get events -n wazuh-operator --sort-by='.lastTimestamp' | tail -10
 ```
 
 ## Upgrading Wazuh Clusters
@@ -210,11 +211,11 @@ spec:
 
 ```bash
 # Helm rollback
-helm rollback wazuh-operator -n wazuh-system
+helm rollback wazuh-operator -n wazuh-operator
 
 # Or rollback to specific revision
-helm history wazuh-operator -n wazuh-system
-helm rollback wazuh-operator <revision> -n wazuh-system
+helm history wazuh-operator -n wazuh-operator
+helm rollback wazuh-operator <revision> -n wazuh-operator
 ```
 
 ### Cluster Rollback
@@ -262,7 +263,7 @@ kubectl delete pod <pod-name> -n wazuh --force --grace-period=0
 
 ```bash
 # Check operator logs
-kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager -f
+kubectl logs -n wazuh-operator deploy/wazuh-operator-controller-manager -f
 
 # Check cluster conditions
 kubectl describe wazuhcluster wazuh-cluster -n wazuh

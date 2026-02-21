@@ -227,10 +227,10 @@ For tracing issues, see [Common Issues](../troubleshooting/common-issues.md).
 
 ```bash
 # Check operator logs for OTEL
-kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager | grep -i otel
+kubectl logs -n wazuh-operator deploy/wazuh-operator-controller-manager | grep -i otel
 
 # Verify environment variables
-kubectl get deploy wazuh-operator-controller-manager -n wazuh-system -o yaml | grep -A5 OTEL
+kubectl get deploy wazuh-operator-controller-manager -n wazuh-operator -o yaml | grep -A5 OTEL
 ```
 
 ### High Trace Volume

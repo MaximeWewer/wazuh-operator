@@ -423,7 +423,7 @@ flowchart TD
 
 ```mermaid
 graph TD
-    subgraph NS["Kubernetes Cluster (wazuh-system namespace)"]
+    subgraph NS["Kubernetes Cluster (wazuh-operator namespace)"]
         DEP["Deployment: wazuh-operator<br/>1 replica (leader election for HA)<br/>Watches CRs cluster-wide<br/>Metrics endpoint :8443 · Health probes :8081"]
         CR["ClusterRole: wazuh-operator-role<br/>Permissions for all CRs and K8s resources"]
         SA["ServiceAccount: wazuh-operator"]

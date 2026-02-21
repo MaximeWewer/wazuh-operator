@@ -33,7 +33,7 @@ MINIKUBE_DRIVER="${MINIKUBE_DRIVER:-docker}"
 
 OPERATOR_IMAGE="${OPERATOR_IMAGE:-wazuh-operator}"
 OPERATOR_TAG="${OPERATOR_TAG:-dev-$(date +%s)}"
-OPERATOR_NAMESPACE="${OPERATOR_NAMESPACE:-wazuh-system}"
+OPERATOR_NAMESPACE="${OPERATOR_NAMESPACE:-wazuh-operator}"
 CLUSTER_NAMESPACE="${CLUSTER_NAMESPACE:-wazuh}"
 CLUSTER_NAME="${CLUSTER_NAME:-wazuh-cluster}"
 SIZING_PROFILE="${SIZING_PROFILE:-S}"  # S, M, L, XL
@@ -246,23 +246,21 @@ deploy_operator() {
     log_info "Creating operator namespace: ${OPERATOR_NAMESPACE}"
     kubectl create namespace "${OPERATOR_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
-    # Uninstall if already exists
-    if helm list -n "${OPERATOR_NAMESPACE}" | grep -q "wazuh-operator"; then
-        log_warning "Operator already installed, upgrading..."
-        helm uninstall wazuh-operator -n "${OPERATOR_NAMESPACE}" || true
-        sleep 5
-    fi
+    # Delete if already exists
+    log_info "Cleaning up previous operator resources (if any)..."
+    helm template wazuh-operator ./charts/wazuh-operator \
+        --namespace "${OPERATOR_NAMESPACE}" 2>/dev/null | kubectl delete -f - 2>/dev/null || true
+    sleep 5
 
     # Install operator
     log_info "Installing Wazuh Operator Helm chart..."
-    helm install wazuh-operator \
+    helm template wazuh-operator \
         ./charts/wazuh-operator \
         --namespace "${OPERATOR_NAMESPACE}" \
         --set operator.image.repository="${OPERATOR_IMAGE}" \
         --set operator.image.tag="${OPERATOR_TAG}" \
         --set operator.image.pullPolicy=Never \
-        --timeout "${HELM_TIMEOUT}" \
-        --wait
+        | kubectl apply --server-side -f -
 
     log_success "Operator deployed successfully"
 
@@ -296,12 +294,11 @@ deploy_wazuh_cluster() {
     log_info "Creating cluster namespace: ${CLUSTER_NAMESPACE}"
     kubectl create namespace "${CLUSTER_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
-    # Uninstall if already exists
-    if helm list -n "${CLUSTER_NAMESPACE}" | grep -q "${CLUSTER_NAME}"; then
-        log_warning "Cluster already installed, upgrading..."
-        helm uninstall "${CLUSTER_NAME}" -n "${CLUSTER_NAMESPACE}" || true
-        sleep 10
-    fi
+    # Delete if already exists
+    log_info "Cleaning up previous cluster resources (if any)..."
+    helm template "${CLUSTER_NAME}" ./charts/wazuh-cluster \
+        --namespace "${CLUSTER_NAMESPACE}" 2>/dev/null | kubectl delete -f - 2>/dev/null || true
+    sleep 10
 
     # Install cluster
     log_info "Installing Wazuh Cluster Helm chart with sizing profile: ${SIZING_PROFILE}"
@@ -311,7 +308,7 @@ deploy_wazuh_cluster() {
     log_info "  - Indexer (1 replica for profile S)"
     log_info "  - Dashboard (1 replica)"
 
-    helm install "${CLUSTER_NAME}" \
+    helm template "${CLUSTER_NAME}" \
         ./charts/wazuh-cluster \
         --namespace "${CLUSTER_NAMESPACE}" \
         --set sizing.profile="${SIZING_PROFILE}" \
@@ -320,8 +317,7 @@ deploy_wazuh_cluster() {
         --set secrets.wazuhApi.password="MyS3cureP@ssw0rd" \
         --set secrets.indexerAdmin.password="MyS3cureP@ssw0rd" \
         --set secrets.wazuhAuthd.password="MyS3cureP@ssw0rd" \
-        --timeout "${HELM_TIMEOUT}" \
-        --wait
+        | kubectl apply --server-side -f -
 
     log_success "Wazuh Cluster deployed successfully"
 }
@@ -446,10 +442,10 @@ main() {
     echo "  kubectl get all -n ${CLUSTER_NAMESPACE}"
     echo ""
     echo "  # Delete cluster:"
-    echo "  helm uninstall ${CLUSTER_NAME} -n ${CLUSTER_NAMESPACE}"
+    echo "  helm template ${CLUSTER_NAME} ./charts/wazuh-cluster --namespace ${CLUSTER_NAMESPACE} | kubectl delete -f -"
     echo ""
     echo "  # Delete operator:"
-    echo "  helm uninstall wazuh-operator -n ${OPERATOR_NAMESPACE}"
+    echo "  helm template wazuh-operator ./charts/wazuh-operator --namespace ${OPERATOR_NAMESPACE} | kubectl delete -f -"
     echo ""
     echo "  # Delete Minikube cluster:"
     echo "  minikube delete --profile ${MINIKUBE_PROFILE}"

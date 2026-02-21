@@ -31,7 +31,7 @@ kubectl get events -n wazuh --sort-by='.lastTimestamp'
 
 ```bash
 # Operator logs
-kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager -f
+kubectl logs -n wazuh-operator deploy/wazuh-operator-controller-manager -f
 
 # Indexer logs
 kubectl logs -n wazuh wazuh-indexer-0 -f
@@ -52,19 +52,20 @@ kubectl logs -n wazuh <pod-name> --previous
 
 ```bash
 # Update operator with debug logging
-helm upgrade wazuh-operator ./charts/wazuh-operator \
-  --namespace wazuh-system \
-  --set extraArgs[0]="--zap-log-level=debug"
+helm template wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-operator \
+  --set extraArgs[0]="--zap-log-level=debug" \
+  | kubectl apply --server-side -f -
 
 # Or patch the deployment
-kubectl patch deployment wazuh-operator-controller-manager -n wazuh-system \
+kubectl patch deployment wazuh-operator-controller-manager -n wazuh-operator \
   --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--zap-log-level=debug"}]'
 ```
 
 ### View Debug Logs
 
 ```bash
-kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager -f | grep -E "(DEBUG|debug)"
+kubectl logs -n wazuh-operator deploy/wazuh-operator-controller-manager -f | grep -E "(DEBUG|debug)"
 ```
 
 ## Component Debugging
@@ -230,7 +231,7 @@ kubectl describe pvc -n wazuh wazuh-indexer-data-wazuh-indexer-0
 
 ```bash
 # 1. Check operator logs
-kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager | tail -50
+kubectl logs -n wazuh-operator deploy/wazuh-operator-controller-manager | tail -50
 
 # 2. Check which component is failing
 kubectl get pods -n wazuh
@@ -246,11 +247,11 @@ kubectl logs -n wazuh <failing-pod>
 
 ```bash
 # 1. Enable debug logging
-kubectl patch deployment wazuh-operator-controller-manager -n wazuh-system \
+kubectl patch deployment wazuh-operator-controller-manager -n wazuh-operator \
   --type='json' -p='[{"op": "add", "path": "/spec/template/spec/containers/0/args/-", "value": "--zap-log-level=debug"}]'
 
 # 2. Watch logs for errors
-kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager -f 2>&1 | grep -i error
+kubectl logs -n wazuh-operator deploy/wazuh-operator-controller-manager -f 2>&1 | grep -i error
 
 # 3. Check cluster status conditions
 kubectl get wazuhcluster -n wazuh -o yaml | grep -A 20 conditions:
@@ -294,5 +295,5 @@ echo "=== Recent Events ==="
 kubectl get events -n wazuh --sort-by='.lastTimestamp' | tail -20
 echo ""
 echo "=== Operator Logs (last 20 lines) ==="
-kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager --tail=20
+kubectl logs -n wazuh-operator deploy/wazuh-operator-controller-manager --tail=20
 ```

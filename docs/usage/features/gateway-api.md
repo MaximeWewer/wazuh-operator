@@ -93,10 +93,9 @@ Gateway API support is **disabled by default** to avoid startup errors when Gate
 ### Enable via Helm
 
 ```bash
-helm install wazuh-operator ./charts/wazuh-operator \
-  --namespace wazuh-system \
-  --create-namespace \
-  --set gatewayAPI.enabled=true
+helm template wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-operator \
+  --set gatewayAPI.enabled=true | kubectl apply -f -
 ```
 
 ### Enable via Environment Variable
@@ -214,7 +213,9 @@ GatewayAPI is configured but operator Gateway API support is disabled
 Enable Gateway API support in the operator:
 
 ```bash
-helm upgrade wazuh-operator ./charts/wazuh-operator --set gatewayAPI.enabled=true
+helm template wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-operator \
+  --set gatewayAPI.enabled=true | kubectl apply -f -
 ```
 
 ### "Gateway API CRDs not installed"
@@ -237,5 +238,5 @@ kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/latest/
 4. Check operator logs for detailed error messages
 
 ```bash
-kubectl logs -n wazuh-system deployment/wazuh-operator-controller-manager | grep -i gateway
+kubectl logs -n wazuh-operator deployment/wazuh-operator-controller-manager | grep -i gateway
 ```

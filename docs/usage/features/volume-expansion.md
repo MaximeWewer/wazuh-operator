@@ -72,11 +72,12 @@ kubectl apply -f wazuhcluster.yaml
 If using Helm, update your values:
 
 ```bash
-helm upgrade wazuh-cluster ./charts/wazuh-cluster \
+helm template wazuh-cluster ./charts/wazuh-cluster \
   --set cluster.spec.indexer.storageSize=100Gi \
   --set cluster.spec.manager.master.storageSize=40Gi \
   --set cluster.spec.manager.workers.storageSize=40Gi \
-  --namespace wazuh
+  --namespace wazuh \
+  | kubectl apply --server-side -f -
 ```
 
 ## Monitoring Expansion Progress
@@ -214,7 +215,7 @@ kubectl rollout restart statefulset wazuh-indexer -n wazuh
 3. **Check operator logs**:
 
    ```bash
-   kubectl logs -l app.kubernetes.io/name=wazuh-operator -n wazuh-system
+   kubectl logs -l app.kubernetes.io/name=wazuh-operator -n wazuh-operator
    ```
 
 ### Expansion Stuck

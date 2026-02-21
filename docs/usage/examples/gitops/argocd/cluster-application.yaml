@@ -61,7 +61,7 @@ spec:
         # Network policies
         networkPolicy:
           enabled: true
-          operatorNamespace: wazuh-system
+          operatorNamespace: wazuh-operator
 
         # Backup configuration (optional)
         opensearchRepository:

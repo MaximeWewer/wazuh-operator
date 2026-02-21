@@ -1295,7 +1295,7 @@ networkPolicy:
   enabled: false
 
   # -- Operator namespace (for allowing operator access)
-  operatorNamespace: wazuh-system
+  operatorNamespace: wazuh-operator
 
   # @extra networkPolicy.indexer Indexer network policy settings
   indexer:

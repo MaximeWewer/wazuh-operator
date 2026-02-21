@@ -98,8 +98,8 @@ docker-push-backup-tools: ## Push backup-tools docker image.
 
 HELM_RELEASE_OPERATOR ?= wazuh-operator
 HELM_RELEASE_CLUSTER ?= wazuh-cluster
-HELM_NAMESPACE_OPERATOR ?= wazuh-system
-HELM_NAMESPACE_CLUSTER ?= wazuh-system
+HELM_NAMESPACE_OPERATOR ?= wazuh-operator
+HELM_NAMESPACE_CLUSTER ?= wazuh-operator
 
 .PHONY: install
 install: manifests ## Install CRDs into the K8s cluster.
@@ -115,22 +115,24 @@ uninstall: ## Uninstall CRDs from the K8s cluster.
 
 .PHONY: deploy
 deploy: manifests ## Deploy operator using Helm.
-	helm upgrade --install $(HELM_RELEASE_OPERATOR) ./charts/wazuh-operator \
-		--namespace $(HELM_NAMESPACE_OPERATOR) --create-namespace
+	helm template $(HELM_RELEASE_OPERATOR) ./charts/wazuh-operator \
+		--namespace $(HELM_NAMESPACE_OPERATOR) | kubectl apply --server-side -f -
 
 .PHONY: undeploy
 undeploy: ## Undeploy operator using Helm.
-	-helm uninstall $(HELM_RELEASE_OPERATOR) --namespace $(HELM_NAMESPACE_OPERATOR)
+	-helm template $(HELM_RELEASE_OPERATOR) ./charts/wazuh-operator \
+		--namespace $(HELM_NAMESPACE_OPERATOR) | kubectl delete -f -
 
 .PHONY: deploy-cluster
 deploy-cluster: ## Deploy a Wazuh cluster using Helm.
-	helm upgrade --install $(HELM_RELEASE_CLUSTER) ./charts/wazuh-cluster \
+	helm template $(HELM_RELEASE_CLUSTER) ./charts/wazuh-cluster \
 		--namespace $(HELM_NAMESPACE_CLUSTER) \
-		--set sizing.profile=S
+		--set sizing.profile=S | kubectl apply --server-side -f -
 
 .PHONY: undeploy-cluster
 undeploy-cluster: ## Undeploy Wazuh cluster using Helm.
-	-helm uninstall $(HELM_RELEASE_CLUSTER) --namespace $(HELM_NAMESPACE_CLUSTER)
+	-helm template $(HELM_RELEASE_CLUSTER) ./charts/wazuh-cluster \
+		--namespace $(HELM_NAMESPACE_CLUSTER) | kubectl delete -f -
 
 ##@ Clean & Redeploy
 

@@ -221,7 +221,7 @@ When testing new code, ensure you're running the **new codebase**, not an old de
 ```bash
 # 1. Cleanup existing deployment
 kubectl delete wazuhcluster wazuh-cluster -n wazuh
-kubectl delete namespace wazuh-system --timeout=60s
+kubectl delete namespace wazuh-operator --timeout=60s
 kubectl delete namespace wazuh --timeout=60s
 
 # 2. Rebuild operator image
@@ -234,7 +234,7 @@ minikube image load wazuh-operator:latest --profile wazuh-dev
 ./scripts/wazuh-dev deploy S
 
 # 5. Verify new image
-kubectl describe pod -n wazuh-system -l app.kubernetes.io/name=wazuh-operator | grep Image:
+kubectl describe pod -n wazuh-operator -l app.kubernetes.io/name=wazuh-operator | grep Image:
 ```
 
 ### Full Reset (Nuclear Option)
@@ -261,8 +261,8 @@ envtest starts a real API server (~2-3 seconds startup). This is normal for inte
 ### Operator pod shows old image
 
 ```bash
-kubectl delete pod -n wazuh-system -l app.kubernetes.io/name=wazuh-operator
-kubectl get pods -n wazuh-system -w
+kubectl delete pod -n wazuh-operator -l app.kubernetes.io/name=wazuh-operator
+kubectl get pods -n wazuh-operator -w
 ```
 
 ### Namespace stuck in Terminating
@@ -282,7 +282,7 @@ kubectl get namespace wazuh -o json | \
 
 ```bash
 # Check operator logs
-kubectl logs -n wazuh-system deployment/wazuh-operator-controller-manager --tail=100
+kubectl logs -n wazuh-operator deployment/wazuh-operator-controller-manager --tail=100
 
 # Remove finalizer (DANGEROUS - testing only)
 kubectl patch wazuhcluster wazuh-cluster -n wazuh --type='json' \

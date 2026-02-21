@@ -332,7 +332,7 @@ kubectl get configmap -n wazuh -l app.kubernetes.io/component=filebeat
 1. Check operator logs:
 
    ```bash
-   kubectl logs -n wazuh-system deploy/wazuh-operator-controller-manager
+   kubectl logs -n wazuh-operator deploy/wazuh-operator-controller-manager
    ```
 
 2. Verify RBAC permissions for ConfigMaps

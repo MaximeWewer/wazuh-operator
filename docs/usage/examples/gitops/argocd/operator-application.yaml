@@ -60,7 +60,7 @@ spec:
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: wazuh-system
+    namespace: wazuh-operator
 
   # Sync policy
   syncPolicy:

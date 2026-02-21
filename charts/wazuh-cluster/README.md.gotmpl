@@ -23,27 +23,30 @@
 1. Install the Wazuh Operator first (if not already installed):
 
 ```bash
-helm install wazuh-operator ./charts/wazuh-operator
+helm template wazuh-operator ./charts/wazuh-operator \
+  --namespace wazuh-operator | kubectl apply --server-side -f -
 ```
 
 2. Install the chart with a sizing profile:
 
 ```bash
-helm install my-wazuh-cluster ./charts/wazuh-cluster \
+helm template my-wazuh-cluster ./charts/wazuh-cluster \
   --set sizing.profile=M \
-  --namespace wazuh-system
+  --namespace wazuh | kubectl apply --server-side -f -
 ```
 
 ## Upgrading
 
 ```bash
-helm upgrade my-wazuh-cluster ./charts/wazuh-cluster -f my-values.yaml
+helm template my-wazuh-cluster ./charts/wazuh-cluster \
+  -f my-values.yaml \
+  --namespace wazuh | kubectl apply --server-side -f -
 ```
 
 ## Uninstallation
 
 ```bash
-helm uninstall my-wazuh-cluster
+kubectl delete -f <(helm template my-wazuh-cluster ./charts/wazuh-cluster --namespace wazuh)
 ```
 
 > **Note:** This will delete all WazuhCluster resources and secrets. The operator will clean up all associated Kubernetes resources.

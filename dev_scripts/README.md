@@ -49,7 +49,7 @@ OPERATOR_TAG=v1.0.0-test ./scripts/deploy-local.sh
 | `MINIKUBE_DRIVER`    | Minikube driver       | `docker`          |
 | `SIZING_PROFILE`     | Cluster size profile  | `S`               |
 | `OPERATOR_TAG`       | Image tag             | `dev-<timestamp>` |
-| `OPERATOR_NAMESPACE` | Operator namespace    | `wazuh-system`    |
+| `OPERATOR_NAMESPACE` | Operator namespace    | `wazuh-operator`    |
 | `CLUSTER_NAMESPACE`  | Cluster namespace     | `wazuh`           |
 | `CLUSTER_NAME`       | Cluster name          | `wazuh-cluster`   |
 
@@ -190,7 +190,7 @@ Then access: <https://localhost:5601>
 
 ```bash
 # View operator logs
-kubectl logs -n wazuh-system -l app.kubernetes.io/name=wazuh-operator -f
+kubectl logs -n wazuh-operator -l app.kubernetes.io/name=wazuh-operator -f
 
 # View cluster status
 kubectl get wazuhcluster -n wazuh
@@ -275,7 +275,7 @@ make docker-build IMG=wazuh-operator:dev
 |         Minikube Cluster          |
 |                                   |
 |  +-----------------------------+  |
-|  |   Namespace: wazuh-system   |  |
+|  |   Namespace: wazuh-operator   |  |
 |  |                             |  |
 |  |   +---------------------+   |  |
 |  |   |  Wazuh Operator     |   |  |
