@@ -469,8 +469,20 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 	// Build Services
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil && len(cluster.Spec.Manager.Master.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Master.Service.Annotations)
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil {
+		svcSpec := cluster.Spec.Manager.Master.Service
+		if svcSpec.Type != "" {
+			serviceBuilder.WithServiceType(svcSpec.Type)
+		}
+		if len(svcSpec.Annotations) > 0 {
+			serviceBuilder.WithAnnotations(svcSpec.Annotations)
+		}
+		if svcSpec.LoadBalancerIP != "" {
+			serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
+		}
+		if len(svcSpec.Ports) > 0 {
+			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
+		}
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {

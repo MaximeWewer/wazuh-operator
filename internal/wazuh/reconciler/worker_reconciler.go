@@ -163,8 +163,17 @@ func (r *WorkerReconciler) reconcileStandaloneConfigMap(ctx context.Context, wor
 // reconcileStandaloneServices reconciles services for standalone worker
 func (r *WorkerReconciler) reconcileStandaloneServices(ctx context.Context, worker *wazuhv1.WazuhWorker) error {
 	serviceBuilder := services.NewWorkerServiceBuilder(worker.Name, worker.Namespace)
-	if worker.Spec.Service != nil && len(worker.Spec.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(worker.Spec.Service.Annotations)
+	if worker.Spec.Service != nil {
+		svcSpec := worker.Spec.Service
+		if svcSpec.Type != "" {
+			serviceBuilder.WithServiceType(svcSpec.Type)
+		}
+		if len(svcSpec.Annotations) > 0 {
+			serviceBuilder.WithAnnotations(svcSpec.Annotations)
+		}
+		if len(svcSpec.Ports) > 0 {
+			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
+		}
 	}
 
 	// Regular ClusterIP service
