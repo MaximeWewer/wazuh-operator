@@ -14,12 +14,26 @@ import (
 // InformerSyncChecker returns a healthz.Checker that verifies the manager's
 // informer cache has synced. Before cache sync, the operator cannot read
 // resources reliably and should not be considered ready.
+//
+// It works by waiting (non-blocking) for the manager to be elected leader,
+// then performing a blocking WaitForCacheSync with a short deadline.
+// Before election, the check fails immediately without calling into the cache.
 func InformerSyncChecker(mgr manager.Manager) healthz.Checker {
 	return func(_ *http.Request) error {
-		// Use an already-canceled context so WaitForCacheSync returns
-		// immediately with the current sync state instead of blocking.
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
+		// Before the manager is fully started (leader elected, cache started),
+		// WaitForCacheSync cannot succeed. Check Elected() first to avoid
+		// calling WaitForCacheSync with a canceled context (which always
+		// returns false because the internal startWait channel races with
+		// the canceled Done channel).
+		select {
+		case <-mgr.Elected():
+			// Manager is started and cache is running.
+		default:
+			return fmt.Errorf("manager not yet started")
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
 
 		if !mgr.GetCache().WaitForCacheSync(ctx) {
 			return fmt.Errorf("informer cache not synced")

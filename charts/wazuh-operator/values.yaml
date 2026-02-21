@@ -80,7 +80,7 @@ operator:
     # @extra operator.healthProbe.readinessProbe Readiness probe settings
     readinessProbe:
       # -- Initial delay before readiness probing
-      initialDelaySeconds: 5
+      initialDelaySeconds: 30
       # -- Readiness probe interval
       periodSeconds: 10
 

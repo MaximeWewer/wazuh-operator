@@ -187,6 +187,56 @@ kubectl get servicemonitor -n wazuh
 kubectl exec -n wazuh <manager-pod> -c wazuh-exporter -- wget -qO- http://localhost:9090/metrics
 ```
 
+## Operator Health Probes
+
+The operator itself exposes health endpoints on port `8081` used by Kubernetes liveness and readiness probes.
+
+| Endpoint | Probe | Description |
+|----------|-------|-------------|
+| `/healthz` | Liveness | Returns OK if the process is running (`ping` check) |
+| `/readyz` | Readiness | Returns OK when all checks pass (see below) |
+
+### Readiness Checks
+
+| Check | Description |
+|-------|-------------|
+| `ping` | Always passes |
+| `informer-sync` | Kubernetes informer cache has fully synced |
+| `reconcile-watchdog` | Reconcile loop has run within the last 5 minutes |
+| `leader-election` | Instance is the elected leader (only when `--leader-elect` is enabled) |
+
+### Verifying Health
+
+```bash
+kubectl port-forward -n wazuh-operator deploy/wazuh-operator-controller-manager 8081:8081
+curl http://localhost:8081/readyz?verbose
+```
+
+Expected output:
+
+```text
+[+]informer-sync ok
+[+]ping ok
+[+]reconcile-watchdog ok
+healthz check passed
+```
+
+### Helm Configuration
+
+Health probe timing is configurable in `values.yaml`:
+
+```yaml
+operator:
+  healthProbe:
+    port: 8081
+    livenessProbe:
+      initialDelaySeconds: 15
+      periodSeconds: 20
+    readinessProbe:
+      initialDelaySeconds: 30
+      periodSeconds: 10
+```
+
 ## Related Documentation
 
 - [OpenTelemetry](./opentelemetry.md) - Distributed tracing for debugging reconciliation loops and API calls

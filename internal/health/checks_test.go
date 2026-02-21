@@ -39,19 +39,26 @@ func (f *fakeManager) Elected() <-chan struct{} {
 // --- Tests ---
 
 func TestInformerSyncChecker(t *testing.T) {
+	elected := make(chan struct{})
+	close(elected)
+	notElected := make(chan struct{})
+
 	tests := []struct {
 		name    string
 		synced  bool
+		elected chan struct{}
 		wantErr bool
 	}{
-		{"synced cache returns nil", true, false},
-		{"unsynced cache returns error", false, true},
+		{"elected and synced returns nil", true, elected, false},
+		{"elected but unsynced returns error", false, elected, true},
+		{"not elected returns error", true, notElected, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mgr := &fakeManager{
-				cache: &fakeCache{synced: tt.synced},
+				cache:   &fakeCache{synced: tt.synced},
+				elected: tt.elected,
 			}
 			checker := InformerSyncChecker(mgr)
 			err := checker(nil)
