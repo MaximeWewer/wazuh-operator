@@ -21,6 +21,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
 func TestManagerServiceBuilder_WithPorts(t *testing.T) {
@@ -47,5 +49,25 @@ func TestManagerServiceBuilder_WithPorts(t *testing.T) {
 	}
 	if service.Spec.Ports[0].TargetPort.IntVal != 5601 {
 		t.Fatalf("expected targetPort 5601, got %d", service.Spec.Ports[0].TargetPort.IntVal)
+	}
+}
+
+func TestManagerServiceBuilder_DefaultPortsFallback(t *testing.T) {
+	service := NewManagerServiceBuilder("test-cluster", "default", "master").Build()
+
+	if len(service.Spec.Ports) != 4 {
+		t.Fatalf("expected 4 default ports, got %d", len(service.Spec.Ports))
+	}
+
+	expectedNames := []string{
+		constants.PortNameManagerAPI,
+		constants.PortNameManagerAgentEvents,
+		constants.PortNameManagerAgentAuth,
+		constants.PortNameManagerCluster,
+	}
+	for i, p := range service.Spec.Ports {
+		if p.Name != expectedNames[i] {
+			t.Fatalf("expected port[%d] name %q, got %q", i, expectedNames[i], p.Name)
+		}
 	}
 }

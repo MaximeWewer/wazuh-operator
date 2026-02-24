@@ -469,20 +469,8 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 	// Build Services
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil {
-		svcSpec := cluster.Spec.Manager.Master.Service
-		if svcSpec.Type != "" {
-			serviceBuilder.WithServiceType(svcSpec.Type)
-		}
-		if len(svcSpec.Annotations) > 0 {
-			serviceBuilder.WithAnnotations(svcSpec.Annotations)
-		}
-		if svcSpec.LoadBalancerIP != "" {
-			serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
-		}
-		if len(svcSpec.Ports) > 0 {
-			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
-		}
+	if cluster.Spec.Manager != nil {
+		applyManagerServiceSpec(serviceBuilder, cluster.Spec.Manager.Master.Service)
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -931,17 +919,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 
 	// Build Services
 	serviceBuilder := services.NewWorkerServiceBuilder(cluster.Name, cluster.Namespace)
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Service != nil {
-		svcSpec := cluster.Spec.Manager.Workers.Service
-		if svcSpec.Type != "" {
-			serviceBuilder.WithServiceType(svcSpec.Type)
-		}
-		if len(svcSpec.Annotations) > 0 {
-			serviceBuilder.WithAnnotations(svcSpec.Annotations)
-		}
-		if len(svcSpec.Ports) > 0 {
-			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
-		}
+	if cluster.Spec.Manager != nil {
+		applyWorkerServiceSpec(serviceBuilder, cluster.Spec.Manager.Workers.Service)
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -1466,20 +1445,8 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 
 	// Build Service
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil {
-		svcSpec := cluster.Spec.Manager.Master.Service
-		if svcSpec.Type != "" {
-			serviceBuilder.WithServiceType(svcSpec.Type)
-		}
-		if len(svcSpec.Annotations) > 0 {
-			serviceBuilder.WithAnnotations(svcSpec.Annotations)
-		}
-		if svcSpec.LoadBalancerIP != "" {
-			serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
-		}
-		if len(svcSpec.Ports) > 0 {
-			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
-		}
+	if cluster.Spec.Manager != nil {
+		applyManagerServiceSpec(serviceBuilder, cluster.Spec.Manager.Master.Service)
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -1785,17 +1752,8 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 
 	// Build Service
 	serviceBuilder := services.NewWorkerServiceBuilder(cluster.Name, cluster.Namespace)
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Service != nil {
-		svcSpec := cluster.Spec.Manager.Workers.Service
-		if svcSpec.Type != "" {
-			serviceBuilder.WithServiceType(svcSpec.Type)
-		}
-		if len(svcSpec.Annotations) > 0 {
-			serviceBuilder.WithAnnotations(svcSpec.Annotations)
-		}
-		if len(svcSpec.Ports) > 0 {
-			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
-		}
+	if cluster.Spec.Manager != nil {
+		applyWorkerServiceSpec(serviceBuilder, cluster.Spec.Manager.Workers.Service)
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {

@@ -217,21 +217,7 @@ func (r *ManagerReconciler) reconcileStandaloneConfigMap(ctx context.Context, ma
 func (r *ManagerReconciler) reconcileStandaloneServices(ctx context.Context, manager *wazuhv1.WazuhManager, nodeType string) error {
 	if nodeType == "master" {
 		serviceBuilder := services.NewManagerServiceBuilder(manager.Name, manager.Namespace, "master")
-		if manager.Spec.Master.Service != nil {
-			svcSpec := manager.Spec.Master.Service
-			if svcSpec.Type != "" {
-				serviceBuilder.WithServiceType(svcSpec.Type)
-			}
-			if len(svcSpec.Annotations) > 0 {
-				serviceBuilder.WithAnnotations(svcSpec.Annotations)
-			}
-			if svcSpec.LoadBalancerIP != "" {
-				serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
-			}
-			if len(svcSpec.Ports) > 0 {
-				serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
-			}
-		}
+		applyManagerServiceSpec(serviceBuilder, manager.Spec.Master.Service)
 
 		service := serviceBuilder.Build()
 		if err := controllerutil.SetControllerReference(manager, service, r.Scheme); err != nil {
@@ -250,18 +236,7 @@ func (r *ManagerReconciler) reconcileStandaloneServices(ctx context.Context, man
 		}
 	} else {
 		serviceBuilder := services.NewWorkerServiceBuilder(manager.Name, manager.Namespace)
-		if manager.Spec.Workers.Service != nil {
-			svcSpec := manager.Spec.Workers.Service
-			if svcSpec.Type != "" {
-				serviceBuilder.WithServiceType(svcSpec.Type)
-			}
-			if len(svcSpec.Annotations) > 0 {
-				serviceBuilder.WithAnnotations(svcSpec.Annotations)
-			}
-			if len(svcSpec.Ports) > 0 {
-				serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
-			}
-		}
+		applyWorkerServiceSpec(serviceBuilder, manager.Spec.Workers.Service)
 
 		service := serviceBuilder.Build()
 		if err := controllerutil.SetControllerReference(manager, service, r.Scheme); err != nil {

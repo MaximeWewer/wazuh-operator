@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/services"
 )
 
 func convertServicePorts(ports []wazuhv1.ServicePortSpec) []corev1.ServicePort {
@@ -46,4 +47,37 @@ func convertServicePorts(ports []wazuhv1.ServicePortSpec) []corev1.ServicePort {
 		})
 	}
 	return out
+}
+
+func applyManagerServiceSpec(builder *services.ManagerServiceBuilder, svcSpec *wazuhv1.ServiceSpec) {
+	if svcSpec == nil {
+		return
+	}
+	if svcSpec.Type != "" {
+		builder.WithServiceType(svcSpec.Type)
+	}
+	if len(svcSpec.Annotations) > 0 {
+		builder.WithAnnotations(svcSpec.Annotations)
+	}
+	if svcSpec.LoadBalancerIP != "" {
+		builder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
+	}
+	if len(svcSpec.Ports) > 0 {
+		builder.WithPorts(convertServicePorts(svcSpec.Ports))
+	}
+}
+
+func applyWorkerServiceSpec(builder *services.WorkerServiceBuilder, svcSpec *wazuhv1.ServiceSpec) {
+	if svcSpec == nil {
+		return
+	}
+	if svcSpec.Type != "" {
+		builder.WithServiceType(svcSpec.Type)
+	}
+	if len(svcSpec.Annotations) > 0 {
+		builder.WithAnnotations(svcSpec.Annotations)
+	}
+	if len(svcSpec.Ports) > 0 {
+		builder.WithPorts(convertServicePorts(svcSpec.Ports))
+	}
 }
