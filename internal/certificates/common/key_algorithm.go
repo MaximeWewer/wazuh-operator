@@ -121,6 +121,25 @@ func ParsePrivateKeyFromPEM(keyPEM []byte) (crypto.PrivateKey, error) {
 	}
 }
 
+// ConvertPrivateKeyPEMToPKCS8 converts a supported private key PEM
+// (PKCS#1 RSA, SEC1 EC, or PKCS#8) to PKCS#8 PEM format.
+func ConvertPrivateKeyPEMToPKCS8(keyPEM []byte) ([]byte, error) {
+	privateKey, err := ParsePrivateKeyFromPEM(keyPEM)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse private key for PKCS#8 conversion: %w", err)
+	}
+
+	der, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal private key to PKCS#8: %w", err)
+	}
+
+	return pem.EncodeToMemory(&pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: der,
+	}), nil
+}
+
 // GetPublicKey extracts the public key from a private key
 func GetPublicKey(key crypto.PrivateKey) crypto.PublicKey {
 	switch k := key.(type) {

@@ -30,6 +30,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
+	certcommon "github.com/MaximeWewer/wazuh-operator/internal/certificates/common"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
@@ -376,6 +377,17 @@ func (r *CertificateReconciler) reconcileAdminCerts(ctx context.Context, cluster
 					r.emitTypedCertRenewingEvent(cluster, CertEventTypeAdmin, secretName)
 				}
 				if !needsRenewal {
+					// Migrate existing admin key to PKCS#8 to guarantee securityadmin.sh compatibility.
+					convertedKey, convErr := certcommon.ConvertPrivateKeyPEMToPKCS8(found.Data[constants.SecretKeyTLSKey])
+					if convErr != nil {
+						log.V(1).Info("Failed to convert existing admin key to PKCS#8", "secret", secretName, "error", convErr.Error())
+					} else if string(found.Data[constants.SecretKeyTLSKey]) != string(convertedKey) {
+						found.Data[constants.SecretKeyTLSKey] = convertedKey
+						if err := r.Update(ctx, found); err != nil {
+							return fmt.Errorf("failed to migrate admin key to PKCS#8 in secret %s: %w", secretName, err)
+						}
+						log.Info("Migrated admin key to PKCS#8 format", "secret", secretName)
+					}
 					return nil
 				}
 			}
