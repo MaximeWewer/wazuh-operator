@@ -23,6 +23,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
@@ -43,8 +44,8 @@ func TestResolveManagerConfig_PropagatesGlobalConfig(t *testing.T) {
 			Manager: &wazuhv1.WazuhManagerClusterSpec{
 				Config: &wazuhv1.WazuhConfigSpec{
 					Global: &wazuhv1.OSSECGlobalSpec{
-						LogAll:     boolPtr(true),
-						LogAllJSON: boolPtr(true),
+						LogAll:     ptr.To(true),
+						LogAllJSON: ptr.To(true),
 					},
 				},
 			},
@@ -88,6 +89,72 @@ func TestResolveManagerConfig_PropagatesGlobalConfig(t *testing.T) {
 	}
 }
 
-func boolPtr(v bool) *bool {
-	return &v
+func TestResolveManagerConfig_BackwardCompat_NilManager(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = wazuhv1.AddToScheme(scheme)
+
+	cluster := &wazuhv1.WazuhCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "default",
+		},
+		Spec: wazuhv1.WazuhClusterSpec{
+			Version: "4.14.2",
+			Manager: nil,
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cluster).
+		Build()
+
+	reconciler := NewClusterReconciler(client, scheme)
+
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, err := reconciler.resolveManagerConfig(context.Background(), cluster)
+	if err != nil {
+		t.Fatalf("resolveManagerConfig failed: %v", err)
+	}
+	if globalCfg == nil || alertsCfg == nil || loggingCfg == nil || remoteCfg == nil || authCfg == nil {
+		t.Fatalf("expected default configs when manager is nil")
+	}
+	if authdPassword != "" {
+		t.Fatalf("expected empty authd password when manager is nil")
+	}
+}
+
+func TestResolveManagerConfig_BackwardCompat_NilManagerConfig(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = wazuhv1.AddToScheme(scheme)
+
+	cluster := &wazuhv1.WazuhCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-cluster",
+			Namespace: "default",
+		},
+		Spec: wazuhv1.WazuhClusterSpec{
+			Version: "4.14.2",
+			Manager: &wazuhv1.WazuhManagerClusterSpec{
+				Config: nil,
+			},
+		},
+	}
+
+	client := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(cluster).
+		Build()
+
+	reconciler := NewClusterReconciler(client, scheme)
+
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, err := reconciler.resolveManagerConfig(context.Background(), cluster)
+	if err != nil {
+		t.Fatalf("resolveManagerConfig failed: %v", err)
+	}
+	if globalCfg == nil || alertsCfg == nil || loggingCfg == nil || remoteCfg == nil || authCfg == nil {
+		t.Fatalf("expected default configs when manager.config is nil")
+	}
+	if authdPassword != "" {
+		t.Fatalf("expected empty authd password when manager.config is nil")
+	}
 }

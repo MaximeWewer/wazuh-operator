@@ -450,22 +450,6 @@ func BuildMasterConfig(clusterName, namespace, nodeName, clusterKey, extraConfig
 func BuildMasterConfigWithConfig(clusterName, namespace, nodeName, clusterKey, extraConfig string,
 	global *GlobalConfig, alerts *AlertsConfig, logging *LoggingConfig, remote *RemoteConfig, auth *AuthConfig, authdPassword string,
 ) (string, error) {
-	if global == nil {
-		global = DefaultGlobalConfig()
-	}
-	if alerts == nil {
-		alerts = DefaultAlertsConfig()
-	}
-	if logging == nil {
-		logging = DefaultLoggingConfig()
-	}
-	if remote == nil {
-		remote = DefaultRemoteConfig()
-	}
-	if auth == nil {
-		auth = DefaultAuthConfig()
-	}
-
 	config := &OSSECConfig{
 		NodeType:          NodeTypeMaster,
 		NodeName:          nodeName,
@@ -503,22 +487,6 @@ func BuildWorkerConfig(clusterName, namespace, nodeName, clusterKey string, mast
 func BuildWorkerConfigWithConfig(clusterName, namespace, nodeName, clusterKey string, masterPort int, extraConfig string,
 	global *GlobalConfig, alerts *AlertsConfig, logging *LoggingConfig, remote *RemoteConfig, auth *AuthConfig, authdPassword string,
 ) (string, error) {
-	if global == nil {
-		global = DefaultGlobalConfig()
-	}
-	if alerts == nil {
-		alerts = DefaultAlertsConfig()
-	}
-	if logging == nil {
-		logging = DefaultLoggingConfig()
-	}
-	if remote == nil {
-		remote = DefaultRemoteConfig()
-	}
-	if auth == nil {
-		auth = DefaultAuthConfig()
-	}
-
 	config := &OSSECConfig{
 		NodeType:          NodeTypeWorker,
 		NodeName:          nodeName,
