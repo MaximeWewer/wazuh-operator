@@ -497,14 +497,34 @@ func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *waz
 		}
 	}
 
-	// Prefer DN options derived from the actual indexer certificate when available.
+	adminDNOpts := dnOpts
+	nodesDNOpts := dnOpts
+
+	// Prefer nodes DN derived from the actual indexer certificate.
 	// This prevents nodes_dn mismatches after upgrades when defaults change.
 	if optsFromCert, err := r.dnOptionsFromIndexerCertSecret(ctx, cluster.Name, cluster.Namespace); err == nil && optsFromCert != nil {
-		dnOpts = optsFromCert
+		nodesDNOpts = optsFromCert
+	}
+	// Prefer admin DN derived from the actual admin certificate mounted for securityadmin.sh.
+	// This ensures authcz.admin_dn matches the certificate subject used by securityadmin.
+	if optsFromCert, err := r.dnOptionsFromAdminCertSecret(ctx, cluster.Name, cluster.Namespace); err == nil && optsFromCert != nil {
+		adminDNOpts = optsFromCert
 	}
 
-	// Build opensearch.yml content (version-aware configuration with DN options)
-	opensearchYML := config.BuildIndexerConfigWithDN(cluster.Name, cluster.Namespace, replicas, cluster.Spec.Version, dnOpts)
+	// Build opensearch.yml content (version-aware configuration with per-certificate DNs)
+	cfg := config.DefaultOpenSearchConfig(cluster.Name, cluster.Namespace)
+	cfg.WithReplicas(replicas)
+	if cluster.Spec.Version != "" {
+		cfg.WithWazuhVersion(cluster.Spec.Version)
+		cfg.CertPath = constants.IndexerCertsDir(cluster.Spec.Version)
+	}
+	if adminDNOpts != nil {
+		cfg.AdminDN = certificates.AdminDN(*adminDNOpts)
+	}
+	if nodesDNOpts != nil {
+		cfg.NodesDN = certificates.NodesDN(*nodesDNOpts)
+	}
+	opensearchYML := cfg.Build()
 
 	configBuilder := configmaps.NewIndexerConfigMapBuilder(cluster.Name, cluster.Namespace)
 	configBuilder.WithOpenSearchYML(opensearchYML)
@@ -520,14 +540,24 @@ func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *waz
 // dnOptionsFromIndexerCertSecret extracts DN options from the indexer TLS cert secret.
 func (r *IndexerReconciler) dnOptionsFromIndexerCertSecret(ctx context.Context, clusterName, namespace string) (*certificates.DNOptions, error) {
 	secretName := constants.IndexerCertsName(clusterName)
+	return r.dnOptionsFromCertSecret(ctx, secretName, namespace, constants.SecretKeyTLSCert)
+}
+
+// dnOptionsFromAdminCertSecret extracts DN options from the admin TLS cert secret.
+func (r *IndexerReconciler) dnOptionsFromAdminCertSecret(ctx context.Context, clusterName, namespace string) (*certificates.DNOptions, error) {
+	secretName := constants.AdminCertsName(clusterName)
+	return r.dnOptionsFromCertSecret(ctx, secretName, namespace, constants.SecretKeyTLSCert)
+}
+
+func (r *IndexerReconciler) dnOptionsFromCertSecret(ctx context.Context, secretName, namespace, certKey string) (*certificates.DNOptions, error) {
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret); err != nil {
 		return nil, err
 	}
 
-	certPEM, ok := secret.Data[constants.SecretKeyTLSCert]
+	certPEM, ok := secret.Data[certKey]
 	if !ok || len(certPEM) == 0 {
-		return nil, fmt.Errorf("tls.crt not found in secret %s", secretName)
+		return nil, fmt.Errorf("%s not found in secret %s", certKey, secretName)
 	}
 
 	block, _ := pem.Decode(certPEM)
