@@ -311,44 +311,38 @@ func (r *IndexerReconciler) reconcileSecrets(ctx context.Context, cluster *wazuh
 	}
 
 	// Security config secret with default configurations
-	// Uses the same password as credentials secret
-	securitySecretName := fmt.Sprintf("%s-indexer-security", cluster.Name)
-	err = r.Get(ctx, types.NamespacedName{Name: securitySecretName, Namespace: cluster.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		// Build admin DN from TLS config for roles mapping
-		adminDN := certificates.DefaultAdminDN()
-		if cluster.Spec.TLS != nil && cluster.Spec.TLS.CertConfig != nil {
-			cfg := cluster.Spec.TLS.CertConfig
-			dnOpts := certificates.DNOptions{
-				OrganizationalUnit: cfg.OrganizationalUnit,
-				Organization:       cfg.Organization,
-				Locality:           cfg.Locality,
-				State:              cfg.State,
-				Country:            cfg.Country,
-			}
-			adminDN = certificates.AdminDN(dnOpts)
+	// Uses the same password as credentials secret and is reconciled on every loop.
+	adminDN := certificates.DefaultAdminDN()
+	if cluster.Spec.TLS != nil && cluster.Spec.TLS.CertConfig != nil {
+		cfg := cluster.Spec.TLS.CertConfig
+		dnOpts := certificates.DNOptions{
+			OrganizationalUnit: cfg.OrganizationalUnit,
+			Organization:       cfg.Organization,
+			Locality:           cfg.Locality,
+			State:              cfg.State,
+			Country:            cfg.Country,
 		}
+		adminDN = certificates.AdminDN(dnOpts)
+	}
+	// Prefer admin DN derived from the current admin certificate to avoid DN drift.
+	if optsFromCert, err := r.dnOptionsFromAdminCertSecret(ctx, cluster.Name, cluster.Namespace); err == nil && optsFromCert != nil {
+		adminDN = certificates.AdminDN(*optsFromCert)
+	}
 
-		securityBuilder := secrets.NewIndexerSecuritySecretBuilder(cluster.Name, cluster.Namespace)
-		// Add default security configuration files with the SAME password as credentials
-		securityBuilder.WithInternalUsers(generateDefaultInternalUsers(adminUsername, adminPassword))
-		securityBuilder.WithRoles(generateDefaultRoles())
-		securityBuilder.WithRolesMapping(generateDefaultRolesMapping(adminDN))
-		securityBuilder.WithActionGroups(generateDefaultActionGroups())
-		securityBuilder.WithTenants(generateDefaultTenants())
-		securityBuilder.WithConfig(generateDefaultSecurityConfig())
-		securitySecret := securityBuilder.Build()
+	securityBuilder := secrets.NewIndexerSecuritySecretBuilder(cluster.Name, cluster.Namespace)
+	securityBuilder.WithInternalUsers(generateDefaultInternalUsers(adminUsername, adminPassword))
+	securityBuilder.WithRoles(generateDefaultRoles())
+	securityBuilder.WithRolesMapping(generateDefaultRolesMapping(adminDN))
+	securityBuilder.WithActionGroups(generateDefaultActionGroups())
+	securityBuilder.WithTenants(generateDefaultTenants())
+	securityBuilder.WithConfig(generateDefaultSecurityConfig())
+	securitySecret := securityBuilder.Build()
 
-		if err := controllerutil.SetControllerReference(cluster, securitySecret, r.Scheme); err != nil {
-			return fmt.Errorf("failed to set controller reference for indexer security: %w", err)
-		}
-
-		log.Info("Creating Indexer security secret", "name", securitySecret.Name)
-		if err := r.Create(ctx, securitySecret); err != nil {
-			return fmt.Errorf("failed to create indexer security secret: %w", err)
-		}
-	} else if err != nil {
-		return fmt.Errorf("failed to get indexer security secret: %w", err)
+	if err := controllerutil.SetControllerReference(cluster, securitySecret, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for indexer security: %w", err)
+	}
+	if err := r.createOrUpdate(ctx, securitySecret); err != nil {
+		return fmt.Errorf("failed to reconcile indexer security secret: %w", err)
 	}
 
 	return nil
