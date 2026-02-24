@@ -469,8 +469,20 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 	// Build Services
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil && len(cluster.Spec.Manager.Master.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Master.Service.Annotations)
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil {
+		svcSpec := cluster.Spec.Manager.Master.Service
+		if svcSpec.Type != "" {
+			serviceBuilder.WithServiceType(svcSpec.Type)
+		}
+		if len(svcSpec.Annotations) > 0 {
+			serviceBuilder.WithAnnotations(svcSpec.Annotations)
+		}
+		if svcSpec.LoadBalancerIP != "" {
+			serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
+		}
+		if len(svcSpec.Ports) > 0 {
+			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
+		}
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -2089,15 +2101,18 @@ func (r *ClusterReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 	})
 }
 
-// updateStatefulSetWithRetry updates a StatefulSet with retry-on-conflict, always using the latest resourceVersion.
+// updateStatefulSetWithRetry updates a StatefulSet with retry-on-conflict.
+// It merges mutable fields from desired into the current server object rather than
+// doing a full PUT replacement, which avoids issues with server-defaulted immutable
+// fields (e.g. VolumeClaimTemplates) causing silent update failures.
 func (r *ClusterReconciler) updateStatefulSetWithRetry(ctx context.Context, desired *appsv1.StatefulSet) error {
 	return utils.RetryOnConflict(ctx, func() error {
 		current := &appsv1.StatefulSet{}
 		if err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, current); err != nil {
 			return err
 		}
-		desired.SetResourceVersion(current.GetResourceVersion())
-		return r.Update(ctx, desired)
+		patch.MergeStatefulSetUpdate(current, desired)
+		return r.Update(ctx, current)
 	})
 }
 

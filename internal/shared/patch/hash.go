@@ -191,15 +191,31 @@ type ManagerWorkersSpec struct {
 	ImagePullPolicy               corev1.PullPolicy          `json:"imagePullPolicy,omitempty"`
 }
 
-// ComputeSpecHash computes a SHA256 hash of spec fields for change detection
-// The spec must be a struct with JSON tags for deterministic serialization
+// ComputeSpecHash computes a SHA256 hash of spec fields for change detection.
+// It uses canonical JSON serialization (marshal → unmarshal to interface{} → re-marshal)
+// to guarantee deterministic output regardless of Go map iteration order,
+// custom MarshalJSON implementations, or internal type representations.
 func ComputeSpecHash(spec any) (string, error) {
 	data, err := json.Marshal(spec)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal spec for hashing: %w", err)
 	}
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:])[:16], nil // Return first 16 chars for shorter annotation
+
+	// Canonicalize: unmarshal into generic interface{} and re-marshal.
+	// This normalizes all types to basic JSON primitives and ensures
+	// all map keys (including nested) are sorted alphabetically.
+	var canonical any
+	if err := json.Unmarshal(data, &canonical); err != nil {
+		return "", fmt.Errorf("failed to canonicalize spec for hashing: %w", err)
+	}
+
+	canonicalData, err := json.Marshal(canonical)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal canonical spec for hashing: %w", err)
+	}
+
+	hash := sha256.Sum256(canonicalData)
+	return hex.EncodeToString(hash[:])[:16], nil
 }
 
 // ComputeConfigHash computes a deterministic hash of ConfigMap data

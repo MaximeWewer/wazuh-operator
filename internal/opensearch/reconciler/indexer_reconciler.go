@@ -567,8 +567,20 @@ func (r *IndexerReconciler) getConfigHash(ctx context.Context, cluster *wazuhv1.
 // reconcileServices reconciles indexer services
 func (r *IndexerReconciler) reconcileServices(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	serviceBuilder := services.NewIndexerServiceBuilder(cluster.Name, cluster.Namespace)
-	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Service != nil && len(cluster.Spec.Indexer.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(cluster.Spec.Indexer.Service.Annotations)
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Service != nil {
+		svcSpec := cluster.Spec.Indexer.Service
+		if svcSpec.Type != "" {
+			serviceBuilder.WithServiceType(svcSpec.Type)
+		}
+		if len(svcSpec.Annotations) > 0 {
+			serviceBuilder.WithAnnotations(svcSpec.Annotations)
+		}
+		if svcSpec.LoadBalancerIP != "" {
+			serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
+		}
+		if len(svcSpec.Ports) > 0 {
+			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
+		}
 	}
 
 	// Regular service
@@ -1707,15 +1719,18 @@ func (r *IndexerReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 	})
 }
 
-// updateStatefulSetWithRetry updates a StatefulSet with retry-on-conflict, always using the latest resourceVersion.
+// updateStatefulSetWithRetry updates a StatefulSet with retry-on-conflict.
+// It merges mutable fields from desired into the current server object rather than
+// doing a full PUT replacement, which avoids issues with server-defaulted immutable
+// fields (e.g. VolumeClaimTemplates) causing silent update failures.
 func (r *IndexerReconciler) updateStatefulSetWithRetry(ctx context.Context, desired *appsv1.StatefulSet) error {
 	return utils.RetryOnConflict(ctx, func() error {
 		current := &appsv1.StatefulSet{}
 		if err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, current); err != nil {
 			return err
 		}
-		desired.SetResourceVersion(current.GetResourceVersion())
-		return r.Update(ctx, desired)
+		patch.MergeStatefulSetUpdate(current, desired)
+		return r.Update(ctx, current)
 	})
 }
 
@@ -1802,8 +1817,20 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 
 	// Build Services
 	serviceBuilder := services.NewIndexerServiceBuilder(indexer.Name, indexer.Namespace)
-	if indexer.Spec.Service != nil && len(indexer.Spec.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(indexer.Spec.Service.Annotations)
+	if indexer.Spec.Service != nil {
+		svcSpec := indexer.Spec.Service
+		if svcSpec.Type != "" {
+			serviceBuilder.WithServiceType(svcSpec.Type)
+		}
+		if len(svcSpec.Annotations) > 0 {
+			serviceBuilder.WithAnnotations(svcSpec.Annotations)
+		}
+		if svcSpec.LoadBalancerIP != "" {
+			serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
+		}
+		if len(svcSpec.Ports) > 0 {
+			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
+		}
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(indexer, service, r.Scheme); err != nil {
