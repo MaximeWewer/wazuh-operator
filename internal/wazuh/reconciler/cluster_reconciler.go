@@ -462,6 +462,10 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	}
 	configBuilder.WithFilebeatTemplate(filebeatTemplate)
 
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.LocalInternalOptions != "" {
+		configBuilder.WithExtraConfig(constants.ConfigMapKeyLocalInternalOptions, cluster.Spec.Manager.Master.LocalInternalOptions)
+	}
+
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for master configmap: %w", err)
@@ -923,6 +927,10 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		return nil, fmt.Errorf("failed to build wazuh-template.json: %w", err)
 	}
 	configBuilder.WithFilebeatTemplate(filebeatTemplate)
+
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.LocalInternalOptions != "" {
+		configBuilder.WithExtraConfig(constants.ConfigMapKeyLocalInternalOptions, cluster.Spec.Manager.Workers.LocalInternalOptions)
+	}
 
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {
@@ -1540,6 +1548,10 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	}
 	configBuilder.WithFilebeatTemplate(filebeatTemplate)
 
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.LocalInternalOptions != "" {
+		configBuilder.WithExtraConfig(constants.ConfigMapKeyLocalInternalOptions, cluster.Spec.Manager.Master.LocalInternalOptions)
+	}
+
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for master configmap: %w", err)
@@ -1850,6 +1862,10 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		return fmt.Errorf("failed to build wazuh-template.json: %w", err)
 	}
 	configBuilder.WithFilebeatTemplate(filebeatTemplate)
+
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.LocalInternalOptions != "" {
+		configBuilder.WithExtraConfig(constants.ConfigMapKeyLocalInternalOptions, cluster.Spec.Manager.Workers.LocalInternalOptions)
+	}
 
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {

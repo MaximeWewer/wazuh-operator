@@ -979,10 +979,6 @@ spec:
                   type: string
                 description: Annotations for the StatefulSet
                 type: object
-              clusterName:
-                default: wazuh
-                description: OpenSearch cluster name
-                type: string
               clusterRef:
                 description: Reference to a WazuhCluster (optional)
                 properties:

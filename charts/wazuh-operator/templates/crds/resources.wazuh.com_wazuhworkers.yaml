@@ -6572,6 +6572,9 @@ spec:
                       type: object
                     type: array
                 type: object
+              localInternalOptions:
+                description: Local internal options (content for /var/ossec/etc/local_internal_options.conf)
+                type: string
               managerRef:
                 description: Reference to the WazuhManager this worker belongs to
                 type: string

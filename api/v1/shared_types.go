@@ -118,6 +118,10 @@ type WazuhMasterSpec struct {
 	// +optional
 	ExtraConfig string `json:"extraConfig,omitempty"`
 
+	// Local internal options (content for /var/ossec/etc/local_internal_options.conf)
+	// +optional
+	LocalInternalOptions string `json:"localInternalOptions,omitempty"`
+
 	// Environment variables
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
@@ -246,6 +250,10 @@ type WazuhWorkerSpec struct {
 	// Extra configuration to inject into ossec.conf
 	// +optional
 	ExtraConfig string `json:"extraConfig,omitempty"`
+
+	// Local internal options (content for /var/ossec/etc/local_internal_options.conf)
+	// +optional
+	LocalInternalOptions string `json:"localInternalOptions,omitempty"`
 
 	// Environment variables
 	// +optional
@@ -710,18 +718,6 @@ func (c *CredentialsSecretRef) IsExternalSecret() bool {
 
 // WazuhConfigSpec defines custom Wazuh configuration
 type WazuhConfigSpec struct {
-	// Master configuration overlay (raw XML to append)
-	// +optional
-	MasterConfig string `json:"masterConfig,omitempty"`
-
-	// Worker configuration overlay (raw XML to append)
-	// +optional
-	WorkerConfig string `json:"workerConfig,omitempty"`
-
-	// Local internal options
-	// +optional
-	LocalInternalOptions string `json:"localInternalOptions,omitempty"`
-
 	// Global section configuration for ossec.conf
 	// +optional
 	Global *OSSECGlobalSpec `json:"global,omitempty"`

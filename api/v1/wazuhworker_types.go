@@ -108,6 +108,10 @@ type WazuhWorkerCRDSpec struct {
 	// +optional
 	ExtraConfig string `json:"extraConfig,omitempty"`
 
+	// Local internal options (content for /var/ossec/etc/local_internal_options.conf)
+	// +optional
+	LocalInternalOptions string `json:"localInternalOptions,omitempty"`
+
 	// Filebeat configuration
 	// +optional
 	Filebeat *FilebeatConfig `json:"filebeat,omitempty"`

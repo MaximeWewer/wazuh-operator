@@ -200,9 +200,6 @@ Configuration for safe scale-down operations. See [Drain Strategy](features/drai
 | `logging`              | [OSSECLoggingSpec](#ossecloggingspec) | No       | -       | Logging section             |
 | `remote`               | [OSSECRemoteSpec](#ossecremotespec)   | No       | -       | Remote section              |
 | `auth`                 | [OSSECAuthSpec](#ossecauthspec)       | No       | -       | Auth section                |
-| `masterConfig`         | string                                | No       | -       | Raw XML for master          |
-| `workerConfig`         | string                                | No       | -       | Raw XML for workers         |
-| `localInternalOptions` | string                                | No       | -       | local_internal_options.conf |
 
 ### OSSECGlobalSpec
 
@@ -265,6 +262,7 @@ Configuration for safe scale-down operations. See [Drain Strategy](features/drai
 | `tolerations`              | []Toleration                      | No       | -       | Tolerations             |
 | `affinity`                 | Affinity                          | No       | -       | Affinity rules          |
 | `extraConfig`              | string                            | No       | -       | Extra ossec.conf XML    |
+| `localInternalOptions`     | string                            | No       | -       | local_internal_options.conf |
 | `extraVolumes`             | []Volume                          | No       | -       | Extra volumes           |
 | `extraVolumeMounts`        | []VolumeMount                     | No       | -       | Extra mounts            |
 | `extraInitContainers`      | []Container                       | No       | -       | Extra init containers   |
@@ -305,7 +303,6 @@ Includes all fields from [MasterSpec](#masterspec) (including `extraVolumes`, `e
 | `replicas`                 | int32                                         | No       | `3`                | Number of replicas (simple mode)                                   |
 | `nodePools`                | [][IndexerNodePoolSpec](#indexernodepoolspec) | No       | -                  | NodePools for advanced topology (mutually exclusive with replicas) |
 | `storageSize`              | string                                        | No       | `50Gi`             | Storage size                                                       |
-| `clusterName`              | string                                        | No       | `wazuh`            | Cluster name                                                       |
 | `javaOpts`                 | string                                        | No       | `-Xms1g -Xmx1g...` | Java options                                                       |
 | `image`                    | [ImageSpec](#imagespec)                       | No       | -                  | Image override                                                     |
 | `resources`                | ResourceRequirements                          | No       | -                  | Resources                                                          |
@@ -635,6 +632,7 @@ Standalone CRD for managing Wazuh Worker configuration. Used for per-worker over
 | `tolerations`         | []Toleration         | No       | -       | Tolerations              |
 | `affinity`            | Affinity             | No       | -       | Affinity rules           |
 | `extraConfig`         | string               | No       | -       | Extra ossec.conf XML     |
+| `localInternalOptions` | string              | No       | -       | local_internal_options.conf |
 | `extraVolumes`        | []Volume             | No       | -       | Extra volumes            |
 | `extraVolumeMounts`   | []VolumeMount        | No       | -       | Extra volume mounts      |
 | `extraInitContainers` | []Container          | No       | -       | Extra init containers    |
@@ -665,7 +663,6 @@ Standalone CRD for managing OpenSearch Indexer configuration. Used in reference 
 | `storageClassName` | string                                        | No       | -                                                | Storage class        |
 | `image`            | [ImageSpec](#imagespec)                       | No       | -                                                | Image override       |
 | `javaOpts`         | string                                        | No       | `-Xms1g -Xmx1g -Dlog4j2.formatMsgNoLookups=true` | Java options         |
-| `clusterName`      | string                                        | No       | `wazuh`                                          | Cluster name         |
 | `credentials`      | [CredentialsSecretRef](#credentialssecretref) | No       | -                                                | Admin credentials    |
 | `nodeSelector`        | map[string]string                             | No       | -                                                | Node selector           |
 | `tolerations`         | []Toleration                                  | No       | -                                                | Tolerations             |

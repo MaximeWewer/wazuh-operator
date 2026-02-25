@@ -9043,10 +9043,6 @@ spec:
                         minimum: 1
                         type: integer
                     type: object
-                  clusterName:
-                    default: wazuh
-                    description: Cluster name
-                    type: string
                   clusterSettings:
                     description: |-
                       ClusterSettings defines cluster-level settings to apply via the Cluster Settings API
@@ -22539,9 +22535,6 @@ spec:
                             description: SMTPServer is the SMTP server address
                             type: string
                         type: object
-                      localInternalOptions:
-                        description: Local internal options
-                        type: string
                       logging:
                         description: Logging section configuration for ossec.conf
                         properties:
@@ -22555,9 +22548,6 @@ spec:
                             - plain,json
                             type: string
                         type: object
-                      masterConfig:
-                        description: Master configuration overlay (raw XML to append)
-                        type: string
                       remote:
                         description: Remote section configuration for ossec.conf
                         properties:
@@ -22584,9 +22574,6 @@ spec:
                             description: QueueSize for the queue
                             type: integer
                         type: object
-                      workerConfig:
-                        description: Worker configuration overlay (raw XML to append)
-                        type: string
                     type: object
                   filebeatSSLVerificationMode:
                     default: full
@@ -29214,6 +29201,9 @@ spec:
                               type: object
                             type: array
                         type: object
+                      localInternalOptions:
+                        description: Local internal options (content for /var/ossec/etc/local_internal_options.conf)
+                        type: string
                       nodeSelector:
                         additionalProperties:
                           type: string
@@ -36748,6 +36738,9 @@ spec:
                               type: object
                             type: array
                         type: object
+                      localInternalOptions:
+                        description: Local internal options (content for /var/ossec/etc/local_internal_options.conf)
+                        type: string
                       nodeSelector:
                         additionalProperties:
                           type: string

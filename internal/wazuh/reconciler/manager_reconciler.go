@@ -205,6 +205,12 @@ func (r *ManagerReconciler) reconcileStandaloneConfigMap(ctx context.Context, ma
 	}
 	configBuilder.WithFilebeatTemplate(filebeatTemplate)
 
+	if nodeType == "master" && manager.Spec.Master.LocalInternalOptions != "" {
+		configBuilder.WithExtraConfig(constants.ConfigMapKeyLocalInternalOptions, manager.Spec.Master.LocalInternalOptions)
+	} else if nodeType == "worker" && manager.Spec.Workers.LocalInternalOptions != "" {
+		configBuilder.WithExtraConfig(constants.ConfigMapKeyLocalInternalOptions, manager.Spec.Workers.LocalInternalOptions)
+	}
+
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(manager, configMap, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference: %w", err)

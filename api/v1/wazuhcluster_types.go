@@ -239,11 +239,6 @@ type WazuhIndexerClusterSpec struct {
 	// +kubebuilder:default="-Xms1g -Xmx1g -Dlog4j2.formatMsgNoLookups=true"
 	JavaOpts string `json:"javaOpts,omitempty"`
 
-	// Cluster name
-	// +optional
-	// +kubebuilder:default="wazuh"
-	ClusterName string `json:"clusterName,omitempty"`
-
 	// Credentials for indexer
 	// +optional
 	Credentials *CredentialsSecretRef `json:"credentials,omitempty"`

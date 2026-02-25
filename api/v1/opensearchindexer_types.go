@@ -59,11 +59,6 @@ type OpenSearchIndexerSpec struct {
 	// +kubebuilder:default="-Xms1g -Xmx1g -Dlog4j2.formatMsgNoLookups=true"
 	JavaOpts string `json:"javaOpts,omitempty"`
 
-	// OpenSearch cluster name
-	// +optional
-	// +kubebuilder:default="wazuh"
-	ClusterName string `json:"clusterName,omitempty"`
-
 	// Credentials for indexer (admin user)
 	// +optional
 	Credentials *CredentialsSecretRef `json:"credentials,omitempty"`

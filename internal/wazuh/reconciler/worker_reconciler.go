@@ -153,6 +153,10 @@ func (r *WorkerReconciler) reconcileStandaloneConfigMap(ctx context.Context, wor
 	}
 	configBuilder.WithFilebeatTemplate(filebeatTemplate)
 
+	if worker.Spec.LocalInternalOptions != "" {
+		configBuilder.WithExtraConfig(constants.ConfigMapKeyLocalInternalOptions, worker.Spec.LocalInternalOptions)
+	}
+
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(worker, configMap, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference: %w", err)

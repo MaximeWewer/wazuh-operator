@@ -209,6 +209,9 @@ const (
 
 	// ConfigMapKeyFilebeatYml is the key for filebeat.yml in ConfigMap
 	ConfigMapKeyFilebeatYml = "filebeat.yml"
+
+	// ConfigMapKeyLocalInternalOptions is the key for local_internal_options.conf in ConfigMap
+	ConfigMapKeyLocalInternalOptions = "local_internal_options.conf"
 )
 
 // Secret key names

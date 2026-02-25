@@ -124,7 +124,6 @@ kubectl delete -f <(helm template my-wazuh-cluster ./charts/wazuh-cluster --name
 | cluster.spec.indexer.antiAffinity.topologyKey | string | `"kubernetes.io/hostname"` | Topology key for anti-affinity |
 | cluster.spec.indexer.antiAffinity.type | string | `"preferred"` | Anti-affinity type: "preferred" or "required" |
 | cluster.spec.indexer.antiAffinity.weight | int | `100` | Weight for preferred anti-affinity (1-100) |
-| cluster.spec.indexer.clusterName | string | `"wazuh"` | Indexer cluster name |
 | cluster.spec.indexer.clusterSettings | object | `{}` |  |
 | cluster.spec.indexer.containerSecurityContext | object | `{}` | Indexer container security context |
 | cluster.spec.indexer.env | list | `[]` | Indexer environment variables |
@@ -140,6 +139,7 @@ kubectl delete -f <(helm template my-wazuh-cluster ./charts/wazuh-cluster --name
 | cluster.spec.indexer.hpa.minReplicas | int | `3` | Minimum indexer replicas |
 | cluster.spec.indexer.hpa.targetCPUUtilizationPercentage | int | `70` | Target CPU utilization percentage |
 | cluster.spec.indexer.hpa.targetMemoryUtilizationPercentage | int | `80` | Target memory utilization percentage |
+| cluster.spec.indexer.image | object | `{"pullPolicy":"","repository":"","tag":""}` | Override global storageClassName for indexer PVCs (e.g., "fast-ssd") storageClass: "" @extra cluster.spec.indexer.image Indexer image override |
 | cluster.spec.indexer.image.pullPolicy | string | `""` | Indexer image pull policy |
 | cluster.spec.indexer.image.repository | string | `""` | Indexer image repository (leave empty for operator default) |
 | cluster.spec.indexer.image.tag | string | `""` | Indexer image tag (leave empty for operator default) |
@@ -192,14 +192,11 @@ kubectl delete -f <(helm template my-wazuh-cluster ./charts/wazuh-cluster --name
 | cluster.spec.manager.config.global.logAll | bool | `false` | Log all events |
 | cluster.spec.manager.config.global.logAllJson | bool | `false` | Log all events in JSON format |
 | cluster.spec.manager.config.global.smtpServer | string | `"smtp.example.wazuh.com"` | SMTP server address |
-| cluster.spec.manager.config.localInternalOptions | string | `""` | Local internal options |
 | cluster.spec.manager.config.logging.logFormat | string | `"plain"` | Log format: "plain" or "json" |
-| cluster.spec.manager.config.masterConfig | string | `""` | Raw XML to append to master ossec.conf |
 | cluster.spec.manager.config.remote.connection | string | `"secure"` | Connection type: "secure" or "syslog" |
 | cluster.spec.manager.config.remote.port | int | `1514` | Remote listening port |
 | cluster.spec.manager.config.remote.protocol | string | `"tcp"` | Protocol: "tcp" or "udp" |
 | cluster.spec.manager.config.remote.queueSize | int | `131072` | Message queue size |
-| cluster.spec.manager.config.workerConfig | string | `""` | Raw XML to append to worker ossec.conf |
 | cluster.spec.manager.filebeatSSLVerificationMode | string | `"full"` | Filebeat SSL verification mode: full, none, certificate |
 | cluster.spec.manager.image.pullPolicy | string | `""` | Manager image pull policy |
 | cluster.spec.manager.image.repository | string | `""` | Manager image repository (leave empty for operator default) |
@@ -234,6 +231,7 @@ kubectl delete -f <(helm template my-wazuh-cluster ./charts/wazuh-cluster --name
 | cluster.spec.manager.master.ingress.hosts | list | `[]` | Ingress hosts |
 | cluster.spec.manager.master.ingress.ingressClassName | string | `""` | Ingress class name |
 | cluster.spec.manager.master.ingress.tls | list | `[]` | Ingress TLS configuration |
+| cluster.spec.manager.master.localInternalOptions | string | `""` | Local internal options (content for /var/ossec/etc/local_internal_options.conf) |
 | cluster.spec.manager.master.nodeSelector | object | `{}` | Master node selector |
 | cluster.spec.manager.master.podAnnotations | object | `{}` | Master pod annotations |
 | cluster.spec.manager.master.securityContext | object | `{}` | Master pod security context |
@@ -273,6 +271,7 @@ kubectl delete -f <(helm template my-wazuh-cluster ./charts/wazuh-cluster --name
 | cluster.spec.manager.workers.ingress.hosts | list | `[]` | Ingress hosts |
 | cluster.spec.manager.workers.ingress.ingressClassName | string | `""` | Ingress class name |
 | cluster.spec.manager.workers.ingress.tls | list | `[]` | Ingress TLS configuration |
+| cluster.spec.manager.workers.localInternalOptions | string | `""` | Local internal options (content for /var/ossec/etc/local_internal_options.conf) |
 | cluster.spec.manager.workers.nodeSelector | object | `{}` | Workers node selector |
 | cluster.spec.manager.workers.overrides | list | `[]` | Per-worker configuration overrides for specific worker indices |
 | cluster.spec.manager.workers.podAnnotations | object | `{}` | Workers pod annotations |

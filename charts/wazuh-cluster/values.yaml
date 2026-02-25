@@ -138,10 +138,6 @@ cluster:
 
     # @extra cluster.spec.indexer OpenSearch Indexer configuration
     indexer:
-      # -- Indexer cluster name
-      # @default -- `"wazuh"`
-      clusterName: ""
-
       # -- Indexer update strategy (RollingUpdate or OnDelete)
       # @default -- `"RollingUpdate"`
       updateStrategy: ""
@@ -329,13 +325,6 @@ cluster:
 
       # @extra cluster.spec.manager.config Wazuh ossec.conf configuration
       config:
-        # -- Raw XML to append to master ossec.conf
-        masterConfig: ""
-        # -- Raw XML to append to worker ossec.conf
-        workerConfig: ""
-        # -- Local internal options
-        localInternalOptions: ""
-
         # @extra cluster.spec.manager.config.global Global ossec.conf settings
         global:
           # -- Enable JSON output
@@ -495,6 +484,9 @@ cluster:
         #       <level>10</level>
         #     </integration>
 
+        # -- Local internal options (content for /var/ossec/etc/local_internal_options.conf)
+        localInternalOptions: ""
+
         # -- Master topology spread constraints
         topologySpreadConstraints: []
 
@@ -589,6 +581,9 @@ cluster:
         #       <log_format>syslog</log_format>
         #       <location>/var/log/custom.log</location>
         #     </localfile>
+
+        # -- Local internal options (content for /var/ossec/etc/local_internal_options.conf)
+        localInternalOptions: ""
 
         # -- Per-worker configuration overrides for specific worker indices
         overrides: []

@@ -828,6 +828,12 @@ if [ -f /config-source/wazuh-template.json ]; then
     chmod 644 /etc/filebeat/wazuh-template.json
     echo "Copied wazuh-template.json"
 fi
+# Copy local_internal_options.conf if it exists
+if [ -f /config-source/local_internal_options.conf ]; then
+    cp /config-source/local_internal_options.conf /wazuh-config-mount/etc/local_internal_options.conf
+    chmod 644 /wazuh-config-mount/etc/local_internal_options.conf
+    echo "Copied local_internal_options.conf"
+fi
 echo "Configuration copy complete"
 ls -la /wazuh-config-mount/etc/ 2>/dev/null || true
 ls -la /etc/filebeat/ 2>/dev/null || true`,
