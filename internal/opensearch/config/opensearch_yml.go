@@ -130,14 +130,6 @@ func (c *OpenSearchConfig) WithDiscoveryHosts(hosts []string) *OpenSearchConfig 
 	return c
 }
 
-// WithDNOptions sets custom Distinguished Name options for admin and nodes
-// This should match the certificate generation options to ensure authentication works
-func (c *OpenSearchConfig) WithDNOptions(opts certificates.DNOptions) *OpenSearchConfig {
-	c.AdminDN = certificates.AdminDN(opts)
-	c.NodesDN = certificates.NodesDN(opts)
-	return c
-}
-
 // WithInitialMasterNodes sets the initial master nodes for cluster bootstrap
 func (c *OpenSearchConfig) WithInitialMasterNodes(nodes []string) *OpenSearchConfig {
 	c.InitialMasterNodes = nodes
@@ -306,20 +298,11 @@ func (c *OpenSearchConfig) Build() string {
 // BuildIndexerConfig is a convenience function to build opensearch.yml for indexer
 // The wazuhVersion parameter enables version-aware configuration (e.g., SSL hot reload settings)
 func BuildIndexerConfig(clusterName, namespace string, replicas int32, wazuhVersion string) string {
-	return BuildIndexerConfigWithDN(clusterName, namespace, replicas, wazuhVersion, nil)
-}
-
-// BuildIndexerConfigWithDN builds opensearch.yml for indexer with custom DN options
-// If dnOpts is nil, default DN options are used
-func BuildIndexerConfigWithDN(clusterName, namespace string, replicas int32, wazuhVersion string, dnOpts *certificates.DNOptions) string {
 	config := DefaultOpenSearchConfig(clusterName, namespace)
 	config.WithReplicas(replicas)
 	if wazuhVersion != "" {
 		config.WithWazuhVersion(wazuhVersion)
 		config.CertPath = constants.IndexerCertsDir(wazuhVersion)
-	}
-	if dnOpts != nil {
-		config.WithDNOptions(*dnOpts)
 	}
 	return config.Build()
 }

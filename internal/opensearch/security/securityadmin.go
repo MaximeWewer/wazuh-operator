@@ -122,7 +122,7 @@ func (e *SecurityAdminExecutor) ApplyInternalUsers(ctx context.Context, clusterN
 	// Prefer pushing inline content from the Secret to avoid stale subPath mounts.
 	var cmd []string
 	if expectedInternalUsers != "" {
-		cmd = buildInlineInternalUsersCommand(expectedInternalUsers)
+		cmd = buildInlineInternalUsersCommand(wazuhVersion, expectedInternalUsers)
 	} else {
 		cmd = buildInternalUsersCommand(wazuhVersion)
 	}
@@ -156,6 +156,7 @@ func buildInternalUsersCommand(wazuhVersion string) []string {
 
 	preferredInternalUsers := preferredConfigDir + "/internal_users.yml"
 	fallbackInternalUsers := fallbackConfigDir + "/internal_users.yml"
+	certsDir := constants.IndexerCertsDir(wazuhVersion)
 
 	return []string{
 		"bash", "-c",
@@ -175,14 +176,15 @@ func buildInternalUsersCommand(wazuhVersion string) []string {
 			"-key %s/tls.key",
 			preferredInternalUsers, fallbackInternalUsers, fallbackInternalUsers,
 			preferredInternalUsers, fallbackInternalUsers,
-			constants.PathIndexerCerts, constants.PathIndexerAdminCerts, constants.PathIndexerAdminCerts),
+			certsDir, constants.PathIndexerAdminCerts, constants.PathIndexerAdminCerts),
 	}
 }
 
 // buildInlineInternalUsersCommand pushes internal_users content directly to a temp file in the pod,
 // then applies it with securityadmin.sh. This avoids stale Secret subPath mounts.
-func buildInlineInternalUsersCommand(internalUsers string) []string {
+func buildInlineInternalUsersCommand(wazuhVersion, internalUsers string) []string {
 	encoded := base64.StdEncoding.EncodeToString([]byte(internalUsers))
+	certsDir := constants.IndexerCertsDir(wazuhVersion)
 	return []string{
 		"bash", "-c",
 		fmt.Sprintf("echo '%s' | base64 -d > /tmp/internal_users.yml; "+
@@ -195,7 +197,7 @@ func buildInlineInternalUsersCommand(internalUsers string) []string {
 			"-cert %s/tls.crt "+
 			"-key %s/tls.key",
 			encoded,
-			constants.PathIndexerCerts, constants.PathIndexerAdminCerts, constants.PathIndexerAdminCerts),
+			certsDir, constants.PathIndexerAdminCerts, constants.PathIndexerAdminCerts),
 	}
 }
 
