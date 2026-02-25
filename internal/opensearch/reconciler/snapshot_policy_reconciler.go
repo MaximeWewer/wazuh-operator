@@ -25,6 +25,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -253,14 +255,23 @@ func (r *SnapshotPolicyReconciler) buildSnapshotPolicy(policy *wazuhv1.OpenSearc
 
 // updateStatus updates the policy status
 func (r *SnapshotPolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.OpenSearchSnapshotPolicy, phase wazuhv1.OpenSearchResourcePhase, message string) error {
-	policy.Status.Phase = phase
-	policy.Status.Message = message
-	now := metav1.Now()
-	policy.Status.LastSyncTime = &now
-
 	metrics.SetResourceSyncStatus("OpenSearchSnapshotPolicy", policy.Namespace, policy.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
-	return r.Status().Update(ctx, policy)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchSnapshotPolicy{}
+		if err := r.Get(ctx, types.NamespacedName{Name: policy.Name, Namespace: policy.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status.Phase = phase
+		latest.Status.Message = message
+		now := metav1.Now()
+		latest.Status.LastSyncTime = &now
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		policy.Status = latest.Status
+		return nil
+	})
 }
 
 // handleDeletion handles snapshot policy cleanup on deletion

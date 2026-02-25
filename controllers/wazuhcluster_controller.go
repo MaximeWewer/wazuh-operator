@@ -1178,7 +1178,18 @@ func (r *WazuhClusterReconciler) updateCondition(cluster *wazuhv1.WazuhCluster, 
 // Use this on error paths where the main updateStatus() won't be reached.
 func (r *WazuhClusterReconciler) persistCondition(ctx context.Context, cluster *wazuhv1.WazuhCluster, conditionType, reason, message string) {
 	r.updateCondition(cluster, conditionType, metav1.ConditionFalse, reason, message)
-	if err := r.Status().Update(ctx, cluster); err != nil {
+	if err := utils.RetryOnConflict(ctx, func() error {
+		latestCluster := &wazuhv1.WazuhCluster{}
+		if err := r.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, latestCluster); err != nil {
+			return err
+		}
+		r.updateCondition(latestCluster, conditionType, metav1.ConditionFalse, reason, message)
+		if err := r.Status().Update(ctx, latestCluster); err != nil {
+			return err
+		}
+		cluster.Status.Conditions = latestCluster.Status.Conditions
+		return nil
+	}); err != nil {
 		logf.FromContext(ctx).Error(err, "Failed to persist status condition", "conditionType", conditionType, "reason", reason)
 	}
 }

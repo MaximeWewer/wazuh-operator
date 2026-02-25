@@ -39,6 +39,7 @@ import (
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
+	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/validation"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -261,7 +262,19 @@ func (r *DecoderReconciler) setCondition(decoder *wazuhv1.WazuhDecoder, conditio
 
 // updateStatus updates the decoder status
 func (r *DecoderReconciler) updateStatus(ctx context.Context, decoder *wazuhv1.WazuhDecoder) error {
-	return r.Status().Update(ctx, decoder)
+	desiredStatus := decoder.Status
+	return utils.RetryOnConflict(ctx, func() error {
+		latest := &wazuhv1.WazuhDecoder{}
+		if err := r.Get(ctx, types.NamespacedName{Name: decoder.Name, Namespace: decoder.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status = desiredStatus
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		decoder.Status = latest.Status
+		return nil
+	})
 }
 
 // determineAppliedNodes determines which manager nodes the decoder applies to
