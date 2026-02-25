@@ -2142,9 +2142,9 @@ func (r *ClusterReconciler) ensureAPICredentialsSecret(ctx context.Context, clus
 	log := logf.FromContext(ctx)
 
 	// Check if user provided a custom API credentials secret
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.APICredentials != nil && cluster.Spec.Manager.APICredentials.SecretName != "" {
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.APICredentials != nil && cluster.Spec.Manager.APICredentials.GetSecretName() != "" {
 		// User-provided secret - validate password meets Wazuh requirements
-		userSecretName := cluster.Spec.Manager.APICredentials.SecretName
+		userSecretName := cluster.Spec.Manager.APICredentials.GetSecretName()
 		passwordKey := cluster.Spec.Manager.APICredentials.PasswordKey
 		if passwordKey == "" {
 			passwordKey = "password" // default key

@@ -1391,14 +1391,31 @@ func (r *WazuhClusterReconciler) collectWazuhAgentMetrics(cluster *wazuhv1.Wazuh
 
 	// Get credentials from secret
 	credSecret := &corev1.Secret{}
-	secretName := fmt.Sprintf("%s-wazuh-api", cluster.Name)
+	secretName := constants.APICredentialsName(cluster.Name)
+	usernameKey := constants.SecretKeyAPIUsername
+	passwordKey := constants.SecretKeyAPIPassword
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.APICredentials != nil {
+		if customSecret := cluster.Spec.Manager.APICredentials.GetSecretName(); customSecret != "" {
+			secretName = customSecret
+		}
+		if cluster.Spec.Manager.APICredentials.UsernameKey != "" {
+			usernameKey = cluster.Spec.Manager.APICredentials.UsernameKey
+		} else if secretName != constants.APICredentialsName(cluster.Name) {
+			usernameKey = "username"
+		}
+		if cluster.Spec.Manager.APICredentials.PasswordKey != "" {
+			passwordKey = cluster.Spec.Manager.APICredentials.PasswordKey
+		} else if secretName != constants.APICredentialsName(cluster.Name) {
+			passwordKey = "password"
+		}
+	}
 	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cluster.Namespace}, credSecret); err != nil {
 		log.V(1).Info("Cannot get Wazuh API credentials for metrics", "error", err)
 		return
 	}
 
-	username := string(credSecret.Data["username"])
-	password := string(credSecret.Data["password"])
+	username := string(credSecret.Data[usernameKey])
+	password := string(credSecret.Data[passwordKey])
 	if username == "" || password == "" {
 		log.V(1).Info("Wazuh API credentials incomplete, skipping agent metrics")
 		return
