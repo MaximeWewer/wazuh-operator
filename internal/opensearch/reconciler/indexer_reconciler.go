@@ -916,6 +916,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		containerSecurityContext      *corev1.SecurityContext
 		terminationGracePeriodSeconds *int64
 		imagePullPolicy               corev1.PullPolicy
+		updateStrategy                string
 	)
 	version := cluster.Spec.Version
 	imagePullSecrets := cluster.Spec.ImagePullSecrets
@@ -948,6 +949,8 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 			}
 			image = cluster.Spec.Indexer.Image.ResolveImage(constants.DefaultWazuhIndexerImage, version)
 		}
+
+		updateStrategy = cluster.Spec.Indexer.UpdateStrategy
 
 		// Apply cluster-level anti-affinity if enabled
 		if affinityutil.ShouldApplyIndexerAntiAffinity(cluster) {
@@ -1023,6 +1026,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		ContainerSecurityContext:      containerSecurityContext,
 		TerminationGracePeriodSeconds: terminationGracePeriodSeconds,
 		ImagePullPolicy:               imagePullPolicy,
+		UpdateStrategy:                updateStrategy,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute indexer spec hash, proceeding without spec hash tracking")

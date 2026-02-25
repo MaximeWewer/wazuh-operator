@@ -90,6 +90,8 @@ type IndexerSpec struct {
 	ContainerSecurityContext      *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	TerminationGracePeriodSeconds *int64                     `json:"terminationGracePeriodSeconds,omitempty"`
 	ImagePullPolicy               corev1.PullPolicy          `json:"imagePullPolicy,omitempty"`
+	// StatefulSet update strategy
+	UpdateStrategy string `json:"updateStrategy,omitempty"`
 }
 
 // DashboardSpec contains fields from WazuhCluster.Spec.Dashboard used for hash computation
@@ -156,6 +158,8 @@ type ManagerMasterSpec struct {
 	ContainerSecurityContext      *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	TerminationGracePeriodSeconds *int64                     `json:"terminationGracePeriodSeconds,omitempty"`
 	ImagePullPolicy               corev1.PullPolicy          `json:"imagePullPolicy,omitempty"`
+	// StatefulSet update strategy
+	UpdateStrategy string `json:"updateStrategy,omitempty"`
 }
 
 // ManagerWorkersSpec contains fields from WazuhCluster.Spec.Manager.Workers used for hash computation
@@ -189,6 +193,8 @@ type ManagerWorkersSpec struct {
 	ContainerSecurityContext      *corev1.SecurityContext    `json:"containerSecurityContext,omitempty"`
 	TerminationGracePeriodSeconds *int64                     `json:"terminationGracePeriodSeconds,omitempty"`
 	ImagePullPolicy               corev1.PullPolicy          `json:"imagePullPolicy,omitempty"`
+	// StatefulSet update strategy
+	UpdateStrategy string `json:"updateStrategy,omitempty"`
 }
 
 // ComputeSpecHash computes a SHA256 hash of spec fields for change detection.
@@ -285,6 +291,7 @@ type IndexerSpecInput struct {
 	ContainerSecurityContext      *corev1.SecurityContext
 	TerminationGracePeriodSeconds *int64
 	ImagePullPolicy               corev1.PullPolicy
+	UpdateStrategy                string
 }
 
 // ComputeIndexerSpecHash computes the spec hash for an Indexer component
@@ -376,6 +383,7 @@ type ManagerMasterSpecInput struct {
 	ContainerSecurityContext      *corev1.SecurityContext
 	TerminationGracePeriodSeconds *int64
 	ImagePullPolicy               corev1.PullPolicy
+	UpdateStrategy                string
 }
 
 // ComputeManagerMasterSpecHash computes the spec hash for a Manager Master component
@@ -424,6 +432,7 @@ type ManagerWorkersSpecInput struct {
 	ContainerSecurityContext      *corev1.SecurityContext
 	TerminationGracePeriodSeconds *int64
 	ImagePullPolicy               corev1.PullPolicy
+	UpdateStrategy                string
 }
 
 // ComputeManagerWorkersSpecHash computes the spec hash for Manager Workers component

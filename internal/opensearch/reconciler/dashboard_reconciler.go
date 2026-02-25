@@ -802,8 +802,11 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		securityContext = cluster.Spec.Dashboard.SecurityContext
 		containerSecurityContext = cluster.Spec.Dashboard.ContainerSecurityContext
 		terminationGracePeriodSeconds = cluster.Spec.Dashboard.TerminationGracePeriodSeconds
-		if cluster.Spec.Dashboard.Image != nil && cluster.Spec.Dashboard.Image.PullPolicy != "" {
-			imagePullPolicy = cluster.Spec.Dashboard.Image.PullPolicy
+		if cluster.Spec.Dashboard.Image != nil {
+			image = cluster.Spec.Dashboard.Image.ResolveImage(constants.DefaultWazuhDashboardImage, cluster.Spec.Version)
+			if cluster.Spec.Dashboard.Image.PullPolicy != "" {
+				imagePullPolicy = cluster.Spec.Dashboard.Image.PullPolicy
+			}
 		}
 	}
 

@@ -384,6 +384,8 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		masterContainerSecurityContext      *corev1.SecurityContext
 		masterTerminationGracePeriodSeconds *int64
 		managerImagePullPolicy              corev1.PullPolicy
+		masterImage                         string
+		masterUpdateStrategy                string
 	)
 
 	var env []corev1.EnvVar
@@ -413,8 +415,12 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		masterSecurityContext = cluster.Spec.Manager.Master.SecurityContext
 		masterContainerSecurityContext = cluster.Spec.Manager.Master.ContainerSecurityContext
 		masterTerminationGracePeriodSeconds = cluster.Spec.Manager.Master.TerminationGracePeriodSeconds
-		if cluster.Spec.Manager.Image != nil && cluster.Spec.Manager.Image.PullPolicy != "" {
-			managerImagePullPolicy = cluster.Spec.Manager.Image.PullPolicy
+		masterUpdateStrategy = cluster.Spec.Manager.Master.UpdateStrategy
+		if cluster.Spec.Manager.Image != nil {
+			masterImage = cluster.Spec.Manager.Image.ResolveImage(constants.DefaultWazuhManagerImage, version)
+			if cluster.Spec.Manager.Image.PullPolicy != "" {
+				managerImagePullPolicy = cluster.Spec.Manager.Image.PullPolicy
+			}
 		}
 
 		// Apply cluster-level anti-affinity if enabled
@@ -515,6 +521,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		Version:                       version,
 		Resources:                     resources,
 		StorageSize:                   storageSize,
+		Image:                         masterImage,
 		NodeSelector:                  nodeSelector,
 		Tolerations:                   tolerations,
 		Affinity:                      affinity,
@@ -535,6 +542,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		ContainerSecurityContext:      masterContainerSecurityContext,
 		TerminationGracePeriodSeconds: masterTerminationGracePeriodSeconds,
 		ImagePullPolicy:               managerImagePullPolicy,
+		UpdateStrategy:                masterUpdateStrategy,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
@@ -978,6 +986,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	var workerContainerSecurityContext *corev1.SecurityContext
 	var workerTerminationGracePeriodSeconds *int64
 	var workerImagePullPolicy corev1.PullPolicy
+	var workerImage string
+	var workerUpdateStrategy string
 	if cluster.Spec.Manager != nil {
 		workerPodAnnotations = cluster.Spec.Manager.Workers.PodAnnotations
 		workerExtraConfig = cluster.Spec.Manager.Workers.ExtraConfig
@@ -990,8 +1000,12 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		workerSecurityContext = cluster.Spec.Manager.Workers.SecurityContext
 		workerContainerSecurityContext = cluster.Spec.Manager.Workers.ContainerSecurityContext
 		workerTerminationGracePeriodSeconds = cluster.Spec.Manager.Workers.TerminationGracePeriodSeconds
-		if cluster.Spec.Manager.Image != nil && cluster.Spec.Manager.Image.PullPolicy != "" {
-			workerImagePullPolicy = cluster.Spec.Manager.Image.PullPolicy
+		workerUpdateStrategy = cluster.Spec.Manager.Workers.UpdateStrategy
+		if cluster.Spec.Manager.Image != nil {
+			workerImage = cluster.Spec.Manager.Image.ResolveImage(constants.DefaultWazuhManagerImage, version)
+			if cluster.Spec.Manager.Image.PullPolicy != "" {
+				workerImagePullPolicy = cluster.Spec.Manager.Image.PullPolicy
+			}
 		}
 	}
 
@@ -1012,6 +1026,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		Version:                       version,
 		Resources:                     resources,
 		StorageSize:                   storageSize,
+		Image:                         workerImage,
 		NodeSelector:                  nodeSelector,
 		Tolerations:                   tolerations,
 		Affinity:                      affinity,
@@ -1031,6 +1046,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		ContainerSecurityContext:      workerContainerSecurityContext,
 		TerminationGracePeriodSeconds: workerTerminationGracePeriodSeconds,
 		ImagePullPolicy:               workerImagePullPolicy,
+		UpdateStrategy:                workerUpdateStrategy,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec hash")
@@ -1635,11 +1651,15 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Manager.Master.UpdateStrategy))
 	}
 
+	legacyMasterImage := ""
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Image != nil {
+		legacyMasterImage = cluster.Spec.Manager.Image.ResolveImage(constants.DefaultWazuhManagerImage, cluster.Spec.Version)
+	}
 	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
 		Version:                       cluster.Spec.Version,
 		Resources:                     cluster.Spec.Manager.Master.Resources,
 		StorageSize:                   cluster.Spec.Manager.Master.StorageSize,
-		Image:                         "",
+		Image:                         legacyMasterImage,
 		NodeSelector:                  cluster.Spec.Manager.Master.NodeSelector,
 		Tolerations:                   cluster.Spec.Manager.Master.Tolerations,
 		Affinity:                      cluster.Spec.Manager.Master.Affinity,
@@ -1657,6 +1677,7 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 		ContainerSecurityContext:      cluster.Spec.Manager.Master.ContainerSecurityContext,
 		TerminationGracePeriodSeconds: cluster.Spec.Manager.Master.TerminationGracePeriodSeconds,
 		ImagePullPolicy:               legacyManagerImagePullPolicy(cluster),
+		UpdateStrategy:                cluster.Spec.Manager.Master.UpdateStrategy,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
@@ -1952,12 +1973,16 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Manager.Workers.UpdateStrategy))
 	}
 
+	legacyWorkerImage := ""
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Image != nil {
+		legacyWorkerImage = cluster.Spec.Manager.Image.ResolveImage(constants.DefaultWazuhManagerImage, cluster.Spec.Version)
+	}
 	specHash, err := patch.ComputeManagerWorkersSpecHashFull(patch.ManagerWorkersSpecInput{
 		Replicas:                      workerReplicas2,
 		Version:                       cluster.Spec.Version,
 		Resources:                     cluster.Spec.Manager.Workers.Resources,
 		StorageSize:                   cluster.Spec.Manager.Workers.StorageSize,
-		Image:                         "",
+		Image:                         legacyWorkerImage,
 		NodeSelector:                  cluster.Spec.Manager.Workers.NodeSelector,
 		Tolerations:                   cluster.Spec.Manager.Workers.Tolerations,
 		Affinity:                      cluster.Spec.Manager.Workers.Affinity,
@@ -1974,6 +1999,7 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		ContainerSecurityContext:      cluster.Spec.Manager.Workers.ContainerSecurityContext,
 		TerminationGracePeriodSeconds: cluster.Spec.Manager.Workers.TerminationGracePeriodSeconds,
 		ImagePullPolicy:               legacyManagerImagePullPolicy(cluster),
+		UpdateStrategy:                cluster.Spec.Manager.Workers.UpdateStrategy,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec hash")
