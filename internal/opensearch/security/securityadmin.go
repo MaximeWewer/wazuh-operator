@@ -20,6 +20,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -101,7 +103,7 @@ func (e *SecurityAdminExecutor) ApplySecurityConfig(ctx context.Context, cluster
 // ApplyInternalUsers runs securityadmin.sh on the first indexer pod to push internal_users.yml
 // into the OpenSearch security index. This is used to recover from credential mismatches
 // when PVCs survive CR deletion but credential secrets are regenerated.
-func (e *SecurityAdminExecutor) ApplyInternalUsers(ctx context.Context, clusterName, namespace, wazuhVersion string) error {
+func (e *SecurityAdminExecutor) ApplyInternalUsers(ctx context.Context, clusterName, namespace, wazuhVersion, expectedInternalUsers string) error {
 	log := logf.FromContext(ctx).WithValues("cluster", clusterName, "namespace", namespace)
 
 	// Target the first indexer pod
@@ -115,6 +117,14 @@ func (e *SecurityAdminExecutor) ApplyInternalUsers(ctx context.Context, clusterN
 
 	if pod.Status.Phase != corev1.PodRunning {
 		return fmt.Errorf("indexer pod %s is not running (phase: %s)", podName, pod.Status.Phase)
+	}
+
+	// Secret volumes are updated asynchronously by kubelet. Wait until the mounted
+	// internal_users.yml matches the desired Secret content before applying with securityadmin.
+	if expectedInternalUsers != "" {
+		if err := e.waitForMountedInternalUsers(ctx, namespace, podName, wazuhVersion, expectedInternalUsers, 30*time.Second); err != nil {
+			return err
+		}
 	}
 
 	// Build the securityadmin.sh command targeting internal_users.yml
@@ -136,6 +146,37 @@ func (e *SecurityAdminExecutor) ApplyInternalUsers(ctx context.Context, clusterN
 		"stdout", stdout)
 
 	return nil
+}
+
+func (e *SecurityAdminExecutor) waitForMountedInternalUsers(
+	ctx context.Context,
+	namespace, podName, wazuhVersion, expectedInternalUsers string,
+	timeout time.Duration,
+) error {
+	log := logf.FromContext(ctx).WithValues("pod", podName, "namespace", namespace)
+
+	deadline := time.Now().Add(timeout)
+	expected := strings.TrimSpace(expectedInternalUsers)
+	for {
+		stdout, stderr, err := e.execInPod(ctx, namespace, podName, buildReadInternalUsersCommand(wazuhVersion))
+		if err == nil && strings.TrimSpace(stdout) == expected {
+			log.V(1).Info("Mounted internal_users.yml is up to date")
+			return nil
+		}
+
+		if time.Now().After(deadline) {
+			if err != nil {
+				return fmt.Errorf("timed out waiting for mounted internal_users.yml sync: %w (stderr: %s)", err, stderr)
+			}
+			return fmt.Errorf("timed out waiting for mounted internal_users.yml sync")
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
 }
 
 // buildInternalUsersCommand constructs the securityadmin.sh command for pushing internal_users.yml
@@ -169,6 +210,31 @@ func buildInternalUsersCommand(wazuhVersion string) []string {
 			preferredInternalUsers, fallbackInternalUsers, fallbackInternalUsers,
 			preferredInternalUsers, fallbackInternalUsers,
 			constants.PathIndexerCerts, constants.PathIndexerAdminCerts, constants.PathIndexerAdminCerts),
+	}
+}
+
+// buildReadInternalUsersCommand reads the resolved internal_users.yml from the indexer pod.
+func buildReadInternalUsersCommand(wazuhVersion string) []string {
+	preferredConfigDir := constants.IndexerSecurityConfigDir(wazuhVersion)
+	fallbackConfigDir := constants.PathIndexerLegacySecurityConfig
+	if preferredConfigDir == constants.PathIndexerLegacySecurityConfig {
+		fallbackConfigDir = constants.PathIndexerSecurityConfig
+	}
+
+	preferredInternalUsers := preferredConfigDir + "/internal_users.yml"
+	fallbackInternalUsers := fallbackConfigDir + "/internal_users.yml"
+
+	return []string{
+		"bash", "-c",
+		fmt.Sprintf("INTERNAL_USERS_FILE=%s; "+
+			"if [ ! -f \"$INTERNAL_USERS_FILE\" ] && [ -f %s ]; then INTERNAL_USERS_FILE=%s; fi; "+
+			"if [ ! -f \"$INTERNAL_USERS_FILE\" ]; then "+
+			"echo \"ERR: internal_users.yml not found at %s or %s\"; "+
+			"exit 1; "+
+			"fi; "+
+			"cat \"$INTERNAL_USERS_FILE\"",
+			preferredInternalUsers, fallbackInternalUsers, fallbackInternalUsers,
+			preferredInternalUsers, fallbackInternalUsers),
 	}
 }
 

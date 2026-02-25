@@ -2163,8 +2163,29 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 		return nil
 	}
 
-	// Compute hash to check if we've already synced this config
-	configHash := patch.ComputeSecretHash(credSecret.Data)
+	// Compute combined hash to check if we've already synced this config.
+	// Include both credentials and internal_users.yml so changes in either source
+	// trigger securityadmin.sh.
+	securitySecretName := constants.IndexerSecurityName(cluster.Name)
+	securitySecret := &corev1.Secret{}
+	internalUsersContent := ""
+	if err := r.Get(ctx, types.NamespacedName{Name: securitySecretName, Namespace: cluster.Namespace}, securitySecret); err != nil {
+		if errors.IsNotFound(err) {
+			log.V(1).Info("Indexer security secret not found, using credentials-only hash", "secret", securitySecretName)
+		} else {
+			return fmt.Errorf("failed to get indexer security secret: %w", err)
+		}
+	} else if internalUsers, ok := securitySecret.Data[constants.SecretKeyInternalUsers]; ok {
+		internalUsersContent = string(internalUsers)
+	}
+
+	combinedSyncData := map[string][]byte{
+		"credentials_hash": []byte(patch.ComputeSecretHash(credSecret.Data)),
+	}
+	if internalUsersContent != "" {
+		combinedSyncData[constants.SecretKeyInternalUsers] = []byte(internalUsersContent)
+	}
+	configHash := patch.ComputeSecretHash(combinedSyncData)
 
 	// Check if we've already synced this configuration.
 	if cluster.Status.Security != nil && cluster.Status.Security.CredentialsHash == configHash {
@@ -2178,8 +2199,8 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 		log.V(1).Info("SecurityAdminExecutor not configured, skipping internal_users sync")
 		return nil
 	}
-	log.Info("Credentials hash changed, applying internal_users via securityadmin.sh", "username", adminUsername)
-	if saErr := r.SecurityAdminExecutor.ApplyInternalUsers(ctx, cluster.Name, cluster.Namespace, cluster.Spec.Version); saErr != nil {
+	log.Info("Credentials/internal_users hash changed, applying internal_users via securityadmin.sh", "username", adminUsername)
+	if saErr := r.SecurityAdminExecutor.ApplyInternalUsers(ctx, cluster.Name, cluster.Namespace, cluster.Spec.Version, internalUsersContent); saErr != nil {
 		log.Error(saErr, "securityadmin.sh internal_users sync failed")
 		return nil
 	}
