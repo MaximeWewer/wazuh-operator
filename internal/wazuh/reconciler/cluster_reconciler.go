@@ -420,7 +420,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "master")
 
-	ossecConf, err := config.BuildMasterConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-master", "", extraConfig)
+	ossecConf, err := r.buildMasterOSSECConfig(ctx, cluster, extraConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build ossec.conf: %w", err)
 	}
@@ -870,7 +870,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "worker")
 
 	// Build ossec.conf for workers - master service name is computed from cluster name
-	ossecConf, err := config.BuildWorkerConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-worker", "", int(constants.PortManagerCluster), extraConfig)
+	ossecConf, err := r.buildWorkerOSSECConfig(ctx, cluster, extraConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build worker ossec.conf: %w", err)
 	}
@@ -1369,7 +1369,7 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "master")
 
 	// Generate ossec.conf
-	ossecConf, err := config.BuildMasterConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-master", "", extraConfig)
+	ossecConf, err := r.buildMasterOSSECConfig(ctx, cluster, extraConfig)
 	if err != nil {
 		return fmt.Errorf("failed to build ossec.conf: %w", err)
 	}
@@ -1676,7 +1676,7 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "worker")
 
 	// Build ossec.conf for workers - master service name is computed from cluster name
-	ossecConf, err := config.BuildWorkerConfig(cluster.Name, cluster.Namespace, cluster.Name+"-manager-worker", "", int(constants.PortManagerCluster), extraConfig)
+	ossecConf, err := r.buildWorkerOSSECConfig(ctx, cluster, extraConfig)
 	if err != nil {
 		return fmt.Errorf("failed to build worker ossec.conf: %w", err)
 	}
@@ -2099,6 +2099,110 @@ func (r *ClusterReconciler) resolveSecretKey(ctx context.Context, namespace, sec
 		return "", fmt.Errorf("key %s not found in secret %s", key, secretName)
 	}
 	return string(value), nil
+}
+
+// buildMasterOSSECConfig builds ossec.conf for manager master, honoring manager.config and authd secret refs.
+func (r *ClusterReconciler) buildMasterOSSECConfig(ctx context.Context, cluster *wazuhv1.WazuhCluster, extraConfig string) (string, error) {
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg := config.WazuhConfigFromSpec(nil)
+	if cluster.Spec.Manager != nil {
+		globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg = config.WazuhConfigFromSpec(cluster.Spec.Manager.Config)
+	}
+
+	if authCfg == nil {
+		authCfg = config.DefaultAuthConfig()
+	}
+
+	// Backward-compatibility: honor legacy manager.authdPasswordSecretRef if auth.passwordSecretRef is not set.
+	if authCfg.PasswordSecretRef == nil && cluster.Spec.Manager != nil && cluster.Spec.Manager.AuthdPasswordSecretRef != nil {
+		key := cluster.Spec.Manager.AuthdPasswordSecretRef.Key
+		if key == "" {
+			key = "password"
+		}
+		authCfg.PasswordSecretRef = &config.SecretKeyReference{
+			Name: cluster.Spec.Manager.AuthdPasswordSecretRef.Name,
+			Key:  key,
+		}
+		// Legacy field implies password auth should be enabled.
+		authCfg.UsePassword = true
+	}
+
+	authdPassword := r.resolveAuthdPassword(ctx, cluster, authCfg)
+
+	ossecConfig := config.DefaultOSSECConfig(cluster.Name, cluster.Name+"-manager-master")
+	ossecConfig.Namespace = cluster.Namespace
+	ossecConfig.ExtraConfig = extraConfig
+	ossecConfig.Global = globalCfg
+	ossecConfig.Alerts = alertsCfg
+	ossecConfig.Logging = loggingCfg
+	ossecConfig.Remote = remoteCfg
+	ossecConfig.Auth = authCfg
+	ossecConfig.AuthdPassword = authdPassword
+
+	return config.NewOSSECConfigBuilder(ossecConfig).Build()
+}
+
+// buildWorkerOSSECConfig builds ossec.conf for manager workers, honoring manager.config and authd secret refs.
+func (r *ClusterReconciler) buildWorkerOSSECConfig(ctx context.Context, cluster *wazuhv1.WazuhCluster, extraConfig string) (string, error) {
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg := config.WazuhConfigFromSpec(nil)
+	if cluster.Spec.Manager != nil {
+		globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg = config.WazuhConfigFromSpec(cluster.Spec.Manager.Config)
+	}
+
+	if authCfg == nil {
+		authCfg = config.DefaultAuthConfig()
+	}
+
+	// Backward-compatibility: honor legacy manager.authdPasswordSecretRef if auth.passwordSecretRef is not set.
+	if authCfg.PasswordSecretRef == nil && cluster.Spec.Manager != nil && cluster.Spec.Manager.AuthdPasswordSecretRef != nil {
+		key := cluster.Spec.Manager.AuthdPasswordSecretRef.Key
+		if key == "" {
+			key = "password"
+		}
+		authCfg.PasswordSecretRef = &config.SecretKeyReference{
+			Name: cluster.Spec.Manager.AuthdPasswordSecretRef.Name,
+			Key:  key,
+		}
+		// Legacy field implies password auth should be enabled.
+		authCfg.UsePassword = true
+	}
+
+	authdPassword := r.resolveAuthdPassword(ctx, cluster, authCfg)
+
+	ossecConfig := config.DefaultOSSECConfig(cluster.Name, cluster.Name+"-manager-worker")
+	ossecConfig.NodeType = config.NodeTypeWorker
+	ossecConfig.Namespace = cluster.Namespace
+	ossecConfig.MasterAddress = config.GetMasterServiceAddress(cluster.Name, cluster.Namespace)
+	ossecConfig.MasterPort = int(constants.PortManagerCluster)
+	ossecConfig.ExtraConfig = extraConfig
+	ossecConfig.Global = globalCfg
+	ossecConfig.Alerts = alertsCfg
+	ossecConfig.Logging = loggingCfg
+	ossecConfig.Remote = remoteCfg
+	ossecConfig.Auth = authCfg
+	ossecConfig.AuthdPassword = authdPassword
+
+	return config.NewOSSECConfigBuilder(ossecConfig).Build()
+}
+
+// resolveAuthdPassword resolves authd password from configured secret.
+func (r *ClusterReconciler) resolveAuthdPassword(ctx context.Context, cluster *wazuhv1.WazuhCluster, authCfg *config.AuthConfig) string {
+	if authCfg == nil || !authCfg.UsePassword || authCfg.PasswordSecretRef == nil {
+		return ""
+	}
+
+	log := logf.FromContext(ctx)
+	key := authCfg.PasswordSecretRef.Key
+	if key == "" {
+		key = "password"
+	}
+
+	password, err := r.resolveSecretKey(ctx, cluster.Namespace, authCfg.PasswordSecretRef.Name, key)
+	if err != nil {
+		log.Error(err, "Failed to resolve authd password from secret", "secret", authCfg.PasswordSecretRef.Name, "key", key)
+		return ""
+	}
+
+	return password
 }
 
 // ensureClusterKeySecret ensures the cluster key secret exists

@@ -62,6 +62,8 @@ type WorkerReconciler struct {
 	drainer *drain.ManagerDrainerImpl
 	// wazuhClient is the Wazuh API client for drain operations
 	wazuhClient *adapters.WazuhAPIAdapter
+	// wazuhClientCredentialsHash tracks the credentials used to build wazuhClient
+	wazuhClientCredentialsHash string
 }
 
 // NewWorkerReconciler creates a new WorkerReconciler
@@ -649,10 +651,6 @@ func (r *WorkerReconciler) verifyDrainComplete(ctx context.Context, cluster *waz
 
 // ensureWazuhClient creates or reuses a Wazuh API client
 func (r *WorkerReconciler) ensureWazuhClient(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
-	if r.wazuhClient != nil {
-		return nil
-	}
-
 	// Build the Wazuh API URL from the cluster name
 	// The master service is typically named {cluster-name}-manager-master
 	masterServiceName := cluster.Name + "-manager-master"
@@ -664,6 +662,10 @@ func (r *WorkerReconciler) ensureWazuhClient(ctx context.Context, cluster *wazuh
 	if err != nil {
 		return fmt.Errorf("failed to get Wazuh API credentials: %w", err)
 	}
+	credentialsHash := utils.HashStrings(username, password)
+	if r.wazuhClient != nil && r.wazuhClientCredentialsHash == credentialsHash {
+		return nil
+	}
 
 	r.wazuhClient = adapters.NewWazuhAPIAdapter(adapters.WazuhAPIConfig{
 		BaseURL:  baseURL,
@@ -671,6 +673,7 @@ func (r *WorkerReconciler) ensureWazuhClient(ctx context.Context, cluster *wazuh
 		Password: password,
 		Insecure: true, // Use insecure for internal cluster communication
 	})
+	r.wazuhClientCredentialsHash = credentialsHash
 
 	return nil
 }
@@ -722,6 +725,8 @@ func (r *WorkerReconciler) ResetDrainState(cluster *wazuhv1.WazuhCluster) {
 	}
 	// Clear cached drainer for next operation
 	r.drainer = nil
+	r.wazuhClient = nil
+	r.wazuhClientCredentialsHash = ""
 }
 
 // EvaluateDrainFeasibility evaluates if drain is feasible (for dry-run mode)

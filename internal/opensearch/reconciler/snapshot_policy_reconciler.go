@@ -145,6 +145,19 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 	if policyInfo == nil {
 		log.Info("Creating snapshot policy", "name", policy.Name, "repository", repoName)
 		if err := snapshotAPI.CreatePolicy(ctx, policy.Name, snapshotPolicy); err != nil {
+			// OpenSearch may return 400 "Sequence number and primary term must be provided"
+			// if the policy already exists (e.g. brief race/eventual consistency window).
+			if isSnapshotPolicyVersionRequiredError(err) {
+				log.Info("Snapshot policy already exists, retrying as update", "name", policy.Name, "repository", repoName)
+				latestPolicyInfo, getErr := snapshotAPI.GetPolicyInfo(ctx, policy.Name)
+				if getErr == nil && latestPolicyInfo != nil {
+					if updateErr := snapshotAPI.UpdatePolicy(ctx, policy.Name, snapshotPolicy, latestPolicyInfo.SeqNo, latestPolicyInfo.PrimaryTerm); updateErr == nil {
+						goto policyApplied
+					} else {
+						err = updateErr
+					}
+				}
+			}
 			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create snapshot policy: %v", err)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
@@ -162,6 +175,7 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 		}
 	}
 
+policyApplied:
 	r.recordEvent(policy, corev1.EventTypeNormal, "Synced", "Snapshot policy reconciled successfully")
 
 	// Compute spec hash for drift detection
@@ -186,6 +200,14 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 
 	log.Info("Snapshot policy reconciliation completed", "name", policy.Name, "repository", repoName)
 	return nil
+}
+
+func isSnapshotPolicyVersionRequiredError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "sequence number and primary term must be provided")
 }
 
 // recordEvent emits an event if the recorder is available

@@ -1154,6 +1154,11 @@ type SecurityStatus struct {
 	// Used to detect when credentials change and need to be re-synced to OpenSearch
 	// +optional
 	CredentialsHash string `json:"credentialsHash,omitempty"`
+
+	// APICredentialsHash is the hash of the last applied Wazuh API credentials
+	// used by manager workers/master and dashboard.
+	// +optional
+	APICredentialsHash string `json:"apiCredentialsHash,omitempty"`
 }
 
 // ClusterPhase represents the phase of the cluster

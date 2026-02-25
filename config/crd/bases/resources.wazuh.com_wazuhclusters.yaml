@@ -38636,6 +38636,11 @@ spec:
               security:
                 description: Security holds security-related status
                 properties:
+                  apiCredentialsHash:
+                    description: |-
+                      APICredentialsHash is the hash of the last applied Wazuh API credentials
+                      used by manager workers/master and dashboard.
+                    type: string
                   credentialsHash:
                     description: |-
                       CredentialsHash is the hash of the last synced credentials secret

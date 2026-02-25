@@ -2268,10 +2268,16 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 	}
 	cluster.Status.Security.CredentialsHash = joinSecuritySyncHash(credentialsHash, internalUsersHash)
 
-	// Dashboard consumes indexer credentials via env vars (SecretKeyRef), which are only
-	// read at pod startup. Restart dashboard after status hash update so the new state
-	// is persisted even if restart fails.
+	// Manager (master/workers) and Dashboard consume indexer credentials via env vars
+	// (SecretKeyRef), which are only read at pod startup. Restart them after status hash
+	// update so the new state is persisted even if a restart call fails.
 	if credentialsChanged {
+		if err := r.restartManagerMaster(ctx, cluster); err != nil {
+			log.Error(err, "Failed to restart manager master after credential sync")
+		}
+		if err := r.restartManagerWorkers(ctx, cluster); err != nil {
+			log.Error(err, "Failed to restart manager workers after credential sync")
+		}
 		if err := r.restartDashboard(ctx, cluster); err != nil {
 			log.Error(err, "Failed to restart dashboard after credential sync")
 		}
@@ -2310,12 +2316,23 @@ func splitSecuritySyncHash(stored string) (credentialsHash, internalUsersHash st
 // an annotation on the pod template. This is used after credential recovery to break
 // the dashboard out of CrashLoopBackOff.
 func (r *IndexerReconciler) restartDashboard(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	return r.restartDeployment(ctx, cluster.Namespace, constants.DashboardName(cluster.Name), "Dashboard")
+}
+
+func (r *IndexerReconciler) restartManagerMaster(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	return r.restartStatefulSet(ctx, cluster.Namespace, constants.ManagerMasterName(cluster.Name), "Manager master")
+}
+
+func (r *IndexerReconciler) restartManagerWorkers(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	return r.restartStatefulSet(ctx, cluster.Namespace, constants.ManagerWorkersName(cluster.Name), "Manager workers")
+}
+
+func (r *IndexerReconciler) restartDeployment(ctx context.Context, namespace, name, component string) error {
 	log := logf.FromContext(ctx)
 
-	dashboardName := constants.DashboardName(cluster.Name)
 	var deployment appsv1.Deployment
-	if err := r.Get(ctx, types.NamespacedName{Name: dashboardName, Namespace: cluster.Namespace}, &deployment); err != nil {
-		return fmt.Errorf("failed to get dashboard deployment %s: %w", dashboardName, err)
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &deployment); err != nil {
+		return fmt.Errorf("failed to get %s deployment %s: %w", component, name, err)
 	}
 
 	if deployment.Spec.Template.Annotations == nil {
@@ -2324,9 +2341,29 @@ func (r *IndexerReconciler) restartDashboard(ctx context.Context, cluster *wazuh
 	deployment.Spec.Template.Annotations["wazuh.com/credential-recovery-restart"] = time.Now().Format(time.RFC3339)
 
 	if err := r.Update(ctx, &deployment); err != nil {
-		return fmt.Errorf("failed to update dashboard deployment %s for restart: %w", dashboardName, err)
+		return fmt.Errorf("failed to update %s deployment %s for restart: %w", component, name, err)
 	}
-	log.Info("Dashboard restart triggered after credential recovery", "deployment", dashboardName)
+	log.Info("Restart triggered after credential recovery", "component", component, "deployment", name)
+	return nil
+}
+
+func (r *IndexerReconciler) restartStatefulSet(ctx context.Context, namespace, name, component string) error {
+	log := logf.FromContext(ctx)
+
+	var sts appsv1.StatefulSet
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &sts); err != nil {
+		return fmt.Errorf("failed to get %s statefulset %s: %w", component, name, err)
+	}
+
+	if sts.Spec.Template.Annotations == nil {
+		sts.Spec.Template.Annotations = make(map[string]string)
+	}
+	sts.Spec.Template.Annotations["wazuh.com/credential-recovery-restart"] = time.Now().Format(time.RFC3339)
+
+	if err := r.Update(ctx, &sts); err != nil {
+		return fmt.Errorf("failed to update %s statefulset %s for restart: %w", component, name, err)
+	}
+	log.Info("Restart triggered after credential recovery", "component", component, "statefulset", name)
 	return nil
 }
 
