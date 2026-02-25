@@ -21,6 +21,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -2201,11 +2202,20 @@ func (r *ClusterReconciler) resolveAuthdPassword(ctx context.Context, cluster *w
 	log := logf.FromContext(ctx)
 	key := authCfg.PasswordSecretRef.Key
 	if key == "" {
-		key = "password"
+		key = defaultAuthdSecretKey(authCfg.PasswordSecretRef.Name)
 	}
 
 	password, err := r.resolveSecretKey(ctx, cluster.Namespace, authCfg.PasswordSecretRef.Name, key)
 	if err != nil {
+		// Fallback between common key conventions.
+		fallbackKey := "password"
+		if key == "password" {
+			fallbackKey = "authd.pass"
+		}
+		if fallbackPassword, fallbackErr := r.resolveSecretKey(ctx, cluster.Namespace, authCfg.PasswordSecretRef.Name, fallbackKey); fallbackErr == nil {
+			log.V(1).Info("Resolved authd password with fallback key", "secret", authCfg.PasswordSecretRef.Name, "key", fallbackKey)
+			return fallbackPassword
+		}
 		log.Error(err, "Failed to resolve authd password from secret", "secret", authCfg.PasswordSecretRef.Name, "key", key)
 		return ""
 	}
@@ -2227,7 +2237,7 @@ func (r *ClusterReconciler) authdPasswordSecretRef(cluster *wazuhv1.WazuhCluster
 	if authCfg.PasswordSecretRef == nil && cluster.Spec.Manager.AuthdPasswordSecretRef != nil {
 		key := cluster.Spec.Manager.AuthdPasswordSecretRef.Key
 		if key == "" {
-			key = "password"
+			key = defaultAuthdSecretKey(cluster.Spec.Manager.AuthdPasswordSecretRef.Name)
 		}
 		authCfg.PasswordSecretRef = &config.SecretKeyReference{
 			Name: cluster.Spec.Manager.AuthdPasswordSecretRef.Name,
@@ -2242,9 +2252,16 @@ func (r *ClusterReconciler) authdPasswordSecretRef(cluster *wazuhv1.WazuhCluster
 
 	key := authCfg.PasswordSecretRef.Key
 	if key == "" {
-		key = "password"
+		key = defaultAuthdSecretKey(authCfg.PasswordSecretRef.Name)
 	}
 	return authCfg.PasswordSecretRef.Name, key, true
+}
+
+func defaultAuthdSecretKey(secretName string) string {
+	if strings.HasSuffix(secretName, "-authd-pass") {
+		return "authd.pass"
+	}
+	return "password"
 }
 
 func (r *ClusterReconciler) injectAuthdPasswordSecretMount(

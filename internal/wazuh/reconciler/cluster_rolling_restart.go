@@ -100,7 +100,7 @@ func (r *ClusterReconciler) OrchestrateManagerRollingRestart(ctx context.Context
 
 // orchestrateWorkerRestart handles rolling restart for the worker StatefulSet.
 func (r *ClusterReconciler) orchestrateWorkerRestart(ctx context.Context, cluster *wazuhv1.WazuhCluster, orchestrator *rolling.RollingRestartOrchestrator) (*rolling.RestartResult, error) {
-	workerStsName := constants.ManagerWorkersName(cluster.Name)
+	workerStsName := constants.ManagerWorkerName(cluster.Name)
 	workerSts := &appsv1.StatefulSet{}
 	if err := r.Get(ctx, types.NamespacedName{Name: workerStsName, Namespace: cluster.Namespace}, workerSts); err != nil {
 		if errors.IsNotFound(err) {

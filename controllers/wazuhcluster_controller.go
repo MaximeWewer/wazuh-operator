@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -65,6 +66,8 @@ import (
 
 const (
 	wazuhClusterFinalizer = "resources.wazuh.com/finalizer"
+	apiCredentialRecoveryHashAnnotation = "wazuh.com/api-credential-recovery-hash"
+	authdCredentialRecoveryHashAnnotation = "wazuh.com/authd-credential-recovery-hash"
 
 	// RequeueIntervalNormal is the normal requeue interval when cluster is stable
 	RequeueIntervalNormal = 30 * time.Second
@@ -1524,44 +1527,38 @@ func (r *WazuhClusterReconciler) reconcileAPICredentialsStatusAndRollout(ctx con
 	}
 
 	reason := "wazuh api credentials changed"
-	if _, err := certreconciler.TriggerStatefulSetRollingRestart(
+	if err := r.triggerStatefulSetRestartWithHash(
 		ctx,
-		r.Client,
 		cluster.Namespace,
 		constants.ManagerMasterName(cluster.Name),
-		&certreconciler.RollingRestartConfig{
-			Component:    "manager-master",
-			RestartOrder: certreconciler.RestartOrderSequential,
-			Reason:       reason,
-		},
+		"manager-master",
+		reason,
+		apiCredentialRecoveryHashAnnotation,
+		newHash,
 	); err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to restart manager master after API credentials change: %w", err)
 	}
 
-	if _, err := certreconciler.TriggerStatefulSetRollingRestart(
+	if err := r.triggerStatefulSetRestartWithHash(
 		ctx,
-		r.Client,
 		cluster.Namespace,
-		constants.ManagerWorkersName(cluster.Name),
-		&certreconciler.RollingRestartConfig{
-			Component:    "manager-workers",
-			RestartOrder: certreconciler.RestartOrderSequential,
-			Reason:       reason,
-		},
+		constants.ManagerWorkerName(cluster.Name),
+		"manager-workers",
+		reason,
+		apiCredentialRecoveryHashAnnotation,
+		newHash,
 	); err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to restart manager workers after API credentials change: %w", err)
 	}
 
-	if _, err := certreconciler.TriggerDeploymentRollingRestart(
+	if err := r.triggerDeploymentRestartWithHash(
 		ctx,
-		r.Client,
 		cluster.Namespace,
 		constants.DashboardName(cluster.Name),
-		&certreconciler.RollingRestartConfig{
-			Component:    "dashboard",
-			RestartOrder: certreconciler.RestartOrderSequential,
-			Reason:       reason,
-		},
+		"dashboard",
+		reason,
+		apiCredentialRecoveryHashAnnotation,
+		newHash,
 	); err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to restart dashboard after API credentials change: %w", err)
 	}
@@ -1607,7 +1604,7 @@ func (r *WazuhClusterReconciler) resolveAuthdCredentialsRef(cluster *wazuhv1.Waz
 	}
 
 	if passwordKey == "" {
-		passwordKey = "password"
+		passwordKey = defaultAuthdSecretKey(secretName)
 	}
 
 	if disabled || !usePassword || secretName == "" {
@@ -1629,6 +1626,14 @@ func (r *WazuhClusterReconciler) computeAuthdCredentialsHash(ctx context.Context
 	}
 
 	password := string(secret.Data[passwordKey])
+	if password == "" {
+		// Fallback between common key conventions.
+		altKey := "password"
+		if passwordKey == "password" {
+			altKey = "authd.pass"
+		}
+		password = string(secret.Data[altKey])
+	}
 	if password == "" {
 		return "", enabledOnMasterOnly, true, nil
 	}
@@ -1676,31 +1681,27 @@ func (r *WazuhClusterReconciler) reconcileAuthdCredentialsStatusAndRollout(ctx c
 	}
 
 	reason := "wazuh authd password changed"
-	if _, err := certreconciler.TriggerStatefulSetRollingRestart(
+	if err := r.triggerStatefulSetRestartWithHash(
 		ctx,
-		r.Client,
 		cluster.Namespace,
 		constants.ManagerMasterName(cluster.Name),
-		&certreconciler.RollingRestartConfig{
-			Component:    "manager-master",
-			RestartOrder: certreconciler.RestartOrderSequential,
-			Reason:       reason,
-		},
+		"manager-master",
+		reason,
+		authdCredentialRecoveryHashAnnotation,
+		newHash,
 	); err != nil && !errors.IsNotFound(err) {
 		return fmt.Errorf("failed to restart manager master after authd password change: %w", err)
 	}
 
 	if !enabledOnMasterOnly {
-		if _, err := certreconciler.TriggerStatefulSetRollingRestart(
+		if err := r.triggerStatefulSetRestartWithHash(
 			ctx,
-			r.Client,
 			cluster.Namespace,
-			constants.ManagerWorkersName(cluster.Name),
-			&certreconciler.RollingRestartConfig{
-				Component:    "manager-workers",
-				RestartOrder: certreconciler.RestartOrderSequential,
-				Reason:       reason,
-			},
+			constants.ManagerWorkerName(cluster.Name),
+			"manager-workers",
+			reason,
+			authdCredentialRecoveryHashAnnotation,
+			newHash,
 		); err != nil && !errors.IsNotFound(err) {
 			return fmt.Errorf("failed to restart manager workers after authd password change: %w", err)
 		}
@@ -1709,6 +1710,99 @@ func (r *WazuhClusterReconciler) reconcileAuthdCredentialsStatusAndRollout(ctx c
 	cluster.Status.Security.AuthdCredentialsHash = newHash
 	log.Info("Triggered manager restart(s) after authd credentials change", "enabledOnMasterOnly", enabledOnMasterOnly)
 	return nil
+}
+
+func defaultAuthdSecretKey(secretName string) string {
+	if strings.HasSuffix(secretName, "-authd-pass") {
+		return "authd.pass"
+	}
+	return "password"
+}
+
+func (r *WazuhClusterReconciler) triggerStatefulSetRestartWithHash(
+	ctx context.Context,
+	namespace, name, component, reason, hashAnnotationKey, hash string,
+) error {
+	log := logf.FromContext(ctx)
+
+	return utils.RetryOnConflict(ctx, func() error {
+		sts := &appsv1.StatefulSet{}
+		if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, sts); err != nil {
+			return err
+		}
+
+		if sts.Spec.Replicas != nil && *sts.Spec.Replicas == 0 {
+			log.V(1).Info("Skipping restart - statefulset has 0 replicas", "statefulset", name, "component", component)
+			return nil
+		}
+
+		if sts.Spec.Template.Annotations == nil {
+			sts.Spec.Template.Annotations = make(map[string]string)
+		}
+
+		if sts.Spec.Template.Annotations[hashAnnotationKey] == hash {
+			log.V(1).Info("Restart already requested for current hash", "statefulset", name, "component", component, "annotation", hashAnnotationKey)
+			return nil
+		}
+
+		sts.Spec.Template.Annotations[constants.AnnotationRestartedAt] = time.Now().Format(time.RFC3339)
+		sts.Spec.Template.Annotations[constants.AnnotationRollingRestartTriggered] = "true"
+		sts.Spec.Template.Annotations[hashAnnotationKey] = hash
+
+		if err := r.Update(ctx, sts); err != nil {
+			return err
+		}
+
+		log.Info("Triggered rolling restart for statefulset",
+			"statefulset", name,
+			"component", component,
+			"reason", reason,
+			"annotation", hashAnnotationKey)
+		return nil
+	})
+}
+
+func (r *WazuhClusterReconciler) triggerDeploymentRestartWithHash(
+	ctx context.Context,
+	namespace, name, component, reason, hashAnnotationKey, hash string,
+) error {
+	log := logf.FromContext(ctx)
+
+	return utils.RetryOnConflict(ctx, func() error {
+		deployment := &appsv1.Deployment{}
+		if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, deployment); err != nil {
+			return err
+		}
+
+		if deployment.Spec.Replicas != nil && *deployment.Spec.Replicas == 0 {
+			log.V(1).Info("Skipping restart - deployment has 0 replicas", "deployment", name, "component", component)
+			return nil
+		}
+
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = make(map[string]string)
+		}
+
+		if deployment.Spec.Template.Annotations[hashAnnotationKey] == hash {
+			log.V(1).Info("Restart already requested for current hash", "deployment", name, "component", component, "annotation", hashAnnotationKey)
+			return nil
+		}
+
+		deployment.Spec.Template.Annotations[constants.AnnotationRestartedAt] = time.Now().Format(time.RFC3339)
+		deployment.Spec.Template.Annotations[constants.AnnotationRollingRestartTriggered] = "true"
+		deployment.Spec.Template.Annotations[hashAnnotationKey] = hash
+
+		if err := r.Update(ctx, deployment); err != nil {
+			return err
+		}
+
+		log.Info("Triggered rolling restart for deployment",
+			"deployment", name,
+			"component", component,
+			"reason", reason,
+			"annotation", hashAnnotationKey)
+		return nil
+	})
 }
 
 // recordCertificateExpiryDaysMetrics reads certificate secrets and records

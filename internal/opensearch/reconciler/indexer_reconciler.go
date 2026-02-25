@@ -2272,16 +2272,17 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 	// (SecretKeyRef), which are only read at pod startup. Restart them after status hash
 	// update so the new state is persisted even if a restart call fails.
 	if credentialsChanged {
-		if err := r.restartIndexerStatefulSets(ctx, cluster); err != nil {
+		restartHash := credentialsHash
+		if err := r.restartIndexerStatefulSets(ctx, cluster, restartHash); err != nil {
 			log.Error(err, "Failed to trigger indexer restart after credential sync")
 		}
-		if err := r.restartManagerMaster(ctx, cluster); err != nil {
+		if err := r.restartManagerMaster(ctx, cluster, restartHash); err != nil {
 			log.Error(err, "Failed to restart manager master after credential sync")
 		}
-		if err := r.restartManagerWorkers(ctx, cluster); err != nil {
+		if err := r.restartManagerWorkers(ctx, cluster, restartHash); err != nil {
 			log.Error(err, "Failed to restart manager workers after credential sync")
 		}
-		if err := r.restartDashboard(ctx, cluster); err != nil {
+		if err := r.restartDashboard(ctx, cluster, restartHash); err != nil {
 			log.Error(err, "Failed to restart dashboard after credential sync")
 		}
 	}
@@ -2318,19 +2319,19 @@ func splitSecuritySyncHash(stored string) (credentialsHash, internalUsersHash st
 // restartDashboard triggers a rolling restart of the dashboard deployment by patching
 // an annotation on the pod template. This is used after credential recovery to break
 // the dashboard out of CrashLoopBackOff.
-func (r *IndexerReconciler) restartDashboard(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
-	return r.restartDeployment(ctx, cluster.Namespace, constants.DashboardName(cluster.Name), "Dashboard")
+func (r *IndexerReconciler) restartDashboard(ctx context.Context, cluster *wazuhv1.WazuhCluster, restartHash string) error {
+	return r.restartDeployment(ctx, cluster.Namespace, constants.DashboardName(cluster.Name), "Dashboard", restartHash)
 }
 
-func (r *IndexerReconciler) restartManagerMaster(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
-	return r.restartStatefulSet(ctx, cluster.Namespace, constants.ManagerMasterName(cluster.Name), "Manager master")
+func (r *IndexerReconciler) restartManagerMaster(ctx context.Context, cluster *wazuhv1.WazuhCluster, restartHash string) error {
+	return r.restartStatefulSet(ctx, cluster.Namespace, constants.ManagerMasterName(cluster.Name), "Manager master", restartHash)
 }
 
-func (r *IndexerReconciler) restartManagerWorkers(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
-	return r.restartStatefulSet(ctx, cluster.Namespace, constants.ManagerWorkersName(cluster.Name), "Manager workers")
+func (r *IndexerReconciler) restartManagerWorkers(ctx context.Context, cluster *wazuhv1.WazuhCluster, restartHash string) error {
+	return r.restartStatefulSet(ctx, cluster.Namespace, constants.ManagerWorkerName(cluster.Name), "Manager workers", restartHash)
 }
 
-func (r *IndexerReconciler) restartIndexerStatefulSets(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+func (r *IndexerReconciler) restartIndexerStatefulSets(ctx context.Context, cluster *wazuhv1.WazuhCluster, restartHash string) error {
 	if cluster.Spec.Indexer == nil {
 		return nil
 	}
@@ -2339,7 +2340,7 @@ func (r *IndexerReconciler) restartIndexerStatefulSets(ctx context.Context, clus
 	if cluster.Spec.Indexer.IsAdvancedMode() {
 		for _, pool := range cluster.Spec.Indexer.NodePools {
 			name := constants.IndexerNodePoolName(cluster.Name, pool.Name)
-			if err := r.restartStatefulSet(ctx, cluster.Namespace, name, fmt.Sprintf("Indexer nodepool %s", pool.Name)); err != nil {
+			if err := r.restartStatefulSet(ctx, cluster.Namespace, name, fmt.Sprintf("Indexer nodepool %s", pool.Name), restartHash); err != nil {
 				return err
 			}
 		}
@@ -2347,47 +2348,65 @@ func (r *IndexerReconciler) restartIndexerStatefulSets(ctx context.Context, clus
 	}
 
 	// Simple mode: single indexer StatefulSet
-	return r.restartStatefulSet(ctx, cluster.Namespace, constants.IndexerName(cluster.Name), "Indexer")
+	return r.restartStatefulSet(ctx, cluster.Namespace, constants.IndexerName(cluster.Name), "Indexer", restartHash)
 }
 
-func (r *IndexerReconciler) restartDeployment(ctx context.Context, namespace, name, component string) error {
+func (r *IndexerReconciler) restartDeployment(ctx context.Context, namespace, name, component, restartHash string) error {
 	log := logf.FromContext(ctx)
 
-	var deployment appsv1.Deployment
-	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &deployment); err != nil {
-		return fmt.Errorf("failed to get %s deployment %s: %w", component, name, err)
-	}
+	return utils.RetryOnConflict(ctx, func() error {
+		var deployment appsv1.Deployment
+		if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &deployment); err != nil {
+			return fmt.Errorf("failed to get %s deployment %s: %w", component, name, err)
+		}
 
-	if deployment.Spec.Template.Annotations == nil {
-		deployment.Spec.Template.Annotations = make(map[string]string)
-	}
-	deployment.Spec.Template.Annotations["wazuh.com/credential-recovery-restart"] = time.Now().Format(time.RFC3339)
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = make(map[string]string)
+		}
 
-	if err := r.Update(ctx, &deployment); err != nil {
-		return fmt.Errorf("failed to update %s deployment %s for restart: %w", component, name, err)
-	}
-	log.Info("Restart triggered after credential recovery", "component", component, "deployment", name)
-	return nil
+		if deployment.Spec.Template.Annotations["wazuh.com/indexer-credential-recovery-hash"] == restartHash {
+			log.V(1).Info("Restart already requested for current credentials hash", "component", component, "deployment", name)
+			return nil
+		}
+
+		deployment.Spec.Template.Annotations["wazuh.com/credential-recovery-restart"] = time.Now().Format(time.RFC3339)
+		deployment.Spec.Template.Annotations["wazuh.com/indexer-credential-recovery-hash"] = restartHash
+
+		if err := r.Update(ctx, &deployment); err != nil {
+			return fmt.Errorf("failed to update %s deployment %s for restart: %w", component, name, err)
+		}
+		log.Info("Restart triggered after credential recovery", "component", component, "deployment", name)
+		return nil
+	})
 }
 
-func (r *IndexerReconciler) restartStatefulSet(ctx context.Context, namespace, name, component string) error {
+func (r *IndexerReconciler) restartStatefulSet(ctx context.Context, namespace, name, component, restartHash string) error {
 	log := logf.FromContext(ctx)
 
-	var sts appsv1.StatefulSet
-	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &sts); err != nil {
-		return fmt.Errorf("failed to get %s statefulset %s: %w", component, name, err)
-	}
+	return utils.RetryOnConflict(ctx, func() error {
+		var sts appsv1.StatefulSet
+		if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &sts); err != nil {
+			return fmt.Errorf("failed to get %s statefulset %s: %w", component, name, err)
+		}
 
-	if sts.Spec.Template.Annotations == nil {
-		sts.Spec.Template.Annotations = make(map[string]string)
-	}
-	sts.Spec.Template.Annotations["wazuh.com/credential-recovery-restart"] = time.Now().Format(time.RFC3339)
+		if sts.Spec.Template.Annotations == nil {
+			sts.Spec.Template.Annotations = make(map[string]string)
+		}
 
-	if err := r.Update(ctx, &sts); err != nil {
-		return fmt.Errorf("failed to update %s statefulset %s for restart: %w", component, name, err)
-	}
-	log.Info("Restart triggered after credential recovery", "component", component, "statefulset", name)
-	return nil
+		if sts.Spec.Template.Annotations["wazuh.com/indexer-credential-recovery-hash"] == restartHash {
+			log.V(1).Info("Restart already requested for current credentials hash", "component", component, "statefulset", name)
+			return nil
+		}
+
+		sts.Spec.Template.Annotations["wazuh.com/credential-recovery-restart"] = time.Now().Format(time.RFC3339)
+		sts.Spec.Template.Annotations["wazuh.com/indexer-credential-recovery-hash"] = restartHash
+
+		if err := r.Update(ctx, &sts); err != nil {
+			return fmt.Errorf("failed to update %s statefulset %s for restart: %w", component, name, err)
+		}
+		log.Info("Restart triggered after credential recovery", "component", component, "statefulset", name)
+		return nil
+	})
 }
 
 // CheckSecurityInitialization checks if OpenSearch security is initialized
