@@ -19,9 +19,8 @@ package security
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
-	"strings"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -119,16 +118,14 @@ func (e *SecurityAdminExecutor) ApplyInternalUsers(ctx context.Context, clusterN
 		return fmt.Errorf("indexer pod %s is not running (phase: %s)", podName, pod.Status.Phase)
 	}
 
-	// Secret volumes are updated asynchronously by kubelet. Wait until the mounted
-	// internal_users.yml matches the desired Secret content before applying with securityadmin.
+	// Build the securityadmin.sh command targeting internal_users.yml.
+	// Prefer pushing inline content from the Secret to avoid stale subPath mounts.
+	var cmd []string
 	if expectedInternalUsers != "" {
-		if err := e.waitForMountedInternalUsers(ctx, namespace, podName, wazuhVersion, expectedInternalUsers, 30*time.Second); err != nil {
-			return err
-		}
+		cmd = buildInlineInternalUsersCommand(expectedInternalUsers)
+	} else {
+		cmd = buildInternalUsersCommand(wazuhVersion)
 	}
-
-	// Build the securityadmin.sh command targeting internal_users.yml
-	cmd := buildInternalUsersCommand(wazuhVersion)
 
 	log.Info("Executing securityadmin.sh to push internal_users.yml", "pod", podName)
 
@@ -146,37 +143,6 @@ func (e *SecurityAdminExecutor) ApplyInternalUsers(ctx context.Context, clusterN
 		"stdout", stdout)
 
 	return nil
-}
-
-func (e *SecurityAdminExecutor) waitForMountedInternalUsers(
-	ctx context.Context,
-	namespace, podName, wazuhVersion, expectedInternalUsers string,
-	timeout time.Duration,
-) error {
-	log := logf.FromContext(ctx).WithValues("pod", podName, "namespace", namespace)
-
-	deadline := time.Now().Add(timeout)
-	expected := strings.TrimSpace(expectedInternalUsers)
-	for {
-		stdout, stderr, err := e.execInPod(ctx, namespace, podName, buildReadInternalUsersCommand(wazuhVersion))
-		if err == nil && strings.TrimSpace(stdout) == expected {
-			log.V(1).Info("Mounted internal_users.yml is up to date")
-			return nil
-		}
-
-		if time.Now().After(deadline) {
-			if err != nil {
-				return fmt.Errorf("timed out waiting for mounted internal_users.yml sync: %w (stderr: %s)", err, stderr)
-			}
-			return fmt.Errorf("timed out waiting for mounted internal_users.yml sync")
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(2 * time.Second):
-		}
-	}
 }
 
 // buildInternalUsersCommand constructs the securityadmin.sh command for pushing internal_users.yml
@@ -213,28 +179,23 @@ func buildInternalUsersCommand(wazuhVersion string) []string {
 	}
 }
 
-// buildReadInternalUsersCommand reads the resolved internal_users.yml from the indexer pod.
-func buildReadInternalUsersCommand(wazuhVersion string) []string {
-	preferredConfigDir := constants.IndexerSecurityConfigDir(wazuhVersion)
-	fallbackConfigDir := constants.PathIndexerLegacySecurityConfig
-	if preferredConfigDir == constants.PathIndexerLegacySecurityConfig {
-		fallbackConfigDir = constants.PathIndexerSecurityConfig
-	}
-
-	preferredInternalUsers := preferredConfigDir + "/internal_users.yml"
-	fallbackInternalUsers := fallbackConfigDir + "/internal_users.yml"
-
+// buildInlineInternalUsersCommand pushes internal_users content directly to a temp file in the pod,
+// then applies it with securityadmin.sh. This avoids stale Secret subPath mounts.
+func buildInlineInternalUsersCommand(internalUsers string) []string {
+	encoded := base64.StdEncoding.EncodeToString([]byte(internalUsers))
 	return []string{
 		"bash", "-c",
-		fmt.Sprintf("INTERNAL_USERS_FILE=%s; "+
-			"if [ ! -f \"$INTERNAL_USERS_FILE\" ] && [ -f %s ]; then INTERNAL_USERS_FILE=%s; fi; "+
-			"if [ ! -f \"$INTERNAL_USERS_FILE\" ]; then "+
-			"echo \"ERR: internal_users.yml not found at %s or %s\"; "+
-			"exit 1; "+
-			"fi; "+
-			"cat \"$INTERNAL_USERS_FILE\"",
-			preferredInternalUsers, fallbackInternalUsers, fallbackInternalUsers,
-			preferredInternalUsers, fallbackInternalUsers),
+		fmt.Sprintf("echo '%s' | base64 -d > /tmp/internal_users.yml; "+
+			"OPENSEARCH_JAVA_HOME=/usr/share/wazuh-indexer/jdk "+
+			"/usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh "+
+			"-f /tmp/internal_users.yml "+
+			"-t internalusers "+
+			"-icl -nhnv "+
+			"-cacert %s/ca.crt "+
+			"-cert %s/tls.crt "+
+			"-key %s/tls.key",
+			encoded,
+			constants.PathIndexerCerts, constants.PathIndexerAdminCerts, constants.PathIndexerAdminCerts),
 	}
 }
 
