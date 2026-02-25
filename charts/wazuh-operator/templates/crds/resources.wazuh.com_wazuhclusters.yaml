@@ -38657,6 +38657,11 @@ spec:
                       APICredentialsHash is the hash of the last applied Wazuh API credentials
                       used by manager workers/master and dashboard.
                     type: string
+                  authdCredentialsHash:
+                    description: |-
+                      AuthdCredentialsHash is the hash of the last applied authd password secret
+                      used by Wazuh manager authd enrollment.
+                    type: string
                   credentialsHash:
                     description: |-
                       CredentialsHash is the hash of the last synced credentials secret

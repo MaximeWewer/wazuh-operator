@@ -2272,6 +2272,9 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 	// (SecretKeyRef), which are only read at pod startup. Restart them after status hash
 	// update so the new state is persisted even if a restart call fails.
 	if credentialsChanged {
+		if err := r.restartIndexerStatefulSets(ctx, cluster); err != nil {
+			log.Error(err, "Failed to trigger indexer restart after credential sync")
+		}
 		if err := r.restartManagerMaster(ctx, cluster); err != nil {
 			log.Error(err, "Failed to restart manager master after credential sync")
 		}
@@ -2325,6 +2328,26 @@ func (r *IndexerReconciler) restartManagerMaster(ctx context.Context, cluster *w
 
 func (r *IndexerReconciler) restartManagerWorkers(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	return r.restartStatefulSet(ctx, cluster.Namespace, constants.ManagerWorkersName(cluster.Name), "Manager workers")
+}
+
+func (r *IndexerReconciler) restartIndexerStatefulSets(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	if cluster.Spec.Indexer == nil {
+		return nil
+	}
+
+	// Advanced mode: restart each node pool StatefulSet
+	if cluster.Spec.Indexer.IsAdvancedMode() {
+		for _, pool := range cluster.Spec.Indexer.NodePools {
+			name := constants.IndexerNodePoolName(cluster.Name, pool.Name)
+			if err := r.restartStatefulSet(ctx, cluster.Namespace, name, fmt.Sprintf("Indexer nodepool %s", pool.Name)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Simple mode: single indexer StatefulSet
+	return r.restartStatefulSet(ctx, cluster.Namespace, constants.IndexerName(cluster.Name), "Indexer")
 }
 
 func (r *IndexerReconciler) restartDeployment(ctx context.Context, namespace, name, component string) error {

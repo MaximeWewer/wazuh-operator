@@ -417,6 +417,8 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		}
 	}
 
+	extraVolumes, extraVolumeMounts = r.injectAuthdPasswordSecretMount(cluster, extraVolumes, extraVolumeMounts)
+
 	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "master")
 
@@ -865,6 +867,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 			affinity = affinityutil.MergeAntiAffinity(clusterAntiAffinity, affinity)
 		}
 	}
+
+	extraVolumes, extraVolumeMounts = r.injectAuthdPasswordSecretMount(cluster, extraVolumes, extraVolumeMounts)
 
 	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "worker")
@@ -1365,6 +1369,8 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 		extraContainers = cluster.Spec.Manager.Master.ExtraContainers
 	}
 
+	extraVolumes, extraVolumeMounts = r.injectAuthdPasswordSecretMount(cluster, extraVolumes, extraVolumeMounts)
+
 	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "master")
 
@@ -1671,6 +1677,8 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		extraInitContainers = cluster.Spec.Manager.Workers.ExtraInitContainers
 		extraContainers = cluster.Spec.Manager.Workers.ExtraContainers
 	}
+
+	extraVolumes, extraVolumeMounts = r.injectAuthdPasswordSecretMount(cluster, extraVolumes, extraVolumeMounts)
 
 	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "worker")
@@ -2203,6 +2211,88 @@ func (r *ClusterReconciler) resolveAuthdPassword(ctx context.Context, cluster *w
 	}
 
 	return password
+}
+
+func (r *ClusterReconciler) authdPasswordSecretRef(cluster *wazuhv1.WazuhCluster) (string, string, bool) {
+	if cluster == nil || cluster.Spec.Manager == nil {
+		return "", "", false
+	}
+
+	_, _, _, _, authCfg := config.WazuhConfigFromSpec(cluster.Spec.Manager.Config)
+	if authCfg == nil {
+		authCfg = config.DefaultAuthConfig()
+	}
+
+	// Backward-compatibility: honor legacy manager.authdPasswordSecretRef.
+	if authCfg.PasswordSecretRef == nil && cluster.Spec.Manager.AuthdPasswordSecretRef != nil {
+		key := cluster.Spec.Manager.AuthdPasswordSecretRef.Key
+		if key == "" {
+			key = "password"
+		}
+		authCfg.PasswordSecretRef = &config.SecretKeyReference{
+			Name: cluster.Spec.Manager.AuthdPasswordSecretRef.Name,
+			Key:  key,
+		}
+		authCfg.UsePassword = true
+	}
+
+	if !authCfg.UsePassword || authCfg.PasswordSecretRef == nil || authCfg.PasswordSecretRef.Name == "" {
+		return "", "", false
+	}
+
+	key := authCfg.PasswordSecretRef.Key
+	if key == "" {
+		key = "password"
+	}
+	return authCfg.PasswordSecretRef.Name, key, true
+}
+
+func (r *ClusterReconciler) injectAuthdPasswordSecretMount(
+	cluster *wazuhv1.WazuhCluster,
+	volumes []corev1.Volume,
+	mounts []corev1.VolumeMount,
+) ([]corev1.Volume, []corev1.VolumeMount) {
+	secretName, secretKey, ok := r.authdPasswordSecretRef(cluster)
+	if !ok {
+		return volumes, mounts
+	}
+
+	const volumeName = "wazuh-authd-password"
+	const keyPath = "authd.pass"
+	const mountPath = "/var/ossec/etc/authd.pass"
+
+	// Prevent duplicates if user already provided a custom mount/volume.
+	for _, v := range volumes {
+		if v.Name == volumeName {
+			return volumes, mounts
+		}
+	}
+	for _, m := range mounts {
+		if m.MountPath == mountPath || (m.Name == volumeName && m.SubPath == keyPath) {
+			return volumes, mounts
+		}
+	}
+
+	volumes = append(volumes, corev1.Volume{
+		Name: volumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: secretName,
+				Items: []corev1.KeyToPath{
+					{Key: secretKey, Path: keyPath},
+				},
+			},
+		},
+	})
+
+	mounts = append(mounts, corev1.VolumeMount{
+		Name:      volumeName,
+		MountPath: mountPath,
+		SubPath:   keyPath,
+		ReadOnly:  true,
+	})
+
+	return volumes, mounts
 }
 
 // ensureClusterKeySecret ensures the cluster key secret exists

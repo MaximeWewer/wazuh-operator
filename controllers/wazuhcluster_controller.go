@@ -618,6 +618,11 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		log.Error(err, "Failed to reconcile Wazuh API credentials rotation state")
 		return ctrl.Result{}, err
 	}
+	// 8.6 Reconcile authd password rotation state and trigger manager restarts
+	if err := r.reconcileAuthdCredentialsStatusAndRollout(ctx, cluster); err != nil {
+		log.Error(err, "Failed to reconcile authd credentials rotation state")
+		return ctrl.Result{}, err
+	}
 
 	// 9. Reconcile Monitoring resources (ServiceMonitors) if enabled
 	if r.MonitoringReconciler != nil {
@@ -1563,6 +1568,146 @@ func (r *WazuhClusterReconciler) reconcileAPICredentialsStatusAndRollout(ctx con
 
 	cluster.Status.Security.APICredentialsHash = newHash
 	log.Info("Triggered dependent restarts after API credentials change")
+	return nil
+}
+
+func (r *WazuhClusterReconciler) resolveAuthdCredentialsRef(cluster *wazuhv1.WazuhCluster) (secretName, passwordKey string, enabledOnMasterOnly bool, configured bool) {
+	enabledOnMasterOnly = true
+	if cluster.Spec.Manager == nil {
+		return "", "", enabledOnMasterOnly, false
+	}
+
+	var (
+		disabled    bool
+		usePassword bool
+	)
+
+	if cluster.Spec.Manager.Config != nil && cluster.Spec.Manager.Config.Auth != nil {
+		auth := cluster.Spec.Manager.Config.Auth
+		if auth.Disabled != nil {
+			disabled = *auth.Disabled
+		}
+		if auth.UsePassword != nil {
+			usePassword = *auth.UsePassword
+		}
+		if auth.EnabledOnMasterOnly != nil {
+			enabledOnMasterOnly = *auth.EnabledOnMasterOnly
+		}
+		if auth.PasswordSecretRef != nil {
+			secretName = auth.PasswordSecretRef.Name
+			passwordKey = auth.PasswordSecretRef.Key
+		}
+	}
+
+	// Backward compatibility: legacy top-level authdPasswordSecretRef.
+	if secretName == "" && cluster.Spec.Manager.AuthdPasswordSecretRef != nil {
+		secretName = cluster.Spec.Manager.AuthdPasswordSecretRef.Name
+		passwordKey = cluster.Spec.Manager.AuthdPasswordSecretRef.Key
+		usePassword = true
+	}
+
+	if passwordKey == "" {
+		passwordKey = "password"
+	}
+
+	if disabled || !usePassword || secretName == "" {
+		return "", "", enabledOnMasterOnly, false
+	}
+
+	return secretName, passwordKey, enabledOnMasterOnly, true
+}
+
+func (r *WazuhClusterReconciler) computeAuthdCredentialsHash(ctx context.Context, cluster *wazuhv1.WazuhCluster) (hash string, enabledOnMasterOnly bool, configured bool, err error) {
+	secretName, passwordKey, enabledOnMasterOnly, configured := r.resolveAuthdCredentialsRef(cluster)
+	if !configured {
+		return "", enabledOnMasterOnly, false, nil
+	}
+
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cluster.Namespace}, secret); err != nil {
+		return "", enabledOnMasterOnly, true, err
+	}
+
+	password := string(secret.Data[passwordKey])
+	if password == "" {
+		return "", enabledOnMasterOnly, true, nil
+	}
+
+	return utils.HashStrings(password), enabledOnMasterOnly, true, nil
+}
+
+func (r *WazuhClusterReconciler) reconcileAuthdCredentialsStatusAndRollout(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+	if cluster.Spec.Manager == nil {
+		return nil
+	}
+
+	newHash, enabledOnMasterOnly, configured, err := r.computeAuthdCredentialsHash(ctx, cluster)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.V(1).Info("authd password secret not found yet, skipping authd credentials rollout check")
+			return nil
+		}
+		return fmt.Errorf("failed to compute authd credentials hash: %w", err)
+	}
+
+	if cluster.Status.Security == nil {
+		cluster.Status.Security = &wazuhv1.SecurityStatus{}
+	}
+	oldHash := cluster.Status.Security.AuthdCredentialsHash
+
+	// Not configured for authd password or empty password.
+	if !configured || newHash == "" {
+		if oldHash != "" {
+			cluster.Status.Security.AuthdCredentialsHash = ""
+		}
+		return nil
+	}
+
+	if oldHash == newHash {
+		return nil
+	}
+
+	// First observed hash: persist state without restart.
+	if oldHash == "" {
+		cluster.Status.Security.AuthdCredentialsHash = newHash
+		log.V(1).Info("Initialized authd credentials hash in cluster status")
+		return nil
+	}
+
+	reason := "wazuh authd password changed"
+	if _, err := certreconciler.TriggerStatefulSetRollingRestart(
+		ctx,
+		r.Client,
+		cluster.Namespace,
+		constants.ManagerMasterName(cluster.Name),
+		&certreconciler.RollingRestartConfig{
+			Component:    "manager-master",
+			RestartOrder: certreconciler.RestartOrderSequential,
+			Reason:       reason,
+		},
+	); err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to restart manager master after authd password change: %w", err)
+	}
+
+	if !enabledOnMasterOnly {
+		if _, err := certreconciler.TriggerStatefulSetRollingRestart(
+			ctx,
+			r.Client,
+			cluster.Namespace,
+			constants.ManagerWorkersName(cluster.Name),
+			&certreconciler.RollingRestartConfig{
+				Component:    "manager-workers",
+				RestartOrder: certreconciler.RestartOrderSequential,
+				Reason:       reason,
+			},
+		); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to restart manager workers after authd password change: %w", err)
+		}
+	}
+
+	cluster.Status.Security.AuthdCredentialsHash = newHash
+	log.Info("Triggered manager restart(s) after authd credentials change", "enabledOnMasterOnly", enabledOnMasterOnly)
 	return nil
 }
 

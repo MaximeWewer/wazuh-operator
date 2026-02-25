@@ -1159,6 +1159,11 @@ type SecurityStatus struct {
 	// used by manager workers/master and dashboard.
 	// +optional
 	APICredentialsHash string `json:"apiCredentialsHash,omitempty"`
+
+	// AuthdCredentialsHash is the hash of the last applied authd password secret
+	// used by Wazuh manager authd enrollment.
+	// +optional
+	AuthdCredentialsHash string `json:"authdCredentialsHash,omitempty"`
 }
 
 // ClusterPhase represents the phase of the cluster
