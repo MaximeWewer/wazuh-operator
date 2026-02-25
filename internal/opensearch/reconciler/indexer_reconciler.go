@@ -23,7 +23,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net"
-	"net/http"
 	"sort"
 	"time"
 
@@ -2167,101 +2166,24 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 	// Compute hash to check if we've already synced this config
 	configHash := patch.ComputeSecretHash(credSecret.Data)
 
-	// Try to create OpenSearch client and update users
-	osClient, err := r.getClientFactory().GetClientForCluster(ctx, cluster)
-	if err != nil {
-		// Auth failed - try securityadmin.sh to force-push internal_users.yml
-		// This handles the case where PVCs survive CR deletion but credential secrets
-		// are regenerated, causing a password mismatch with the security index.
-		if r.SecurityAdminExecutor != nil {
-			log.Info("REST API auth failed, attempting credential recovery via securityadmin.sh")
-			if saErr := r.SecurityAdminExecutor.ApplyInternalUsers(ctx, cluster.Name, cluster.Namespace, cluster.Spec.Version); saErr != nil {
-				log.Error(saErr, "securityadmin.sh credential recovery failed")
-				return nil // Will retry on next reconciliation
-			}
-			log.Info("Credentials pushed via securityadmin.sh, will sync via REST API on next reconciliation")
-			if r.Recorder != nil {
-				r.Recorder.Event(cluster, corev1.EventTypeNormal, "SecurityCredentialsRecovered",
-					"Recovered credentials via securityadmin.sh after auth failure (PVC reuse detected)")
-			}
-		} else {
-			log.V(1).Info("Failed to create OpenSearch client for security sync (expected on first startup)", "error", err)
-		}
-		return nil
-	}
-
-	// If hashes match, still verify runtime auth to detect drift between security index
-	// and secrets (e.g. stale hashes with unchanged secret values).
+	// Check if we've already synced this configuration.
 	if cluster.Status.Security != nil && cluster.Status.Security.CredentialsHash == configHash {
-		resp, err := osClient.Get(ctx, "/_cluster/health")
-		if err == nil && resp != nil {
-			defer resp.Body.Close()
-			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-				log.Info("Credentials hash matches but runtime auth failed, attempting recovery via securityadmin.sh",
-					"statusCode", resp.StatusCode)
-				if r.SecurityAdminExecutor != nil {
-					if saErr := r.SecurityAdminExecutor.ApplyInternalUsers(ctx, cluster.Name, cluster.Namespace, cluster.Spec.Version); saErr != nil {
-						log.Error(saErr, "securityadmin.sh credential recovery failed")
-					} else {
-						log.Info("Credentials pushed via securityadmin.sh after auth drift detection")
-					}
-				}
-			}
-		}
 		log.V(1).Info("Security credentials already synced", "hash", configHash)
 		return nil
 	}
 
-	// Update default admin user
-	log.Info("Syncing default admin user to security index", "username", adminUsername)
-	adminPayload := map[string]interface{}{
-		"password":      password,
-		"backend_roles": []string{"admin"},
-		"description":   "Default admin user",
-	}
-	resp, err := osClient.PutJSON(ctx, "/_plugins/_security/api/internalusers/"+adminUsername, adminPayload)
-	if err != nil {
-		log.V(1).Info("Failed to update default admin user (may be expected on new cluster)", "username", adminUsername, "error", err)
+	// Sync internal users via securityadmin.sh only. This avoids bootstrap deadlocks
+	// when credentials have changed and the REST API can no longer authenticate.
+	if r.SecurityAdminExecutor == nil {
+		log.V(1).Info("SecurityAdminExecutor not configured, skipping internal_users sync")
 		return nil
 	}
-	resp.Body.Close()
-
-	// Check for auth failure (401/403) - indicates credential mismatch with security index
-	// This happens when PVCs survive CR deletion and contain old password hashes
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		log.Info("REST API returned auth error during credential sync, attempting recovery via securityadmin.sh",
-			"statusCode", resp.StatusCode)
-		if r.SecurityAdminExecutor != nil {
-			if saErr := r.SecurityAdminExecutor.ApplyInternalUsers(ctx, cluster.Name, cluster.Namespace, cluster.Spec.Version); saErr != nil {
-				log.Error(saErr, "securityadmin.sh credential recovery failed")
-				return nil // Will retry on next reconciliation
-			}
-			log.Info("Credentials pushed via securityadmin.sh, will sync via REST API on next reconciliation")
-			if r.Recorder != nil {
-				r.Recorder.Event(cluster, corev1.EventTypeNormal, "SecurityCredentialsRecovered",
-					"Recovered credentials via securityadmin.sh after REST API auth failure (PVC reuse detected)")
-			}
-
-			// Restart the dashboard to break out of CrashLoopBackOff.
-			// The dashboard already has the correct password from the secret, but may be stuck
-			// in exponential backoff after repeated auth failures against the indexer.
-			r.restartDashboard(ctx, cluster)
-		}
+	log.Info("Credentials hash changed, applying internal_users via securityadmin.sh", "username", adminUsername)
+	if saErr := r.SecurityAdminExecutor.ApplyInternalUsers(ctx, cluster.Name, cluster.Namespace, cluster.Spec.Version); saErr != nil {
+		log.Error(saErr, "securityadmin.sh internal_users sync failed")
 		return nil
 	}
-
-	// Update kibanaserver user
-	log.Info("Syncing kibanaserver user to security index")
-	kibanaPayload := map[string]interface{}{
-		"password":    password,
-		"description": "Kibana server user",
-	}
-	resp, err = osClient.PutJSON(ctx, "/_plugins/_security/api/internalusers/kibanaserver", kibanaPayload)
-	if err != nil {
-		log.V(1).Info("Failed to update kibanaserver user", "error", err)
-		return nil
-	}
-	resp.Body.Close()
+	log.Info("Credentials pushed via securityadmin.sh", "username", adminUsername)
 
 	// Update status to track that we've synced this config
 	if cluster.Status.Security == nil {
