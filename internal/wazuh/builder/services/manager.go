@@ -40,6 +40,7 @@ type ManagerServiceBuilder struct {
 	labels         map[string]string
 	annotations    map[string]string
 	loadBalancerIP string
+	ports          []corev1.ServicePort
 }
 
 // NewManagerServiceBuilder creates a new ManagerServiceBuilder
@@ -98,10 +99,46 @@ func (b *ManagerServiceBuilder) WithLoadBalancerIP(ip string) *ManagerServiceBui
 	return b
 }
 
+// WithPorts sets custom service ports
+func (b *ManagerServiceBuilder) WithPorts(ports []corev1.ServicePort) *ManagerServiceBuilder {
+	b.ports = ports
+	return b
+}
+
 // Build creates the Service
 func (b *ManagerServiceBuilder) Build() *corev1.Service {
 	labels := b.buildLabels()
 	selectorLabels := b.buildSelectorLabels()
+
+	ports := b.ports
+	if len(ports) == 0 {
+		ports = []corev1.ServicePort{
+			{
+				Name:       constants.PortNameManagerAPI,
+				Port:       constants.PortManagerAPI,
+				TargetPort: intstr.FromInt(int(constants.PortManagerAPI)),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       constants.PortNameManagerAgentEvents,
+				Port:       constants.PortManagerAgentEvents,
+				TargetPort: intstr.FromInt(int(constants.PortManagerAgentEvents)),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       constants.PortNameManagerAgentAuth,
+				Port:       constants.PortManagerAgentAuth,
+				TargetPort: intstr.FromInt(int(constants.PortManagerAgentAuth)),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       constants.PortNameManagerCluster,
+				Port:       constants.PortManagerCluster,
+				TargetPort: intstr.FromInt(int(constants.PortManagerCluster)),
+				Protocol:   corev1.ProtocolTCP,
+			},
+		}
+	}
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -113,32 +150,7 @@ func (b *ManagerServiceBuilder) Build() *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Type:     b.serviceType,
 			Selector: selectorLabels,
-			Ports: []corev1.ServicePort{
-				{
-					Name:       constants.PortNameManagerAPI,
-					Port:       constants.PortManagerAPI,
-					TargetPort: intstr.FromInt(int(constants.PortManagerAPI)),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       constants.PortNameManagerAgentEvents,
-					Port:       constants.PortManagerAgentEvents,
-					TargetPort: intstr.FromInt(int(constants.PortManagerAgentEvents)),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       constants.PortNameManagerAgentAuth,
-					Port:       constants.PortManagerAgentAuth,
-					TargetPort: intstr.FromInt(int(constants.PortManagerAgentAuth)),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       constants.PortNameManagerCluster,
-					Port:       constants.PortManagerCluster,
-					TargetPort: intstr.FromInt(int(constants.PortManagerCluster)),
-					Protocol:   corev1.ProtocolTCP,
-				},
-			},
+			Ports:    ports,
 		},
 	}
 

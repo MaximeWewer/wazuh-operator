@@ -567,8 +567,20 @@ func (r *IndexerReconciler) getConfigHash(ctx context.Context, cluster *wazuhv1.
 // reconcileServices reconciles indexer services
 func (r *IndexerReconciler) reconcileServices(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	serviceBuilder := services.NewIndexerServiceBuilder(cluster.Name, cluster.Namespace)
-	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Service != nil && len(cluster.Spec.Indexer.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(cluster.Spec.Indexer.Service.Annotations)
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Service != nil {
+		svcSpec := cluster.Spec.Indexer.Service
+		if svcSpec.Type != "" {
+			serviceBuilder.WithServiceType(svcSpec.Type)
+		}
+		if len(svcSpec.Annotations) > 0 {
+			serviceBuilder.WithAnnotations(svcSpec.Annotations)
+		}
+		if svcSpec.LoadBalancerIP != "" {
+			serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
+		}
+		if len(svcSpec.Ports) > 0 {
+			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
+		}
 	}
 
 	// Regular service
@@ -1805,8 +1817,20 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 
 	// Build Services
 	serviceBuilder := services.NewIndexerServiceBuilder(indexer.Name, indexer.Namespace)
-	if indexer.Spec.Service != nil && len(indexer.Spec.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(indexer.Spec.Service.Annotations)
+	if indexer.Spec.Service != nil {
+		svcSpec := indexer.Spec.Service
+		if svcSpec.Type != "" {
+			serviceBuilder.WithServiceType(svcSpec.Type)
+		}
+		if len(svcSpec.Annotations) > 0 {
+			serviceBuilder.WithAnnotations(svcSpec.Annotations)
+		}
+		if svcSpec.LoadBalancerIP != "" {
+			serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
+		}
+		if len(svcSpec.Ports) > 0 {
+			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
+		}
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(indexer, service, r.Scheme); err != nil {

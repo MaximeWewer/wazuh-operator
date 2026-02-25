@@ -36,6 +36,7 @@ type WorkerServiceBuilder struct {
 	headless    bool
 	labels      map[string]string
 	annotations map[string]string
+	ports       []corev1.ServicePort
 }
 
 // NewWorkerServiceBuilder creates a new WorkerServiceBuilder
@@ -87,10 +88,40 @@ func (b *WorkerServiceBuilder) WithAnnotations(annotations map[string]string) *W
 	return b
 }
 
+// WithPorts sets custom service ports
+func (b *WorkerServiceBuilder) WithPorts(ports []corev1.ServicePort) *WorkerServiceBuilder {
+	b.ports = ports
+	return b
+}
+
 // Build creates the Service
 func (b *WorkerServiceBuilder) Build() *corev1.Service {
 	labels := b.buildLabels()
 	selectorLabels := b.buildSelectorLabels()
+
+	ports := b.ports
+	if len(ports) == 0 {
+		ports = []corev1.ServicePort{
+			{
+				Name:       constants.PortNameManagerAPI,
+				Port:       constants.PortManagerAPI,
+				TargetPort: intstr.FromInt(int(constants.PortManagerAPI)),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       constants.PortNameManagerAgentEvents,
+				Port:       constants.PortManagerAgentEvents,
+				TargetPort: intstr.FromInt(int(constants.PortManagerAgentEvents)),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       constants.PortNameManagerCluster,
+				Port:       constants.PortManagerCluster,
+				TargetPort: intstr.FromInt(int(constants.PortManagerCluster)),
+				Protocol:   corev1.ProtocolTCP,
+			},
+		}
+	}
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -102,26 +133,7 @@ func (b *WorkerServiceBuilder) Build() *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Type:     b.serviceType,
 			Selector: selectorLabels,
-			Ports: []corev1.ServicePort{
-				{
-					Name:       constants.PortNameManagerAPI,
-					Port:       constants.PortManagerAPI,
-					TargetPort: intstr.FromInt(int(constants.PortManagerAPI)),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       constants.PortNameManagerAgentEvents,
-					Port:       constants.PortManagerAgentEvents,
-					TargetPort: intstr.FromInt(int(constants.PortManagerAgentEvents)),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       constants.PortNameManagerCluster,
-					Port:       constants.PortManagerCluster,
-					TargetPort: intstr.FromInt(int(constants.PortManagerCluster)),
-					Protocol:   corev1.ProtocolTCP,
-				},
-			},
+			Ports:    ports,
 		},
 	}
 

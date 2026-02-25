@@ -469,8 +469,8 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 	// Build Services
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil && len(cluster.Spec.Manager.Master.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Master.Service.Annotations)
+	if cluster.Spec.Manager != nil {
+		applyManagerServiceSpec(serviceBuilder, cluster.Spec.Manager.Master.Service)
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -919,8 +919,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 
 	// Build Services
 	serviceBuilder := services.NewWorkerServiceBuilder(cluster.Name, cluster.Namespace)
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Service != nil && len(cluster.Spec.Manager.Workers.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Workers.Service.Annotations)
+	if cluster.Spec.Manager != nil {
+		applyWorkerServiceSpec(serviceBuilder, cluster.Spec.Manager.Workers.Service)
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -1445,8 +1445,8 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 
 	// Build Service
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil && len(cluster.Spec.Manager.Master.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Master.Service.Annotations)
+	if cluster.Spec.Manager != nil {
+		applyManagerServiceSpec(serviceBuilder, cluster.Spec.Manager.Master.Service)
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -1752,8 +1752,8 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 
 	// Build Service
 	serviceBuilder := services.NewWorkerServiceBuilder(cluster.Name, cluster.Namespace)
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Service != nil && len(cluster.Spec.Manager.Workers.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Workers.Service.Annotations)
+	if cluster.Spec.Manager != nil {
+		applyWorkerServiceSpec(serviceBuilder, cluster.Spec.Manager.Workers.Service)
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {

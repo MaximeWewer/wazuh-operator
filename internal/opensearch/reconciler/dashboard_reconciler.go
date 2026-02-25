@@ -373,8 +373,23 @@ func (r *DashboardReconciler) resolveAPIEndpointCredentials(ctx context.Context,
 // reconcileService reconciles the dashboard service
 func (r *DashboardReconciler) reconcileService(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	serviceBuilder := osservices.NewDashboardServiceBuilder(cluster.Name, cluster.Namespace)
-	if cluster.Spec.Dashboard != nil && cluster.Spec.Dashboard.Service != nil && len(cluster.Spec.Dashboard.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(cluster.Spec.Dashboard.Service.Annotations)
+	if cluster.Spec.Dashboard != nil && cluster.Spec.Dashboard.Service != nil {
+		svcSpec := cluster.Spec.Dashboard.Service
+		if svcSpec.Type != "" {
+			serviceBuilder.WithServiceType(svcSpec.Type)
+		}
+		if len(svcSpec.Annotations) > 0 {
+			serviceBuilder.WithAnnotations(svcSpec.Annotations)
+		}
+		if svcSpec.LoadBalancerIP != "" {
+			serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
+		}
+		if svcSpec.NodePort > 0 {
+			serviceBuilder.WithNodePort(svcSpec.NodePort)
+		}
+		if len(svcSpec.Ports) > 0 {
+			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
+		}
 	}
 	service := serviceBuilder.Build()
 
@@ -1269,8 +1284,23 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 
 	// Build Service
 	serviceBuilder := osservices.NewDashboardServiceBuilder(dashboard.Name, dashboard.Namespace)
-	if dashboard.Spec.Service != nil && len(dashboard.Spec.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(dashboard.Spec.Service.Annotations)
+	if dashboard.Spec.Service != nil {
+		svcSpec := dashboard.Spec.Service
+		if svcSpec.Type != "" {
+			serviceBuilder.WithServiceType(svcSpec.Type)
+		}
+		if len(svcSpec.Annotations) > 0 {
+			serviceBuilder.WithAnnotations(svcSpec.Annotations)
+		}
+		if svcSpec.LoadBalancerIP != "" {
+			serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
+		}
+		if svcSpec.NodePort > 0 {
+			serviceBuilder.WithNodePort(svcSpec.NodePort)
+		}
+		if len(svcSpec.Ports) > 0 {
+			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
+		}
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(dashboard, service, r.Scheme); err != nil {

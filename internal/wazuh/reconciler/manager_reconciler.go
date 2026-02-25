@@ -217,9 +217,7 @@ func (r *ManagerReconciler) reconcileStandaloneConfigMap(ctx context.Context, ma
 func (r *ManagerReconciler) reconcileStandaloneServices(ctx context.Context, manager *wazuhv1.WazuhManager, nodeType string) error {
 	if nodeType == "master" {
 		serviceBuilder := services.NewManagerServiceBuilder(manager.Name, manager.Namespace, "master")
-		if manager.Spec.Master.Service != nil && len(manager.Spec.Master.Service.Annotations) > 0 {
-			serviceBuilder.WithAnnotations(manager.Spec.Master.Service.Annotations)
-		}
+		applyManagerServiceSpec(serviceBuilder, manager.Spec.Master.Service)
 
 		service := serviceBuilder.Build()
 		if err := controllerutil.SetControllerReference(manager, service, r.Scheme); err != nil {
@@ -238,9 +236,7 @@ func (r *ManagerReconciler) reconcileStandaloneServices(ctx context.Context, man
 		}
 	} else {
 		serviceBuilder := services.NewWorkerServiceBuilder(manager.Name, manager.Namespace)
-		if manager.Spec.Workers.Service != nil && len(manager.Spec.Workers.Service.Annotations) > 0 {
-			serviceBuilder.WithAnnotations(manager.Spec.Workers.Service.Annotations)
-		}
+		applyWorkerServiceSpec(serviceBuilder, manager.Spec.Workers.Service)
 
 		service := serviceBuilder.Build()
 		if err := controllerutil.SetControllerReference(manager, service, r.Scheme); err != nil {
