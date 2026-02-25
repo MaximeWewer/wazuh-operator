@@ -141,18 +141,34 @@ func (e *SecurityAdminExecutor) ApplyInternalUsers(ctx context.Context, clusterN
 // buildInternalUsersCommand constructs the securityadmin.sh command for pushing internal_users.yml
 // Uses bash -c with OPENSEARCH_JAVA_HOME since the container may not have 'which'
 func buildInternalUsersCommand(wazuhVersion string) []string {
-	securityConfigDir := constants.IndexerSecurityConfigDir(wazuhVersion)
+	preferredConfigDir := constants.IndexerSecurityConfigDir(wazuhVersion)
+	fallbackConfigDir := constants.PathIndexerLegacySecurityConfig
+	if preferredConfigDir == constants.PathIndexerLegacySecurityConfig {
+		fallbackConfigDir = constants.PathIndexerSecurityConfig
+	}
+
+	preferredInternalUsers := preferredConfigDir + "/internal_users.yml"
+	fallbackInternalUsers := fallbackConfigDir + "/internal_users.yml"
+
 	return []string{
 		"bash", "-c",
-		fmt.Sprintf("OPENSEARCH_JAVA_HOME=/usr/share/wazuh-indexer/jdk "+
+		fmt.Sprintf("INTERNAL_USERS_FILE=%s; "+
+			"if [ ! -f \"$INTERNAL_USERS_FILE\" ] && [ -f %s ]; then INTERNAL_USERS_FILE=%s; fi; "+
+			"if [ ! -f \"$INTERNAL_USERS_FILE\" ]; then "+
+			"echo \"ERR: internal_users.yml not found at %s or %s\"; "+
+			"exit 1; "+
+			"fi; "+
+			"OPENSEARCH_JAVA_HOME=/usr/share/wazuh-indexer/jdk "+
 			"/usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh "+
-			"-f %s/internal_users.yml "+
+			"-f \"$INTERNAL_USERS_FILE\" "+
 			"-t internalusers "+
 			"-icl -nhnv "+
 			"-cacert %s/ca.crt "+
 			"-cert %s/tls.crt "+
 			"-key %s/tls.key",
-			securityConfigDir, constants.PathIndexerCerts, constants.PathIndexerAdminCerts, constants.PathIndexerAdminCerts),
+			preferredInternalUsers, fallbackInternalUsers, fallbackInternalUsers,
+			preferredInternalUsers, fallbackInternalUsers,
+			constants.PathIndexerCerts, constants.PathIndexerAdminCerts, constants.PathIndexerAdminCerts),
 	}
 }
 

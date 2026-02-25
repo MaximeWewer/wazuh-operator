@@ -27,22 +27,26 @@ func TestBuildInternalUsersCommand(t *testing.T) {
 	tests := []struct {
 		name          string
 		wazuhVersion  string
-		wantConfigDir string
+		wantPreferred string
+		wantFallback  string
 	}{
 		{
-			name:          "modern version (>= 4.14.0) uses config dir",
+			name:          "modern version (>= 4.14.0) prefers config dir with legacy fallback",
 			wazuhVersion:  "4.14.0",
-			wantConfigDir: constants.PathIndexerSecurityConfig,
+			wantPreferred: constants.PathIndexerSecurityConfig + "/internal_users.yml",
+			wantFallback:  constants.PathIndexerLegacySecurityConfig + "/internal_users.yml",
 		},
 		{
-			name:          "legacy version (< 4.14.0) uses legacy dir",
+			name:          "legacy version (< 4.14.0) prefers legacy dir with config fallback",
 			wazuhVersion:  "4.13.0",
-			wantConfigDir: constants.PathIndexerLegacySecurityConfig,
+			wantPreferred: constants.PathIndexerLegacySecurityConfig + "/internal_users.yml",
+			wantFallback:  constants.PathIndexerSecurityConfig + "/internal_users.yml",
 		},
 		{
-			name:          "newer version uses config dir",
+			name:          "newer version prefers config dir with legacy fallback",
 			wazuhVersion:  "4.15.1",
-			wantConfigDir: constants.PathIndexerSecurityConfig,
+			wantPreferred: constants.PathIndexerSecurityConfig + "/internal_users.yml",
+			wantFallback:  constants.PathIndexerLegacySecurityConfig + "/internal_users.yml",
 		},
 	}
 
@@ -70,10 +74,20 @@ func TestBuildInternalUsersCommand(t *testing.T) {
 				t.Error("expected securityadmin.sh path in script")
 			}
 
-			// Verify -f points to internal_users.yml in the correct directory
-			expectedFile := tt.wantConfigDir + "/internal_users.yml"
-			if !strings.Contains(script, "-f "+expectedFile) {
-				t.Errorf("expected -f %s in script, got: %s", expectedFile, script)
+			// Verify preferred and fallback internal_users.yml paths are present
+			if !strings.Contains(script, "INTERNAL_USERS_FILE="+tt.wantPreferred) {
+				t.Errorf("expected preferred path %s in script, got: %s", tt.wantPreferred, script)
+			}
+			if !strings.Contains(script, "[ -f "+tt.wantFallback+" ]") {
+				t.Errorf("expected fallback file check for %s in script, got: %s", tt.wantFallback, script)
+			}
+			if !strings.Contains(script, "internal_users.yml not found at "+tt.wantPreferred+" or "+tt.wantFallback) {
+				t.Errorf("expected not-found message with both paths in script, got: %s", script)
+			}
+
+			// Verify securityadmin receives resolved path variable
+			if !strings.Contains(script, "-f \"$INTERNAL_USERS_FILE\"") {
+				t.Errorf("expected -f \"$INTERNAL_USERS_FILE\" in script, got: %s", script)
 			}
 
 			// Verify -t internalusers is present
