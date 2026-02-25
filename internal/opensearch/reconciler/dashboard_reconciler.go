@@ -931,6 +931,27 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		deployBuilder.WithExtraContainers(extraContainers)
 	}
 
+	// Set image override from CRD
+	if cluster.Spec.Dashboard != nil && cluster.Spec.Dashboard.Image != nil {
+		dashboardImage := cluster.Spec.Dashboard.Image.ResolveImage(constants.DefaultWazuhDashboardImage, cluster.Spec.Version)
+		if dashboardImage != "" {
+			deployBuilder.WithImage(dashboardImage)
+		}
+	}
+	// Set security context overrides
+	if securityContext != nil {
+		deployBuilder.WithSecurityContext(securityContext)
+	}
+	if containerSecurityContext != nil {
+		deployBuilder.WithContainerSecurityContext(containerSecurityContext)
+	}
+	// Set termination grace period
+	dashboardTerminationGracePeriod := constants.DefaultDashboardTerminationGracePeriod
+	if terminationGracePeriodSeconds != nil {
+		dashboardTerminationGracePeriod = *terminationGracePeriodSeconds
+	}
+	deployBuilder.WithTerminationGracePeriodSeconds(&dashboardTerminationGracePeriod)
+
 	if certHash != "" {
 		deployBuilder.WithCertHash(certHash)
 	}

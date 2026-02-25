@@ -61,6 +61,10 @@ type DashboardDeploymentBuilder struct {
 	serviceAccountName string
 	// Image pull policy
 	imagePullPolicy corev1.PullPolicy
+	// Pod-level security context override
+	securityContext *corev1.PodSecurityContext
+	// Container-level security context override
+	containerSecurityContext *corev1.SecurityContext
 }
 
 // NewDashboardDeploymentBuilder creates a new DashboardDeploymentBuilder
@@ -262,6 +266,20 @@ func (b *DashboardDeploymentBuilder) WithServiceAccountName(name string) *Dashbo
 	return b
 }
 
+// WithSecurityContext sets the pod-level security context override
+// Non-nil fields in sc will override the corresponding defaults.
+func (b *DashboardDeploymentBuilder) WithSecurityContext(sc *corev1.PodSecurityContext) *DashboardDeploymentBuilder {
+	b.securityContext = sc
+	return b
+}
+
+// WithContainerSecurityContext sets the container-level security context override
+// Non-nil fields in sc will override the corresponding defaults.
+func (b *DashboardDeploymentBuilder) WithContainerSecurityContext(sc *corev1.SecurityContext) *DashboardDeploymentBuilder {
+	b.containerSecurityContext = sc
+	return b
+}
+
 // Build creates the Deployment
 func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 	labels := b.buildLabels()
@@ -307,6 +325,78 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 	// Build env vars
 	env := b.buildEnvVars()
 
+	// Build pod-level security context with defaults, then merge user overrides
+	// Defaults: RunAsNonRoot=true, RunAsUser=1000, FSGroup=1000, SeccompProfile=RuntimeDefault
+	podSecCtx := &corev1.PodSecurityContext{
+		RunAsNonRoot: func() *bool { b := true; return &b }(),
+		RunAsUser:    func() *int64 { u := int64(1000); return &u }(),
+		FSGroup:      func() *int64 { g := int64(1000); return &g }(),
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}
+	if b.securityContext != nil {
+		if b.securityContext.FSGroup != nil {
+			podSecCtx.FSGroup = b.securityContext.FSGroup
+		}
+		if b.securityContext.RunAsUser != nil {
+			podSecCtx.RunAsUser = b.securityContext.RunAsUser
+		}
+		if b.securityContext.RunAsGroup != nil {
+			podSecCtx.RunAsGroup = b.securityContext.RunAsGroup
+		}
+		if b.securityContext.RunAsNonRoot != nil {
+			podSecCtx.RunAsNonRoot = b.securityContext.RunAsNonRoot
+		}
+		if b.securityContext.SeccompProfile != nil {
+			podSecCtx.SeccompProfile = b.securityContext.SeccompProfile
+		}
+		if b.securityContext.SELinuxOptions != nil {
+			podSecCtx.SELinuxOptions = b.securityContext.SELinuxOptions
+		}
+		if b.securityContext.Sysctls != nil {
+			podSecCtx.Sysctls = b.securityContext.Sysctls
+		}
+		if b.securityContext.SupplementalGroups != nil {
+			podSecCtx.SupplementalGroups = b.securityContext.SupplementalGroups
+		}
+	}
+
+	// Build container-level security context with defaults, then merge user overrides
+	// Defaults: AllowPrivilegeEscalation=true (dashboard requires it)
+	containerSecCtx := &corev1.SecurityContext{
+		AllowPrivilegeEscalation: func() *bool { b := true; return &b }(),
+	}
+	if b.containerSecurityContext != nil {
+		if b.containerSecurityContext.AllowPrivilegeEscalation != nil {
+			containerSecCtx.AllowPrivilegeEscalation = b.containerSecurityContext.AllowPrivilegeEscalation
+		}
+		if b.containerSecurityContext.Capabilities != nil {
+			containerSecCtx.Capabilities = b.containerSecurityContext.Capabilities
+		}
+		if b.containerSecurityContext.RunAsUser != nil {
+			containerSecCtx.RunAsUser = b.containerSecurityContext.RunAsUser
+		}
+		if b.containerSecurityContext.RunAsGroup != nil {
+			containerSecCtx.RunAsGroup = b.containerSecurityContext.RunAsGroup
+		}
+		if b.containerSecurityContext.RunAsNonRoot != nil {
+			containerSecCtx.RunAsNonRoot = b.containerSecurityContext.RunAsNonRoot
+		}
+		if b.containerSecurityContext.ReadOnlyRootFilesystem != nil {
+			containerSecCtx.ReadOnlyRootFilesystem = b.containerSecurityContext.ReadOnlyRootFilesystem
+		}
+		if b.containerSecurityContext.Privileged != nil {
+			containerSecCtx.Privileged = b.containerSecurityContext.Privileged
+		}
+		if b.containerSecurityContext.SeccompProfile != nil {
+			containerSecCtx.SeccompProfile = b.containerSecurityContext.SeccompProfile
+		}
+		if b.containerSecurityContext.SELinuxOptions != nil {
+			containerSecCtx.SELinuxOptions = b.containerSecurityContext.SELinuxOptions
+		}
+	}
+
 	// Build init containers and append extras
 	initContainers := []corev1.Container{
 		{
@@ -347,9 +437,7 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 			Image:           image,
 			ImagePullPolicy: imagePullPolicy,
 			Resources:       *resources,
-			SecurityContext: &corev1.SecurityContext{
-				AllowPrivilegeEscalation: func() *bool { b := true; return &b }(),
-			},
+			SecurityContext: containerSecCtx,
 			Ports: []corev1.ContainerPort{
 				{Name: constants.PortNameDashboardHTTP, ContainerPort: constants.PortDashboardHTTP, Protocol: corev1.ProtocolTCP},
 			},
@@ -433,15 +521,7 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 					Affinity:                      b.affinity,
 					ImagePullSecrets:              b.imagePullSecrets,
 					TopologySpreadConstraints:     b.topologySpreadConstraints,
-					// SecurityContext at pod level - dashboard runs as non-root user
-					SecurityContext: &corev1.PodSecurityContext{
-						RunAsNonRoot: func() *bool { b := true; return &b }(),
-						RunAsUser:    func() *int64 { u := int64(1000); return &u }(),
-						FSGroup:      func() *int64 { g := int64(1000); return &g }(),
-						SeccompProfile: &corev1.SeccompProfile{
-							Type: corev1.SeccompProfileTypeRuntimeDefault,
-						},
-					},
+					SecurityContext: podSecCtx,
 					InitContainers: initContainers,
 					Containers:     containers,
 					Volumes:        volumes,
