@@ -23,6 +23,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net"
+	"net/http"
 	"sort"
 	"time"
 
@@ -2166,12 +2167,6 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 	// Compute hash to check if we've already synced this config
 	configHash := patch.ComputeSecretHash(credSecret.Data)
 
-	// Check if we've already synced this configuration
-	if cluster.Status.Security != nil && cluster.Status.Security.CredentialsHash == configHash {
-		log.V(1).Info("Security credentials already synced", "hash", configHash)
-		return nil
-	}
-
 	// Try to create OpenSearch client and update users
 	osClient, err := r.getClientFactory().GetClientForCluster(ctx, cluster)
 	if err != nil {
@@ -2192,6 +2187,28 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 		} else {
 			log.V(1).Info("Failed to create OpenSearch client for security sync (expected on first startup)", "error", err)
 		}
+		return nil
+	}
+
+	// If hashes match, still verify runtime auth to detect drift between security index
+	// and secrets (e.g. stale hashes with unchanged secret values).
+	if cluster.Status.Security != nil && cluster.Status.Security.CredentialsHash == configHash {
+		resp, err := osClient.Get(ctx, "/_cluster/health")
+		if err == nil && resp != nil {
+			defer resp.Body.Close()
+			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+				log.Info("Credentials hash matches but runtime auth failed, attempting recovery via securityadmin.sh",
+					"statusCode", resp.StatusCode)
+				if r.SecurityAdminExecutor != nil {
+					if saErr := r.SecurityAdminExecutor.ApplyInternalUsers(ctx, cluster.Name, cluster.Namespace, cluster.Spec.Version); saErr != nil {
+						log.Error(saErr, "securityadmin.sh credential recovery failed")
+					} else {
+						log.Info("Credentials pushed via securityadmin.sh after auth drift detection")
+					}
+				}
+			}
+		}
+		log.V(1).Info("Security credentials already synced", "hash", configHash)
 		return nil
 	}
 
