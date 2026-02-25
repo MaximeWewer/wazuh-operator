@@ -2185,6 +2185,10 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 	}
 	log.Info("Credentials pushed via securityadmin.sh", "username", adminUsername)
 
+	// Dashboard consumes indexer credentials via env vars (SecretKeyRef), which are only
+	// read at pod startup. Restart dashboard so it picks up the rotated credentials.
+	r.restartDashboard(ctx, cluster)
+
 	// Update status to track that we've synced this config
 	if cluster.Status.Security == nil {
 		cluster.Status.Security = &wazuhv1.SecurityStatus{}

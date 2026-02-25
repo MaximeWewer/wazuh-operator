@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -2058,6 +2059,43 @@ func (r *WazuhClusterReconciler) findClustersForDecoder(ctx context.Context, obj
 	}
 }
 
+// findClustersForSecret finds WazuhClusters impacted by changes in key indexer secrets.
+// This complements Owns(Secret), which only catches secrets with owner references.
+func (r *WazuhClusterReconciler) findClustersForSecret(ctx context.Context, obj client.Object) []ctrl.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		return []ctrl.Request{}
+	}
+	log := logf.FromContext(ctx)
+
+	clusterList := &wazuhv1.WazuhClusterList{}
+	if err := r.List(ctx, clusterList, client.InNamespace(secret.Namespace)); err != nil {
+		log.Error(err, "Failed to list WazuhClusters for secret watch")
+		return []ctrl.Request{}
+	}
+
+	requests := []ctrl.Request{}
+	for _, cluster := range clusterList.Items {
+		expectedCredentials := constants.IndexerCredentialsName(cluster.Name)
+		expectedSecurity := constants.IndexerSecurityName(cluster.Name)
+		if secret.Name != expectedCredentials && secret.Name != expectedSecurity {
+			continue
+		}
+
+		requests = append(requests, ctrl.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      cluster.Name,
+				Namespace: cluster.Namespace,
+			},
+		})
+		log.V(1).Info("Enqueueing WazuhCluster for secret change",
+			"cluster", cluster.Name,
+			"secret", secret.Name)
+	}
+
+	return requests
+}
+
 // SetupWithManager sets up the controller with the Manager
 func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Wire the event recorder into sub-reconcilers
@@ -2077,6 +2115,15 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Use GenerationChangedPredicate on the primary resource to skip reconciles
 	// triggered by status-only updates. Owned resources keep default predicates
 	// so we still react to their status changes.
+	secretWatchPredicate := predicate.NewPredicateFuncs(func(obj client.Object) bool {
+		if obj == nil {
+			return false
+		}
+		name := obj.GetName()
+		return strings.HasSuffix(name, constants.SuffixIndexerCredentials) ||
+			strings.HasSuffix(name, constants.SuffixIndexerSecurity)
+	})
+
 	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.WazuhCluster{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&appsv1.StatefulSet{}).
@@ -2084,6 +2131,12 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
+		// Watch key indexer secrets even when not owned by WazuhCluster (e.g., Helm-managed).
+		Watches(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.findClustersForSecret),
+			builder.WithPredicates(secretWatchPredicate),
+		).
 		Owns(&networkingv1.Ingress{}).
 		// Watch WazuhManager CRs - reconcile WazuhCluster when referenced manager changes
 		Watches(
