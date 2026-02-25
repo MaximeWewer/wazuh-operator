@@ -664,6 +664,11 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 		stsBuilder.WithImagePullPolicy(cluster.Spec.Indexer.Image.PullPolicy)
 	}
 
+	// Set update strategy from CRD
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.UpdateStrategy != "" {
+		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Indexer.UpdateStrategy))
+	}
+
 	sts := stsBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for indexer statefulset: %w", err)
@@ -1133,6 +1138,11 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 	// Set image pull policy if configured
 	if imagePullPolicy != "" {
 		stsBuilder.WithImagePullPolicy(imagePullPolicy)
+	}
+
+	// Set update strategy from CRD (nodePool inherits from cluster-level indexer spec)
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.UpdateStrategy != "" {
+		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Indexer.UpdateStrategy))
 	}
 
 	sts := stsBuilder.Build()
@@ -1885,6 +1895,9 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 	}
 	if indexer.Spec.Image != nil && indexer.Spec.Image.PullPolicy != "" {
 		stsBuilder.WithImagePullPolicy(indexer.Spec.Image.PullPolicy)
+	}
+	if indexer.Spec.UpdateStrategy != "" {
+		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(indexer.Spec.UpdateStrategy))
 	}
 
 	sts := stsBuilder.Build()

@@ -625,6 +625,10 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	if masterContainerSecurityContext != nil {
 		stsBuilder.WithContainerSecurityContext(masterContainerSecurityContext)
 	}
+	// Set update strategy from CRD
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.UpdateStrategy != "" {
+		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Manager.Master.UpdateStrategy))
+	}
 
 	// Mount rule ConfigMaps if RuleReconciler is configured
 	var ruleHash string
@@ -1114,6 +1118,10 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	if workerContainerSecurityContext != nil {
 		stsBuilder.WithContainerSecurityContext(workerContainerSecurityContext)
 	}
+	// Set update strategy from CRD
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.UpdateStrategy != "" {
+		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Manager.Workers.UpdateStrategy))
+	}
 
 	// Mount rule ConfigMaps if RuleReconciler is configured
 	var ruleHash string
@@ -1539,6 +1547,10 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 		legacyMasterTerminationGracePeriod = *cluster.Spec.Manager.Master.TerminationGracePeriodSeconds
 	}
 	stsBuilder.WithTerminationGracePeriodSeconds(&legacyMasterTerminationGracePeriod)
+	// Set update strategy from CRD
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.UpdateStrategy != "" {
+		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Manager.Master.UpdateStrategy))
+	}
 
 	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
 		Version:                       cluster.Spec.Version,
@@ -1848,6 +1860,10 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		legacyWorkerTerminationGracePeriod = *cluster.Spec.Manager.Workers.TerminationGracePeriodSeconds
 	}
 	stsBuilder.WithTerminationGracePeriodSeconds(&legacyWorkerTerminationGracePeriod)
+	// Set update strategy from CRD
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.UpdateStrategy != "" {
+		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Manager.Workers.UpdateStrategy))
+	}
 
 	specHash, err := patch.ComputeManagerWorkersSpecHashFull(patch.ManagerWorkersSpecInput{
 		Replicas:                      workerReplicas2,

@@ -73,6 +73,8 @@ type IndexerStatefulSetBuilder struct {
 	securityContext *corev1.PodSecurityContext
 	// Container-level security context override
 	containerSecurityContext *corev1.SecurityContext
+	// Update strategy for the StatefulSet
+	updateStrategy appsv1.StatefulSetUpdateStrategyType
 }
 
 // NewIndexerStatefulSetBuilder creates a new IndexerStatefulSetBuilder
@@ -293,6 +295,12 @@ func (b *IndexerStatefulSetBuilder) WithContainerSecurityContext(sc *corev1.Secu
 	return b
 }
 
+// WithUpdateStrategy sets the StatefulSet update strategy type
+func (b *IndexerStatefulSetBuilder) WithUpdateStrategy(strategy appsv1.StatefulSetUpdateStrategyType) *IndexerStatefulSetBuilder {
+	b.updateStrategy = strategy
+	return b
+}
+
 // Build creates the StatefulSet
 func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	labels := b.buildLabels()
@@ -468,10 +476,8 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			// Parallel allows all pods to start simultaneously, which is required for
 			// OpenSearch cluster formation - nodes need to discover each other at startup
 			PodManagementPolicy: appsv1.ParallelPodManagement,
-			// OnDelete strategy gives the operator control over pod-by-pod restarts
-			// with cluster health verification between each pod replacement
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-				Type: appsv1.OnDeleteStatefulSetStrategyType,
+				Type: b.resolveUpdateStrategy(),
 			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,
@@ -852,6 +858,14 @@ fi`, config.VMMaxMapCount()),
 	}
 
 	return initContainers
+}
+
+// resolveUpdateStrategy returns the configured strategy or defaults to OnDelete
+func (b *IndexerStatefulSetBuilder) resolveUpdateStrategy() appsv1.StatefulSetUpdateStrategyType {
+	if b.updateStrategy != "" {
+		return b.updateStrategy
+	}
+	return appsv1.OnDeleteStatefulSetStrategyType
 }
 
 // boolPtr returns a pointer to a bool

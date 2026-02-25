@@ -67,6 +67,8 @@ type NodePoolStatefulSetBuilder struct {
 	terminationGracePeriodSeconds *int64
 	// Service account name
 	serviceAccountName string
+	// Update strategy for the StatefulSet
+	updateStrategy appsv1.StatefulSetUpdateStrategyType
 }
 
 // NewNodePoolStatefulSetBuilder creates a new NodePoolStatefulSetBuilder
@@ -268,6 +270,20 @@ func (b *NodePoolStatefulSetBuilder) WithServiceAccountName(name string) *NodePo
 	return b
 }
 
+// WithUpdateStrategy sets the StatefulSet update strategy type
+func (b *NodePoolStatefulSetBuilder) WithUpdateStrategy(strategy appsv1.StatefulSetUpdateStrategyType) *NodePoolStatefulSetBuilder {
+	b.updateStrategy = strategy
+	return b
+}
+
+// resolveUpdateStrategy returns the configured strategy or defaults to OnDelete
+func (b *NodePoolStatefulSetBuilder) resolveUpdateStrategy() appsv1.StatefulSetUpdateStrategyType {
+	if b.updateStrategy != "" {
+		return b.updateStrategy
+	}
+	return appsv1.OnDeleteStatefulSetStrategyType
+}
+
 // Build creates the StatefulSet for this nodePool
 func (b *NodePoolStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	name := constants.IndexerNodePoolName(b.clusterName, b.poolName)
@@ -377,10 +393,8 @@ func (b *NodePoolStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			MinReadySeconds: 30,
 			// Parallel allows all pods to start simultaneously for cluster formation
 			PodManagementPolicy: appsv1.ParallelPodManagement,
-			// OnDelete strategy gives the operator control over pod-by-pod restarts
-			// with cluster health verification between each pod replacement
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-				Type: appsv1.OnDeleteStatefulSetStrategyType,
+				Type: b.resolveUpdateStrategy(),
 			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,

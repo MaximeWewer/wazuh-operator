@@ -110,9 +110,12 @@ type OpenSearchIndexerSpec struct {
 	// +optional
 	NetworkPolicy *NetworkPolicySpec `json:"networkPolicy,omitempty"`
 
-	// Update strategy
+	// Update strategy for the StatefulSet
+	// "OnDelete" (default) gives the operator control over pod-by-pod restarts
+	// "RollingUpdate" lets Kubernetes handle rolling updates automatically
 	// +optional
-	// +kubebuilder:default="RollingUpdate"
+	// +kubebuilder:default="OnDelete"
+	// +kubebuilder:validation:Enum=OnDelete;RollingUpdate
 	UpdateStrategy string `json:"updateStrategy,omitempty"`
 
 	// Additional volumes

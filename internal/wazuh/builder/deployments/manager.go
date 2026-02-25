@@ -75,6 +75,8 @@ type ManagerStatefulSetBuilder struct {
 	securityContext *corev1.PodSecurityContext
 	// Container-level security context override
 	containerSecurityContext *corev1.SecurityContext
+	// Update strategy for the StatefulSet
+	updateStrategy appsv1.StatefulSetUpdateStrategyType
 }
 
 // RuleConfigMapRef holds information about a rule ConfigMap to mount
@@ -341,6 +343,20 @@ func (b *ManagerStatefulSetBuilder) WithContainerSecurityContext(sc *corev1.Secu
 	return b
 }
 
+// WithUpdateStrategy sets the StatefulSet update strategy type
+func (b *ManagerStatefulSetBuilder) WithUpdateStrategy(strategy appsv1.StatefulSetUpdateStrategyType) *ManagerStatefulSetBuilder {
+	b.updateStrategy = strategy
+	return b
+}
+
+// resolveUpdateStrategy returns the configured strategy or defaults to OnDelete
+func (b *ManagerStatefulSetBuilder) resolveUpdateStrategy() appsv1.StatefulSetUpdateStrategyType {
+	if b.updateStrategy != "" {
+		return b.updateStrategy
+	}
+	return appsv1.OnDeleteStatefulSetStrategyType
+}
+
 // Build creates the StatefulSet
 func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	labels := b.buildLabels()
@@ -532,10 +548,8 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			MinReadySeconds: 30,
 			// Parallel allows all pods to start simultaneously during initial deployment
 			PodManagementPolicy: appsv1.ParallelPodManagement,
-			// OnDelete strategy gives the operator control over pod-by-pod restarts
-			// with cluster health verification between each pod replacement
 			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-				Type: appsv1.OnDeleteStatefulSetStrategyType,
+				Type: b.resolveUpdateStrategy(),
 			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,

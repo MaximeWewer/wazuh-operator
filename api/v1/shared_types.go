@@ -152,6 +152,14 @@ type WazuhMasterSpec struct {
 	// Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
 	// +optional
 	ServiceAccount *ServiceAccountConfig `json:"serviceAccount,omitempty"`
+
+	// Update strategy for the StatefulSet
+	// "OnDelete" (default) gives the operator control over pod-by-pod restarts
+	// "RollingUpdate" lets Kubernetes handle rolling updates automatically
+	// +optional
+	// +kubebuilder:default="OnDelete"
+	// +kubebuilder:validation:Enum=OnDelete;RollingUpdate
+	UpdateStrategy string `json:"updateStrategy,omitempty"`
 }
 
 // WazuhWorkerSpec defines the worker nodes configuration
@@ -282,6 +290,14 @@ type WazuhWorkerSpec struct {
 	// Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
 	// +optional
 	ServiceAccount *ServiceAccountConfig `json:"serviceAccount,omitempty"`
+
+	// Update strategy for the StatefulSet
+	// "OnDelete" (default) gives the operator control over pod-by-pod restarts
+	// "RollingUpdate" lets Kubernetes handle rolling updates automatically
+	// +optional
+	// +kubebuilder:default="OnDelete"
+	// +kubebuilder:validation:Enum=OnDelete;RollingUpdate
+	UpdateStrategy string `json:"updateStrategy,omitempty"`
 }
 
 // GetReplicas returns the number of worker replicas, defaulting to DefaultManagerWorkerReplicas if not set
@@ -363,10 +379,6 @@ type ServiceSpec struct {
 	// Custom service ports configuration
 	// +optional
 	Ports []ServicePortSpec `json:"ports,omitempty"`
-
-	// NodePort for NodePort services
-	// +optional
-	NodePort int32 `json:"nodePort,omitempty"`
 }
 
 // ServicePortSpec defines a single service port configuration
