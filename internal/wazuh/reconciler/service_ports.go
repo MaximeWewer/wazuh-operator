@@ -77,6 +77,9 @@ func applyWorkerServiceSpec(builder *services.WorkerServiceBuilder, svcSpec *waz
 	if len(svcSpec.Annotations) > 0 {
 		builder.WithAnnotations(svcSpec.Annotations)
 	}
+	if svcSpec.LoadBalancerIP != "" {
+		builder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
+	}
 	if len(svcSpec.Ports) > 0 {
 		builder.WithPorts(convertServicePorts(svcSpec.Ports))
 	}

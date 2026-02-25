@@ -28,15 +28,16 @@ import (
 
 // WorkerServiceBuilder builds Services for Wazuh Manager Worker nodes
 type WorkerServiceBuilder struct {
-	name        string
-	namespace   string
-	clusterName string
-	version     string
-	serviceType corev1.ServiceType
-	headless    bool
-	labels      map[string]string
-	annotations map[string]string
-	ports       []corev1.ServicePort
+	name           string
+	namespace      string
+	clusterName    string
+	version        string
+	serviceType    corev1.ServiceType
+	headless       bool
+	labels         map[string]string
+	annotations    map[string]string
+	ports          []corev1.ServicePort
+	loadBalancerIP string
 }
 
 // NewWorkerServiceBuilder creates a new WorkerServiceBuilder
@@ -94,6 +95,12 @@ func (b *WorkerServiceBuilder) WithPorts(ports []corev1.ServicePort) *WorkerServ
 	return b
 }
 
+// WithLoadBalancerIP sets the load balancer IP (deprecated in K8s 1.24+)
+func (b *WorkerServiceBuilder) WithLoadBalancerIP(ip string) *WorkerServiceBuilder {
+	b.loadBalancerIP = ip
+	return b
+}
+
 // Build creates the Service
 func (b *WorkerServiceBuilder) Build() *corev1.Service {
 	labels := b.buildLabels()
@@ -140,6 +147,11 @@ func (b *WorkerServiceBuilder) Build() *corev1.Service {
 	// Handle headless service
 	if b.headless {
 		svc.Spec.ClusterIP = corev1.ClusterIPNone
+	}
+
+	// Deprecated: LoadBalancerIP is deprecated in K8s 1.24+, use service annotations instead
+	if b.loadBalancerIP != "" {
+		svc.Spec.LoadBalancerIP = b.loadBalancerIP //nolint:staticcheck // deprecated but still supported
 	}
 
 	return svc

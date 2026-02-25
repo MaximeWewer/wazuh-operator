@@ -7265,10 +7265,6 @@ spec:
                           Deprecated: LoadBalancerIP is deprecated in Kubernetes 1.24+.
                           Use service annotations for your cloud provider instead.
                         type: string
-                      nodePort:
-                        description: NodePort for NodePort services
-                        format: int32
-                        type: integer
                       ports:
                         description: Custom service ports configuration
                         items:
@@ -7574,6 +7570,16 @@ spec:
                       type: object
                     type: array
                     x-kubernetes-preserve-unknown-fields: true
+                  updateStrategy:
+                    default: OnDelete
+                    description: |-
+                      Update strategy for the StatefulSet
+                      "OnDelete" (default) gives the operator control over pod-by-pod restarts
+                      "RollingUpdate" lets Kubernetes handle rolling updates automatically
+                    enum:
+                    - OnDelete
+                    - RollingUpdate
+                    type: string
                 type: object
               storageClassName:
                 description: Storage class to use for PVCs
@@ -14546,10 +14552,6 @@ spec:
                           Deprecated: LoadBalancerIP is deprecated in Kubernetes 1.24+.
                           Use service annotations for your cloud provider instead.
                         type: string
-                      nodePort:
-                        description: NodePort for NodePort services
-                        format: int32
-                        type: integer
                       ports:
                         description: Custom service ports configuration
                         items:
@@ -14855,6 +14857,16 @@ spec:
                       type: object
                     type: array
                     x-kubernetes-preserve-unknown-fields: true
+                  updateStrategy:
+                    default: OnDelete
+                    description: |-
+                      Update strategy for the StatefulSet
+                      "OnDelete" (default) gives the operator control over pod-by-pod restarts
+                      "RollingUpdate" lets Kubernetes handle rolling updates automatically
+                    enum:
+                    - OnDelete
+                    - RollingUpdate
+                    type: string
                 type: object
             required:
             - master

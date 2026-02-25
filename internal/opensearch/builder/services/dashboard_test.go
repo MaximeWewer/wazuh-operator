@@ -67,7 +67,7 @@ func TestDashboardServiceBuilder_WithPorts(t *testing.T) {
 	}
 }
 
-func TestDashboardServiceBuilder_WithPortsOverridesNodePort(t *testing.T) {
+func TestDashboardServiceBuilder_WithPortsPerPortNodePort(t *testing.T) {
 	customPorts := []corev1.ServicePort{
 		{
 			Name:       "custom-http",
@@ -78,17 +78,15 @@ func TestDashboardServiceBuilder_WithPortsOverridesNodePort(t *testing.T) {
 		},
 	}
 
-	// When custom ports are set, nodePort on the builder should be ignored
+	// Per-port nodePort is set via custom ports
 	service := NewDashboardServiceBuilder("test-cluster", "default").
 		WithServiceType(corev1.ServiceTypeNodePort).
-		WithNodePort(32000).
 		WithPorts(customPorts).
 		Build()
 
 	if len(service.Spec.Ports) != 1 {
 		t.Fatalf("expected 1 port, got %d", len(service.Spec.Ports))
 	}
-	// Custom ports take precedence, so NodePort should come from custom ports
 	if service.Spec.Ports[0].NodePort != 31000 {
 		t.Fatalf("expected nodePort 31000 from custom ports, got %d", service.Spec.Ports[0].NodePort)
 	}

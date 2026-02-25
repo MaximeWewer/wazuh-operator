@@ -7201,10 +7201,6 @@ spec:
                       Deprecated: LoadBalancerIP is deprecated in Kubernetes 1.24+.
                       Use service annotations for your cloud provider instead.
                     type: string
-                  nodePort:
-                    description: NodePort for NodePort services
-                    format: int32
-                    type: integer
                   ports:
                     description: Custom service ports configuration
                     items:

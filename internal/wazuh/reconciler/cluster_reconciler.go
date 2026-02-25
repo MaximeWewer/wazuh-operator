@@ -24,6 +24,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -53,6 +54,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/cronjobs"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/deployments"
+	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/hpa"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/secrets"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/config"
@@ -333,6 +335,11 @@ func (r *ClusterReconciler) ReconcileManagerNonBlocking(ctx context.Context, clu
 	}
 	if workerRollout != nil {
 		pendingRollouts = append(pendingRollouts, *workerRollout)
+	}
+
+	// Reconcile Worker HPA
+	if err := r.reconcileWorkerHPA(ctx, cluster); err != nil {
+		return ManagerReconcileResult{Error: fmt.Errorf("failed to reconcile worker HPA: %w", err)}
 	}
 
 	// Reconcile Manager PDB
@@ -1331,6 +1338,70 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	}
 
 	return nil, nil
+}
+
+// reconcileWorkerHPA reconciles the HorizontalPodAutoscaler for worker StatefulSet
+func (r *ClusterReconciler) reconcileWorkerHPA(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	hpaName := cluster.Name + "-manager-worker"
+
+	// Check if HPA should be enabled
+	hpaEnabled := cluster.Spec.Manager != nil &&
+		cluster.Spec.Manager.Workers.HPA != nil &&
+		cluster.Spec.Manager.Workers.HPA.Enabled
+
+	if !hpaEnabled {
+		// If HPA should not exist, delete it if it does
+		existing := &autoscalingv2.HorizontalPodAutoscaler{}
+		err := r.Get(ctx, types.NamespacedName{Name: hpaName, Namespace: cluster.Namespace}, existing)
+		if err == nil {
+			log.Info("Deleting Worker HPA (no longer needed)", "name", hpaName)
+			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+				return fmt.Errorf("failed to delete worker HPA: %w", err)
+			}
+		} else if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get worker HPA: %w", err)
+		}
+		return nil
+	}
+
+	// Build the HPA
+	builder := hpa.NewWorkerHPABuilder(cluster.Name, cluster.Namespace).
+		WithSpec(cluster.Spec.Manager.Workers.HPA)
+
+	workerHPA := builder.Build()
+	if workerHPA == nil {
+		return nil
+	}
+
+	if err := controllerutil.SetControllerReference(cluster, workerHPA, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for worker HPA: %w", err)
+	}
+
+	// Check if HPA exists
+	existing := &autoscalingv2.HorizontalPodAutoscaler{}
+	err := r.Get(ctx, types.NamespacedName{Name: hpaName, Namespace: cluster.Namespace}, existing)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating Worker HPA", "name", hpaName,
+			"minReplicas", *workerHPA.Spec.MinReplicas,
+			"maxReplicas", workerHPA.Spec.MaxReplicas)
+		if err := r.Create(ctx, workerHPA); err != nil {
+			return fmt.Errorf("failed to create worker HPA: %w", err)
+		}
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("failed to get worker HPA: %w", err)
+	}
+
+	// Update HPA if needed
+	workerHPA.SetResourceVersion(existing.GetResourceVersion())
+	log.V(1).Info("Updating Worker HPA", "name", hpaName)
+	if err := r.Update(ctx, workerHPA); err != nil {
+		return fmt.Errorf("failed to update worker HPA: %w", err)
+	}
+
+	return nil
 }
 
 // resolveIndexerCredentials resolves indexer credentials from secret

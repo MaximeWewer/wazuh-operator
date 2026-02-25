@@ -384,9 +384,6 @@ func (r *DashboardReconciler) reconcileService(ctx context.Context, cluster *waz
 		if svcSpec.LoadBalancerIP != "" {
 			serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
 		}
-		if svcSpec.NodePort > 0 {
-			serviceBuilder.WithNodePort(svcSpec.NodePort)
-		}
 		if len(svcSpec.Ports) > 0 {
 			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
 		}
@@ -1315,9 +1312,6 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 		}
 		if svcSpec.LoadBalancerIP != "" {
 			serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
-		}
-		if svcSpec.NodePort > 0 {
-			serviceBuilder.WithNodePort(svcSpec.NodePort)
 		}
 		if len(svcSpec.Ports) > 0 {
 			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))

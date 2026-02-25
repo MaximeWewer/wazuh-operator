@@ -35,7 +35,6 @@ type DashboardServiceBuilder struct {
 	labels         map[string]string
 	annotations    map[string]string
 	loadBalancerIP string
-	nodePort       int32
 	ports          []corev1.ServicePort
 }
 
@@ -86,12 +85,6 @@ func (b *DashboardServiceBuilder) WithLoadBalancerIP(ip string) *DashboardServic
 	return b
 }
 
-// WithNodePort sets the node port
-func (b *DashboardServiceBuilder) WithNodePort(nodePort int32) *DashboardServiceBuilder {
-	b.nodePort = nodePort
-	return b
-}
-
 // WithPorts sets custom service ports
 func (b *DashboardServiceBuilder) WithPorts(ports []corev1.ServicePort) *DashboardServiceBuilder {
 	b.ports = ports
@@ -105,19 +98,14 @@ func (b *DashboardServiceBuilder) Build() *corev1.Service {
 
 	ports := b.ports
 	if len(ports) == 0 {
-		port := corev1.ServicePort{
-			Name:       constants.PortNameDashboardHTTP,
-			Port:       constants.PortDashboardHTTP,
-			TargetPort: intstr.FromInt(int(constants.PortDashboardHTTP)),
-			Protocol:   corev1.ProtocolTCP,
+		ports = []corev1.ServicePort{
+			{
+				Name:       constants.PortNameDashboardHTTP,
+				Port:       constants.PortDashboardHTTP,
+				TargetPort: intstr.FromInt(int(constants.PortDashboardHTTP)),
+				Protocol:   corev1.ProtocolTCP,
+			},
 		}
-
-		// Set node port if specified and service type is NodePort or LoadBalancer
-		if b.nodePort > 0 && (b.serviceType == corev1.ServiceTypeNodePort || b.serviceType == corev1.ServiceTypeLoadBalancer) {
-			port.NodePort = b.nodePort
-		}
-
-		ports = []corev1.ServicePort{port}
 	}
 
 	svc := &corev1.Service{
