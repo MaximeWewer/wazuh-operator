@@ -611,6 +611,20 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	if managerImagePullPolicy != "" {
 		stsBuilder.WithImagePullPolicy(managerImagePullPolicy)
 	}
+	// Set image override from CRD
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Image != nil {
+		managerImage := cluster.Spec.Manager.Image.ResolveImage(constants.DefaultWazuhManagerImage, version)
+		if managerImage != "" {
+			stsBuilder.WithImage(managerImage)
+		}
+	}
+	// Set security context overrides
+	if masterSecurityContext != nil {
+		stsBuilder.WithSecurityContext(masterSecurityContext)
+	}
+	if masterContainerSecurityContext != nil {
+		stsBuilder.WithContainerSecurityContext(masterContainerSecurityContext)
+	}
 
 	// Mount rule ConfigMaps if RuleReconciler is configured
 	var ruleHash string
@@ -833,11 +847,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		tolerations               []corev1.Toleration
 		affinity                  *corev1.Affinity
 		topologySpreadConstraints []corev1.TopologySpreadConstraint
-		extraVolumes              []corev1.Volume
-		extraVolumeMounts         []corev1.VolumeMount
 		extraConfig               string
 		annotations               map[string]string
-		podAnnotations            map[string]string
 	)
 	workerImagePullSecrets := cluster.Spec.ImagePullSecrets
 
@@ -853,11 +864,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		tolerations = cluster.Spec.Manager.Workers.Tolerations
 		affinity = cluster.Spec.Manager.Workers.Affinity
 		topologySpreadConstraints = cluster.Spec.Manager.Workers.TopologySpreadConstraints
-		extraVolumes = cluster.Spec.Manager.Workers.ExtraVolumes
-		extraVolumeMounts = cluster.Spec.Manager.Workers.ExtraVolumeMounts
 		extraConfig = cluster.Spec.Manager.Workers.ExtraConfig
 		annotations = cluster.Spec.Manager.Workers.Annotations
-		podAnnotations = cluster.Spec.Manager.Workers.PodAnnotations
 
 		// Apply cluster-level anti-affinity if enabled
 		if affinityutil.ShouldApplyAntiAffinity(cluster) {
@@ -1042,11 +1050,11 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	if len(workerImagePullSecrets) > 0 {
 		stsBuilder.WithImagePullSecrets(workerImagePullSecrets)
 	}
-	if len(extraVolumes) > 0 {
-		stsBuilder.WithVolumes(extraVolumes)
+	if len(workerExtraVolumes) > 0 {
+		stsBuilder.WithVolumes(workerExtraVolumes)
 	}
-	if len(extraVolumeMounts) > 0 {
-		stsBuilder.WithVolumeMounts(extraVolumeMounts)
+	if len(workerExtraVolumeMounts) > 0 {
+		stsBuilder.WithVolumeMounts(workerExtraVolumeMounts)
 	}
 	if len(workerExtraInitContainers) > 0 {
 		stsBuilder.WithExtraInitContainers(workerExtraInitContainers)
@@ -1057,8 +1065,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	if len(annotations) > 0 {
 		stsBuilder.WithAnnotations(annotations)
 	}
-	if len(podAnnotations) > 0 {
-		stsBuilder.WithPodAnnotations(podAnnotations)
+	if len(workerPodAnnotations) > 0 {
+		stsBuilder.WithPodAnnotations(workerPodAnnotations)
 	}
 	if certHash != "" {
 		stsBuilder.WithCertHash(certHash)
@@ -1084,6 +1092,27 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	// Set image pull policy if configured
 	if workerImagePullPolicy != "" {
 		stsBuilder.WithImagePullPolicy(workerImagePullPolicy)
+	}
+	// Set image override from CRD
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Image != nil {
+		workerImage := cluster.Spec.Manager.Image.ResolveImage(constants.DefaultWazuhManagerImage, version)
+		if workerImage != "" {
+			stsBuilder.WithImage(workerImage)
+		}
+	}
+	// Forward worker env/envFrom
+	if len(workerEnv) > 0 {
+		stsBuilder.WithEnv(workerEnv)
+	}
+	if len(workerEnvFrom) > 0 {
+		stsBuilder.WithEnvFrom(workerEnvFrom)
+	}
+	// Set security context overrides
+	if workerSecurityContext != nil {
+		stsBuilder.WithSecurityContext(workerSecurityContext)
+	}
+	if workerContainerSecurityContext != nil {
+		stsBuilder.WithContainerSecurityContext(workerContainerSecurityContext)
 	}
 
 	// Mount rule ConfigMaps if RuleReconciler is configured

@@ -66,6 +66,10 @@ type WorkerStatefulSetBuilder struct {
 	serviceAccountName string
 	// Image pull policy
 	imagePullPolicy corev1.PullPolicy
+	// Pod-level security context override
+	securityContext *corev1.PodSecurityContext
+	// Container-level security context override
+	containerSecurityContext *corev1.SecurityContext
 }
 
 // NewWorkerStatefulSetBuilder creates a new WorkerStatefulSetBuilder
@@ -306,6 +310,20 @@ func (b *WorkerStatefulSetBuilder) WithServiceAccountName(name string) *WorkerSt
 	return b
 }
 
+// WithSecurityContext sets the pod-level security context override
+// Non-nil fields in sc will override the corresponding defaults.
+func (b *WorkerStatefulSetBuilder) WithSecurityContext(sc *corev1.PodSecurityContext) *WorkerStatefulSetBuilder {
+	b.securityContext = sc
+	return b
+}
+
+// WithContainerSecurityContext sets the container-level security context override
+// Non-nil fields in sc will override the corresponding defaults.
+func (b *WorkerStatefulSetBuilder) WithContainerSecurityContext(sc *corev1.SecurityContext) *WorkerStatefulSetBuilder {
+	b.containerSecurityContext = sc
+	return b
+}
+
 // Build creates the StatefulSet
 func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	labels := b.buildLabels()
@@ -347,8 +365,79 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	// Build env vars
 	env := b.buildEnvVars()
 
-	// Wazuh manager requires root (uid 0) to run s6, filebeat, and other services
+	// Build pod-level security context with defaults, then merge user overrides
+	// Defaults: FSGroup=999 (wazuh group), SeccompProfile=Unconfined (needed for Filebeat)
+	podSecCtx := &corev1.PodSecurityContext{
+		FSGroup: func() *int64 { v := int64(999); return &v }(),
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeUnconfined,
+		},
+	}
+	if b.securityContext != nil {
+		if b.securityContext.FSGroup != nil {
+			podSecCtx.FSGroup = b.securityContext.FSGroup
+		}
+		if b.securityContext.RunAsUser != nil {
+			podSecCtx.RunAsUser = b.securityContext.RunAsUser
+		}
+		if b.securityContext.RunAsGroup != nil {
+			podSecCtx.RunAsGroup = b.securityContext.RunAsGroup
+		}
+		if b.securityContext.RunAsNonRoot != nil {
+			podSecCtx.RunAsNonRoot = b.securityContext.RunAsNonRoot
+		}
+		if b.securityContext.SeccompProfile != nil {
+			podSecCtx.SeccompProfile = b.securityContext.SeccompProfile
+		}
+		if b.securityContext.SELinuxOptions != nil {
+			podSecCtx.SELinuxOptions = b.securityContext.SELinuxOptions
+		}
+		if b.securityContext.Sysctls != nil {
+			podSecCtx.Sysctls = b.securityContext.Sysctls
+		}
+		if b.securityContext.SupplementalGroups != nil {
+			podSecCtx.SupplementalGroups = b.securityContext.SupplementalGroups
+		}
+	}
+
+	// Build container-level security context with defaults, then merge user overrides
+	// Defaults: RunAsUser=0 (root, required by s6), SYS_CHROOT capability
 	runAsRoot := int64(0)
+	containerSecCtx := &corev1.SecurityContext{
+		RunAsUser: &runAsRoot,
+		Capabilities: &corev1.Capabilities{
+			Add: []corev1.Capability{"SYS_CHROOT"},
+		},
+	}
+	if b.containerSecurityContext != nil {
+		if b.containerSecurityContext.AllowPrivilegeEscalation != nil {
+			containerSecCtx.AllowPrivilegeEscalation = b.containerSecurityContext.AllowPrivilegeEscalation
+		}
+		if b.containerSecurityContext.Capabilities != nil {
+			containerSecCtx.Capabilities = b.containerSecurityContext.Capabilities
+		}
+		if b.containerSecurityContext.RunAsUser != nil {
+			containerSecCtx.RunAsUser = b.containerSecurityContext.RunAsUser
+		}
+		if b.containerSecurityContext.RunAsGroup != nil {
+			containerSecCtx.RunAsGroup = b.containerSecurityContext.RunAsGroup
+		}
+		if b.containerSecurityContext.RunAsNonRoot != nil {
+			containerSecCtx.RunAsNonRoot = b.containerSecurityContext.RunAsNonRoot
+		}
+		if b.containerSecurityContext.ReadOnlyRootFilesystem != nil {
+			containerSecCtx.ReadOnlyRootFilesystem = b.containerSecurityContext.ReadOnlyRootFilesystem
+		}
+		if b.containerSecurityContext.Privileged != nil {
+			containerSecCtx.Privileged = b.containerSecurityContext.Privileged
+		}
+		if b.containerSecurityContext.SeccompProfile != nil {
+			containerSecCtx.SeccompProfile = b.containerSecurityContext.SeccompProfile
+		}
+		if b.containerSecurityContext.SELinuxOptions != nil {
+			containerSecCtx.SELinuxOptions = b.containerSecurityContext.SELinuxOptions
+		}
+	}
 
 	// Build init containers
 	initContainers := []corev1.Container{
@@ -365,14 +454,7 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			Image:           image,
 			ImagePullPolicy: imagePullPolicy,
 			Resources:       *resources,
-			// SecurityContext: Wazuh manager image runs multiple services via s6 supervisor
-			// (wazuh-manager, filebeat, etc.) which require root privileges and SYS_CHROOT capability
-			SecurityContext: &corev1.SecurityContext{
-				RunAsUser: &runAsRoot,
-				Capabilities: &corev1.Capabilities{
-					Add: []corev1.Capability{"SYS_CHROOT"},
-				},
-			},
+			SecurityContext: containerSecCtx,
 			Ports: []corev1.ContainerPort{
 				{Name: "registration", ContainerPort: constants.PortManagerAgentAuth, Protocol: corev1.ProtocolTCP},
 				{Name: "cluster", ContainerPort: constants.PortManagerCluster, Protocol: corev1.ProtocolTCP},
@@ -446,15 +528,7 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 					Affinity:                      b.affinity,
 					ImagePullSecrets:              b.imagePullSecrets,
 					TopologySpreadConstraints:     b.topologySpreadConstraints,
-					// SecurityContext at pod level - fsGroup 999 is the wazuh group in the official image
-					// SeccompProfile Unconfined is needed on some environments (WSL2, certain kernels)
-					// to allow Filebeat's Go runtime to create threads (pthread_create)
-					SecurityContext: &corev1.PodSecurityContext{
-						FSGroup: func() *int64 { v := int64(999); return &v }(),
-						SeccompProfile: &corev1.SeccompProfile{
-							Type: corev1.SeccompProfileTypeUnconfined,
-						},
-					},
+					SecurityContext:               podSecCtx,
 					InitContainers: initContainers,
 					Containers:     containers,
 					Volumes:        volumes,
