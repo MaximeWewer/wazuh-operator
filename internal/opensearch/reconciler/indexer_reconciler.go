@@ -2024,11 +2024,11 @@ _meta:
     - "admin"
   description: "Default admin user"
 
-	kibanaserver:
-	  hash: "%s"
-	  reserved: true
-	  description: "Kibana server user"
-	`, adminUsername, passwordHash, passwordHash))
+kibanaserver:
+  hash: "%s"
+  reserved: true
+  description: "Kibana server user"
+`, adminUsername, passwordHash, passwordHash))
 }
 
 // findReusableBcryptHash returns a hash from internal_users.yml that matches the provided password.
