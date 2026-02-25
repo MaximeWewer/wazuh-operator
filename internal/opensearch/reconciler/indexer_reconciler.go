@@ -937,8 +937,11 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		securityContext = cluster.Spec.Indexer.SecurityContext
 		containerSecurityContext = cluster.Spec.Indexer.ContainerSecurityContext
 		terminationGracePeriodSeconds = cluster.Spec.Indexer.TerminationGracePeriodSeconds
-		if cluster.Spec.Indexer.Image != nil && cluster.Spec.Indexer.Image.PullPolicy != "" {
-			imagePullPolicy = cluster.Spec.Indexer.Image.PullPolicy
+		if cluster.Spec.Indexer.Image != nil {
+			if cluster.Spec.Indexer.Image.PullPolicy != "" {
+				imagePullPolicy = cluster.Spec.Indexer.Image.PullPolicy
+			}
+			image = cluster.Spec.Indexer.Image.ResolveImage(constants.DefaultWazuhIndexerImage, version)
 		}
 
 		// Apply cluster-level anti-affinity if enabled
@@ -1072,6 +1075,17 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		if len(podAnnotations) > 0 {
 			stsBuilder.WithPodAnnotations(podAnnotations)
 		}
+		if securityContext != nil {
+			stsBuilder.WithSecurityContext(securityContext)
+		}
+		if containerSecurityContext != nil {
+			stsBuilder.WithContainerSecurityContext(containerSecurityContext)
+		}
+	}
+
+	// Set custom image if configured
+	if image != "" {
+		stsBuilder.WithImage(image)
 	}
 
 	// Wire extra volumes, init containers, and sidecar containers

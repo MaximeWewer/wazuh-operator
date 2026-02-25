@@ -326,6 +326,24 @@ type ImageSpec struct {
 	PullPolicy corev1.PullPolicy `json:"pullPolicy,omitempty"`
 }
 
+// ResolveImage returns the full container image string (repository:tag).
+// If Repository is set, it takes precedence over defaultRepo.
+// If Tag is set, it takes precedence over defaultTag.
+func (s *ImageSpec) ResolveImage(defaultRepo, defaultTag string) string {
+	repo := defaultRepo
+	tag := defaultTag
+	if s != nil && s.Repository != "" {
+		repo = s.Repository
+	}
+	if s != nil && s.Tag != "" {
+		tag = s.Tag
+	}
+	if tag != "" {
+		return repo + ":" + tag
+	}
+	return repo
+}
+
 // ServiceSpec defines service configuration
 type ServiceSpec struct {
 	// Service type

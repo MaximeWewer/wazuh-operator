@@ -69,6 +69,10 @@ type IndexerStatefulSetBuilder struct {
 	serviceAccountName string
 	// Image pull policy
 	imagePullPolicy corev1.PullPolicy
+	// Pod-level security context override
+	securityContext *corev1.PodSecurityContext
+	// Container-level security context override
+	containerSecurityContext *corev1.SecurityContext
 }
 
 // NewIndexerStatefulSetBuilder creates a new IndexerStatefulSetBuilder
@@ -275,6 +279,20 @@ func (b *IndexerStatefulSetBuilder) WithServiceAccountName(name string) *Indexer
 	return b
 }
 
+// WithSecurityContext sets the pod-level security context override
+// The provided context is merged with the builder defaults (FSGroup, RunAsUser, SeccompProfile).
+func (b *IndexerStatefulSetBuilder) WithSecurityContext(sc *corev1.PodSecurityContext) *IndexerStatefulSetBuilder {
+	b.securityContext = sc
+	return b
+}
+
+// WithContainerSecurityContext sets the container-level security context override
+// The provided context is merged with the builder defaults (AllowPrivilegeEscalation=false, Drop ALL).
+func (b *IndexerStatefulSetBuilder) WithContainerSecurityContext(sc *corev1.SecurityContext) *IndexerStatefulSetBuilder {
+	b.containerSecurityContext = sc
+	return b
+}
+
 // Build creates the StatefulSet
 func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	labels := b.buildLabels()
@@ -316,9 +334,77 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	// Build env vars
 	env := b.buildEnvVars()
 
-	// Security context for OpenSearch
-	fsGroup := int64(1000)
-	runAsUser := int64(1000)
+	// Security context for OpenSearch (defaults, can be overridden by user)
+	podSecCtx := &corev1.PodSecurityContext{
+		FSGroup:   int64Ptr(1000),
+		RunAsUser: int64Ptr(1000),
+		SeccompProfile: &corev1.SeccompProfile{
+			Type: corev1.SeccompProfileTypeRuntimeDefault,
+		},
+	}
+	if b.securityContext != nil {
+		if b.securityContext.FSGroup != nil {
+			podSecCtx.FSGroup = b.securityContext.FSGroup
+		}
+		if b.securityContext.RunAsUser != nil {
+			podSecCtx.RunAsUser = b.securityContext.RunAsUser
+		}
+		if b.securityContext.RunAsGroup != nil {
+			podSecCtx.RunAsGroup = b.securityContext.RunAsGroup
+		}
+		if b.securityContext.RunAsNonRoot != nil {
+			podSecCtx.RunAsNonRoot = b.securityContext.RunAsNonRoot
+		}
+		if b.securityContext.SeccompProfile != nil {
+			podSecCtx.SeccompProfile = b.securityContext.SeccompProfile
+		}
+		if b.securityContext.SELinuxOptions != nil {
+			podSecCtx.SELinuxOptions = b.securityContext.SELinuxOptions
+		}
+		if len(b.securityContext.Sysctls) > 0 {
+			podSecCtx.Sysctls = b.securityContext.Sysctls
+		}
+		if b.securityContext.SupplementalGroups != nil {
+			podSecCtx.SupplementalGroups = b.securityContext.SupplementalGroups
+		}
+	}
+
+	// Container security context (defaults, can be overridden by user)
+	containerSecCtx := &corev1.SecurityContext{
+		AllowPrivilegeEscalation: boolPtr(false),
+		Capabilities: &corev1.Capabilities{
+			Drop: []corev1.Capability{"ALL"},
+		},
+	}
+	if b.containerSecurityContext != nil {
+		if b.containerSecurityContext.AllowPrivilegeEscalation != nil {
+			containerSecCtx.AllowPrivilegeEscalation = b.containerSecurityContext.AllowPrivilegeEscalation
+		}
+		if b.containerSecurityContext.Capabilities != nil {
+			containerSecCtx.Capabilities = b.containerSecurityContext.Capabilities
+		}
+		if b.containerSecurityContext.RunAsUser != nil {
+			containerSecCtx.RunAsUser = b.containerSecurityContext.RunAsUser
+		}
+		if b.containerSecurityContext.RunAsGroup != nil {
+			containerSecCtx.RunAsGroup = b.containerSecurityContext.RunAsGroup
+		}
+		if b.containerSecurityContext.RunAsNonRoot != nil {
+			containerSecCtx.RunAsNonRoot = b.containerSecurityContext.RunAsNonRoot
+		}
+		if b.containerSecurityContext.ReadOnlyRootFilesystem != nil {
+			containerSecCtx.ReadOnlyRootFilesystem = b.containerSecurityContext.ReadOnlyRootFilesystem
+		}
+		if b.containerSecurityContext.Privileged != nil {
+			containerSecCtx.Privileged = b.containerSecurityContext.Privileged
+		}
+		if b.containerSecurityContext.SeccompProfile != nil {
+			containerSecCtx.SeccompProfile = b.containerSecurityContext.SeccompProfile
+		}
+		if b.containerSecurityContext.SELinuxOptions != nil {
+			containerSecCtx.SELinuxOptions = b.containerSecurityContext.SELinuxOptions
+		}
+	}
 
 	// Build init containers and append extras
 	initContainers := b.buildInitContainers(image)
@@ -331,12 +417,7 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			Image:           image,
 			ImagePullPolicy: imagePullPolicy,
 			Resources:       *resources,
-			SecurityContext: &corev1.SecurityContext{
-				AllowPrivilegeEscalation: boolPtr(false),
-				Capabilities: &corev1.Capabilities{
-					Drop: []corev1.Capability{"ALL"},
-				},
-			},
+			SecurityContext: containerSecCtx,
 			Ports: []corev1.ContainerPort{
 				{Name: constants.PortNameIndexerREST, ContainerPort: constants.PortIndexerREST, Protocol: corev1.ProtocolTCP},
 				{Name: constants.PortNameIndexerTransport, ContainerPort: constants.PortIndexerTransport, Protocol: corev1.ProtocolTCP},
@@ -408,16 +489,7 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 					Affinity:                      b.affinity,
 					ImagePullSecrets:              b.imagePullSecrets,
 					TopologySpreadConstraints:     b.topologySpreadConstraints,
-					SecurityContext: &corev1.PodSecurityContext{
-						FSGroup:   &fsGroup,
-						RunAsUser: &runAsUser,
-						// Note: RunAsNonRoot is not set at pod level because the
-						// volume-mount-hack init container needs to run as root.
-						// The main container has its own security context with runAsNonRoot.
-						SeccompProfile: &corev1.SeccompProfile{
-							Type: corev1.SeccompProfileTypeRuntimeDefault,
-						},
-					},
+					SecurityContext: podSecCtx,
 					InitContainers: initContainers,
 					Containers:     containers,
 					Volumes:        volumes,
