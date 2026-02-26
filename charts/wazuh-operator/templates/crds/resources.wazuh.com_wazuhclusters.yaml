@@ -22178,11 +22178,11 @@ spec:
                     type: array
                     x-kubernetes-preserve-unknown-fields: true
                   updateStrategy:
-                    default: OnDelete
+                    default: RollingUpdate
                     description: |-
                       Update strategy for the StatefulSet
-                      "OnDelete" (default) gives the operator control over pod-by-pod restarts
-                      "RollingUpdate" lets Kubernetes handle rolling updates automatically
+                      "RollingUpdate" (default) lets Kubernetes handle rolling updates automatically
+                      "OnDelete" requires manual pod deletion to trigger updates
                     enum:
                     - OnDelete
                     - RollingUpdate
@@ -29833,11 +29833,11 @@ spec:
                         type: array
                         x-kubernetes-preserve-unknown-fields: true
                       updateStrategy:
-                        default: OnDelete
+                        default: RollingUpdate
                         description: |-
                           Update strategy for the StatefulSet
-                          "OnDelete" (default) gives the operator control over pod-by-pod restarts
-                          "RollingUpdate" lets Kubernetes handle rolling updates automatically
+                          "RollingUpdate" (default) lets Kubernetes handle rolling updates automatically
+                          "OnDelete" requires manual pod deletion to trigger updates
                         enum:
                         - OnDelete
                         - RollingUpdate
@@ -37392,11 +37392,11 @@ spec:
                         type: array
                         x-kubernetes-preserve-unknown-fields: true
                       updateStrategy:
-                        default: OnDelete
+                        default: RollingUpdate
                         description: |-
                           Update strategy for the StatefulSet
-                          "OnDelete" (default) gives the operator control over pod-by-pod restarts
-                          "RollingUpdate" lets Kubernetes handle rolling updates automatically
+                          "RollingUpdate" (default) lets Kubernetes handle rolling updates automatically
+                          "OnDelete" requires manual pod deletion to trigger updates
                         enum:
                         - OnDelete
                         - RollingUpdate

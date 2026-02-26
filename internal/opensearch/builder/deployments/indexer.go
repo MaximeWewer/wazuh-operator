@@ -886,12 +886,12 @@ fi`, config.VMMaxMapCount()),
 	return initContainers
 }
 
-// resolveUpdateStrategy returns the configured strategy or defaults to OnDelete
+// resolveUpdateStrategy returns the configured strategy or defaults to RollingUpdate
 func (b *IndexerStatefulSetBuilder) resolveUpdateStrategy() appsv1.StatefulSetUpdateStrategyType {
 	if b.updateStrategy != "" {
 		return b.updateStrategy
 	}
-	return appsv1.OnDeleteStatefulSetStrategyType
+	return appsv1.RollingUpdateStatefulSetStrategyType
 }
 
 // boolPtr returns a pointer to a bool

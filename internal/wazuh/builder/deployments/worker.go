@@ -354,12 +354,12 @@ func (b *WorkerStatefulSetBuilder) WithUpdateStrategy(strategy appsv1.StatefulSe
 	return b
 }
 
-// resolveUpdateStrategy returns the configured strategy or defaults to OnDelete
+// resolveUpdateStrategy returns the configured strategy or defaults to RollingUpdate
 func (b *WorkerStatefulSetBuilder) resolveUpdateStrategy() appsv1.StatefulSetUpdateStrategyType {
 	if b.updateStrategy != "" {
 		return b.updateStrategy
 	}
-	return appsv1.OnDeleteStatefulSetStrategyType
+	return appsv1.RollingUpdateStatefulSetStrategyType
 }
 
 // Build creates the StatefulSet

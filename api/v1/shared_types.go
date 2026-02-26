@@ -158,10 +158,10 @@ type WazuhMasterSpec struct {
 	ServiceAccount *ServiceAccountConfig `json:"serviceAccount,omitempty"`
 
 	// Update strategy for the StatefulSet
-	// "OnDelete" (default) gives the operator control over pod-by-pod restarts
-	// "RollingUpdate" lets Kubernetes handle rolling updates automatically
+	// "RollingUpdate" (default) lets Kubernetes handle rolling updates automatically
+	// "OnDelete" requires manual pod deletion to trigger updates
 	// +optional
-	// +kubebuilder:default="OnDelete"
+	// +kubebuilder:default="RollingUpdate"
 	// +kubebuilder:validation:Enum=OnDelete;RollingUpdate
 	UpdateStrategy string `json:"updateStrategy,omitempty"`
 }
@@ -295,10 +295,10 @@ type WazuhWorkerSpec struct {
 	ServiceAccount *ServiceAccountConfig `json:"serviceAccount,omitempty"`
 
 	// Update strategy for the StatefulSet
-	// "OnDelete" (default) gives the operator control over pod-by-pod restarts
-	// "RollingUpdate" lets Kubernetes handle rolling updates automatically
+	// "RollingUpdate" (default) lets Kubernetes handle rolling updates automatically
+	// "OnDelete" requires manual pod deletion to trigger updates
 	// +optional
-	// +kubebuilder:default="OnDelete"
+	// +kubebuilder:default="RollingUpdate"
 	// +kubebuilder:validation:Enum=OnDelete;RollingUpdate
 	UpdateStrategy string `json:"updateStrategy,omitempty"`
 }

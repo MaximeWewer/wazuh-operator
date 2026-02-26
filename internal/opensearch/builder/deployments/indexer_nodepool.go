@@ -276,12 +276,12 @@ func (b *NodePoolStatefulSetBuilder) WithUpdateStrategy(strategy appsv1.Stateful
 	return b
 }
 
-// resolveUpdateStrategy returns the configured strategy or defaults to OnDelete
+// resolveUpdateStrategy returns the configured strategy or defaults to RollingUpdate
 func (b *NodePoolStatefulSetBuilder) resolveUpdateStrategy() appsv1.StatefulSetUpdateStrategyType {
 	if b.updateStrategy != "" {
 		return b.updateStrategy
 	}
-	return appsv1.OnDeleteStatefulSetStrategyType
+	return appsv1.RollingUpdateStatefulSetStrategyType
 }
 
 // Build creates the StatefulSet for this nodePool
