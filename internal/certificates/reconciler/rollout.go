@@ -433,7 +433,7 @@ func TriggerFilebeatCertificateRenewalRestart(ctx context.Context, c client.Clie
 	}
 
 	workersResult, err := TriggerStatefulSetRollingRestart(ctx, c, namespace,
-		constants.ManagerWorkerName(clusterName), workersConfig)
+		constants.ManagerWorkersName(clusterName), workersConfig)
 	if err != nil {
 		// Don't fail completely if workers fail - master may have 0 workers
 		log.Info("Workers restart failed or skipped", "error", err)
