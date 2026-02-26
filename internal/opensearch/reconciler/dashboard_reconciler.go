@@ -422,8 +422,14 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 			deployBuilder.WithResources(cluster.Spec.Dashboard.Resources)
 		}
 		deployBuilder.WithEnableSSL(cluster.Spec.Dashboard.EnableSSL)
-		if cluster.Spec.Dashboard.Image != nil && cluster.Spec.Dashboard.Image.PullPolicy != "" {
-			deployBuilder.WithImagePullPolicy(cluster.Spec.Dashboard.Image.PullPolicy)
+		if cluster.Spec.Dashboard.Image != nil {
+			if cluster.Spec.Dashboard.Image.PullPolicy != "" {
+				deployBuilder.WithImagePullPolicy(cluster.Spec.Dashboard.Image.PullPolicy)
+			}
+			dashboardImage := cluster.Spec.Dashboard.Image.ResolveImage(constants.DefaultWazuhDashboardImage, cluster.Spec.Version)
+			if dashboardImage != "" {
+				deployBuilder.WithImage(dashboardImage)
+			}
 		}
 		if len(cluster.Spec.Dashboard.Annotations) > 0 {
 			deployBuilder.WithAnnotations(cluster.Spec.Dashboard.Annotations)
@@ -431,6 +437,47 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 		if len(cluster.Spec.Dashboard.PodAnnotations) > 0 {
 			deployBuilder.WithPodAnnotations(cluster.Spec.Dashboard.PodAnnotations)
 		}
+		if cluster.Spec.Dashboard.NodeSelector != nil {
+			deployBuilder.WithNodeSelector(cluster.Spec.Dashboard.NodeSelector)
+		}
+		if cluster.Spec.Dashboard.Tolerations != nil {
+			deployBuilder.WithTolerations(cluster.Spec.Dashboard.Tolerations)
+		}
+		if cluster.Spec.Dashboard.Affinity != nil {
+			deployBuilder.WithAffinity(cluster.Spec.Dashboard.Affinity)
+		}
+		if len(cluster.Spec.Dashboard.TopologySpreadConstraints) > 0 {
+			deployBuilder.WithTopologySpreadConstraints(cluster.Spec.Dashboard.TopologySpreadConstraints)
+		}
+		if len(cluster.Spec.Dashboard.Env) > 0 {
+			deployBuilder.WithEnv(cluster.Spec.Dashboard.Env)
+		}
+		if len(cluster.Spec.Dashboard.EnvFrom) > 0 {
+			deployBuilder.WithEnvFrom(cluster.Spec.Dashboard.EnvFrom)
+		}
+		if len(cluster.Spec.Dashboard.ExtraVolumes) > 0 {
+			deployBuilder.WithVolumes(cluster.Spec.Dashboard.ExtraVolumes)
+		}
+		if len(cluster.Spec.Dashboard.ExtraVolumeMounts) > 0 {
+			deployBuilder.WithVolumeMounts(cluster.Spec.Dashboard.ExtraVolumeMounts)
+		}
+		if len(cluster.Spec.Dashboard.ExtraInitContainers) > 0 {
+			deployBuilder.WithExtraInitContainers(cluster.Spec.Dashboard.ExtraInitContainers)
+		}
+		if len(cluster.Spec.Dashboard.ExtraContainers) > 0 {
+			deployBuilder.WithExtraContainers(cluster.Spec.Dashboard.ExtraContainers)
+		}
+		if cluster.Spec.Dashboard.SecurityContext != nil {
+			deployBuilder.WithSecurityContext(cluster.Spec.Dashboard.SecurityContext)
+		}
+		if cluster.Spec.Dashboard.ContainerSecurityContext != nil {
+			deployBuilder.WithContainerSecurityContext(cluster.Spec.Dashboard.ContainerSecurityContext)
+		}
+	}
+
+	// Set image pull secrets (cluster-level)
+	if len(cluster.Spec.ImagePullSecrets) > 0 {
+		deployBuilder.WithImagePullSecrets(cluster.Spec.ImagePullSecrets)
 	}
 
 	// Set cert hash to trigger pod restart on cert renewal
@@ -446,15 +493,67 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 	deployBuilder.WithTerminationGracePeriodSeconds(&terminationGracePeriod)
 
 	// Reconcile and set ServiceAccount if configured
+	var dashboardSAName string
 	if cluster.Spec.Dashboard != nil && cluster.Spec.Dashboard.ServiceAccount != nil {
 		saName, saErr := serviceaccount.ReconcileServiceAccount(ctx, r.Client, r.Scheme, cluster,
 			cluster.Spec.Dashboard.ServiceAccount, cluster.Name, cluster.Namespace, "dashboard")
 		if saErr != nil {
 			return fmt.Errorf("failed to reconcile dashboard ServiceAccount: %w", saErr)
 		}
-		if saName != "" {
-			deployBuilder.WithServiceAccountName(saName)
+		dashboardSAName = saName
+	}
+	if dashboardSAName != "" {
+		deployBuilder.WithServiceAccountName(dashboardSAName)
+	}
+
+	// Compute spec hash for change detection
+	specHash := ""
+	if cluster.Spec.Dashboard != nil {
+		var imagePullPolicy corev1.PullPolicy
+		var image string
+		if cluster.Spec.Dashboard.Image != nil {
+			imagePullPolicy = cluster.Spec.Dashboard.Image.PullPolicy
+			image = cluster.Spec.Dashboard.Image.ResolveImage(constants.DefaultWazuhDashboardImage, cluster.Spec.Version)
 		}
+		hash, err := patch.ComputeDashboardSpecHashFull(patch.DashboardSpecInput{
+			Replicas:                      cluster.Spec.Dashboard.Replicas,
+			Version:                       cluster.Spec.Version,
+			Resources:                     cluster.Spec.Dashboard.Resources,
+			Image:                         image,
+			NodeSelector:                  cluster.Spec.Dashboard.NodeSelector,
+			Tolerations:                   cluster.Spec.Dashboard.Tolerations,
+			Affinity:                      cluster.Spec.Dashboard.Affinity,
+			ImagePullSecrets:              cluster.Spec.ImagePullSecrets,
+			TopologySpreadConstraints:     cluster.Spec.Dashboard.TopologySpreadConstraints,
+			Env:                           cluster.Spec.Dashboard.Env,
+			EnvFrom:                       cluster.Spec.Dashboard.EnvFrom,
+			Annotations:                   cluster.Spec.Dashboard.Annotations,
+			PodAnnotations:                cluster.Spec.Dashboard.PodAnnotations,
+			ExtraVolumes:                  cluster.Spec.Dashboard.ExtraVolumes,
+			ExtraVolumeMounts:             cluster.Spec.Dashboard.ExtraVolumeMounts,
+			ExtraInitContainers:           cluster.Spec.Dashboard.ExtraInitContainers,
+			ExtraContainers:               cluster.Spec.Dashboard.ExtraContainers,
+			ServiceAccountName:            dashboardSAName,
+			SecurityContext:               cluster.Spec.Dashboard.SecurityContext,
+			ContainerSecurityContext:      cluster.Spec.Dashboard.ContainerSecurityContext,
+			TerminationGracePeriodSeconds: cluster.Spec.Dashboard.TerminationGracePeriodSeconds,
+			ImagePullPolicy:               imagePullPolicy,
+			EnableSSL:                     cluster.Spec.Dashboard.EnableSSL,
+		})
+		if err != nil {
+			log.Error(err, "Failed to compute dashboard spec hash, continuing without spec tracking")
+		} else {
+			specHash = hash
+		}
+	}
+	if specHash != "" {
+		deployBuilder.WithSpecHash(specHash)
+	}
+
+	// Compute config hash from ConfigMap for change detection
+	configHash := r.getConfigHash(ctx, cluster)
+	if configHash != "" {
+		deployBuilder.WithConfigHash(configHash)
 	}
 
 	deployment := deployBuilder.Build()
@@ -474,10 +573,12 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 		return fmt.Errorf("failed to get dashboard deployment: %w", err)
 	}
 
-	// Check if update is needed (cert hash changed or replicas changed)
+	// Check if update is needed (cert hash, spec hash, or replicas changed)
 	existingCertHash := ""
+	existingSpecHash := ""
 	if found.Spec.Template.Annotations != nil {
 		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
+		existingSpecHash = found.Spec.Template.Annotations[constants.AnnotationSpecHash]
 	}
 
 	// Update if cert hash changed (including from empty to non-empty)
@@ -492,6 +593,15 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 			needsUpdate = true
 			certHashChanged = true
 		}
+	}
+
+	// Check if spec hash changed (detects all CRD spec field changes)
+	if specHash != "" && specHash != existingSpecHash {
+		log.Info("Updating Dashboard Deployment due to spec change",
+			"name", deployment.Name,
+			"oldSpecHash", utils.ShortHash(existingSpecHash),
+			"newSpecHash", utils.ShortHash(specHash))
+		needsUpdate = true
 	}
 
 	// Check if replicas changed

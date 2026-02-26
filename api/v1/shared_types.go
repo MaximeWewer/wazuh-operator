@@ -279,11 +279,6 @@ type WazuhWorkerSpec struct {
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
 
-	// Per-pod configuration overrides for specific worker indices
-	// This allows specializing individual worker pods (e.g., worker-0 for cloud log collection)
-	// +optional
-	Overrides []WorkerOverride `json:"overrides,omitempty"`
-
 	// HorizontalPodAutoscaler configuration for automatic scaling of workers
 	// +optional
 	HPA *HPASpec `json:"hpa,omitempty"`
@@ -315,23 +310,6 @@ func (w *WazuhWorkerSpec) GetReplicas() int32 {
 	}
 	// Default: 2 workers (from constants.DefaultManagerWorkerReplicas)
 	return 2
-}
-
-// WorkerOverride defines per-pod configuration for a specific worker
-// Use this to specialize individual worker pods (e.g., cloud log collection on worker-0)
-type WorkerOverride struct {
-	// Index of the worker pod (0-based, corresponds to pod name suffix like worker-0, worker-1)
-	// +kubebuilder:validation:Minimum=0
-	Index int32 `json:"index"`
-
-	// Extra configuration to inject into ossec.conf for this specific worker
-	// This is merged with the base workers.extraConfig
-	// +optional
-	ExtraConfig string `json:"extraConfig,omitempty"`
-
-	// Description of this worker's specialization (for documentation)
-	// +optional
-	Description string `json:"description,omitempty"`
 }
 
 // ImageSpec defines container image configuration

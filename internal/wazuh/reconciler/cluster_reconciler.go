@@ -25,6 +25,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -54,6 +55,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/cronjobs"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/deployments"
+	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/hpa"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/secrets"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/config"
@@ -286,6 +288,11 @@ func (r *ClusterReconciler) ReconcileManagerWithCertHashes(ctx context.Context, 
 		return fmt.Errorf("failed to reconcile manager PDB: %w", err)
 	}
 
+	// Reconcile Worker HPA
+	if err := r.reconcileWorkerHPA(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to reconcile worker HPA: %w", err)
+	}
+
 	log.Info("Manager reconciliation completed")
 	return nil
 }
@@ -349,6 +356,11 @@ func (r *ClusterReconciler) ReconcileManagerNonBlocking(ctx context.Context, clu
 		log.Error(err, "Failed to reconcile manager worker volume expansion")
 	}
 
+	// Reconcile Worker HPA
+	if err := r.reconcileWorkerHPA(ctx, cluster); err != nil {
+		log.Error(err, "Failed to reconcile worker HPA")
+	}
+
 	log.Info("Manager reconciliation completed (non-blocking)", "pendingRollouts", len(pendingRollouts))
 	return ManagerReconcileResult{PendingRollouts: pendingRollouts}
 }
@@ -407,8 +419,10 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		masterSecurityContext = cluster.Spec.Manager.Master.SecurityContext
 		masterContainerSecurityContext = cluster.Spec.Manager.Master.ContainerSecurityContext
 		masterTerminationGracePeriodSeconds = cluster.Spec.Manager.Master.TerminationGracePeriodSeconds
-		if cluster.Spec.Manager.Image != nil && cluster.Spec.Manager.Image.PullPolicy != "" {
-			managerImagePullPolicy = cluster.Spec.Manager.Image.PullPolicy
+		if cluster.Spec.Manager.Image != nil {
+			if cluster.Spec.Manager.Image.PullPolicy != "" {
+				managerImagePullPolicy = cluster.Spec.Manager.Image.PullPolicy
+			}
 		}
 
 		// Apply cluster-level anti-affinity if enabled
@@ -428,6 +442,11 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		return nil, fmt.Errorf("failed to build ossec.conf: %w", err)
 	}
 	configBuilder.WithOSSECConfig(ossecConf)
+
+	// Add local_internal_options.conf if configured
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.LocalInternalOptions != "" {
+		configBuilder.WithExtraConfig(constants.ConfigMapKeyLocalInternalOptions, cluster.Spec.Manager.Master.LocalInternalOptions)
+	}
 
 	indexerService := fmt.Sprintf("%s-indexer", cluster.Name)
 	sslVerificationMode := "full"
@@ -472,8 +491,8 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 	// Build Services
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil && len(cluster.Spec.Manager.Master.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Master.Service.Annotations)
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil {
+		applyManagerServiceSpec(serviceBuilder, cluster.Spec.Manager.Master.Service)
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -599,6 +618,24 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	}
 	// Set cluster reference for monitoring sidecar
 	stsBuilder.WithCluster(cluster)
+	// Set custom image if configured
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Image != nil {
+		resolved := cluster.Spec.Manager.Image.ResolveImage(constants.DefaultWazuhManagerImage, version)
+		if resolved != "" {
+			stsBuilder.WithImage(resolved)
+		}
+	}
+	// Set security contexts if configured
+	if masterSecurityContext != nil {
+		stsBuilder.WithSecurityContext(masterSecurityContext)
+	}
+	if masterContainerSecurityContext != nil {
+		stsBuilder.WithContainerSecurityContext(masterContainerSecurityContext)
+	}
+	// Set update strategy if configured
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.UpdateStrategy != "" {
+		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Manager.Master.UpdateStrategy))
+	}
 	// Set termination grace period (default + user override)
 	masterTerminationGracePeriod := constants.DefaultManagerTerminationGracePeriod
 	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.TerminationGracePeriodSeconds != nil {
@@ -881,6 +918,11 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	}
 	configBuilder.WithOSSECConfig(ossecConf)
 
+	// Add local_internal_options.conf if configured
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.LocalInternalOptions != "" {
+		configBuilder.WithExtraConfig(constants.ConfigMapKeyLocalInternalOptions, cluster.Spec.Manager.Workers.LocalInternalOptions)
+	}
+
 	indexerService := fmt.Sprintf("%s-indexer", cluster.Name)
 	sslVerificationMode := "full"
 	if cluster.Spec.Manager != nil && cluster.Spec.Manager.FilebeatSSLVerificationMode != "" {
@@ -924,8 +966,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 
 	// Build Services
 	serviceBuilder := services.NewWorkerServiceBuilder(cluster.Name, cluster.Namespace)
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Service != nil && len(cluster.Spec.Manager.Workers.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Workers.Service.Annotations)
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Service != nil {
+		applyWorkerServiceSpec(serviceBuilder, cluster.Spec.Manager.Workers.Service)
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -968,8 +1010,10 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		workerSecurityContext = cluster.Spec.Manager.Workers.SecurityContext
 		workerContainerSecurityContext = cluster.Spec.Manager.Workers.ContainerSecurityContext
 		workerTerminationGracePeriodSeconds = cluster.Spec.Manager.Workers.TerminationGracePeriodSeconds
-		if cluster.Spec.Manager.Image != nil && cluster.Spec.Manager.Image.PullPolicy != "" {
-			workerImagePullPolicy = cluster.Spec.Manager.Image.PullPolicy
+		if cluster.Spec.Manager.Image != nil {
+			if cluster.Spec.Manager.Image.PullPolicy != "" {
+				workerImagePullPolicy = cluster.Spec.Manager.Image.PullPolicy
+			}
 		}
 	}
 
@@ -1047,6 +1091,12 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	if len(workerImagePullSecrets) > 0 {
 		stsBuilder.WithImagePullSecrets(workerImagePullSecrets)
 	}
+	if len(workerEnv) > 0 {
+		stsBuilder.WithEnv(workerEnv)
+	}
+	if len(workerEnvFrom) > 0 {
+		stsBuilder.WithEnvFrom(workerEnvFrom)
+	}
 	if len(extraVolumes) > 0 {
 		stsBuilder.WithVolumes(extraVolumes)
 	}
@@ -1075,6 +1125,24 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		stsBuilder.WithSpecHash(specHash)
 	}
 
+	// Set custom image if configured
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Image != nil {
+		resolved := cluster.Spec.Manager.Image.ResolveImage(constants.DefaultWazuhManagerImage, version)
+		if resolved != "" {
+			stsBuilder.WithImage(resolved)
+		}
+	}
+	// Set security contexts if configured
+	if workerSecurityContext != nil {
+		stsBuilder.WithSecurityContext(workerSecurityContext)
+	}
+	if workerContainerSecurityContext != nil {
+		stsBuilder.WithContainerSecurityContext(workerContainerSecurityContext)
+	}
+	// Set update strategy if configured
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.UpdateStrategy != "" {
+		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Manager.Workers.UpdateStrategy))
+	}
 	// Set termination grace period (default + user override)
 	workerTerminationGracePeriod := constants.DefaultManagerTerminationGracePeriod
 	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.TerminationGracePeriodSeconds != nil {
@@ -1382,6 +1450,11 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	}
 	configBuilder.WithOSSECConfig(ossecConf)
 
+	// Add local_internal_options.conf if configured
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.LocalInternalOptions != "" {
+		configBuilder.WithExtraConfig(constants.ConfigMapKeyLocalInternalOptions, cluster.Spec.Manager.Master.LocalInternalOptions)
+	}
+
 	// Generate filebeat.yml with correct indexer host and credentials
 	indexerService := fmt.Sprintf("%s-indexer", cluster.Name)
 	sslVerificationMode := "full"
@@ -1452,8 +1525,8 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 
 	// Build Service
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil && len(cluster.Spec.Manager.Master.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Master.Service.Annotations)
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil {
+		applyManagerServiceSpec(serviceBuilder, cluster.Spec.Manager.Master.Service)
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -1495,6 +1568,12 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 		stsBuilder.WithExtraContainers(extraContainers)
 	}
 	if cluster.Spec.Manager != nil {
+		if len(cluster.Spec.Manager.Master.Env) > 0 {
+			stsBuilder.WithEnv(cluster.Spec.Manager.Master.Env)
+		}
+		if len(cluster.Spec.Manager.Master.EnvFrom) > 0 {
+			stsBuilder.WithEnvFrom(cluster.Spec.Manager.Master.EnvFrom)
+		}
 		if len(cluster.Spec.Manager.Master.Annotations) > 0 {
 			stsBuilder.WithAnnotations(cluster.Spec.Manager.Master.Annotations)
 		}
@@ -1511,6 +1590,24 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	}
 	// Set cluster reference for monitoring sidecar
 	stsBuilder.WithCluster(cluster)
+	// Set custom image if configured
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Image != nil {
+		resolved := cluster.Spec.Manager.Image.ResolveImage(constants.DefaultWazuhManagerImage, cluster.Spec.Version)
+		if resolved != "" {
+			stsBuilder.WithImage(resolved)
+		}
+	}
+	// Set security contexts if configured
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.SecurityContext != nil {
+		stsBuilder.WithSecurityContext(cluster.Spec.Manager.Master.SecurityContext)
+	}
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.ContainerSecurityContext != nil {
+		stsBuilder.WithContainerSecurityContext(cluster.Spec.Manager.Master.ContainerSecurityContext)
+	}
+	// Set update strategy if configured
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.UpdateStrategy != "" {
+		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Manager.Master.UpdateStrategy))
+	}
 	// Set termination grace period (default + user override)
 	legacyMasterTerminationGracePeriod := constants.DefaultManagerTerminationGracePeriod
 	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.TerminationGracePeriodSeconds != nil {
@@ -1691,6 +1788,11 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 	}
 	configBuilder.WithOSSECConfig(ossecConf)
 
+	// Add local_internal_options.conf if configured
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.LocalInternalOptions != "" {
+		configBuilder.WithExtraConfig(constants.ConfigMapKeyLocalInternalOptions, cluster.Spec.Manager.Workers.LocalInternalOptions)
+	}
+
 	// Generate filebeat.yml with correct indexer host and credentials
 	indexerService := fmt.Sprintf("%s-indexer", cluster.Name)
 	sslVerificationMode := "full"
@@ -1761,8 +1863,8 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 
 	// Build Service
 	serviceBuilder := services.NewWorkerServiceBuilder(cluster.Name, cluster.Namespace)
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Service != nil && len(cluster.Spec.Manager.Workers.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Workers.Service.Annotations)
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Service != nil {
+		applyWorkerServiceSpec(serviceBuilder, cluster.Spec.Manager.Workers.Service)
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -1807,6 +1909,12 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		if len(extraContainers) > 0 {
 			stsBuilder.WithExtraContainers(extraContainers)
 		}
+		if len(cluster.Spec.Manager.Workers.Env) > 0 {
+			stsBuilder.WithEnv(cluster.Spec.Manager.Workers.Env)
+		}
+		if len(cluster.Spec.Manager.Workers.EnvFrom) > 0 {
+			stsBuilder.WithEnvFrom(cluster.Spec.Manager.Workers.EnvFrom)
+		}
 		if len(cluster.Spec.Manager.Workers.Annotations) > 0 {
 			stsBuilder.WithAnnotations(cluster.Spec.Manager.Workers.Annotations)
 		}
@@ -1821,6 +1929,28 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 	}
 	if configHash != "" {
 		stsBuilder.WithConfigHash(configHash)
+	}
+	// Set custom image if configured
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Image != nil {
+		resolved := cluster.Spec.Manager.Image.ResolveImage(constants.DefaultWazuhManagerImage, cluster.Spec.Version)
+		if resolved != "" {
+			stsBuilder.WithImage(resolved)
+		}
+	}
+	// Set security contexts if configured
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.SecurityContext != nil {
+		stsBuilder.WithSecurityContext(cluster.Spec.Manager.Workers.SecurityContext)
+	}
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.ContainerSecurityContext != nil {
+		stsBuilder.WithContainerSecurityContext(cluster.Spec.Manager.Workers.ContainerSecurityContext)
+	}
+	// Set update strategy if configured
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.UpdateStrategy != "" {
+		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Manager.Workers.UpdateStrategy))
+	}
+	// Set image pull policy if configured
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Image != nil && cluster.Spec.Manager.Image.PullPolicy != "" {
+		stsBuilder.WithImagePullPolicy(cluster.Spec.Manager.Image.PullPolicy)
 	}
 	// Set termination grace period (default + user override)
 	legacyWorkerTerminationGracePeriod := constants.DefaultManagerTerminationGracePeriod
@@ -2718,6 +2848,68 @@ func (r *ClusterReconciler) reconcileManagerPDB(ctx context.Context, cluster *wa
 		return r.Update(ctx, managerPDB)
 	}); err != nil {
 		return fmt.Errorf("failed to update manager PDB: %w", err)
+	}
+
+	return nil
+}
+
+// reconcileWorkerHPA reconciles the HorizontalPodAutoscaler for Wazuh Manager Workers
+func (r *ClusterReconciler) reconcileWorkerHPA(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	hpaName := cluster.Name + "-manager-worker"
+
+	// Check if HPA should be enabled
+	hpaEnabled := cluster.Spec.Manager != nil &&
+		cluster.Spec.Manager.Workers.HPA != nil &&
+		cluster.Spec.Manager.Workers.HPA.Enabled
+
+	if !hpaEnabled {
+		// If HPA should not exist, delete it if it does
+		existing := &autoscalingv2.HorizontalPodAutoscaler{}
+		err := r.Get(ctx, types.NamespacedName{Name: hpaName, Namespace: cluster.Namespace}, existing)
+		if err == nil {
+			log.Info("Deleting Worker HPA (no longer needed)", "name", hpaName)
+			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
+				return fmt.Errorf("failed to delete worker HPA: %w", err)
+			}
+		} else if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to get worker HPA: %w", err)
+		}
+		return nil
+	}
+
+	// Build the HPA
+	builder := hpa.NewWorkerHPABuilder(cluster.Name, cluster.Namespace).
+		WithSpec(cluster.Spec.Manager.Workers.HPA)
+
+	workerHPA := builder.Build()
+	if workerHPA == nil {
+		return nil
+	}
+
+	if err := controllerutil.SetControllerReference(cluster, workerHPA, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for worker HPA: %w", err)
+	}
+
+	// Check if HPA exists
+	existing := &autoscalingv2.HorizontalPodAutoscaler{}
+	err := r.Get(ctx, types.NamespacedName{Name: hpaName, Namespace: cluster.Namespace}, existing)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating Worker HPA", "name", hpaName)
+		if err := r.Create(ctx, workerHPA); err != nil {
+			return fmt.Errorf("failed to create worker HPA: %w", err)
+		}
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("failed to get worker HPA: %w", err)
+	}
+
+	// Update HPA if needed
+	workerHPA.SetResourceVersion(existing.GetResourceVersion())
+	log.V(1).Info("Updating Worker HPA", "name", hpaName)
+	if err := r.Update(ctx, workerHPA); err != nil {
+		return fmt.Errorf("failed to update worker HPA: %w", err)
 	}
 
 	return nil

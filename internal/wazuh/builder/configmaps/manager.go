@@ -106,15 +106,6 @@ func (b *ManagerConfigMapBuilder) WithExtraConfig(filename, content string) *Man
 	return b
 }
 
-// WithIndexedOSSECConfig adds an ossec.conf for a specific worker index
-// The config is stored with key format "ossec-worker-{index}.conf"
-// This enables per-pod specialization when combined with an init container
-func (b *ManagerConfigMapBuilder) WithIndexedOSSECConfig(index int32, config string) *ManagerConfigMapBuilder {
-	key := fmt.Sprintf("ossec-worker-%d.conf", index)
-	b.extraConfigs[key] = config
-	return b
-}
-
 // WithData adds raw data entries
 func (b *ManagerConfigMapBuilder) WithData(data map[string]string) *ManagerConfigMapBuilder {
 	for k, v := range data {
