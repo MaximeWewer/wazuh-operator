@@ -68,7 +68,7 @@ jobs:
             TAG="v${VERSION}"
           else
             git fetch --tags
-            YEAR_MONTH=$(date +'%Y.%m')
+            YEAR_MONTH=$(date +'%Y.%-m')
             LATEST_TAG=$(git tag -l "v${YEAR_MONTH}.*" | sort -V | tail -n 1)
             if [ -z "${LATEST_TAG}" ]; then
               VERSION="${YEAR_MONTH}.1"
