@@ -159,8 +159,6 @@ rules:
   - opensearchactiongroups
   - opensearchauthconfigs
   - opensearchcomponenttemplates
-  - opensearchdashboards
-  - opensearchindexers
   - opensearchindextemplates
   - opensearchindices
   - opensearchismpolicies
@@ -177,10 +175,8 @@ rules:
   - wazuhclusters
   - wazuhdecoders
   - wazuhfilebeats
-  - wazuhmanagers
   - wazuhrestores
   - wazuhrules
-  - wazuhworkers
   verbs:
   - create
   - delete
@@ -195,8 +191,6 @@ rules:
   - opensearchactiongroups/finalizers
   - opensearchauthconfigs/finalizers
   - opensearchcomponenttemplates/finalizers
-  - opensearchdashboards/finalizers
-  - opensearchindexers/finalizers
   - opensearchindextemplates/finalizers
   - opensearchindices/finalizers
   - opensearchismpolicies/finalizers
@@ -213,10 +207,8 @@ rules:
   - wazuhclusters/finalizers
   - wazuhdecoders/finalizers
   - wazuhfilebeats/finalizers
-  - wazuhmanagers/finalizers
   - wazuhrestores/finalizers
   - wazuhrules/finalizers
-  - wazuhworkers/finalizers
   verbs:
   - update
 - apiGroups:
@@ -225,8 +217,6 @@ rules:
   - opensearchactiongroups/status
   - opensearchauthconfigs/status
   - opensearchcomponenttemplates/status
-  - opensearchdashboards/status
-  - opensearchindexers/status
   - opensearchindextemplates/status
   - opensearchindices/status
   - opensearchismpolicies/status
@@ -243,10 +233,8 @@ rules:
   - wazuhclusters/status
   - wazuhdecoders/status
   - wazuhfilebeats/status
-  - wazuhmanagers/status
   - wazuhrestores/status
   - wazuhrules/status
-  - wazuhworkers/status
   verbs:
   - get
   - patch

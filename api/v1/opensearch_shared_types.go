@@ -16,142 +16,20 @@ limitations under the License.
 
 package v1
 
-import (
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
-
-// OpenSearchDashboardSpec defines the desired state of OpenSearchDashboard
-type OpenSearchDashboardSpec struct {
-	// Version of OpenSearch Dashboards to deploy
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Pattern=`^[0-9]+\.[0-9]+\.[0-9]+$`
-	Version string `json:"version"`
-
-	// Reference to a WazuhCluster (optional)
+// ClusterSettingsSpec defines cluster-level OpenSearch settings applied via the Cluster Settings API
+type ClusterSettingsSpec struct {
+	// Persistent settings survive cluster restarts
+	// Common settings: cluster.routing.allocation.enable, indices.recovery.max_bytes_per_sec
 	// +optional
-	ClusterRef *WazuhClusterReference `json:"clusterRef,omitempty"`
+	Persistent map[string]string `json:"persistent,omitempty"`
 
-	// Reference to the OpenSearchIndexer to connect to
-	// +kubebuilder:validation:Required
-	IndexerRef string `json:"indexerRef"`
-
-	// Number of dashboard replicas
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:default=1
-	Replicas int32 `json:"replicas,omitempty"`
-
-	// Resources for dashboard
+	// Transient settings are cleared on cluster restart
+	// Useful for temporary maintenance settings
 	// +optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
-
-	// Image override
-	// +optional
-	Image *ImageSpec `json:"image,omitempty"`
-
-	// Enable SSL
-	// +optional
-	// +kubebuilder:default=true
-	EnableSSL bool `json:"enableSSL,omitempty"`
-
-	// Service configuration
-	// +optional
-	Service *ServiceSpec `json:"service,omitempty"`
-
-	// Node selector
-	// +optional
-	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
-
-	// Tolerations
-	// +optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
-
-	// Affinity
-	// +optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	Affinity *corev1.Affinity `json:"affinity,omitempty"`
-
-	// Pod Disruption Budget
-	// +optional
-	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
-
-	// Annotations for the Deployment
-	// +optional
-	Annotations map[string]string `json:"annotations,omitempty"`
-
-	// Pod annotations
-	// +optional
-	PodAnnotations map[string]string `json:"podAnnotations,omitempty"`
-
-	// Ingress configuration
-	// +optional
-	Ingress *IngressSpec `json:"ingress,omitempty"`
-
-	// GatewayAPI configuration (alternative to Ingress)
-	// +optional
-	GatewayAPI *GatewayAPISpec `json:"gatewayAPI,omitempty"`
-
-	// Network policy
-	// +optional
-	NetworkPolicy *NetworkPolicySpec `json:"networkPolicy,omitempty"`
-
-	// Environment variables to add to the container
-	// +optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	Env []corev1.EnvVar `json:"env,omitempty"`
-
-	// Environment variables from ConfigMaps or Secrets
-	// +optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	EnvFrom []corev1.EnvFromSource `json:"envFrom,omitempty"`
-
-	// Security context for the pod
-	// +optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	SecurityContext *corev1.PodSecurityContext `json:"securityContext,omitempty"`
-
-	// Security context for the container
-	// +optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	ContainerSecurityContext *corev1.SecurityContext `json:"containerSecurityContext,omitempty"`
-
-	// Additional volumes
-	// +optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
-
-	// Additional volume mounts
-	// +optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
-
-	// Additional init containers to inject into the pod
-	// +optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	ExtraInitContainers []corev1.Container `json:"extraInitContainers,omitempty"`
-
-	// Additional sidecar containers to inject into the pod
-	// +optional
-	// +kubebuilder:pruning:PreserveUnknownFields
-	ExtraContainers []corev1.Container `json:"extraContainers,omitempty"`
-
-	// Image pull secrets for private registries
-	// +optional
-	ImagePullSecrets []corev1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
-
-	// Wazuh plugin configuration
-	// +optional
-	WazuhPlugin *WazuhPluginConfig `json:"wazuhPlugin,omitempty"`
-
-	// Custom dashboards configuration
-	// +optional
-	Config *DashboardConfigSpec `json:"config,omitempty"`
+	Transient map[string]string `json:"transient,omitempty"`
 }
 
-// WazuhPluginConfig defines Wazuh plugin configuration for the dashboard
-// Corresponds to /usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml
+// WazuhPluginConfig defines Wazuh plugin configuration for the OpenSearch Dashboard
 type WazuhPluginConfig struct {
 	// Enable Wazuh plugin
 	// +optional
@@ -264,7 +142,7 @@ type WazuhMonitoringConfig struct {
 	Replicas int32 `json:"replicas,omitempty"`
 }
 
-// WazuhChecksConfig defines Wazuh health check settings
+// WazuhChecksConfig defines health check settings
 type WazuhChecksConfig struct {
 	// Validate index patterns on dashboard load
 	// +optional
@@ -307,7 +185,7 @@ type WazuhChecksConfig struct {
 	MaxBuckets bool `json:"maxBuckets,omitempty"`
 }
 
-// WazuhCronStatisticsConfig defines Wazuh cron statistics settings
+// WazuhCronStatisticsConfig defines cron statistics settings
 type WazuhCronStatisticsConfig struct {
 	// Enable/disable statistics task execution
 	// +optional
@@ -345,8 +223,7 @@ type WazuhCronStatisticsConfig struct {
 	Replicas int32 `json:"replicas,omitempty"`
 }
 
-// DefaultAPIEndpointConfig defines the default Wazuh API endpoint configuration
-// Used when no explicit apiEndpoints are defined
+// DefaultAPIEndpointConfig defines the default API endpoint configuration
 type DefaultAPIEndpointConfig struct {
 	// Credentials from a secret for the default API endpoint
 	// The secret should have keys for username and password
@@ -396,98 +273,4 @@ type WazuhAPIEndpoint struct {
 	// +optional
 	// +kubebuilder:default=false
 	RunAs bool `json:"runAs,omitempty"`
-}
-
-// DashboardConfigSpec defines custom dashboard configuration
-type DashboardConfigSpec struct {
-	// Custom opensearch_dashboards.yml content
-	// +optional
-	DashboardsYml string `json:"dashboardsYml,omitempty"`
-
-	// Base path for the dashboard
-	// +optional
-	BasePath string `json:"basePath,omitempty"`
-
-	// Default route
-	// +optional
-	// +kubebuilder:default="/app/wazuh"
-	DefaultRoute string `json:"defaultRoute,omitempty"`
-}
-
-// OpenSearchDashboardStatus defines the observed state of OpenSearchDashboard
-type OpenSearchDashboardStatus struct {
-	// Phase of the dashboard
-	// +optional
-	Phase ComponentPhase `json:"phase,omitempty"`
-
-	// Conditions represent the latest available observations
-	// +listType=map
-	// +listMapKey=type
-	// +optional
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
-
-	// Ready replicas
-	// +optional
-	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
-
-	// Total replicas
-	// +optional
-	Replicas int32 `json:"replicas,omitempty"`
-
-	// Observed generation
-	// +optional
-	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
-
-	// Last update time
-	// +optional
-	LastUpdateTime *metav1.Time `json:"lastUpdateTime,omitempty"`
-
-	// Version currently deployed
-	// +optional
-	Version string `json:"version,omitempty"`
-
-	// Message provides additional information
-	// +optional
-	Message string `json:"message,omitempty"`
-
-	// URL to access the dashboard
-	// +optional
-	URL string `json:"url,omitempty"`
-
-	// Connected to indexer
-	// +optional
-	IndexerConnected bool `json:"indexerConnected,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-// +kubebuilder:storageversion
-// +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Namespaced,shortName=osdash
-// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`
-// +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
-// +kubebuilder:printcolumn:name="Ready",type=integer,JSONPath=`.status.readyReplicas`
-// +kubebuilder:printcolumn:name="Replicas",type=integer,JSONPath=`.status.replicas`
-// +kubebuilder:printcolumn:name="URL",type=string,JSONPath=`.status.url`
-// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
-
-// OpenSearchDashboard is the Schema for the opensearchdashboards API
-type OpenSearchDashboard struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   OpenSearchDashboardSpec   `json:"spec,omitempty"`
-	Status OpenSearchDashboardStatus `json:"status,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-
-// OpenSearchDashboardList contains a list of OpenSearchDashboard
-type OpenSearchDashboardList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []OpenSearchDashboard `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&OpenSearchDashboard{}, &OpenSearchDashboardList{})
 }

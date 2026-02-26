@@ -59,14 +59,10 @@ spec:
           metadata:
             type: object
           spec:
-            description: |-
-              WazuhClusterSpec defines the desired state of WazuhCluster
-              Supports two modes:
-              1. Inline mode (default): Define manager, indexer, dashboard specs inline
-              2. Reference mode: Use managerRef, indexerRef, dashboardRef to reference separate CRDs
+            description: WazuhClusterSpec defines the desired state of WazuhCluster
             properties:
               dashboard:
-                description: Dashboard configuration (inline mode)
+                description: Dashboard configuration
                 properties:
                   affinity:
                     description: Affinity
@@ -7958,18 +7954,6 @@ spec:
                         type: boolean
                     type: object
                 type: object
-              dashboardRef:
-                description: Reference to a WazuhDashboard resource (reference mode)
-                properties:
-                  name:
-                    description: Name of the component resource
-                    type: string
-                  namespace:
-                    description: Namespace of the component (defaults to same namespace)
-                    type: string
-                required:
-                - name
-                type: object
               drain:
                 description: Drain strategy configuration for safe scale-down operations
                 properties:
@@ -8076,7 +8060,7 @@ spec:
                   x-kubernetes-map-type: atomic
                 type: array
               indexer:
-                description: Indexer configuration (inline mode)
+                description: Indexer configuration
                 properties:
                   affinity:
                     description: Affinity
@@ -22204,24 +22188,12 @@ spec:
                     - RollingUpdate
                     type: string
                 type: object
-              indexerRef:
-                description: Reference to a WazuhIndexer resource (reference mode)
-                properties:
-                  name:
-                    description: Name of the component resource
-                    type: string
-                  namespace:
-                    description: Namespace of the component (defaults to same namespace)
-                    type: string
-                required:
-                - name
-                type: object
               license:
                 default: basic
                 description: License type for the cluster
                 type: string
               manager:
-                description: Manager configuration (inline mode)
+                description: Manager configuration
                 properties:
                   antiAffinity:
                     description: |-
@@ -37399,18 +37371,6 @@ spec:
                 required:
                 - master
                 - workers
-                type: object
-              managerRef:
-                description: Reference to a WazuhManager resource (reference mode)
-                properties:
-                  name:
-                    description: Name of the component resource
-                    type: string
-                  namespace:
-                    description: Namespace of the component (defaults to same namespace)
-                    type: string
-                required:
-                - name
                 type: object
               monitoring:
                 description: Monitoring configuration

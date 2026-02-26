@@ -119,24 +119,10 @@ func (v *WazuhClusterCustomValidator) validateWazuhCluster(cluster *WazuhCluster
 		allErrors = append(allErrors, fmt.Sprintf("spec.version: %s", err.Error()))
 	}
 
-	// Validate configuration mode (inline vs reference)
-	if cluster.IsMixedMode() {
-		allErrors = append(allErrors,
-			"spec: cannot mix inline configuration (manager, indexer, dashboard) with references (managerRef, indexerRef, dashboardRef)")
-	}
-
-	// Validate inline mode components
-	if cluster.IsInlineMode() {
-		errs, warns := v.validateInlineMode(cluster)
-		allErrors = append(allErrors, errs...)
-		warnings = append(warnings, warns...)
-	}
-
-	// Validate reference mode
-	if cluster.IsReferenceMode() {
-		errs := v.validateReferenceMode(cluster)
-		allErrors = append(allErrors, errs...)
-	}
+	// Validate inline components
+	errs, warns := v.validateInlineMode(cluster)
+	allErrors = append(allErrors, errs...)
+	warnings = append(warnings, warns...)
 
 	// Validate TLS configuration
 	if cluster.Spec.TLS != nil {
@@ -149,10 +135,6 @@ func (v *WazuhClusterCustomValidator) validateWazuhCluster(cluster *WazuhCluster
 		errs := validateDrainConfig(cluster.Spec.Drain)
 		allErrors = append(allErrors, errs...)
 	}
-
-	// Validate multi-cluster isolation (warnings only)
-	isolationWarnings := validateMultiClusterIsolation(cluster)
-	warnings = append(warnings, isolationWarnings...)
 
 	if len(allErrors) > 0 {
 		return warnings, fmt.Errorf("validation failed: %v", allErrors)
@@ -189,57 +171,9 @@ func (v *WazuhClusterCustomValidator) validateInlineMode(cluster *WazuhCluster) 
 	return errors, warnings
 }
 
-// validateReferenceMode validates component references
-func (v *WazuhClusterCustomValidator) validateReferenceMode(cluster *WazuhCluster) []string {
-	var errors []string
-
-	// In reference mode, at least one reference must be provided
-	if cluster.Spec.ManagerRef == nil && cluster.Spec.IndexerRef == nil && cluster.Spec.DashboardRef == nil {
-		errors = append(errors, "spec: at least one component reference must be provided in reference mode")
-	}
-
-	// Validate reference names
-	if cluster.Spec.ManagerRef != nil && cluster.Spec.ManagerRef.Name == "" {
-		errors = append(errors, "spec.managerRef.name: cannot be empty")
-	}
-	if cluster.Spec.IndexerRef != nil && cluster.Spec.IndexerRef.Name == "" {
-		errors = append(errors, "spec.indexerRef.name: cannot be empty")
-	}
-	if cluster.Spec.DashboardRef != nil && cluster.Spec.DashboardRef.Name == "" {
-		errors = append(errors, "spec.dashboardRef.name: cannot be empty")
-	}
-
-	return errors
-}
-
-// validateMultiClusterIsolation validates multi-cluster deployment considerations
-// Returns warnings for configurations that may cause conflicts
-func validateMultiClusterIsolation(cluster *WazuhCluster) admission.Warnings {
-	var warnings admission.Warnings
-
-	// Warn about cross-namespace references requiring RBAC
-	hasCrossNamespaceRef := (cluster.Spec.ManagerRef != nil && cluster.Spec.ManagerRef.Namespace != "" && cluster.Spec.ManagerRef.Namespace != cluster.Namespace) ||
-		(cluster.Spec.IndexerRef != nil && cluster.Spec.IndexerRef.Namespace != "" && cluster.Spec.IndexerRef.Namespace != cluster.Namespace) ||
-		(cluster.Spec.DashboardRef != nil && cluster.Spec.DashboardRef.Namespace != "" && cluster.Spec.DashboardRef.Namespace != cluster.Namespace)
-
-	if hasCrossNamespaceRef {
-		warnings = append(warnings, "cross-namespace references detected; ensure RBAC allows the operator to access referenced namespaces")
-	}
-
-	return warnings
-}
-
 // validateUpdate validates update-specific rules
 func (v *WazuhClusterCustomValidator) validateUpdate(oldCluster, newCluster *WazuhCluster) (admission.Warnings, error) {
 	var warnings admission.Warnings
-
-	// Prevent mode transition (inline <-> reference)
-	if oldCluster.IsInlineMode() && newCluster.IsReferenceMode() {
-		return warnings, fmt.Errorf("spec: cannot transition from inline mode to reference mode")
-	}
-	if oldCluster.IsReferenceMode() && newCluster.IsInlineMode() {
-		return warnings, fmt.Errorf("spec: cannot transition from reference mode to inline mode")
-	}
 
 	// Prevent indexer topology mode transition (simple <-> advanced)
 	if oldCluster.Spec.Indexer != nil && newCluster.Spec.Indexer != nil {

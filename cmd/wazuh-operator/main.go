@@ -372,22 +372,6 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "WazuhCertificate")
 		os.Exit(1)
 	}
-	if err := (&controllers.WazuhManagerReconciler{
-		Client:            mgr.GetClient(),
-		Scheme:            mgr.GetScheme(),
-		ManagerReconciler: wazuhreconciler.NewManagerReconciler(mgr.GetClient(), mgr.GetScheme()),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "WazuhManager")
-		os.Exit(1)
-	}
-	if err := (&controllers.WazuhWorkerReconciler{
-		Client:           mgr.GetClient(),
-		Scheme:           mgr.GetScheme(),
-		WorkerReconciler: wazuhreconciler.NewWorkerReconciler(mgr.GetClient(), mgr.GetScheme()),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "WazuhWorker")
-		os.Exit(1)
-	}
 	if err := (&controllers.WazuhFilebeatReconciler{
 		Client:             mgr.GetClient(),
 		Scheme:             mgr.GetScheme(),
@@ -526,24 +510,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// OpenSearch Infrastructure Controllers
-	if err := (&controllers.OpenSearchIndexerReconciler{
-		Client:            mgr.GetClient(),
-		Scheme:            mgr.GetScheme(),
-		IndexerReconciler: opensearchreconciler.NewIndexerReconciler(mgr.GetClient(), mgr.GetScheme()).WithClientFactory(osClientFactory).WithSecurityAdminExecutor(securityAdminExecutor),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchIndexer")
-		os.Exit(1)
-	}
-	if err := (&controllers.OpenSearchDashboardReconciler{
-		Client:              mgr.GetClient(),
-		Scheme:              mgr.GetScheme(),
-		DashboardReconciler: opensearchreconciler.NewDashboardReconciler(mgr.GetClient(), mgr.GetScheme()),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchDashboard")
-		os.Exit(1)
-	}
-
 	// Backup/Restore Controllers
 	if err := (&controllers.WazuhBackupReconciler{
 		Client:           mgr.GetClient(),
@@ -570,10 +536,6 @@ func main() {
 		}
 		if err := wazuhv1.SetupOpenSearchAuthConfigWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "OpenSearchAuthConfig")
-			os.Exit(1)
-		}
-		if err := wazuhv1.SetupOpenSearchIndexerWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "OpenSearchIndexer")
 			os.Exit(1)
 		}
 	}

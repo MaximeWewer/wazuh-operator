@@ -69,17 +69,6 @@ type SecretReference struct {
 	Key string `json:"key,omitempty"`
 }
 
-// ComponentRef references a component CRD (WazuhManager, WazuhIndexer, WazuhDashboard)
-type ComponentRef struct {
-	// Name of the component resource
-	// +kubebuilder:validation:Required
-	Name string `json:"name"`
-
-	// Namespace of the component (defaults to same namespace)
-	// +optional
-	Namespace string `json:"namespace,omitempty"`
-}
-
 // ExternalSecretRef references an ExternalSecret or SecretStore from External Secrets Operator (ESO)
 // This allows integration with external secret providers like HashiCorp Vault, AWS Secrets Manager,
 // Azure Key Vault, GCP Secret Manager, etc.

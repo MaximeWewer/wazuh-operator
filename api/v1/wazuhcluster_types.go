@@ -22,9 +22,6 @@ import (
 )
 
 // WazuhClusterSpec defines the desired state of WazuhCluster
-// Supports two modes:
-// 1. Inline mode (default): Define manager, indexer, dashboard specs inline
-// 2. Reference mode: Use managerRef, indexerRef, dashboardRef to reference separate CRDs
 type WazuhClusterSpec struct {
 	// Version of Wazuh to deploy
 	// +kubebuilder:validation:Required
@@ -36,29 +33,17 @@ type WazuhClusterSpec struct {
 	// +kubebuilder:default="basic"
 	License string `json:"license,omitempty"`
 
-	// Manager configuration (inline mode)
+	// Manager configuration
 	// +optional
 	Manager *WazuhManagerClusterSpec `json:"manager,omitempty"`
 
-	// Reference to a WazuhManager resource (reference mode)
-	// +optional
-	ManagerRef *ComponentRef `json:"managerRef,omitempty"`
-
-	// Indexer configuration (inline mode)
+	// Indexer configuration
 	// +optional
 	Indexer *WazuhIndexerClusterSpec `json:"indexer,omitempty"`
 
-	// Reference to a WazuhIndexer resource (reference mode)
-	// +optional
-	IndexerRef *ComponentRef `json:"indexerRef,omitempty"`
-
-	// Dashboard configuration (inline mode)
+	// Dashboard configuration
 	// +optional
 	Dashboard *WazuhDashboardClusterSpec `json:"dashboard,omitempty"`
-
-	// Reference to a WazuhDashboard resource (reference mode)
-	// +optional
-	DashboardRef *ComponentRef `json:"dashboardRef,omitempty"`
 
 	// Image pull secrets for private registries
 	// +optional
@@ -1280,30 +1265,6 @@ type WazuhClusterList struct {
 
 func init() {
 	SchemeBuilder.Register(&WazuhCluster{}, &WazuhClusterList{})
-}
-
-// WazuhCluster helper methods for configuration mode detection
-
-// IsInlineMode returns true if the cluster uses inline component specifications
-// Inline mode means Manager, Indexer, or Dashboard specs are defined directly in the WazuhCluster
-func (c *WazuhCluster) IsInlineMode() bool {
-	return c.Spec.Manager != nil ||
-		c.Spec.Indexer != nil ||
-		c.Spec.Dashboard != nil
-}
-
-// IsReferenceMode returns true if the cluster uses component references
-// Reference mode means ManagerRef, IndexerRef, or DashboardRef point to separate CRs
-func (c *WazuhCluster) IsReferenceMode() bool {
-	return c.Spec.ManagerRef != nil ||
-		c.Spec.IndexerRef != nil ||
-		c.Spec.DashboardRef != nil
-}
-
-// IsMixedMode returns true if the cluster mixes inline and reference modes
-// Mixed mode is invalid and should be rejected by validation
-func (c *WazuhCluster) IsMixedMode() bool {
-	return c.IsInlineMode() && c.IsReferenceMode()
 }
 
 // WazuhIndexerClusterSpec helper methods for topology mode detection

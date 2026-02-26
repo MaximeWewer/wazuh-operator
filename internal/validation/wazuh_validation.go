@@ -26,34 +26,6 @@ import (
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
-// ValidateWazuhManager validates a WazuhManager resource
-func ValidateWazuhManager(manager *wazuhv1.WazuhManager) field.ErrorList {
-	var allErrs field.ErrorList
-
-	// Validate name
-	if manager.Name == "" {
-		allErrs = append(allErrs, field.Required(field.NewPath("metadata").Child("name"), "name is required"))
-	}
-
-	// Validate spec
-	specPath := field.NewPath("spec")
-
-	// Validate version
-	if manager.Spec.Version != "" {
-		if !isValidVersion(manager.Spec.Version) {
-			allErrs = append(allErrs, field.Invalid(specPath.Child("version"), manager.Spec.Version, "invalid version format"))
-		}
-	}
-
-	// Validate worker replicas
-	if manager.Spec.Workers.Replicas != nil && *manager.Spec.Workers.Replicas < 0 {
-		allErrs = append(allErrs, field.Invalid(specPath.Child("workers").Child("replicas"),
-			*manager.Spec.Workers.Replicas, "worker replicas must be non-negative"))
-	}
-
-	return allErrs
-}
-
 // ValidateWazuhCluster validates a WazuhCluster resource
 func ValidateWazuhCluster(cluster *wazuhv1.WazuhCluster) field.ErrorList {
 	var allErrs field.ErrorList
