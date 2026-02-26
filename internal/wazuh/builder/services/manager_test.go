@@ -38,8 +38,9 @@ func TestManagerServiceBuilder_WithPorts(t *testing.T) {
 
 	service := builder.WithPorts(customPorts).Build()
 
-	if len(service.Spec.Ports) != 1 {
-		t.Fatalf("expected 1 port, got %d", len(service.Spec.Ports))
+	// Custom port + auto-injected cluster port
+	if len(service.Spec.Ports) != 2 {
+		t.Fatalf("expected 2 ports (custom + cluster), got %d", len(service.Spec.Ports))
 	}
 	if service.Spec.Ports[0].Name != "http" {
 		t.Fatalf("expected port name 'http', got %q", service.Spec.Ports[0].Name)
@@ -47,8 +48,37 @@ func TestManagerServiceBuilder_WithPorts(t *testing.T) {
 	if service.Spec.Ports[0].Port != 80 {
 		t.Fatalf("expected port 80, got %d", service.Spec.Ports[0].Port)
 	}
-	if service.Spec.Ports[0].TargetPort.IntVal != 5601 {
-		t.Fatalf("expected targetPort 5601, got %d", service.Spec.Ports[0].TargetPort.IntVal)
+	if service.Spec.Ports[1].Name != constants.PortNameManagerCluster {
+		t.Fatalf("expected auto-injected cluster port, got %q", service.Spec.Ports[1].Name)
+	}
+	if service.Spec.Ports[1].Port != constants.PortManagerCluster {
+		t.Fatalf("expected cluster port 1516, got %d", service.Spec.Ports[1].Port)
+	}
+}
+
+func TestManagerServiceBuilder_CustomPortsWithClusterPort(t *testing.T) {
+	builder := NewManagerServiceBuilder("test-cluster", "default", "master")
+	customPorts := []corev1.ServicePort{
+		{
+			Name:       "api",
+			Port:       55000,
+			TargetPort: intstr.FromInt(55000),
+			NodePort:   31550,
+			Protocol:   corev1.ProtocolTCP,
+		},
+		{
+			Name:       constants.PortNameManagerCluster,
+			Port:       constants.PortManagerCluster,
+			TargetPort: intstr.FromInt(int(constants.PortManagerCluster)),
+			Protocol:   corev1.ProtocolTCP,
+		},
+	}
+
+	service := builder.WithPorts(customPorts).Build()
+
+	// Should not duplicate the cluster port
+	if len(service.Spec.Ports) != 2 {
+		t.Fatalf("expected 2 ports (no duplicate cluster), got %d", len(service.Spec.Ports))
 	}
 }
 

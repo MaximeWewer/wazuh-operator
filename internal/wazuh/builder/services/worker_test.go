@@ -27,28 +27,50 @@ import (
 
 func TestWorkerServiceBuilder_WithPorts(t *testing.T) {
 	builder := NewWorkerServiceBuilder("test-cluster", "default")
+	// Custom ports without cluster port — it should be auto-injected
 	customPorts := []corev1.ServicePort{
 		{
-			Name:       "cluster",
-			Port:       1516,
-			TargetPort: intstr.FromInt(1516),
+			Name:       "agents-events",
+			Port:       1514,
+			TargetPort: intstr.FromInt(1514),
+			NodePort:   31514,
 			Protocol:   corev1.ProtocolTCP,
 		},
 	}
 
 	service := builder.WithPorts(customPorts).Build()
 
+	// Custom port + auto-injected cluster port
+	if len(service.Spec.Ports) != 2 {
+		t.Fatalf("expected 2 ports (custom + cluster), got %d", len(service.Spec.Ports))
+	}
+	if service.Spec.Ports[0].Name != "agents-events" {
+		t.Fatalf("expected port name 'agents-events', got %q", service.Spec.Ports[0].Name)
+	}
+	if service.Spec.Ports[1].Name != constants.PortNameManagerCluster {
+		t.Fatalf("expected auto-injected cluster port, got %q", service.Spec.Ports[1].Name)
+	}
+	if service.Spec.Ports[1].Port != constants.PortManagerCluster {
+		t.Fatalf("expected cluster port 1516, got %d", service.Spec.Ports[1].Port)
+	}
+}
+
+func TestWorkerServiceBuilder_CustomPortsWithClusterPort(t *testing.T) {
+	builder := NewWorkerServiceBuilder("test-cluster", "default")
+	customPorts := []corev1.ServicePort{
+		{
+			Name:       constants.PortNameManagerCluster,
+			Port:       constants.PortManagerCluster,
+			TargetPort: intstr.FromInt(int(constants.PortManagerCluster)),
+			Protocol:   corev1.ProtocolTCP,
+		},
+	}
+
+	service := builder.WithPorts(customPorts).Build()
+
+	// Should not duplicate the cluster port
 	if len(service.Spec.Ports) != 1 {
-		t.Fatalf("expected 1 port, got %d", len(service.Spec.Ports))
-	}
-	if service.Spec.Ports[0].Name != "cluster" {
-		t.Fatalf("expected port name 'cluster', got %q", service.Spec.Ports[0].Name)
-	}
-	if service.Spec.Ports[0].Port != 1516 {
-		t.Fatalf("expected port 1516, got %d", service.Spec.Ports[0].Port)
-	}
-	if service.Spec.Ports[0].TargetPort.IntVal != 1516 {
-		t.Fatalf("expected targetPort 1516, got %d", service.Spec.Ports[0].TargetPort.IntVal)
+		t.Fatalf("expected 1 port (no duplicate cluster), got %d", len(service.Spec.Ports))
 	}
 }
 

@@ -140,6 +140,24 @@ func (b *ManagerServiceBuilder) Build() *corev1.Service {
 		}
 	}
 
+	// Ensure cluster port (1516) is always present — it is required for
+	// master↔worker communication and must never be omitted by custom ports.
+	hasClusterPort := false
+	for _, p := range ports {
+		if p.Port == constants.PortManagerCluster {
+			hasClusterPort = true
+			break
+		}
+	}
+	if !hasClusterPort {
+		ports = append(ports, corev1.ServicePort{
+			Name:       constants.PortNameManagerCluster,
+			Port:       constants.PortManagerCluster,
+			TargetPort: intstr.FromInt(int(constants.PortManagerCluster)),
+			Protocol:   corev1.ProtocolTCP,
+		})
+	}
+
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        b.name,
