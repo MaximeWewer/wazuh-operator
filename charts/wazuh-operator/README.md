@@ -96,7 +96,7 @@ kubectl delete -f <(helm template wazuh-operator ./charts/wazuh-operator --names
 | operator.healthProbe.livenessProbe.initialDelaySeconds | int | `15` | Initial delay before liveness probing |
 | operator.healthProbe.livenessProbe.periodSeconds | int | `20` | Liveness probe interval |
 | operator.healthProbe.port | int | `8081` | Health probe port |
-| operator.healthProbe.readinessProbe.initialDelaySeconds | int | `5` | Initial delay before readiness probing |
+| operator.healthProbe.readinessProbe.initialDelaySeconds | int | `30` | Initial delay before readiness probing |
 | operator.healthProbe.readinessProbe.periodSeconds | int | `10` | Readiness probe interval |
 | operator.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |
 | operator.image.repository | string | `"ghcr.io/maximewewer/wazuh-operator"` | Operator image repository |
@@ -106,6 +106,7 @@ kubectl delete -f <(helm template wazuh-operator ./charts/wazuh-operator --names
 | operator.logging.level | string | `"info"` | Log level: "debug", "info", "warn", "error" |
 | operator.metrics.enabled | bool | `true` | Enable Prometheus metrics |
 | operator.metrics.port | int | `8080` | Metrics port |
+| operator.metrics.secure | bool | `false` | Serve metrics over HTTPS (requires TLS configuration in ServiceMonitor if true) |
 | operator.metrics.service.annotations | object | `{}` | Metrics service annotations |
 | operator.metrics.service.type | string | `"ClusterIP"` | Metrics service type |
 | operator.name | string | `"wazuh-operator"` | Operator name |
@@ -301,6 +302,7 @@ operator:
   metrics:
     enabled: true
     port: 8080
+    secure: false  # Set to true to serve metrics over HTTPS
 
   serviceMonitor:
     enabled: true
@@ -318,6 +320,10 @@ operator:
         for: "5m"
         severity: critical
 ```
+
+> **Note:** When `metrics.secure` is `true`, the operator serves metrics over HTTPS and the
+> ServiceMonitor is automatically configured with `scheme: https` and `insecureSkipVerify: true`.
+> When `false` (default), metrics are served over plain HTTP.
 
 ### With Gateway API Support
 
@@ -452,6 +458,14 @@ helm get values wazuh-operator -n wazuh-operator
 kubectl port-forward -n wazuh-operator svc/wazuh-operator-metrics 8080:8080
 curl http://localhost:8080/metrics
 ```
+
+### TLS Handshake Errors from Prometheus
+
+If you see `http: TLS handshake error ... client sent an HTTP request to an HTTPS server` in operator logs,
+Prometheus is scraping metrics over HTTP but the operator is serving them over HTTPS.
+
+**Fix:** Set `operator.metrics.secure: false` in your values, or configure your ServiceMonitor for HTTPS scraping
+(done automatically when `secure: true` and `serviceMonitor.enabled: true`).
 
 ## Support
 

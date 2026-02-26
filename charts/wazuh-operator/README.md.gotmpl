@@ -240,6 +240,7 @@ operator:
   metrics:
     enabled: true
     port: 8080
+    secure: false  # Set to true to serve metrics over HTTPS
 
   serviceMonitor:
     enabled: true
@@ -257,6 +258,10 @@ operator:
         for: "5m"
         severity: critical
 ```
+
+> **Note:** When `metrics.secure` is `true`, the operator serves metrics over HTTPS and the
+> ServiceMonitor is automatically configured with `scheme: https` and `insecureSkipVerify: true`.
+> When `false` (default), metrics are served over plain HTTP.
 
 ### With Gateway API Support
 
@@ -391,6 +396,14 @@ helm get values wazuh-operator -n wazuh-operator
 kubectl port-forward -n wazuh-operator svc/wazuh-operator-metrics 8080:8080
 curl http://localhost:8080/metrics
 ```
+
+### TLS Handshake Errors from Prometheus
+
+If you see `http: TLS handshake error ... client sent an HTTP request to an HTTPS server` in operator logs,
+Prometheus is scraping metrics over HTTP but the operator is serving them over HTTPS.
+
+**Fix:** Set `operator.metrics.secure: false` in your values, or configure your ServiceMonitor for HTTPS scraping
+(done automatically when `secure: true` and `serviceMonitor.enabled: true`).
 
 ## Support
 

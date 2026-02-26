@@ -237,6 +237,39 @@ operator:
       periodSeconds: 10
 ```
 
+## Operator Metrics
+
+The operator exposes its own Prometheus metrics (reconciliation counts, queue depth, etc.) on a configurable port.
+
+### Configuration
+
+```yaml
+operator:
+  metrics:
+    enabled: true
+    port: 8080
+    secure: false  # Serve metrics over HTTPS (default: false)
+  serviceMonitor:
+    enabled: true
+    interval: "30s"
+    scrapeTimeout: "10s"
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `metrics.enabled` | bool | `true` | Enable operator metrics endpoint |
+| `metrics.port` | int | `8080` | Metrics port |
+| `metrics.secure` | bool | `false` | Serve metrics over HTTPS instead of HTTP |
+| `serviceMonitor.enabled` | bool | `false` | Create a ServiceMonitor for the operator |
+
+> **Note:** When `metrics.secure` is `true`, the ServiceMonitor is automatically configured with
+> `scheme: https` and `insecureSkipVerify: true`. When `false` (default), Prometheus scrapes
+> over plain HTTP.
+>
+> If you see `http: TLS handshake error ... client sent an HTTP request to an HTTPS server` in
+> operator logs, it means Prometheus is scraping with HTTP but the operator is serving HTTPS.
+> Set `metrics.secure: false` to resolve this.
+
 ## Related Documentation
 
 - [OpenTelemetry](./opentelemetry.md) - Distributed tracing for debugging reconciliation loops and API calls
