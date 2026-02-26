@@ -308,11 +308,13 @@ func main() {
 	certReconciler := certreconciler.NewCertificateReconciler(mgr.GetClient(), mgr.GetScheme()).
 		WithRESTConfig(mgr.GetConfig())
 
-	// Create shared rule and decoder reconcilers (used by both WazuhCluster and individual controllers)
+	// Create shared rule, decoder, and agent group reconcilers (used by both WazuhCluster and individual controllers)
 	wazuhRuleRecorder := mgr.GetEventRecorderFor("wazuhrule-controller")
 	ruleReconciler := wazuhreconciler.NewRuleReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhRuleRecorder)
 	wazuhDecoderRecorder := mgr.GetEventRecorderFor("wazuhdecoder-controller")
 	decoderReconciler := wazuhreconciler.NewDecoderReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhDecoderRecorder)
+	wazuhAgentGroupRecorder := mgr.GetEventRecorderFor("wazuhagentgroup-controller")
+	agentGroupReconciler := wazuhreconciler.NewAgentGroupReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhAgentGroupRecorder)
 
 	// WazuhCluster Controller (main orchestration)
 	wazuhClusterReconciler := &controllers.WazuhClusterReconciler{
@@ -321,7 +323,8 @@ func main() {
 		Recorder: mgr.GetEventRecorderFor("wazuhcluster-controller"),
 		ClusterReconciler: wazuhreconciler.NewClusterReconciler(mgr.GetClient(), mgr.GetScheme()).
 			WithRuleReconciler(ruleReconciler).
-			WithDecoderReconciler(decoderReconciler),
+			WithDecoderReconciler(decoderReconciler).
+			WithAgentGroupReconciler(agentGroupReconciler),
 		CertificateReconciler:   certReconciler,
 		IndexerReconciler:       opensearchreconciler.NewIndexerReconciler(mgr.GetClient(), mgr.GetScheme()).WithClientFactory(osClientFactory).WithSecurityAdminExecutor(securityAdminExecutor),
 		DashboardReconciler:     opensearchreconciler.NewDashboardReconciler(mgr.GetClient(), mgr.GetScheme()),
@@ -379,6 +382,15 @@ func main() {
 		FilebeatReconciler: wazuhreconciler.NewFilebeatReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor("wazuhfilebeat-controller")),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WazuhFilebeat")
+		os.Exit(1)
+	}
+	if err := (&controllers.WazuhAgentGroupReconciler{
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		Recorder:             wazuhAgentGroupRecorder,
+		AgentGroupReconciler: agentGroupReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WazuhAgentGroup")
 		os.Exit(1)
 	}
 

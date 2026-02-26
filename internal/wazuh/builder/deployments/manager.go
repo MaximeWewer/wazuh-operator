@@ -61,6 +61,8 @@ type ManagerStatefulSetBuilder struct {
 	ruleConfigMaps []RuleConfigMapRef
 	// Decoder ConfigMaps to mount
 	decoderConfigMaps []DecoderConfigMapRef
+	// Agent group file ConfigMaps to mount
+	agentGroupFiles []AgentGroupFileRef
 	// Extra init containers
 	extraInitContainers []corev1.Container
 	// Extra sidecar containers
@@ -89,6 +91,13 @@ type RuleConfigMapRef struct {
 type DecoderConfigMapRef struct {
 	Name     string // ConfigMap name
 	FileName string // Filename for the decoder (e.g., "my_decoder.xml")
+}
+
+// AgentGroupFileRef holds information about an agent group files ConfigMap to mount
+type AgentGroupFileRef struct {
+	ConfigMapName string   // ConfigMap name
+	GroupName     string   // Agent group name (used for mount path)
+	FileNames     []string // Filenames within the ConfigMap
 }
 
 // NewManagerStatefulSetBuilder creates a new ManagerStatefulSetBuilder
@@ -301,6 +310,26 @@ func (b *ManagerStatefulSetBuilder) WithDecoderHash(hash string) *ManagerStatefu
 			b.podAnnotations = make(map[string]string)
 		}
 		b.podAnnotations[constants.AnnotationDecoderHash] = hash
+	}
+	return b
+}
+
+// WithAgentGroupFiles sets the agent group file ConfigMaps to mount
+// Each ConfigMap contains files for a specific agent group that will be mounted
+// to /var/ossec/etc/shared/<groupName>/<filename>
+func (b *ManagerStatefulSetBuilder) WithAgentGroupFiles(refs []AgentGroupFileRef) *ManagerStatefulSetBuilder {
+	b.agentGroupFiles = refs
+	return b
+}
+
+// WithAgentGroupFilesHash sets the agent group files hash annotation on pods
+// This triggers pod restart when agent group file content changes
+func (b *ManagerStatefulSetBuilder) WithAgentGroupFilesHash(hash string) *ManagerStatefulSetBuilder {
+	if hash != "" {
+		if b.podAnnotations == nil {
+			b.podAnnotations = make(map[string]string)
+		}
+		b.podAnnotations[constants.AnnotationAgentGroupFilesHash] = hash
 	}
 	return b
 }
@@ -699,6 +728,20 @@ func (b *ManagerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 		})
 	}
 
+	// Add agent group file ConfigMap volumes
+	for _, ref := range b.agentGroupFiles {
+		volumes = append(volumes, corev1.Volume{
+			Name: fmt.Sprintf("agentgroup-files-%s", ref.ConfigMapName),
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: ref.ConfigMapName,
+					},
+				},
+			},
+		})
+	}
+
 	return volumes
 }
 
@@ -757,6 +800,18 @@ func (b *ManagerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 			SubPath:   ref.FileName,
 			ReadOnly:  true,
 		})
+	}
+
+	// Add agent group file mounts at /var/ossec/etc/shared/<groupName>/<filename>
+	for _, ref := range b.agentGroupFiles {
+		for _, fileName := range ref.FileNames {
+			mounts = append(mounts, corev1.VolumeMount{
+				Name:      fmt.Sprintf("agentgroup-files-%s", ref.ConfigMapName),
+				MountPath: fmt.Sprintf("/var/ossec/etc/shared/%s/%s", ref.GroupName, fileName),
+				SubPath:   fileName,
+				ReadOnly:  true,
+			})
+		}
 	}
 
 	return mounts

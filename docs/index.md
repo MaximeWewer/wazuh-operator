@@ -24,8 +24,8 @@ kubectl get wazuhcluster -n wazuh
 | **Type**        | Kubernetes Operator                         |
 | **Language**    | Go 1.26.0                                   |
 | **Framework**   | Kubebuilder v4 + controller-runtime         |
-| **CRDs**        | 21 Custom Resource Definitions              |
-| **Controllers** | 21 reconciliation controllers               |
+| **CRDs**        | 22 Custom Resource Definitions              |
+| **Controllers** | 22 reconciliation controllers               |
 | **API Group**   | `resources.wazuh.com/v1`                    |
 | **Target**      | Kubernetes 1.25+                            |
 
@@ -40,7 +40,7 @@ kubectl get wazuhcluster -n wazuh
 ### User Guide
 
 - [User Documentation](usage/README.md) - Complete user guide index
-- [CRD Reference](usage/CRD-REFERENCE.md) - API documentation for all 21 CRDs
+- [CRD Reference](usage/CRD-REFERENCE.md) - API documentation for all 22 CRDs
 - [Examples](usage/examples/README.md) - Ready-to-use configurations
 
 ### Key Features
@@ -78,7 +78,7 @@ kubectl get wazuhcluster -n wazuh
 | Path                      | Description                                                          |
 | ------------------------- | -------------------------------------------------------------------- |
 | `api/v1/`                 | CRD type definitions (v1 storage version)                            |
-| `controllers/`            | 21 Kubernetes controllers                                            |
+| `controllers/`            | 22 Kubernetes controllers                                            |
 | `internal/wazuh/`         | Wazuh reconcilers, config, builders, drain                           |
 | `internal/opensearch/`    | OpenSearch reconcilers, API clients, config, builders                |
 | `internal/certificates/`  | TLS certificate reconciler and generation                            |

@@ -77,7 +77,7 @@ Open <https://localhost:5601> - Credentials are auto-generated in secrets.
 | Category                | CRDs                                                                                                                 | Short Names                                    |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | **Wazuh Core**          | WazuhCluster                                                                                                         | wc                                             |
-| **Wazuh Config**        | WazuhRule, WazuhDecoder, WazuhCertificate, WazuhFilebeat                                                             | wrule, wdecoder, wzcert, wfb                   |
+| **Wazuh Config**        | WazuhRule, WazuhDecoder, WazuhCertificate, WazuhFilebeat, WazuhAgentGroup                                            | wrule, wdecoder, wzcert, wfb, wagentgroup      |
 | **Wazuh Backup**        | WazuhBackup, WazuhRestore                                                                                            | wbak, wrest                                    |
 | **OpenSearch Security** | OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchActionGroup, OpenSearchTenant, OpenSearchAuthConfig | osuser, osrole, osrmap, osag, ostenant, osauth |
 | **OpenSearch Index**    | OpenSearchIndex, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchPolicy, OpenSearchSnapshotPolicy    | osidx, osidxt, osctpl, osism, ossnap           |

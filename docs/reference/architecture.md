@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framework that manages the complete lifecycle of Wazuh security monitoring platform deployments on Kubernetes. It follows the operator pattern with declarative resource management through 21 Custom Resource Definitions (CRDs) and 21 reconciliation controllers.
+The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framework that manages the complete lifecycle of Wazuh security monitoring platform deployments on Kubernetes. It follows the operator pattern with declarative resource management through 22 Custom Resource Definitions (CRDs) and 22 reconciliation controllers.
 
 ## Technology Stack
 
@@ -46,9 +46,9 @@ flowchart TD
         subgraph CRM[Controller Runtime Manager]
             CRM1["Manages controller lifecycle · Shared caches and informers<br/>Leader election · Metrics server · Health checks"]
         end
-        subgraph Controllers[21 Reconciliation Controllers]
+        subgraph Controllers[22 Reconciliation Controllers]
             WCR["WazuhClusterReconciler (Main)<br/>Orchestrates all components · Delegates to helper reconcilers"]
-            CONFIG["Config Controllers (4)<br/>Rules, Decoders, Certificates, Filebeat"]
+            CONFIG["Config Controllers (5)<br/>Rules, Decoders, Certificates, Filebeat, AgentGroups"]
             SEC["OpenSearch Security Controllers (5)<br/>Users, Roles, RoleMappings, etc."]
             IDX["OpenSearch Index Controllers (5)<br/>Indices, Templates, ISM Policies"]
             BACKUP["Backup/Restore Controllers (4)<br/>Wazuh and OpenSearch backups"]
@@ -80,7 +80,7 @@ flowchart TD
 
 **Components**:
 
-- 21 CRD type definitions
+- 22 CRD type definitions
 - Validation markers (Kubebuilder)
 - Status subresources
 - Short names and categories
@@ -251,14 +251,14 @@ builder := statefulsets.NewManagerBuilder(name, namespace).
 
 ## Data Architecture
 
-### Custom Resource Definitions (21 CRDs)
+### Custom Resource Definitions (22 CRDs)
 
 **API Group**: `resources.wazuh.com/v1`
 
 **Categories**:
 
 1. **Wazuh Core** (1): WazuhCluster
-2. **Wazuh Config** (4): WazuhRule, WazuhDecoder, WazuhCertificate, WazuhFilebeat
+2. **Wazuh Config** (5): WazuhRule, WazuhDecoder, WazuhCertificate, WazuhFilebeat, WazuhAgentGroup
 3. **Wazuh Backup** (2): WazuhBackup, WazuhRestore
 4. **OpenSearch Security** (6): OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchActionGroup, OpenSearchTenant, OpenSearchAuthConfig
 5. **OpenSearch Index** (5): OpenSearchIndex, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchISMPolicy, OpenSearchSnapshotPolicy

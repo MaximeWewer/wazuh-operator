@@ -24,6 +24,7 @@ This document provides a complete reference for all Custom Resource Definitions 
   - [OpenSearchRestore](#opensearchrestore)
 - [Wazuh Configuration CRDs](#wazuh-configuration-crds)
   - [WazuhRule](#wazuhrule)
+  - [WazuhAgentGroup](#wazuhagentgroup)
   - [WazuhDecoder](#wazuhdecoder)
   - [WazuhCertificate](#wazuhcertificate)
   - [WazuhFilebeat](#wazuhfilebeat)
@@ -884,6 +885,64 @@ Manages custom Wazuh detection rules.
 | `priority`    | int32                 | No       | `500`   | Application priority        |
 | `ifSID`       | []int32               | No       | -       | Parent rule IDs             |
 | `ifGroup`     | []string              | No       | -       | Parent rule groups          |
+
+### WazuhAgentGroup
+
+Manages Wazuh agent groups declaratively. Agent groups define shared configuration that is pushed to agents belonging to that group.
+
+**Short Name:** `wagentgroup`
+
+| Field         | Type                  | Required | Default           | Description                                                  |
+| ------------- | --------------------- | -------- | ----------------- | ------------------------------------------------------------ |
+| `clusterRef`  | WazuhClusterReference | **Yes**  | -                 | Cluster reference                                            |
+| `groupName`   | string                | No       | `metadata.name`   | Agent group name (pattern: `^[a-zA-Z0-9._-]+$`)             |
+| `description` | string                | No       | -                 | Group description                                            |
+| `agentConf`   | string                | No       | -                 | XML agent configuration content (`<agent_config>` block)     |
+| `files`       | map[string]string     | No       | -                 | Extra files to place in `/var/ossec/etc/shared/<groupName>/` (mounted via ConfigMap) |
+
+#### Status Fields
+
+| Field                | Type        | Description                                 |
+| -------------------- | ----------- | ------------------------------------------- |
+| `phase`              | string      | Current phase (Pending/Ready/Failed)        |
+| `conditions`         | []Condition | Standard conditions                         |
+| `lastSyncTime`       | Time        | Last sync timestamp                         |
+| `observedGeneration` | int64       | Last observed generation                    |
+| `lastAppliedHash`    | string      | Spec hash for drift detection               |
+| `message`            | string      | Additional information                      |
+| `agentCount`         | int32       | Number of agents in this group              |
+
+#### Example
+
+```yaml
+# docs/usage/examples/wazuh-cluster/wazuhagentgroup-basic.yaml
+apiVersion: resources.wazuh.com/v1
+kind: WazuhAgentGroup
+metadata:
+  name: linux-servers
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  groupName: linux
+  description: "Linux servers group"
+  agentConf: |
+    <agent_config>
+      <syscheck>
+        <frequency>600</frequency>
+        <directories>/etc,/usr/bin,/usr/sbin</directories>
+      </syscheck>
+    </agent_config>
+  files:
+    ar.conf: |
+      restart-wazuh0 - ar.conf - 0
+      host-deny0 - ar.conf - 600
+    rootcheck.txt: |
+      # Custom rootcheck policy
+```
+
+> **Note:** The `files` field lets you place arbitrary files in the group's shared directory (`/var/ossec/etc/shared/<groupName>/`). The Wazuh API only supports writing `agent.conf`, so additional files like `ar.conf` or custom rootcheck policies are mounted via a ConfigMap with SubPath mounts. Changing `files` triggers a rolling restart of the manager pods.
+
+---
 
 ### WazuhDecoder
 

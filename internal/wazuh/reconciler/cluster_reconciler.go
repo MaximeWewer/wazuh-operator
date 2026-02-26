@@ -72,6 +72,8 @@ type ClusterReconciler struct {
 	RuleReconciler *RuleReconciler
 	// DecoderReconciler handles WazuhDecoder resources for mounting decoders to manager pods
 	DecoderReconciler *DecoderReconciler
+	// AgentGroupReconciler handles WazuhAgentGroup resources for mounting group files to manager pods
+	AgentGroupReconciler *AgentGroupReconciler
 }
 
 // NewClusterReconciler creates a new ClusterReconciler
@@ -97,6 +99,12 @@ func (r *ClusterReconciler) WithRuleReconciler(rr *RuleReconciler) *ClusterRecon
 // WithDecoderReconciler sets the decoder reconciler for mounting decoder ConfigMaps to manager pods
 func (r *ClusterReconciler) WithDecoderReconciler(dr *DecoderReconciler) *ClusterReconciler {
 	r.DecoderReconciler = dr
+	return r
+}
+
+// WithAgentGroupReconciler sets the agent group reconciler for mounting group file ConfigMaps to manager pods
+func (r *ClusterReconciler) WithAgentGroupReconciler(agr *AgentGroupReconciler) *ClusterReconciler {
+	r.AgentGroupReconciler = agr
 	return r
 }
 
@@ -680,6 +688,20 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		}
 	}
 
+	// Mount agent group file ConfigMaps if AgentGroupReconciler is configured
+	var agentGroupFilesHash string
+	if r.AgentGroupReconciler != nil {
+		agentGroupFiles, hash, err := r.AgentGroupReconciler.GetAgentGroupFilesForCluster(ctx, cluster.Name, cluster.Namespace)
+		if err != nil {
+			log.Error(err, "Failed to get agent group files for cluster, continuing without group files")
+		} else if len(agentGroupFiles) > 0 {
+			stsBuilder.WithAgentGroupFiles(convertAgentGroupFiles(agentGroupFiles))
+			stsBuilder.WithAgentGroupFilesHash(hash)
+			agentGroupFilesHash = hash
+			log.V(1).Info("Mounting agent group file ConfigMaps to master", "count", len(agentGroupFiles), "hash", utils.ShortHash(hash))
+		}
+	}
+
 	sts := stsBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for master statefulset: %w", err)
@@ -688,7 +710,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	found := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Master StatefulSet", "name", sts.Name, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash), "ruleHash", utils.ShortHash(ruleHash), "decoderHash", utils.ShortHash(decoderHash))
+		log.Info("Creating Master StatefulSet", "name", sts.Name, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash), "ruleHash", utils.ShortHash(ruleHash), "decoderHash", utils.ShortHash(decoderHash), "agentGroupFilesHash", utils.ShortHash(agentGroupFilesHash))
 		if err := r.Create(ctx, sts); err != nil {
 			return nil, fmt.Errorf("failed to create master statefulset: %w", err)
 		}
@@ -727,17 +749,19 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		}, nil
 	}
 
-	// Check if update is needed (any hash changed: cert, config, spec, rule, or decoder)
+	// Check if update is needed (any hash changed: cert, config, spec, rule, decoder, or agent group files)
 	existingCertHash := ""
 	existingConfigHash := ""
 	existingSpecHash := ""
 	existingRuleHash := ""
 	existingDecoderHash := ""
+	existingAgentGroupFilesHash := ""
 	if found.Spec.Template.Annotations != nil {
 		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
 		existingConfigHash = found.Spec.Template.Annotations[constants.AnnotationConfigHash]
 		existingRuleHash = found.Spec.Template.Annotations[constants.AnnotationRuleHash]
 		existingDecoderHash = found.Spec.Template.Annotations[constants.AnnotationDecoderHash]
+		existingAgentGroupFilesHash = found.Spec.Template.Annotations[constants.AnnotationAgentGroupFilesHash]
 	}
 	if found.Annotations != nil {
 		existingSpecHash = found.Annotations[constants.AnnotationSpecHash]
@@ -827,6 +851,18 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingDecoderHash),
 			"newHash", utils.ShortHash(decoderHash))
+	}
+	if agentGroupFilesHash != existingAgentGroupFilesHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+agentgroup-files-change"
+		} else {
+			updateReason = "agentgroup-files-change"
+		}
+		log.Info("Master StatefulSet needs update due to agent group files hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingAgentGroupFilesHash),
+			"newHash", utils.ShortHash(agentGroupFilesHash))
 	}
 
 	if needsUpdate {
@@ -1187,6 +1223,20 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		}
 	}
 
+	// Mount agent group file ConfigMaps if AgentGroupReconciler is configured
+	var agentGroupFilesHash string
+	if r.AgentGroupReconciler != nil {
+		agentGroupFiles, hash, err := r.AgentGroupReconciler.GetAgentGroupFilesForCluster(ctx, cluster.Name, cluster.Namespace)
+		if err != nil {
+			log.Error(err, "Failed to get agent group files for cluster, continuing without group files")
+		} else if len(agentGroupFiles) > 0 {
+			stsBuilder.WithAgentGroupFiles(convertAgentGroupFiles(agentGroupFiles))
+			stsBuilder.WithAgentGroupFilesHash(hash)
+			agentGroupFilesHash = hash
+			log.V(1).Info("Mounting agent group file ConfigMaps to workers", "count", len(agentGroupFiles), "hash", utils.ShortHash(hash))
+		}
+	}
+
 	sts := stsBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for worker statefulset: %w", err)
@@ -1195,7 +1245,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	found := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Worker StatefulSet", "name", sts.Name, "replicas", replicas, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash), "ruleHash", utils.ShortHash(ruleHash), "decoderHash", utils.ShortHash(decoderHash))
+		log.Info("Creating Worker StatefulSet", "name", sts.Name, "replicas", replicas, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash), "ruleHash", utils.ShortHash(ruleHash), "decoderHash", utils.ShortHash(decoderHash), "agentGroupFilesHash", utils.ShortHash(agentGroupFilesHash))
 		if err := r.Create(ctx, sts); err != nil {
 			return nil, fmt.Errorf("failed to create worker statefulset: %w", err)
 		}
@@ -1244,11 +1294,13 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	existingSpecHash := ""
 	existingRuleHash := ""
 	existingDecoderHash := ""
+	existingAgentGroupFilesHash := ""
 	if found.Spec.Template.Annotations != nil {
 		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
 		existingConfigHash = found.Spec.Template.Annotations[constants.AnnotationConfigHash]
 		existingRuleHash = found.Spec.Template.Annotations[constants.AnnotationRuleHash]
 		existingDecoderHash = found.Spec.Template.Annotations[constants.AnnotationDecoderHash]
+		existingAgentGroupFilesHash = found.Spec.Template.Annotations[constants.AnnotationAgentGroupFilesHash]
 	}
 	if found.Annotations != nil {
 		existingSpecHash = found.Annotations[constants.AnnotationSpecHash]
@@ -1338,6 +1390,18 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingDecoderHash),
 			"newHash", utils.ShortHash(decoderHash))
+	}
+	if agentGroupFilesHash != existingAgentGroupFilesHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+agentgroup-files-change"
+		} else {
+			updateReason = "agentgroup-files-change"
+		}
+		log.Info("Worker StatefulSet needs update due to agent group files hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingAgentGroupFilesHash),
+			"newHash", utils.ShortHash(agentGroupFilesHash))
 	}
 
 	if needsUpdate {
@@ -2789,6 +2853,19 @@ func convertDecoderConfigMaps(infos []DecoderConfigMapInfo) []deployments.Decode
 		refs[i] = deployments.DecoderConfigMapRef{
 			Name:     info.ConfigMapName,
 			FileName: info.FileName,
+		}
+	}
+	return refs
+}
+
+// convertAgentGroupFiles converts AgentGroupFileInfo from the agent group reconciler to AgentGroupFileRef for the builder
+func convertAgentGroupFiles(infos []AgentGroupFileInfo) []deployments.AgentGroupFileRef {
+	refs := make([]deployments.AgentGroupFileRef, len(infos))
+	for i, info := range infos {
+		refs[i] = deployments.AgentGroupFileRef{
+			ConfigMapName: info.ConfigMapName,
+			GroupName:     info.GroupName,
+			FileNames:     info.FileNames,
 		}
 	}
 	return refs

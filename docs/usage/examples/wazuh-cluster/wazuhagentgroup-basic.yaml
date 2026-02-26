@@ -1,0 +1,23 @@
+apiVersion: resources.wazuh.com/v1
+kind: WazuhAgentGroup
+metadata:
+  name: linux-servers
+spec:
+  clusterRef:
+    name: wazuh-cluster
+  groupName: linux
+  description: "Linux servers group"
+  agentConf: |
+    <agent_config>
+      <syscheck>
+        <frequency>600</frequency>
+        <directories>/etc,/usr/bin,/usr/sbin</directories>
+      </syscheck>
+    </agent_config>
+  # Optional: extra files placed in /var/ossec/etc/shared/linux/
+  # The Wazuh API only supports agent.conf writes; additional files
+  # are mounted via ConfigMap + SubPath.
+  files:
+    ar.conf: |
+      restart-wazuh0 - ar.conf - 0
+      host-deny0 - ar.conf - 600

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Wazuh Operator implements **21 Kubernetes controllers** that watch Custom Resources and reconcile them to their desired state. Each controller follows the Kubernetes operator pattern with reconciliation loops. These controllers manage **21 Custom Resource Definitions (CRDs)**.
+The Wazuh Operator implements **22 Kubernetes controllers** that watch Custom Resources and reconcile them to their desired state. Each controller follows the Kubernetes operator pattern with reconciliation loops. These controllers manage **22 Custom Resource Definitions (CRDs)**.
 
 ## Controller Architecture
 
@@ -57,7 +57,7 @@ The main orchestrating controller that manages the complete Wazuh cluster lifecy
 
 ---
 
-## Wazuh Configuration Controllers (4)
+## Wazuh Configuration Controllers (5)
 
 ### WazuhRule Controller
 

@@ -46,4 +46,7 @@ const (
 
 	// ComponentTemplateFinalizer is the finalizer for OpenSearch component templates
 	ComponentTemplateFinalizer = "opensearchcomponenttemplate.resources.wazuh.com/finalizer"
+
+	// AgentGroupFinalizer is the finalizer for Wazuh agent groups
+	AgentGroupFinalizer = "wazuhagentgroup.resources.wazuh.com/finalizer"
 )

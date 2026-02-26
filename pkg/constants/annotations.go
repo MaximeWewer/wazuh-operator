@@ -92,6 +92,10 @@ const (
 	// This triggers rolling update when custom log decoders are added, modified, or deleted
 	AnnotationDecoderHash = "wazuh.com/decoder-hash"
 
+	// AnnotationAgentGroupFilesHash stores the hash of WazuhAgentGroup files for pod restart detection
+	// This triggers rolling update when agent group shared files are added, modified, or deleted
+	AnnotationAgentGroupFilesHash = "wazuh.com/agentgroup-files-hash"
+
 	// NOTE: AnnotationCertHash is defined in labels.go as "wazuh.com/cert-hash"
 )
 

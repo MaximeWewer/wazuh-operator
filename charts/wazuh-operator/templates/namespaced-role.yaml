@@ -175,6 +175,7 @@ rules:
 - apiGroups:
   - resources.wazuh.com
   resources:
+  - wazuhagentgroups
   - wazuhclusters
   - wazuhcertificates
   - wazuhdecoders
@@ -207,6 +208,7 @@ rules:
 - apiGroups:
   - resources.wazuh.com
   resources:
+  - wazuhagentgroups/finalizers
   - wazuhclusters/finalizers
   - wazuhcertificates/finalizers
   - wazuhdecoders/finalizers
@@ -233,6 +235,7 @@ rules:
 - apiGroups:
   - resources.wazuh.com
   resources:
+  - wazuhagentgroups/status
   - wazuhclusters/status
   - wazuhcertificates/status
   - wazuhdecoders/status

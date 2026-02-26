@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Wazuh Operator defines 21 Custom Resource Definitions (CRDs) organized into 6 logical categories. All CRDs use API group `resources.wazuh.com` with version `v1` (storage version). Version `v1` is still served for backward compatibility.
+The Wazuh Operator defines 22 Custom Resource Definitions (CRDs) organized into 6 logical categories. All CRDs use API group `resources.wazuh.com` with version `v1` (storage version). Version `v1` is still served for backward compatibility.
 
 ## CRD Categories
 
@@ -23,7 +23,7 @@ These CRDs define the main Wazuh cluster components.
   - `drain`: Safe scale-down strategy configuration
 - **Short Name**: `wc`
 
-### 2. Wazuh Configuration CRDs (4)
+### 2. Wazuh Configuration CRDs (5)
 
 These CRDs manage Wazuh-specific configuration and operational concerns.
 
@@ -71,6 +71,17 @@ These CRDs manage Wazuh-specific configuration and operational concerns.
   - `indexTemplates`: Index template definitions
   - `ingestPipelines`: Ingest pipeline definitions
 - **Short Name**: `wfb`
+
+#### WazuhAgentGroup
+
+- **Purpose**: Manage Wazuh agent groups declaratively
+- **Key Fields**:
+  - `clusterRef`: Target WazuhCluster
+  - `groupName`: Agent group name (defaults to metadata.name)
+  - `description`: Group description
+  - `agentConf`: XML agent configuration content
+  - `files`: Map of extra files (e.g. `ar.conf`, `rootcheck.txt`) to place in `/var/ossec/etc/shared/<groupName>/` via ConfigMap
+- **Short Name**: `wagentgroup`
 
 ### 3. Wazuh Backup/Restore CRDs (2)
 
@@ -300,6 +311,7 @@ WazuhCluster (1) ─┬─> (1..N) Manager Pods (master + workers)
 
 WazuhCluster (1) <──── (0..N) WazuhRule ────> Manager ConfigMaps
 WazuhCluster (1) <──── (0..N) WazuhDecoder ─> Manager ConfigMaps
+WazuhCluster (1) <──── (0..N) WazuhAgentGroup ─> Manager Agent Groups + File ConfigMaps
 WazuhCluster (1) <──── (0..1) WazuhCertificate ─> TLS Secrets
 
 WazuhCluster (1) <──── (0..N) OpenSearchUser ──┐

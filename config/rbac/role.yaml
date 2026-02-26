@@ -170,6 +170,7 @@ rules:
   - opensearchsnapshots
   - opensearchtenants
   - opensearchusers
+  - wazuhagentgroups
   - wazuhbackups
   - wazuhcertificates
   - wazuhclusters
@@ -202,6 +203,7 @@ rules:
   - opensearchsnapshots/finalizers
   - opensearchtenants/finalizers
   - opensearchusers/finalizers
+  - wazuhagentgroups/finalizers
   - wazuhbackups/finalizers
   - wazuhcertificates/finalizers
   - wazuhclusters/finalizers
@@ -228,6 +230,7 @@ rules:
   - opensearchsnapshots/status
   - opensearchtenants/status
   - opensearchusers/status
+  - wazuhagentgroups/status
   - wazuhbackups/status
   - wazuhcertificates/status
   - wazuhclusters/status

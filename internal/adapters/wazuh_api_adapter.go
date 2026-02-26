@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
@@ -117,10 +118,13 @@ func (a *WazuhAPIAdapter) Authenticate(ctx context.Context) error {
 	return nil
 }
 
-// doRequest performs an authenticated request
-//
-//nolint:unparam // body param kept for future POST/PUT support
+// doRequest performs an authenticated request with JSON content type
 func (a *WazuhAPIAdapter) doRequest(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
+	return a.doRequestWithContentType(ctx, method, path, body, "application/json")
+}
+
+// doRequestWithContentType performs an authenticated request with a custom content type
+func (a *WazuhAPIAdapter) doRequestWithContentType(ctx context.Context, method, path string, body io.Reader, contentType string) (*http.Response, error) {
 	if err := a.Authenticate(ctx); err != nil {
 		return nil, err
 	}
@@ -131,7 +135,7 @@ func (a *WazuhAPIAdapter) doRequest(ctx context.Context, method, path string, bo
 	}
 
 	req.Header.Set("Authorization", "Bearer "+a.token)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentType)
 
 	return a.httpClient.Do(req)
 }
@@ -498,4 +502,115 @@ func (a *WazuhAPIAdapter) GetAgentsSummary(ctx context.Context) (*AgentsSummary,
 	}
 
 	return &result.Data.Connection, nil
+}
+
+// GroupInfo represents a Wazuh agent group
+type GroupInfo struct {
+	Name       string `json:"name"`
+	Count      int    `json:"count"`
+	MergedSum  string `json:"mergedSum"`
+	ConfigSum  string `json:"configSum"`
+}
+
+// CreateGroup creates a new agent group
+// API: POST /groups with JSON body {"group_id": "<name>"}
+func (a *WazuhAPIAdapter) CreateGroup(ctx context.Context, groupName string) error {
+	body := fmt.Sprintf(`{"group_id":"%s"}`, groupName)
+	resp, err := a.doRequest(ctx, "POST", "/groups", strings.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("failed to create group %s: %w", groupName, err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+
+	// The Wazuh API may return a 500 with "agent-template.conf" missing
+	// but the group is still created. Check if the group exists after.
+	if resp.StatusCode == http.StatusOK {
+		return nil
+	}
+
+	// Non-blocking error: agent-template.conf missing but group created
+	if resp.StatusCode == http.StatusInternalServerError && strings.Contains(string(respBody), "agent-template.conf") {
+		return nil
+	}
+
+	return fmt.Errorf("failed to create group %s (status %d): %s", groupName, resp.StatusCode, string(respBody))
+}
+
+// GetGroup returns information about a specific agent group, or nil if it doesn't exist
+// API: GET /groups?groups_list={name}
+// Note: Wazuh returns error code 1710 ("The group does not exist") with HTTP 200
+// when the group is not found, so we check both affected_items and failed_items.
+func (a *WazuhAPIAdapter) GetGroup(ctx context.Context, groupName string) (*GroupInfo, error) {
+	path := fmt.Sprintf("/groups?groups_list=%s", groupName)
+	resp, err := a.doRequest(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get group %s: %w", groupName, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get group %s (status %d): %s", groupName, resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Data struct {
+			AffectedItems    []GroupInfo `json:"affected_items"`
+			TotalItems       int         `json:"total_affected_items"`
+			TotalFailedItems int         `json:"total_failed_items"`
+		} `json:"data"`
+		Error int `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode group response: %w", err)
+	}
+
+	// Group not found: error=1 with total_failed_items>0 (error 1710)
+	if result.Data.TotalItems == 0 || len(result.Data.AffectedItems) == 0 {
+		return nil, nil
+	}
+
+	return &result.Data.AffectedItems[0], nil
+}
+
+// DeleteGroup deletes an agent group
+// API: DELETE /groups?groups_list={name}
+func (a *WazuhAPIAdapter) DeleteGroup(ctx context.Context, groupName string) error {
+	path := fmt.Sprintf("/groups?groups_list=%s", groupName)
+	resp, err := a.doRequest(ctx, "DELETE", path, nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete group %s: %w", groupName, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to delete group %s (status %d): %s", groupName, resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// UpdateGroupConfiguration updates the agent.conf for a group
+// API: PUT /groups/{group_id}/configuration with Content-Type: application/xml
+func (a *WazuhAPIAdapter) UpdateGroupConfiguration(ctx context.Context, groupName, agentConf string) error {
+	path := fmt.Sprintf("/groups/%s/configuration", groupName)
+	resp, err := a.doRequestWithContentType(ctx, "PUT", path, strings.NewReader(agentConf), "application/xml")
+	if err != nil {
+		return fmt.Errorf("failed to update group %s configuration: %w", groupName, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to update group %s configuration (status %d): %s", groupName, resp.StatusCode, string(body))
+	}
+
+	return nil
 }

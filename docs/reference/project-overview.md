@@ -26,8 +26,8 @@ For detailed technology decisions and justifications, see [Technology Stack](tec
 
 The operator follows the standard Kubernetes operator pattern with:
 
-- 21 Custom Resource Definitions (CRDs)
-- 21 reconciliation controllers
+- 22 Custom Resource Definitions (CRDs)
+- 22 reconciliation controllers
 - Declarative resource management
 - Continuous reconciliation loops
 - Event-driven architecture
@@ -54,7 +54,7 @@ The operator follows the standard Kubernetes operator pattern with:
 
 - **Declarative Cluster Management**: Define entire Wazuh cluster via YAML
 - **Automated Deployment**: Provisions Manager, Indexer, and Dashboard automatically
-- **Component Management**: 21 CRDs covering all aspects of Wazuh deployment
+- **Component Management**: 22 CRDs covering all aspects of Wazuh deployment
 
 ### Wazuh Management
 
@@ -86,8 +86,8 @@ The operator follows the standard Kubernetes operator pattern with:
 
 ## Project Statistics
 
-- **CRDs**: 21 Custom Resource Definitions
-- **Controllers**: 21 Kubernetes controllers
+- **CRDs**: 22 Custom Resource Definitions
+- **Controllers**: 22 Kubernetes controllers
 - **Go Packages**: 30+ internal packages, 6 public packages
 - **Lines of Code**: ~50,000+ (estimated)
 - **Documentation Files**: 53+ markdown files
@@ -122,7 +122,7 @@ The operator creates and manages:
 **Completed Features**:
 
 - Core operator functionality
-- All 21 CRDs implemented
+- All 22 CRDs implemented
 - TLS with auto-generation and hot reload
 - Prometheus monitoring integration
 - Advanced indexer topology (NodePools)

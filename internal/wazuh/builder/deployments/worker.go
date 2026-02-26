@@ -56,6 +56,8 @@ type WorkerStatefulSetBuilder struct {
 	ruleConfigMaps []RuleConfigMapRef
 	// Decoder ConfigMaps to mount
 	decoderConfigMaps []DecoderConfigMapRef
+	// Agent group file ConfigMaps to mount
+	agentGroupFiles []AgentGroupFileRef
 	// Extra init containers
 	extraInitContainers []corev1.Container
 	// Extra sidecar containers
@@ -284,6 +286,26 @@ func (b *WorkerStatefulSetBuilder) WithDecoderHash(hash string) *WorkerStatefulS
 			b.podAnnotations = make(map[string]string)
 		}
 		b.podAnnotations[constants.AnnotationDecoderHash] = hash
+	}
+	return b
+}
+
+// WithAgentGroupFiles sets the agent group file ConfigMaps to mount
+// Each ConfigMap contains files for a specific agent group that will be mounted
+// to /var/ossec/etc/shared/<groupName>/<filename>
+func (b *WorkerStatefulSetBuilder) WithAgentGroupFiles(refs []AgentGroupFileRef) *WorkerStatefulSetBuilder {
+	b.agentGroupFiles = refs
+	return b
+}
+
+// WithAgentGroupFilesHash sets the agent group files hash annotation on pods
+// This triggers pod restart when agent group file content changes
+func (b *WorkerStatefulSetBuilder) WithAgentGroupFilesHash(hash string) *WorkerStatefulSetBuilder {
+	if hash != "" {
+		if b.podAnnotations == nil {
+			b.podAnnotations = make(map[string]string)
+		}
+		b.podAnnotations[constants.AnnotationAgentGroupFilesHash] = hash
 	}
 	return b
 }
@@ -674,6 +696,20 @@ func (b *WorkerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 		})
 	}
 
+	// Add agent group file ConfigMap volumes
+	for _, ref := range b.agentGroupFiles {
+		volumes = append(volumes, corev1.Volume{
+			Name: fmt.Sprintf("agentgroup-files-%s", ref.ConfigMapName),
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: ref.ConfigMapName,
+					},
+				},
+			},
+		})
+	}
+
 	return volumes
 }
 
@@ -732,6 +768,18 @@ func (b *WorkerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 			SubPath:   ref.FileName,
 			ReadOnly:  true,
 		})
+	}
+
+	// Add agent group file mounts at /var/ossec/etc/shared/<groupName>/<filename>
+	for _, ref := range b.agentGroupFiles {
+		for _, fileName := range ref.FileNames {
+			mounts = append(mounts, corev1.VolumeMount{
+				Name:      fmt.Sprintf("agentgroup-files-%s", ref.ConfigMapName),
+				MountPath: fmt.Sprintf("/var/ossec/etc/shared/%s/%s", ref.GroupName, fileName),
+				SubPath:   fileName,
+				ReadOnly:  true,
+			})
+		}
 	}
 
 	return mounts

@@ -2090,6 +2090,35 @@ func (r *WazuhClusterReconciler) findClustersForDecoder(ctx context.Context, obj
 	}
 }
 
+// findClustersForAgentGroup finds all WazuhClusters that a WazuhAgentGroup references via clusterRef
+// Used by the watch handler to enqueue clusters when agent group files change
+func (r *WazuhClusterReconciler) findClustersForAgentGroup(ctx context.Context, obj client.Object) []ctrl.Request {
+	group, ok := obj.(*wazuhv1.WazuhAgentGroup)
+	if !ok {
+		return []ctrl.Request{}
+	}
+
+	// Only trigger cluster reconcile when files are present (otherwise no volume changes needed)
+	if len(group.Spec.Files) == 0 {
+		return []ctrl.Request{}
+	}
+
+	// Determine the namespace of the target cluster
+	namespace := group.Spec.ClusterRef.Namespace
+	if namespace == "" {
+		namespace = group.Namespace
+	}
+
+	return []ctrl.Request{
+		{
+			NamespacedName: types.NamespacedName{
+				Name:      group.Spec.ClusterRef.Name,
+				Namespace: namespace,
+			},
+		},
+	}
+}
+
 // findClustersForSecret finds WazuhClusters impacted by changes in watched secrets.
 // This complements Owns(Secret), which only catches secrets with owner references.
 func (r *WazuhClusterReconciler) findClustersForSecret(ctx context.Context, obj client.Object) []ctrl.Request {
@@ -2198,6 +2227,11 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&wazuhv1.WazuhDecoder{},
 			handler.EnqueueRequestsFromMapFunc(r.findClustersForDecoder),
+		).
+		// Watch WazuhAgentGroup CRs - reconcile WazuhCluster when agent group files change
+		Watches(
+			&wazuhv1.WazuhAgentGroup{},
+			handler.EnqueueRequestsFromMapFunc(r.findClustersForAgentGroup),
 		)
 
 	// Only add Gateway API watches if enabled AND the specific CRDs are available
