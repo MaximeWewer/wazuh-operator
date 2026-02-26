@@ -21,10 +21,10 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
@@ -54,7 +54,6 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/cronjobs"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/deployments"
-	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/hpa"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/secrets"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/config"
@@ -337,11 +336,6 @@ func (r *ClusterReconciler) ReconcileManagerNonBlocking(ctx context.Context, clu
 		pendingRollouts = append(pendingRollouts, *workerRollout)
 	}
 
-	// Reconcile Worker HPA
-	if err := r.reconcileWorkerHPA(ctx, cluster); err != nil {
-		return ManagerReconcileResult{Error: fmt.Errorf("failed to reconcile worker HPA: %w", err)}
-	}
-
 	// Reconcile Manager PDB
 	if err := r.reconcileManagerPDB(ctx, cluster); err != nil {
 		return ManagerReconcileResult{Error: fmt.Errorf("failed to reconcile manager PDB: %w", err)}
@@ -384,8 +378,6 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		masterContainerSecurityContext      *corev1.SecurityContext
 		masterTerminationGracePeriodSeconds *int64
 		managerImagePullPolicy              corev1.PullPolicy
-		masterImage                         string
-		masterUpdateStrategy                string
 	)
 
 	var env []corev1.EnvVar
@@ -415,12 +407,8 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		masterSecurityContext = cluster.Spec.Manager.Master.SecurityContext
 		masterContainerSecurityContext = cluster.Spec.Manager.Master.ContainerSecurityContext
 		masterTerminationGracePeriodSeconds = cluster.Spec.Manager.Master.TerminationGracePeriodSeconds
-		masterUpdateStrategy = cluster.Spec.Manager.Master.UpdateStrategy
-		if cluster.Spec.Manager.Image != nil {
-			masterImage = cluster.Spec.Manager.Image.ResolveImage(constants.DefaultWazuhManagerImage, version)
-			if cluster.Spec.Manager.Image.PullPolicy != "" {
-				managerImagePullPolicy = cluster.Spec.Manager.Image.PullPolicy
-			}
+		if cluster.Spec.Manager.Image != nil && cluster.Spec.Manager.Image.PullPolicy != "" {
+			managerImagePullPolicy = cluster.Spec.Manager.Image.PullPolicy
 		}
 
 		// Apply cluster-level anti-affinity if enabled
@@ -430,10 +418,12 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		}
 	}
 
+	extraVolumes, extraVolumeMounts = r.injectAuthdPasswordSecretMount(cluster, extraVolumes, extraVolumeMounts)
+
 	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "master")
 
-	ossecConf, err := r.buildOSSECConf(ctx, cluster, config.NodeTypeMaster, extraConfig)
+	ossecConf, err := r.buildMasterOSSECConfig(ctx, cluster, extraConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build ossec.conf: %w", err)
 	}
@@ -468,10 +458,6 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	}
 	configBuilder.WithFilebeatTemplate(filebeatTemplate)
 
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.LocalInternalOptions != "" {
-		configBuilder.WithExtraConfig(constants.ConfigMapKeyLocalInternalOptions, cluster.Spec.Manager.Master.LocalInternalOptions)
-	}
-
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for master configmap: %w", err)
@@ -486,8 +472,8 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 	// Build Services
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
-	if cluster.Spec.Manager != nil {
-		applyManagerServiceSpec(serviceBuilder, cluster.Spec.Manager.Master.Service)
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil && len(cluster.Spec.Manager.Master.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Master.Service.Annotations)
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -521,7 +507,6 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		Version:                       version,
 		Resources:                     resources,
 		StorageSize:                   storageSize,
-		Image:                         masterImage,
 		NodeSelector:                  nodeSelector,
 		Tolerations:                   tolerations,
 		Affinity:                      affinity,
@@ -542,7 +527,6 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		ContainerSecurityContext:      masterContainerSecurityContext,
 		TerminationGracePeriodSeconds: masterTerminationGracePeriodSeconds,
 		ImagePullPolicy:               managerImagePullPolicy,
-		UpdateStrategy:                masterUpdateStrategy,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
@@ -629,24 +613,6 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	// Set image pull policy if configured
 	if managerImagePullPolicy != "" {
 		stsBuilder.WithImagePullPolicy(managerImagePullPolicy)
-	}
-	// Set image override from CRD
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Image != nil {
-		managerImage := cluster.Spec.Manager.Image.ResolveImage(constants.DefaultWazuhManagerImage, version)
-		if managerImage != "" {
-			stsBuilder.WithImage(managerImage)
-		}
-	}
-	// Set security context overrides
-	if masterSecurityContext != nil {
-		stsBuilder.WithSecurityContext(masterSecurityContext)
-	}
-	if masterContainerSecurityContext != nil {
-		stsBuilder.WithContainerSecurityContext(masterContainerSecurityContext)
-	}
-	// Set update strategy from CRD
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.UpdateStrategy != "" {
-		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Manager.Master.UpdateStrategy))
 	}
 
 	// Mount rule ConfigMaps if RuleReconciler is configured
@@ -870,8 +836,11 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		tolerations               []corev1.Toleration
 		affinity                  *corev1.Affinity
 		topologySpreadConstraints []corev1.TopologySpreadConstraint
+		extraVolumes              []corev1.Volume
+		extraVolumeMounts         []corev1.VolumeMount
 		extraConfig               string
 		annotations               map[string]string
+		podAnnotations            map[string]string
 	)
 	workerImagePullSecrets := cluster.Spec.ImagePullSecrets
 
@@ -887,8 +856,11 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		tolerations = cluster.Spec.Manager.Workers.Tolerations
 		affinity = cluster.Spec.Manager.Workers.Affinity
 		topologySpreadConstraints = cluster.Spec.Manager.Workers.TopologySpreadConstraints
+		extraVolumes = cluster.Spec.Manager.Workers.ExtraVolumes
+		extraVolumeMounts = cluster.Spec.Manager.Workers.ExtraVolumeMounts
 		extraConfig = cluster.Spec.Manager.Workers.ExtraConfig
 		annotations = cluster.Spec.Manager.Workers.Annotations
+		podAnnotations = cluster.Spec.Manager.Workers.PodAnnotations
 
 		// Apply cluster-level anti-affinity if enabled
 		if affinityutil.ShouldApplyAntiAffinity(cluster) {
@@ -897,11 +869,13 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		}
 	}
 
+	extraVolumes, extraVolumeMounts = r.injectAuthdPasswordSecretMount(cluster, extraVolumes, extraVolumeMounts)
+
 	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "worker")
 
 	// Build ossec.conf for workers - master service name is computed from cluster name
-	ossecConf, err := r.buildOSSECConf(ctx, cluster, config.NodeTypeWorker, extraConfig)
+	ossecConf, err := r.buildWorkerOSSECConfig(ctx, cluster, extraConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build worker ossec.conf: %w", err)
 	}
@@ -936,10 +910,6 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	}
 	configBuilder.WithFilebeatTemplate(filebeatTemplate)
 
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.LocalInternalOptions != "" {
-		configBuilder.WithExtraConfig(constants.ConfigMapKeyLocalInternalOptions, cluster.Spec.Manager.Workers.LocalInternalOptions)
-	}
-
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for worker configmap: %w", err)
@@ -954,8 +924,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 
 	// Build Services
 	serviceBuilder := services.NewWorkerServiceBuilder(cluster.Name, cluster.Namespace)
-	if cluster.Spec.Manager != nil {
-		applyWorkerServiceSpec(serviceBuilder, cluster.Spec.Manager.Workers.Service)
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Service != nil && len(cluster.Spec.Manager.Workers.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Workers.Service.Annotations)
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -986,8 +956,6 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	var workerContainerSecurityContext *corev1.SecurityContext
 	var workerTerminationGracePeriodSeconds *int64
 	var workerImagePullPolicy corev1.PullPolicy
-	var workerImage string
-	var workerUpdateStrategy string
 	if cluster.Spec.Manager != nil {
 		workerPodAnnotations = cluster.Spec.Manager.Workers.PodAnnotations
 		workerExtraConfig = cluster.Spec.Manager.Workers.ExtraConfig
@@ -1000,12 +968,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		workerSecurityContext = cluster.Spec.Manager.Workers.SecurityContext
 		workerContainerSecurityContext = cluster.Spec.Manager.Workers.ContainerSecurityContext
 		workerTerminationGracePeriodSeconds = cluster.Spec.Manager.Workers.TerminationGracePeriodSeconds
-		workerUpdateStrategy = cluster.Spec.Manager.Workers.UpdateStrategy
-		if cluster.Spec.Manager.Image != nil {
-			workerImage = cluster.Spec.Manager.Image.ResolveImage(constants.DefaultWazuhManagerImage, version)
-			if cluster.Spec.Manager.Image.PullPolicy != "" {
-				workerImagePullPolicy = cluster.Spec.Manager.Image.PullPolicy
-			}
+		if cluster.Spec.Manager.Image != nil && cluster.Spec.Manager.Image.PullPolicy != "" {
+			workerImagePullPolicy = cluster.Spec.Manager.Image.PullPolicy
 		}
 	}
 
@@ -1026,7 +990,6 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		Version:                       version,
 		Resources:                     resources,
 		StorageSize:                   storageSize,
-		Image:                         workerImage,
 		NodeSelector:                  nodeSelector,
 		Tolerations:                   tolerations,
 		Affinity:                      affinity,
@@ -1046,7 +1009,6 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		ContainerSecurityContext:      workerContainerSecurityContext,
 		TerminationGracePeriodSeconds: workerTerminationGracePeriodSeconds,
 		ImagePullPolicy:               workerImagePullPolicy,
-		UpdateStrategy:                workerUpdateStrategy,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec hash")
@@ -1085,11 +1047,11 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	if len(workerImagePullSecrets) > 0 {
 		stsBuilder.WithImagePullSecrets(workerImagePullSecrets)
 	}
-	if len(workerExtraVolumes) > 0 {
-		stsBuilder.WithVolumes(workerExtraVolumes)
+	if len(extraVolumes) > 0 {
+		stsBuilder.WithVolumes(extraVolumes)
 	}
-	if len(workerExtraVolumeMounts) > 0 {
-		stsBuilder.WithVolumeMounts(workerExtraVolumeMounts)
+	if len(extraVolumeMounts) > 0 {
+		stsBuilder.WithVolumeMounts(extraVolumeMounts)
 	}
 	if len(workerExtraInitContainers) > 0 {
 		stsBuilder.WithExtraInitContainers(workerExtraInitContainers)
@@ -1100,8 +1062,8 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	if len(annotations) > 0 {
 		stsBuilder.WithAnnotations(annotations)
 	}
-	if len(workerPodAnnotations) > 0 {
-		stsBuilder.WithPodAnnotations(workerPodAnnotations)
+	if len(podAnnotations) > 0 {
+		stsBuilder.WithPodAnnotations(podAnnotations)
 	}
 	if certHash != "" {
 		stsBuilder.WithCertHash(certHash)
@@ -1127,31 +1089,6 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	// Set image pull policy if configured
 	if workerImagePullPolicy != "" {
 		stsBuilder.WithImagePullPolicy(workerImagePullPolicy)
-	}
-	// Set image override from CRD
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Image != nil {
-		workerImage := cluster.Spec.Manager.Image.ResolveImage(constants.DefaultWazuhManagerImage, version)
-		if workerImage != "" {
-			stsBuilder.WithImage(workerImage)
-		}
-	}
-	// Forward worker env/envFrom
-	if len(workerEnv) > 0 {
-		stsBuilder.WithEnv(workerEnv)
-	}
-	if len(workerEnvFrom) > 0 {
-		stsBuilder.WithEnvFrom(workerEnvFrom)
-	}
-	// Set security context overrides
-	if workerSecurityContext != nil {
-		stsBuilder.WithSecurityContext(workerSecurityContext)
-	}
-	if workerContainerSecurityContext != nil {
-		stsBuilder.WithContainerSecurityContext(workerContainerSecurityContext)
-	}
-	// Set update strategy from CRD
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.UpdateStrategy != "" {
-		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Manager.Workers.UpdateStrategy))
 	}
 
 	// Mount rule ConfigMaps if RuleReconciler is configured
@@ -1364,70 +1301,6 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	return nil, nil
 }
 
-// reconcileWorkerHPA reconciles the HorizontalPodAutoscaler for worker StatefulSet
-func (r *ClusterReconciler) reconcileWorkerHPA(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
-	log := logf.FromContext(ctx)
-
-	hpaName := cluster.Name + "-manager-worker"
-
-	// Check if HPA should be enabled
-	hpaEnabled := cluster.Spec.Manager != nil &&
-		cluster.Spec.Manager.Workers.HPA != nil &&
-		cluster.Spec.Manager.Workers.HPA.Enabled
-
-	if !hpaEnabled {
-		// If HPA should not exist, delete it if it does
-		existing := &autoscalingv2.HorizontalPodAutoscaler{}
-		err := r.Get(ctx, types.NamespacedName{Name: hpaName, Namespace: cluster.Namespace}, existing)
-		if err == nil {
-			log.Info("Deleting Worker HPA (no longer needed)", "name", hpaName)
-			if err := r.Delete(ctx, existing); err != nil && !errors.IsNotFound(err) {
-				return fmt.Errorf("failed to delete worker HPA: %w", err)
-			}
-		} else if !errors.IsNotFound(err) {
-			return fmt.Errorf("failed to get worker HPA: %w", err)
-		}
-		return nil
-	}
-
-	// Build the HPA
-	builder := hpa.NewWorkerHPABuilder(cluster.Name, cluster.Namespace).
-		WithSpec(cluster.Spec.Manager.Workers.HPA)
-
-	workerHPA := builder.Build()
-	if workerHPA == nil {
-		return nil
-	}
-
-	if err := controllerutil.SetControllerReference(cluster, workerHPA, r.Scheme); err != nil {
-		return fmt.Errorf("failed to set controller reference for worker HPA: %w", err)
-	}
-
-	// Check if HPA exists
-	existing := &autoscalingv2.HorizontalPodAutoscaler{}
-	err := r.Get(ctx, types.NamespacedName{Name: hpaName, Namespace: cluster.Namespace}, existing)
-	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Worker HPA", "name", hpaName,
-			"minReplicas", *workerHPA.Spec.MinReplicas,
-			"maxReplicas", workerHPA.Spec.MaxReplicas)
-		if err := r.Create(ctx, workerHPA); err != nil {
-			return fmt.Errorf("failed to create worker HPA: %w", err)
-		}
-		return nil
-	} else if err != nil {
-		return fmt.Errorf("failed to get worker HPA: %w", err)
-	}
-
-	// Update HPA if needed
-	workerHPA.SetResourceVersion(existing.GetResourceVersion())
-	log.V(1).Info("Updating Worker HPA", "name", hpaName)
-	if err := r.Update(ctx, workerHPA); err != nil {
-		return fmt.Errorf("failed to update worker HPA: %w", err)
-	}
-
-	return nil
-}
-
 // resolveIndexerCredentials resolves indexer credentials from secret
 // It first checks for custom credentials in cluster.Spec.Indexer.Credentials
 // If not specified, it falls back to the default auto-generated secret: <cluster>-indexer-credentials
@@ -1497,11 +1370,13 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 		extraContainers = cluster.Spec.Manager.Master.ExtraContainers
 	}
 
+	extraVolumes, extraVolumeMounts = r.injectAuthdPasswordSecretMount(cluster, extraVolumes, extraVolumeMounts)
+
 	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "master")
 
 	// Generate ossec.conf
-	ossecConf, err := r.buildOSSECConf(ctx, cluster, config.NodeTypeMaster, extraConfig)
+	ossecConf, err := r.buildMasterOSSECConfig(ctx, cluster, extraConfig)
 	if err != nil {
 		return fmt.Errorf("failed to build ossec.conf: %w", err)
 	}
@@ -1564,10 +1439,6 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	}
 	configBuilder.WithFilebeatTemplate(filebeatTemplate)
 
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.LocalInternalOptions != "" {
-		configBuilder.WithExtraConfig(constants.ConfigMapKeyLocalInternalOptions, cluster.Spec.Manager.Master.LocalInternalOptions)
-	}
-
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for master configmap: %w", err)
@@ -1581,8 +1452,8 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 
 	// Build Service
 	serviceBuilder := services.NewManagerServiceBuilder(cluster.Name, cluster.Namespace, "master")
-	if cluster.Spec.Manager != nil {
-		applyManagerServiceSpec(serviceBuilder, cluster.Spec.Manager.Master.Service)
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil && len(cluster.Spec.Manager.Master.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Master.Service.Annotations)
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -1646,20 +1517,12 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 		legacyMasterTerminationGracePeriod = *cluster.Spec.Manager.Master.TerminationGracePeriodSeconds
 	}
 	stsBuilder.WithTerminationGracePeriodSeconds(&legacyMasterTerminationGracePeriod)
-	// Set update strategy from CRD
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.UpdateStrategy != "" {
-		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Manager.Master.UpdateStrategy))
-	}
 
-	legacyMasterImage := ""
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Image != nil {
-		legacyMasterImage = cluster.Spec.Manager.Image.ResolveImage(constants.DefaultWazuhManagerImage, cluster.Spec.Version)
-	}
 	specHash, err := patch.ComputeManagerMasterSpecHashFull(patch.ManagerMasterSpecInput{
 		Version:                       cluster.Spec.Version,
 		Resources:                     cluster.Spec.Manager.Master.Resources,
 		StorageSize:                   cluster.Spec.Manager.Master.StorageSize,
-		Image:                         legacyMasterImage,
+		Image:                         "",
 		NodeSelector:                  cluster.Spec.Manager.Master.NodeSelector,
 		Tolerations:                   cluster.Spec.Manager.Master.Tolerations,
 		Affinity:                      cluster.Spec.Manager.Master.Affinity,
@@ -1677,7 +1540,6 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 		ContainerSecurityContext:      cluster.Spec.Manager.Master.ContainerSecurityContext,
 		TerminationGracePeriodSeconds: cluster.Spec.Manager.Master.TerminationGracePeriodSeconds,
 		ImagePullPolicy:               legacyManagerImagePullPolicy(cluster),
-		UpdateStrategy:                cluster.Spec.Manager.Master.UpdateStrategy,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute master spec hash, continuing without spec hash")
@@ -1817,11 +1679,13 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		extraContainers = cluster.Spec.Manager.Workers.ExtraContainers
 	}
 
+	extraVolumes, extraVolumeMounts = r.injectAuthdPasswordSecretMount(cluster, extraVolumes, extraVolumeMounts)
+
 	// Build ConfigMap
 	configBuilder := configmaps.NewManagerConfigMapBuilder(cluster.Name, cluster.Namespace, "worker")
 
 	// Build ossec.conf for workers - master service name is computed from cluster name
-	ossecConf, err := r.buildOSSECConf(ctx, cluster, config.NodeTypeWorker, extraConfig)
+	ossecConf, err := r.buildWorkerOSSECConfig(ctx, cluster, extraConfig)
 	if err != nil {
 		return fmt.Errorf("failed to build worker ossec.conf: %w", err)
 	}
@@ -1884,10 +1748,6 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 	}
 	configBuilder.WithFilebeatTemplate(filebeatTemplate)
 
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.LocalInternalOptions != "" {
-		configBuilder.WithExtraConfig(constants.ConfigMapKeyLocalInternalOptions, cluster.Spec.Manager.Workers.LocalInternalOptions)
-	}
-
 	configMap := configBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for worker configmap: %w", err)
@@ -1901,8 +1761,8 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 
 	// Build Service
 	serviceBuilder := services.NewWorkerServiceBuilder(cluster.Name, cluster.Namespace)
-	if cluster.Spec.Manager != nil {
-		applyWorkerServiceSpec(serviceBuilder, cluster.Spec.Manager.Workers.Service)
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Service != nil && len(cluster.Spec.Manager.Workers.Service.Annotations) > 0 {
+		serviceBuilder.WithAnnotations(cluster.Spec.Manager.Workers.Service.Annotations)
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
@@ -1968,21 +1828,13 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		legacyWorkerTerminationGracePeriod = *cluster.Spec.Manager.Workers.TerminationGracePeriodSeconds
 	}
 	stsBuilder.WithTerminationGracePeriodSeconds(&legacyWorkerTerminationGracePeriod)
-	// Set update strategy from CRD
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.UpdateStrategy != "" {
-		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Manager.Workers.UpdateStrategy))
-	}
 
-	legacyWorkerImage := ""
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Image != nil {
-		legacyWorkerImage = cluster.Spec.Manager.Image.ResolveImage(constants.DefaultWazuhManagerImage, cluster.Spec.Version)
-	}
 	specHash, err := patch.ComputeManagerWorkersSpecHashFull(patch.ManagerWorkersSpecInput{
 		Replicas:                      workerReplicas2,
 		Version:                       cluster.Spec.Version,
 		Resources:                     cluster.Spec.Manager.Workers.Resources,
 		StorageSize:                   cluster.Spec.Manager.Workers.StorageSize,
-		Image:                         legacyWorkerImage,
+		Image:                         "",
 		NodeSelector:                  cluster.Spec.Manager.Workers.NodeSelector,
 		Tolerations:                   cluster.Spec.Manager.Workers.Tolerations,
 		Affinity:                      cluster.Spec.Manager.Workers.Affinity,
@@ -1999,7 +1851,6 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		ContainerSecurityContext:      cluster.Spec.Manager.Workers.ContainerSecurityContext,
 		TerminationGracePeriodSeconds: cluster.Spec.Manager.Workers.TerminationGracePeriodSeconds,
 		ImagePullPolicy:               legacyManagerImagePullPolicy(cluster),
-		UpdateStrategy:                cluster.Spec.Manager.Workers.UpdateStrategy,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute worker spec hash, continuing without spec hash")
@@ -2259,69 +2110,196 @@ func (r *ClusterReconciler) resolveSecretKey(ctx context.Context, namespace, sec
 	return string(value), nil
 }
 
+// resolveManagerConfig resolves effective manager config from spec, including
+// backwards-compatible authd secret resolution.
 func (r *ClusterReconciler) resolveManagerConfig(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*config.GlobalConfig, *config.AlertsConfig, *config.LoggingConfig, *config.RemoteConfig, *config.AuthConfig, string, error) {
-	log := logf.FromContext(ctx)
-
 	var spec *wazuhv1.WazuhConfigSpec
 	if cluster.Spec.Manager != nil {
 		spec = cluster.Spec.Manager.Config
 	}
 
 	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg := config.WazuhConfigFromSpec(spec)
-
-	authdPassword := ""
-	if authCfg.UsePassword && authCfg.PasswordSecretRef != nil {
-		password, err := r.resolveSecretKey(ctx, cluster.Namespace, authCfg.PasswordSecretRef.Name, authCfg.PasswordSecretRef.Key)
-		if err != nil {
-			log.Error(err, "Failed to resolve authd password from secret", "secret", authCfg.PasswordSecretRef.Name)
-			return nil, nil, nil, nil, nil, "", fmt.Errorf("failed to resolve authd password from secret %q: %w", authCfg.PasswordSecretRef.Name, err)
-		} else {
-			authdPassword = password
-		}
+	if authCfg == nil {
+		authCfg = config.DefaultAuthConfig()
 	}
 
+	// Backward-compatibility: honor legacy manager.authdPasswordSecretRef if auth.passwordSecretRef is not set.
+	if authCfg.PasswordSecretRef == nil && cluster.Spec.Manager != nil && cluster.Spec.Manager.AuthdPasswordSecretRef != nil {
+		key := cluster.Spec.Manager.AuthdPasswordSecretRef.Key
+		if key == "" {
+			key = defaultAuthdSecretKey(cluster.Spec.Manager.AuthdPasswordSecretRef.Name)
+		}
+		authCfg.PasswordSecretRef = &config.SecretKeyReference{
+			Name: cluster.Spec.Manager.AuthdPasswordSecretRef.Name,
+			Key:  key,
+		}
+		authCfg.UsePassword = true
+	}
+
+	authdPassword := r.resolveAuthdPassword(ctx, cluster, authCfg)
 	return globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, nil
 }
 
-func (r *ClusterReconciler) buildOSSECConf(ctx context.Context, cluster *wazuhv1.WazuhCluster, nodeType string, extraConfig string) (string, error) {
+// buildMasterOSSECConfig builds ossec.conf for manager master, honoring manager.config and authd secret refs.
+func (r *ClusterReconciler) buildMasterOSSECConfig(ctx context.Context, cluster *wazuhv1.WazuhCluster, extraConfig string) (string, error) {
 	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, err := r.resolveManagerConfig(ctx, cluster)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve manager config: %w", err)
 	}
 
-	switch nodeType {
-	case config.NodeTypeMaster:
-		return config.BuildMasterConfigWithConfig(
-			cluster.Name,
-			cluster.Namespace,
-			cluster.Name+"-manager-master",
-			"",
-			extraConfig,
-			globalCfg,
-			alertsCfg,
-			loggingCfg,
-			remoteCfg,
-			authCfg,
-			authdPassword,
-		)
-	case config.NodeTypeWorker:
-		return config.BuildWorkerConfigWithConfig(
-			cluster.Name,
-			cluster.Namespace,
-			cluster.Name+"-manager-worker",
-			"",
-			int(constants.PortManagerCluster),
-			extraConfig,
-			globalCfg,
-			alertsCfg,
-			loggingCfg,
-			remoteCfg,
-			authCfg,
-			authdPassword,
-		)
-	default:
-		return "", fmt.Errorf("unsupported node type %q", nodeType)
+	ossecConfig := config.DefaultOSSECConfig(cluster.Name, cluster.Name+"-manager-master")
+	ossecConfig.Namespace = cluster.Namespace
+	ossecConfig.ExtraConfig = extraConfig
+	ossecConfig.Global = globalCfg
+	ossecConfig.Alerts = alertsCfg
+	ossecConfig.Logging = loggingCfg
+	ossecConfig.Remote = remoteCfg
+	ossecConfig.Auth = authCfg
+	ossecConfig.AuthdPassword = authdPassword
+
+	return config.NewOSSECConfigBuilder(ossecConfig).Build()
+}
+
+// buildWorkerOSSECConfig builds ossec.conf for manager workers, honoring manager.config and authd secret refs.
+func (r *ClusterReconciler) buildWorkerOSSECConfig(ctx context.Context, cluster *wazuhv1.WazuhCluster, extraConfig string) (string, error) {
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, err := r.resolveManagerConfig(ctx, cluster)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve manager config: %w", err)
 	}
+
+	ossecConfig := config.DefaultOSSECConfig(cluster.Name, cluster.Name+"-manager-worker")
+	ossecConfig.NodeType = config.NodeTypeWorker
+	ossecConfig.Namespace = cluster.Namespace
+	ossecConfig.MasterAddress = config.GetMasterServiceAddress(cluster.Name, cluster.Namespace)
+	ossecConfig.MasterPort = int(constants.PortManagerCluster)
+	ossecConfig.ExtraConfig = extraConfig
+	ossecConfig.Global = globalCfg
+	ossecConfig.Alerts = alertsCfg
+	ossecConfig.Logging = loggingCfg
+	ossecConfig.Remote = remoteCfg
+	ossecConfig.Auth = authCfg
+	ossecConfig.AuthdPassword = authdPassword
+
+	return config.NewOSSECConfigBuilder(ossecConfig).Build()
+}
+
+// resolveAuthdPassword resolves authd password from configured secret.
+func (r *ClusterReconciler) resolveAuthdPassword(ctx context.Context, cluster *wazuhv1.WazuhCluster, authCfg *config.AuthConfig) string {
+	if authCfg == nil || !authCfg.UsePassword || authCfg.PasswordSecretRef == nil {
+		return ""
+	}
+
+	log := logf.FromContext(ctx)
+	key := authCfg.PasswordSecretRef.Key
+	if key == "" {
+		key = defaultAuthdSecretKey(authCfg.PasswordSecretRef.Name)
+	}
+
+	password, err := r.resolveSecretKey(ctx, cluster.Namespace, authCfg.PasswordSecretRef.Name, key)
+	if err != nil {
+		// Fallback between common key conventions.
+		fallbackKey := "password"
+		if key == "password" {
+			fallbackKey = "authd.pass"
+		}
+		if fallbackPassword, fallbackErr := r.resolveSecretKey(ctx, cluster.Namespace, authCfg.PasswordSecretRef.Name, fallbackKey); fallbackErr == nil {
+			log.V(1).Info("Resolved authd password with fallback key", "secret", authCfg.PasswordSecretRef.Name, "key", fallbackKey)
+			return fallbackPassword
+		}
+		log.Error(err, "Failed to resolve authd password from secret", "secret", authCfg.PasswordSecretRef.Name, "key", key)
+		return ""
+	}
+
+	return password
+}
+
+func (r *ClusterReconciler) authdPasswordSecretRef(cluster *wazuhv1.WazuhCluster) (string, string, bool) {
+	if cluster == nil || cluster.Spec.Manager == nil {
+		return "", "", false
+	}
+
+	_, _, _, _, authCfg := config.WazuhConfigFromSpec(cluster.Spec.Manager.Config)
+	if authCfg == nil {
+		authCfg = config.DefaultAuthConfig()
+	}
+
+	// Backward-compatibility: honor legacy manager.authdPasswordSecretRef.
+	if authCfg.PasswordSecretRef == nil && cluster.Spec.Manager.AuthdPasswordSecretRef != nil {
+		key := cluster.Spec.Manager.AuthdPasswordSecretRef.Key
+		if key == "" {
+			key = defaultAuthdSecretKey(cluster.Spec.Manager.AuthdPasswordSecretRef.Name)
+		}
+		authCfg.PasswordSecretRef = &config.SecretKeyReference{
+			Name: cluster.Spec.Manager.AuthdPasswordSecretRef.Name,
+			Key:  key,
+		}
+		authCfg.UsePassword = true
+	}
+
+	if !authCfg.UsePassword || authCfg.PasswordSecretRef == nil || authCfg.PasswordSecretRef.Name == "" {
+		return "", "", false
+	}
+
+	key := authCfg.PasswordSecretRef.Key
+	if key == "" {
+		key = defaultAuthdSecretKey(authCfg.PasswordSecretRef.Name)
+	}
+	return authCfg.PasswordSecretRef.Name, key, true
+}
+
+func defaultAuthdSecretKey(secretName string) string {
+	if strings.HasSuffix(secretName, "-authd-pass") {
+		return "authd.pass"
+	}
+	return "password"
+}
+
+func (r *ClusterReconciler) injectAuthdPasswordSecretMount(
+	cluster *wazuhv1.WazuhCluster,
+	volumes []corev1.Volume,
+	mounts []corev1.VolumeMount,
+) ([]corev1.Volume, []corev1.VolumeMount) {
+	secretName, secretKey, ok := r.authdPasswordSecretRef(cluster)
+	if !ok {
+		return volumes, mounts
+	}
+
+	const volumeName = "wazuh-authd-password"
+	const keyPath = "authd.pass"
+	const mountPath = "/var/ossec/etc/authd.pass"
+
+	// Prevent duplicates if user already provided a custom mount/volume.
+	for _, v := range volumes {
+		if v.Name == volumeName {
+			return volumes, mounts
+		}
+	}
+	for _, m := range mounts {
+		if m.MountPath == mountPath || (m.Name == volumeName && m.SubPath == keyPath) {
+			return volumes, mounts
+		}
+	}
+
+	volumes = append(volumes, corev1.Volume{
+		Name: volumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: secretName,
+				Items: []corev1.KeyToPath{
+					{Key: secretKey, Path: keyPath},
+				},
+			},
+		},
+	})
+
+	mounts = append(mounts, corev1.VolumeMount{
+		Name:      volumeName,
+		MountPath: mountPath,
+		SubPath:   keyPath,
+		ReadOnly:  true,
+	})
+
+	return volumes, mounts
 }
 
 // ensureClusterKeySecret ensures the cluster key secret exists
@@ -2365,9 +2343,9 @@ func (r *ClusterReconciler) ensureAPICredentialsSecret(ctx context.Context, clus
 	log := logf.FromContext(ctx)
 
 	// Check if user provided a custom API credentials secret
-	if cluster.Spec.Manager != nil && cluster.Spec.Manager.APICredentials != nil && cluster.Spec.Manager.APICredentials.SecretName != "" {
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.APICredentials != nil && cluster.Spec.Manager.APICredentials.GetSecretName() != "" {
 		// User-provided secret - validate password meets Wazuh requirements
-		userSecretName := cluster.Spec.Manager.APICredentials.SecretName
+		userSecretName := cluster.Spec.Manager.APICredentials.GetSecretName()
 		passwordKey := cluster.Spec.Manager.APICredentials.PasswordKey
 		if passwordKey == "" {
 			passwordKey = "password" // default key

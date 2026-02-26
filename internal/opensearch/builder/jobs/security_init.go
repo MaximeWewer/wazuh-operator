@@ -138,8 +138,12 @@ INDEXER_URL="%s"
 MAX_RETRIES=60
 RETRY_INTERVAL=5
 
-# Read password from mounted secret for fallback auth
+# Read credentials from mounted secret for fallback auth
+ADMIN_USERNAME=$(cat /credentials/admin-username)
 ADMIN_PASSWORD=$(cat /credentials/admin-password)
+if [ -z "$ADMIN_USERNAME" ]; then
+    ADMIN_USERNAME="admin"
+fi
 if [ -z "$ADMIN_PASSWORD" ]; then
     echo "ERROR: admin-password not found in credentials secret"
     exit 1
@@ -155,7 +159,7 @@ do_curl() {
     fi
 
     # Fall back to password authentication
-    RESULT=$(curl -sk -u "admin:${ADMIN_PASSWORD}" "$@" 2>&1)
+    RESULT=$(curl -sk -u "${ADMIN_USERNAME}:${ADMIN_PASSWORD}" "$@" 2>&1)
     echo "$RESULT"
     return $?
 }
@@ -174,21 +178,21 @@ for i in $(seq 1 $MAX_RETRIES); do
     sleep $RETRY_INTERVAL
 done
 
-echo "Updating admin user..."
+echo "Updating default admin user ${ADMIN_USERNAME}..."
 RESPONSE=$(do_curl -X PUT \
     -H "Content-Type: application/json" \
-    "${INDEXER_URL}/_plugins/_security/api/internalusers/admin" \
-    -d "{\"password\":\"${ADMIN_PASSWORD}\",\"backend_roles\":[\"admin\"],\"description\":\"Admin user\"}")
+    "${INDEXER_URL}/_plugins/_security/api/internalusers/${ADMIN_USERNAME}" \
+    -d "{\"password\":\"${ADMIN_PASSWORD}\",\"backend_roles\":[\"admin\"],\"description\":\"Default admin user\"}")
 
 if echo "$RESPONSE" | grep -q '"status":"OK"'; then
-    echo "Admin user updated successfully"
+    echo "Default admin user updated successfully"
 elif echo "$RESPONSE" | grep -q '"status":"CREATED"'; then
-    echo "Admin user created successfully"
+    echo "Default admin user created successfully"
 else
     echo "Response: $RESPONSE"
     # Don't fail if user already exists with same config
     if ! echo "$RESPONSE" | grep -q "already exists"; then
-        echo "WARNING: Unexpected response when updating admin user"
+        echo "WARNING: Unexpected response when updating default admin user"
     fi
 fi
 

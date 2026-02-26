@@ -33,6 +33,7 @@ import (
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/networking/builder/ingresses"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
+	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 )
 
 // IngressReconciler handles reconciliation of Ingress resources for Wazuh components
@@ -225,19 +226,23 @@ func (r *IngressReconciler) reconcileIndexerIngress(ctx context.Context, cluster
 func (r *IngressReconciler) createOrUpdateIngress(ctx context.Context, ingress *networkingv1.Ingress) error {
 	log := logf.FromContext(ctx)
 
-	existing := &networkingv1.Ingress{}
-	err := r.Get(ctx, types.NamespacedName{Name: ingress.Name, Namespace: ingress.Namespace}, existing)
-	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Ingress", "name", ingress.Name)
-		return r.Create(ctx, ingress)
-	} else if err != nil {
-		return fmt.Errorf("failed to get Ingress: %w", err)
-	}
+	return utils.RetryOnConflict(ctx, func() error {
+		existing := &networkingv1.Ingress{}
+		err := r.Get(ctx, types.NamespacedName{Name: ingress.Name, Namespace: ingress.Namespace}, existing)
+		if err != nil && errors.IsNotFound(err) {
+			log.Info("Creating Ingress", "name", ingress.Name)
+			return r.Create(ctx, ingress)
+		} else if err != nil {
+			return fmt.Errorf("failed to get Ingress: %w", err)
+		}
 
-	// Update existing ingress
-	log.V(1).Info("Updating Ingress", "name", ingress.Name)
-	ingress.SetResourceVersion(existing.GetResourceVersion())
-	return r.Update(ctx, ingress)
+		// Update existing ingress
+		log.V(1).Info("Updating Ingress", "name", ingress.Name)
+		existing.Labels = ingress.Labels
+		existing.Annotations = ingress.Annotations
+		existing.Spec = ingress.Spec
+		return r.Update(ctx, existing)
+	})
 }
 
 // deleteIngressIfExists deletes an Ingress if it exists

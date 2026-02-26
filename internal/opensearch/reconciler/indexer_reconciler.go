@@ -23,7 +23,9 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net"
+	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -297,50 +299,63 @@ func (r *IndexerReconciler) reconcileSecrets(ctx context.Context, cluster *wazuh
 		}
 	} else if err != nil {
 		return fmt.Errorf("failed to get indexer credentials secret: %w", err)
-	} else if adminPassword == "" {
-		// Get existing password from credentials secret (but prefer external if specified)
-		adminPassword = string(existingCreds.Data[constants.SecretKeyAdminPassword])
+	} else {
+		// Reuse credentials from existing secret when external credentials are not explicitly provided.
+		if cluster.Spec.Indexer == nil || cluster.Spec.Indexer.Credentials == nil || cluster.Spec.Indexer.Credentials.SecretName == "" {
+			if username, ok := existingCreds.Data[constants.SecretKeyAdminUsername]; ok && len(username) > 0 {
+				adminUsername = string(username)
+			}
+		}
+		if adminPassword == "" {
+			// Get existing password from credentials secret (but prefer external if specified)
+			adminPassword = string(existingCreds.Data[constants.SecretKeyAdminPassword])
+		}
 	}
 
 	// Security config secret with default configurations
-	// Uses the same password as credentials secret
-	securitySecretName := fmt.Sprintf("%s-indexer-security", cluster.Name)
-	err = r.Get(ctx, types.NamespacedName{Name: securitySecretName, Namespace: cluster.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		// Build admin DN from TLS config for roles mapping
-		adminDN := certificates.DefaultAdminDN()
-		if cluster.Spec.TLS != nil && cluster.Spec.TLS.CertConfig != nil {
-			cfg := cluster.Spec.TLS.CertConfig
-			dnOpts := certificates.DNOptions{
-				OrganizationalUnit: cfg.OrganizationalUnit,
-				Organization:       cfg.Organization,
-				Locality:           cfg.Locality,
-				State:              cfg.State,
-				Country:            cfg.Country,
-			}
-			adminDN = certificates.AdminDN(dnOpts)
+	// Uses the same password as credentials secret and is reconciled on every loop.
+	adminDN := certificates.DefaultAdminDN()
+	if cluster.Spec.TLS != nil && cluster.Spec.TLS.CertConfig != nil {
+		cfg := cluster.Spec.TLS.CertConfig
+		dnOpts := certificates.DNOptions{
+			OrganizationalUnit: cfg.OrganizationalUnit,
+			Organization:       cfg.Organization,
+			Locality:           cfg.Locality,
+			State:              cfg.State,
+			Country:            cfg.Country,
 		}
+		adminDN = certificates.AdminDN(dnOpts)
+	}
+	// Prefer admin DN derived from the current admin certificate to avoid DN drift.
+	if optsFromCert, err := r.dnOptionsFromAdminCertSecret(ctx, cluster.Name, cluster.Namespace); err == nil && optsFromCert != nil {
+		adminDN = certificates.AdminDN(*optsFromCert)
+	}
 
-		securityBuilder := secrets.NewIndexerSecuritySecretBuilder(cluster.Name, cluster.Namespace)
-		// Add default security configuration files with the SAME password as credentials
-		securityBuilder.WithInternalUsers(generateDefaultInternalUsers(adminPassword))
-		securityBuilder.WithRoles(generateDefaultRoles())
-		securityBuilder.WithRolesMapping(generateDefaultRolesMapping(adminDN))
-		securityBuilder.WithActionGroups(generateDefaultActionGroups())
-		securityBuilder.WithTenants(generateDefaultTenants())
-		securityBuilder.WithConfig(generateDefaultSecurityConfig())
-		securitySecret := securityBuilder.Build()
+	// Reuse existing internal_users hash when password is unchanged to avoid
+	// random bcrypt salt churn causing perpetual reconciles.
+	existingSecuritySecret := &corev1.Secret{}
+	var existingInternalUsers []byte
+	securitySecretName := constants.IndexerSecurityName(cluster.Name)
+	if err := r.Get(ctx, types.NamespacedName{Name: securitySecretName, Namespace: cluster.Namespace}, existingSecuritySecret); err == nil {
+		existingInternalUsers = existingSecuritySecret.Data[constants.SecretKeyInternalUsers]
+	} else if !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to get existing indexer security secret: %w", err)
+	}
 
-		if err := controllerutil.SetControllerReference(cluster, securitySecret, r.Scheme); err != nil {
-			return fmt.Errorf("failed to set controller reference for indexer security: %w", err)
-		}
+	securityBuilder := secrets.NewIndexerSecuritySecretBuilder(cluster.Name, cluster.Namespace)
+	securityBuilder.WithInternalUsers(generateDefaultInternalUsers(adminUsername, adminPassword, existingInternalUsers))
+	securityBuilder.WithRoles(generateDefaultRoles())
+	securityBuilder.WithRolesMapping(generateDefaultRolesMapping(adminDN))
+	securityBuilder.WithActionGroups(generateDefaultActionGroups())
+	securityBuilder.WithTenants(generateDefaultTenants())
+	securityBuilder.WithConfig(generateDefaultSecurityConfig())
+	securitySecret := securityBuilder.Build()
 
-		log.Info("Creating Indexer security secret", "name", securitySecret.Name)
-		if err := r.Create(ctx, securitySecret); err != nil {
-			return fmt.Errorf("failed to create indexer security secret: %w", err)
-		}
-	} else if err != nil {
-		return fmt.Errorf("failed to get indexer security secret: %w", err)
+	if err := controllerutil.SetControllerReference(cluster, securitySecret, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for indexer security: %w", err)
+	}
+	if err := r.createOrUpdate(ctx, securitySecret); err != nil {
+		return fmt.Errorf("failed to reconcile indexer security secret: %w", err)
 	}
 
 	return nil
@@ -489,14 +504,34 @@ func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *waz
 		}
 	}
 
-	// Prefer DN options derived from the actual indexer certificate when available.
+	adminDNOpts := dnOpts
+	nodesDNOpts := dnOpts
+
+	// Prefer nodes DN derived from the actual indexer certificate.
 	// This prevents nodes_dn mismatches after upgrades when defaults change.
 	if optsFromCert, err := r.dnOptionsFromIndexerCertSecret(ctx, cluster.Name, cluster.Namespace); err == nil && optsFromCert != nil {
-		dnOpts = optsFromCert
+		nodesDNOpts = optsFromCert
+	}
+	// Prefer admin DN derived from the actual admin certificate mounted for securityadmin.sh.
+	// This ensures authcz.admin_dn matches the certificate subject used by securityadmin.
+	if optsFromCert, err := r.dnOptionsFromAdminCertSecret(ctx, cluster.Name, cluster.Namespace); err == nil && optsFromCert != nil {
+		adminDNOpts = optsFromCert
 	}
 
-	// Build opensearch.yml content (version-aware configuration with DN options)
-	opensearchYML := config.BuildIndexerConfigWithDN(cluster.Name, cluster.Namespace, replicas, cluster.Spec.Version, dnOpts)
+	// Build opensearch.yml content (version-aware configuration with per-certificate DNs)
+	cfg := config.DefaultOpenSearchConfig(cluster.Name, cluster.Namespace)
+	cfg.WithReplicas(replicas)
+	if cluster.Spec.Version != "" {
+		cfg.WithWazuhVersion(cluster.Spec.Version)
+		cfg.CertPath = constants.IndexerCertsDir(cluster.Spec.Version)
+	}
+	if adminDNOpts != nil {
+		cfg.AdminDN = certificates.AdminDN(*adminDNOpts)
+	}
+	if nodesDNOpts != nil {
+		cfg.NodesDN = certificates.NodesDN(*nodesDNOpts)
+	}
+	opensearchYML := cfg.Build()
 
 	configBuilder := configmaps.NewIndexerConfigMapBuilder(cluster.Name, cluster.Namespace)
 	configBuilder.WithOpenSearchYML(opensearchYML)
@@ -512,14 +547,24 @@ func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *waz
 // dnOptionsFromIndexerCertSecret extracts DN options from the indexer TLS cert secret.
 func (r *IndexerReconciler) dnOptionsFromIndexerCertSecret(ctx context.Context, clusterName, namespace string) (*certificates.DNOptions, error) {
 	secretName := constants.IndexerCertsName(clusterName)
+	return r.dnOptionsFromCertSecret(ctx, secretName, namespace, constants.SecretKeyTLSCert)
+}
+
+// dnOptionsFromAdminCertSecret extracts DN options from the admin TLS cert secret.
+func (r *IndexerReconciler) dnOptionsFromAdminCertSecret(ctx context.Context, clusterName, namespace string) (*certificates.DNOptions, error) {
+	secretName := constants.AdminCertsName(clusterName)
+	return r.dnOptionsFromCertSecret(ctx, secretName, namespace, constants.SecretKeyTLSCert)
+}
+
+func (r *IndexerReconciler) dnOptionsFromCertSecret(ctx context.Context, secretName, namespace, certKey string) (*certificates.DNOptions, error) {
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: namespace}, secret); err != nil {
 		return nil, err
 	}
 
-	certPEM, ok := secret.Data[constants.SecretKeyTLSCert]
+	certPEM, ok := secret.Data[certKey]
 	if !ok || len(certPEM) == 0 {
-		return nil, fmt.Errorf("tls.crt not found in secret %s", secretName)
+		return nil, fmt.Errorf("%s not found in secret %s", certKey, secretName)
 	}
 
 	block, _ := pem.Decode(certPEM)
@@ -2000,15 +2045,25 @@ func (r *IndexerReconciler) generateStandaloneIndexerCertificates(ctx context.Co
 	}, nil
 }
 
-// generateDefaultInternalUsers generates the internal_users.yml content with bcrypt hashed password
-func generateDefaultInternalUsers(adminPassword string) []byte {
-	// Generate bcrypt hash for the admin password (cost 12 for security)
-	// bcrypt.GenerateFromPassword should never fail with valid string input
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(adminPassword), 12)
-	if err != nil {
-		// This should never happen, but if it does, use a safe fallback hash for "admin"
-		// Generated with: bcrypt.GenerateFromPassword([]byte("admin"), 12)
-		passwordHash = []byte("$2a$12$VcCDgh2NDk07JGN0rjGbM.Ad41qVR/YFJcgHp0UGns5JDymv..TOG")
+// generateDefaultInternalUsers generates the internal_users.yml content with bcrypt hashed password.
+// Reuses an existing matching bcrypt hash when possible to avoid random salt churn.
+func generateDefaultInternalUsers(adminUsername, adminPassword string, existingInternalUsers []byte) []byte {
+	if adminUsername == "" {
+		adminUsername = constants.DefaultOpenSearchAdminUsername
+	}
+
+	passwordHash := findReusableBcryptHash(existingInternalUsers, adminPassword)
+	if passwordHash == "" {
+		// Generate bcrypt hash for the admin password (cost 12 for security)
+		// bcrypt.GenerateFromPassword should never fail with valid string input
+		generated, err := bcrypt.GenerateFromPassword([]byte(adminPassword), 12)
+		if err != nil {
+			// This should never happen, but if it does, use a safe fallback hash for "admin"
+			// Generated with: bcrypt.GenerateFromPassword([]byte("admin"), 12)
+			passwordHash = "$2a$12$VcCDgh2NDk07JGN0rjGbM.Ad41qVR/YFJcgHp0UGns5JDymv..TOG"
+		} else {
+			passwordHash = string(generated)
+		}
 	}
 
 	return []byte(fmt.Sprintf(`---
@@ -2017,18 +2072,37 @@ _meta:
   type: "internalusers"
   config_version: 2
 
-admin:
+%s:
   hash: "%s"
   reserved: true
   backend_roles:
     - "admin"
-  description: "Admin user"
+  description: "Default admin user"
 
 kibanaserver:
   hash: "%s"
   reserved: true
   description: "Kibana server user"
-`, string(passwordHash), string(passwordHash)))
+`, adminUsername, passwordHash, passwordHash))
+}
+
+// findReusableBcryptHash returns a hash from internal_users.yml that matches the provided password.
+func findReusableBcryptHash(existingInternalUsers []byte, password string) string {
+	if len(existingInternalUsers) == 0 || password == "" {
+		return ""
+	}
+	re := regexp.MustCompile(`hash:\s*"([^"]+)"`)
+	matches := re.FindAllStringSubmatch(string(existingInternalUsers), -1)
+	for _, match := range matches {
+		if len(match) < 2 {
+			continue
+		}
+		hash := match[1]
+		if bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil {
+			return hash
+		}
+	}
+	return ""
 }
 
 // generateDefaultRoles generates the roles.yml content
@@ -2171,101 +2245,102 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 		return fmt.Errorf("failed to get credentials secret: %w", err)
 	}
 
-	// Get the password from secret
+	// Get credentials from secret
+	adminUsername := string(credSecret.Data[constants.SecretKeyAdminUsername])
+	if adminUsername == "" {
+		adminUsername = constants.DefaultOpenSearchAdminUsername
+	}
 	password := string(credSecret.Data[constants.SecretKeyAdminPassword])
 	if password == "" {
 		log.V(1).Info("Admin password not found in credentials secret")
 		return nil
 	}
 
-	// Compute hash to check if we've already synced this config
-	configHash := patch.ComputeSecretHash(credSecret.Data)
+	// Compute combined hash to check if we've already synced this config.
+	// Include both credentials and internal_users.yml so changes in either source
+	// trigger securityadmin.sh.
+	securitySecretName := constants.IndexerSecurityName(cluster.Name)
+	securitySecret := &corev1.Secret{}
+	internalUsersContent := ""
+	if err := r.Get(ctx, types.NamespacedName{Name: securitySecretName, Namespace: cluster.Namespace}, securitySecret); err != nil {
+		if errors.IsNotFound(err) {
+			log.V(1).Info("Indexer security secret not found, using credentials-only hash", "secret", securitySecretName)
+		} else {
+			return fmt.Errorf("failed to get indexer security secret: %w", err)
+		}
+	} else if internalUsers, ok := securitySecret.Data[constants.SecretKeyInternalUsers]; ok {
+		internalUsersContent = string(internalUsers)
+	}
 
-	// Check if we've already synced this configuration
-	if cluster.Status.Security != nil && cluster.Status.Security.CredentialsHash == configHash {
+	credentialsHash := patch.ComputeSecretHash(credSecret.Data)
+	combinedSyncData := map[string][]byte{
+		"credentials_hash": []byte(credentialsHash),
+	}
+	if internalUsersContent != "" {
+		combinedSyncData[constants.SecretKeyInternalUsers] = []byte(internalUsersContent)
+	}
+	internalUsersHash := ""
+	if internalUsersContent != "" {
+		internalUsersHash = patch.ComputeSecretHash(map[string][]byte{
+			constants.SecretKeyInternalUsers: []byte(internalUsersContent),
+		})
+	}
+	configHash := patch.ComputeSecretHash(combinedSyncData)
+
+	// Check if we've already synced this configuration.
+	storedHash := ""
+	if cluster.Status.Security != nil {
+		storedHash = cluster.Status.Security.CredentialsHash
+	}
+	storedCredentialsHash, storedInternalUsersHash := splitSecuritySyncHash(storedHash)
+	credentialsChanged := credentialsHash != "" && credentialsHash != storedCredentialsHash
+	internalUsersChanged := internalUsersHash != storedInternalUsersHash
+
+	if cluster.Status.Security != nil && !credentialsChanged && !internalUsersChanged {
 		log.V(1).Info("Security credentials already synced", "hash", configHash)
 		return nil
 	}
 
-	// Try to create OpenSearch client and update users
-	osClient, err := r.getClientFactory().GetClientForCluster(ctx, cluster)
-	if err != nil {
-		// Auth failed - try securityadmin.sh to force-push internal_users.yml
-		// This handles the case where PVCs survive CR deletion but credential secrets
-		// are regenerated, causing a password mismatch with the security index.
-		if r.SecurityAdminExecutor != nil {
-			log.Info("REST API auth failed, attempting credential recovery via securityadmin.sh")
-			if saErr := r.SecurityAdminExecutor.ApplyInternalUsers(ctx, cluster.Name, cluster.Namespace, cluster.Spec.Version); saErr != nil {
-				log.Error(saErr, "securityadmin.sh credential recovery failed")
-				return nil // Will retry on next reconciliation
-			}
-			log.Info("Credentials pushed via securityadmin.sh, will sync via REST API on next reconciliation")
-			if r.Recorder != nil {
-				r.Recorder.Event(cluster, corev1.EventTypeNormal, "SecurityCredentialsRecovered",
-					"Recovered credentials via securityadmin.sh after auth failure (PVC reuse detected)")
-			}
-		} else {
-			log.V(1).Info("Failed to create OpenSearch client for security sync (expected on first startup)", "error", err)
-		}
+	// Sync internal users via securityadmin.sh only. This avoids bootstrap deadlocks
+	// when credentials have changed and the REST API can no longer authenticate.
+	if r.SecurityAdminExecutor == nil {
+		log.V(1).Info("SecurityAdminExecutor not configured, skipping internal_users sync")
 		return nil
 	}
-
-	// Update admin user
-	log.Info("Syncing admin user to security index")
-	adminPayload := map[string]interface{}{
-		"password":      password,
-		"backend_roles": []string{"admin"},
-		"description":   "Admin user",
-	}
-	resp, err := osClient.PutJSON(ctx, "/_plugins/_security/api/internalusers/admin", adminPayload)
-	if err != nil {
-		log.V(1).Info("Failed to update admin user (may be expected on new cluster)", "error", err)
+	log.Info("Credentials/internal_users hash changed, applying internal_users via securityadmin.sh",
+		"username", adminUsername,
+		"credentialsChanged", credentialsChanged,
+		"internalUsersChanged", internalUsersChanged)
+	if saErr := r.SecurityAdminExecutor.ApplyInternalUsers(ctx, cluster.Name, cluster.Namespace, cluster.Spec.Version, internalUsersContent); saErr != nil {
+		log.Error(saErr, "securityadmin.sh internal_users sync failed")
 		return nil
 	}
-	resp.Body.Close()
-
-	// Check for auth failure (401/403) - indicates credential mismatch with security index
-	// This happens when PVCs survive CR deletion and contain old password hashes
-	if resp.StatusCode == 401 || resp.StatusCode == 403 {
-		log.Info("REST API returned auth error during credential sync, attempting recovery via securityadmin.sh",
-			"statusCode", resp.StatusCode)
-		if r.SecurityAdminExecutor != nil {
-			if saErr := r.SecurityAdminExecutor.ApplyInternalUsers(ctx, cluster.Name, cluster.Namespace, cluster.Spec.Version); saErr != nil {
-				log.Error(saErr, "securityadmin.sh credential recovery failed")
-				return nil // Will retry on next reconciliation
-			}
-			log.Info("Credentials pushed via securityadmin.sh, will sync via REST API on next reconciliation")
-			if r.Recorder != nil {
-				r.Recorder.Event(cluster, corev1.EventTypeNormal, "SecurityCredentialsRecovered",
-					"Recovered credentials via securityadmin.sh after REST API auth failure (PVC reuse detected)")
-			}
-
-			// Restart the dashboard to break out of CrashLoopBackOff.
-			// The dashboard already has the correct password from the secret, but may be stuck
-			// in exponential backoff after repeated auth failures against the indexer.
-			r.restartDashboard(ctx, cluster)
-		}
-		return nil
-	}
-
-	// Update kibanaserver user
-	log.Info("Syncing kibanaserver user to security index")
-	kibanaPayload := map[string]interface{}{
-		"password":    password,
-		"description": "Kibana server user",
-	}
-	resp, err = osClient.PutJSON(ctx, "/_plugins/_security/api/internalusers/kibanaserver", kibanaPayload)
-	if err != nil {
-		log.V(1).Info("Failed to update kibanaserver user", "error", err)
-		return nil
-	}
-	resp.Body.Close()
+	log.Info("Credentials pushed via securityadmin.sh", "username", adminUsername)
 
 	// Update status to track that we've synced this config
 	if cluster.Status.Security == nil {
 		cluster.Status.Security = &wazuhv1.SecurityStatus{}
 	}
-	cluster.Status.Security.CredentialsHash = configHash
+	cluster.Status.Security.CredentialsHash = joinSecuritySyncHash(credentialsHash, internalUsersHash)
+
+	// Manager (master/workers) and Dashboard consume indexer credentials via env vars
+	// (SecretKeyRef), which are only read at pod startup. Restart them after status hash
+	// update so the new state is persisted even if a restart call fails.
+	if credentialsChanged {
+		restartHash := credentialsHash
+		if err := r.restartIndexerStatefulSets(ctx, cluster, restartHash); err != nil {
+			log.Error(err, "Failed to trigger indexer restart after credential sync")
+		}
+		if err := r.restartManagerMaster(ctx, cluster, restartHash); err != nil {
+			log.Error(err, "Failed to restart manager master after credential sync")
+		}
+		if err := r.restartManagerWorkers(ctx, cluster, restartHash); err != nil {
+			log.Error(err, "Failed to restart manager workers after credential sync")
+		}
+		if err := r.restartDashboard(ctx, cluster, restartHash); err != nil {
+			log.Error(err, "Failed to restart dashboard after credential sync")
+		}
+	}
 
 	log.Info("Security credentials synced successfully", "hash", configHash)
 	if r.Recorder != nil {
@@ -2276,29 +2351,117 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 	return nil
 }
 
+// joinSecuritySyncHash encodes credentials and internal_users hashes in a single status field.
+func joinSecuritySyncHash(credentialsHash, internalUsersHash string) string {
+	if internalUsersHash == "" {
+		return credentialsHash
+	}
+	return credentialsHash + "|" + internalUsersHash
+}
+
+// splitSecuritySyncHash decodes "credentials|internalUsers" and supports legacy "credentials" values.
+func splitSecuritySyncHash(stored string) (credentialsHash, internalUsersHash string) {
+	if stored == "" {
+		return "", ""
+	}
+	parts := strings.SplitN(stored, "|", 2)
+	if len(parts) == 1 {
+		return parts[0], ""
+	}
+	return parts[0], parts[1]
+}
+
 // restartDashboard triggers a rolling restart of the dashboard deployment by patching
 // an annotation on the pod template. This is used after credential recovery to break
 // the dashboard out of CrashLoopBackOff.
-func (r *IndexerReconciler) restartDashboard(ctx context.Context, cluster *wazuhv1.WazuhCluster) {
+func (r *IndexerReconciler) restartDashboard(ctx context.Context, cluster *wazuhv1.WazuhCluster, restartHash string) error {
+	return r.restartDeployment(ctx, cluster.Namespace, constants.DashboardName(cluster.Name), "Dashboard", restartHash)
+}
+
+func (r *IndexerReconciler) restartManagerMaster(ctx context.Context, cluster *wazuhv1.WazuhCluster, restartHash string) error {
+	return r.restartStatefulSet(ctx, cluster.Namespace, constants.ManagerMasterName(cluster.Name), "Manager master", restartHash)
+}
+
+func (r *IndexerReconciler) restartManagerWorkers(ctx context.Context, cluster *wazuhv1.WazuhCluster, restartHash string) error {
+	return r.restartStatefulSet(ctx, cluster.Namespace, constants.ManagerWorkerName(cluster.Name), "Manager workers", restartHash)
+}
+
+func (r *IndexerReconciler) restartIndexerStatefulSets(ctx context.Context, cluster *wazuhv1.WazuhCluster, restartHash string) error {
+	if cluster.Spec.Indexer == nil {
+		return nil
+	}
+
+	// Advanced mode: restart each node pool StatefulSet
+	if cluster.Spec.Indexer.IsAdvancedMode() {
+		for _, pool := range cluster.Spec.Indexer.NodePools {
+			name := constants.IndexerNodePoolName(cluster.Name, pool.Name)
+			if err := r.restartStatefulSet(ctx, cluster.Namespace, name, fmt.Sprintf("Indexer nodepool %s", pool.Name), restartHash); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Simple mode: single indexer StatefulSet
+	return r.restartStatefulSet(ctx, cluster.Namespace, constants.IndexerName(cluster.Name), "Indexer", restartHash)
+}
+
+func (r *IndexerReconciler) restartDeployment(ctx context.Context, namespace, name, component, restartHash string) error {
 	log := logf.FromContext(ctx)
 
-	dashboardName := constants.DashboardName(cluster.Name)
-	var deployment appsv1.Deployment
-	if err := r.Get(ctx, types.NamespacedName{Name: dashboardName, Namespace: cluster.Namespace}, &deployment); err != nil {
-		log.V(1).Info("Dashboard deployment not found, skipping restart", "error", err)
-		return
-	}
+	return utils.RetryOnConflict(ctx, func() error {
+		var deployment appsv1.Deployment
+		if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &deployment); err != nil {
+			return fmt.Errorf("failed to get %s deployment %s: %w", component, name, err)
+		}
 
-	if deployment.Spec.Template.Annotations == nil {
-		deployment.Spec.Template.Annotations = make(map[string]string)
-	}
-	deployment.Spec.Template.Annotations["wazuh.com/credential-recovery-restart"] = time.Now().Format(time.RFC3339)
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = make(map[string]string)
+		}
 
-	if err := r.Update(ctx, &deployment); err != nil {
-		log.Error(err, "Failed to restart dashboard after credential recovery")
-		return
-	}
-	log.Info("Dashboard restart triggered after credential recovery", "deployment", dashboardName)
+		if deployment.Spec.Template.Annotations["wazuh.com/indexer-credential-recovery-hash"] == restartHash {
+			log.V(1).Info("Restart already requested for current credentials hash", "component", component, "deployment", name)
+			return nil
+		}
+
+		deployment.Spec.Template.Annotations["wazuh.com/credential-recovery-restart"] = time.Now().Format(time.RFC3339)
+		deployment.Spec.Template.Annotations["wazuh.com/indexer-credential-recovery-hash"] = restartHash
+
+		if err := r.Update(ctx, &deployment); err != nil {
+			return fmt.Errorf("failed to update %s deployment %s for restart: %w", component, name, err)
+		}
+		log.Info("Restart triggered after credential recovery", "component", component, "deployment", name)
+		return nil
+	})
+}
+
+func (r *IndexerReconciler) restartStatefulSet(ctx context.Context, namespace, name, component, restartHash string) error {
+	log := logf.FromContext(ctx)
+
+	return utils.RetryOnConflict(ctx, func() error {
+		var sts appsv1.StatefulSet
+		if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &sts); err != nil {
+			return fmt.Errorf("failed to get %s statefulset %s: %w", component, name, err)
+		}
+
+		if sts.Spec.Template.Annotations == nil {
+			sts.Spec.Template.Annotations = make(map[string]string)
+		}
+
+		if sts.Spec.Template.Annotations["wazuh.com/indexer-credential-recovery-hash"] == restartHash {
+			log.V(1).Info("Restart already requested for current credentials hash", "component", component, "statefulset", name)
+			return nil
+		}
+
+		sts.Spec.Template.Annotations["wazuh.com/credential-recovery-restart"] = time.Now().Format(time.RFC3339)
+		sts.Spec.Template.Annotations["wazuh.com/indexer-credential-recovery-hash"] = restartHash
+
+		if err := r.Update(ctx, &sts); err != nil {
+			return fmt.Errorf("failed to update %s statefulset %s for restart: %w", component, name, err)
+		}
+		log.Info("Restart triggered after credential recovery", "component", component, "statefulset", name)
+		return nil
+	})
 }
 
 // CheckSecurityInitialization checks if OpenSearch security is initialized

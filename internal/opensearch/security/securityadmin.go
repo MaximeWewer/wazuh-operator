@@ -19,6 +19,7 @@ package security
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
@@ -101,7 +102,7 @@ func (e *SecurityAdminExecutor) ApplySecurityConfig(ctx context.Context, cluster
 // ApplyInternalUsers runs securityadmin.sh on the first indexer pod to push internal_users.yml
 // into the OpenSearch security index. This is used to recover from credential mismatches
 // when PVCs survive CR deletion but credential secrets are regenerated.
-func (e *SecurityAdminExecutor) ApplyInternalUsers(ctx context.Context, clusterName, namespace, wazuhVersion string) error {
+func (e *SecurityAdminExecutor) ApplyInternalUsers(ctx context.Context, clusterName, namespace, wazuhVersion, expectedInternalUsers string) error {
 	log := logf.FromContext(ctx).WithValues("cluster", clusterName, "namespace", namespace)
 
 	// Target the first indexer pod
@@ -117,8 +118,14 @@ func (e *SecurityAdminExecutor) ApplyInternalUsers(ctx context.Context, clusterN
 		return fmt.Errorf("indexer pod %s is not running (phase: %s)", podName, pod.Status.Phase)
 	}
 
-	// Build the securityadmin.sh command targeting internal_users.yml
-	cmd := buildInternalUsersCommand(wazuhVersion)
+	// Build the securityadmin.sh command targeting internal_users.yml.
+	// Prefer pushing inline content from the Secret to avoid stale subPath mounts.
+	var cmd []string
+	if expectedInternalUsers != "" {
+		cmd = buildInlineInternalUsersCommand(wazuhVersion, expectedInternalUsers)
+	} else {
+		cmd = buildInternalUsersCommand(wazuhVersion)
+	}
 
 	log.Info("Executing securityadmin.sh to push internal_users.yml", "pod", podName)
 
@@ -141,18 +148,56 @@ func (e *SecurityAdminExecutor) ApplyInternalUsers(ctx context.Context, clusterN
 // buildInternalUsersCommand constructs the securityadmin.sh command for pushing internal_users.yml
 // Uses bash -c with OPENSEARCH_JAVA_HOME since the container may not have 'which'
 func buildInternalUsersCommand(wazuhVersion string) []string {
-	securityConfigDir := constants.IndexerSecurityConfigDir(wazuhVersion)
+	preferredConfigDir := constants.IndexerSecurityConfigDir(wazuhVersion)
+	fallbackConfigDir := constants.PathIndexerLegacySecurityConfig
+	if preferredConfigDir == constants.PathIndexerLegacySecurityConfig {
+		fallbackConfigDir = constants.PathIndexerSecurityConfig
+	}
+
+	preferredInternalUsers := preferredConfigDir + "/internal_users.yml"
+	fallbackInternalUsers := fallbackConfigDir + "/internal_users.yml"
+	certsDir := constants.IndexerCertsDir(wazuhVersion)
+
 	return []string{
 		"bash", "-c",
-		fmt.Sprintf("OPENSEARCH_JAVA_HOME=/usr/share/wazuh-indexer/jdk "+
+		fmt.Sprintf("INTERNAL_USERS_FILE=%s; "+
+			"if [ ! -f \"$INTERNAL_USERS_FILE\" ] && [ -f %s ]; then INTERNAL_USERS_FILE=%s; fi; "+
+			"if [ ! -f \"$INTERNAL_USERS_FILE\" ]; then "+
+			"echo \"ERR: internal_users.yml not found at %s or %s\"; "+
+			"exit 1; "+
+			"fi; "+
+			"OPENSEARCH_JAVA_HOME=/usr/share/wazuh-indexer/jdk "+
 			"/usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh "+
-			"-f %s/internal_users.yml "+
+			"-f \"$INTERNAL_USERS_FILE\" "+
 			"-t internalusers "+
 			"-icl -nhnv "+
 			"-cacert %s/ca.crt "+
 			"-cert %s/tls.crt "+
 			"-key %s/tls.key",
-			securityConfigDir, constants.PathIndexerCerts, constants.PathIndexerAdminCerts, constants.PathIndexerAdminCerts),
+			preferredInternalUsers, fallbackInternalUsers, fallbackInternalUsers,
+			preferredInternalUsers, fallbackInternalUsers,
+			certsDir, constants.PathIndexerAdminCerts, constants.PathIndexerAdminCerts),
+	}
+}
+
+// buildInlineInternalUsersCommand pushes internal_users content directly to a temp file in the pod,
+// then applies it with securityadmin.sh. This avoids stale Secret subPath mounts.
+func buildInlineInternalUsersCommand(wazuhVersion, internalUsers string) []string {
+	encoded := base64.StdEncoding.EncodeToString([]byte(internalUsers))
+	certsDir := constants.IndexerCertsDir(wazuhVersion)
+	return []string{
+		"bash", "-c",
+		fmt.Sprintf("echo '%s' | base64 -d > /tmp/internal_users.yml; "+
+			"OPENSEARCH_JAVA_HOME=/usr/share/wazuh-indexer/jdk "+
+			"/usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh "+
+			"-f /tmp/internal_users.yml "+
+			"-t internalusers "+
+			"-icl -nhnv "+
+			"-cacert %s/ca.crt "+
+			"-cert %s/tls.crt "+
+			"-key %s/tls.key",
+			encoded,
+			certsDir, constants.PathIndexerAdminCerts, constants.PathIndexerAdminCerts),
 	}
 }
 

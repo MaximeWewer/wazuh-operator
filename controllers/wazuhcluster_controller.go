@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -65,6 +66,8 @@ import (
 
 const (
 	wazuhClusterFinalizer = "resources.wazuh.com/finalizer"
+	apiCredentialRecoveryHashAnnotation = "wazuh.com/api-credential-recovery-hash"
+	authdCredentialRecoveryHashAnnotation = "wazuh.com/authd-credential-recovery-hash"
 
 	// RequeueIntervalNormal is the normal requeue interval when cluster is stable
 	RequeueIntervalNormal = 30 * time.Second
@@ -610,6 +613,17 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 	if dashboardResult.PendingRollout != nil {
 		newPendingRollouts = append(newPendingRollouts, *dashboardResult.PendingRollout)
+	}
+
+	// 8.5 Reconcile Wazuh API credentials rotation state and trigger dependent component restarts
+	if err := r.reconcileAPICredentialsStatusAndRollout(ctx, cluster); err != nil {
+		log.Error(err, "Failed to reconcile Wazuh API credentials rotation state")
+		return ctrl.Result{}, err
+	}
+	// 8.6 Reconcile authd password rotation state and trigger manager restarts
+	if err := r.reconcileAuthdCredentialsStatusAndRollout(ctx, cluster); err != nil {
+		log.Error(err, "Failed to reconcile authd credentials rotation state")
+		return ctrl.Result{}, err
 	}
 
 	// 9. Reconcile Monitoring resources (ServiceMonitors) if enabled
@@ -1176,7 +1190,18 @@ func (r *WazuhClusterReconciler) updateCondition(cluster *wazuhv1.WazuhCluster, 
 // Use this on error paths where the main updateStatus() won't be reached.
 func (r *WazuhClusterReconciler) persistCondition(ctx context.Context, cluster *wazuhv1.WazuhCluster, conditionType, reason, message string) {
 	r.updateCondition(cluster, conditionType, metav1.ConditionFalse, reason, message)
-	if err := r.Status().Update(ctx, cluster); err != nil {
+	if err := utils.RetryOnConflict(ctx, func() error {
+		latestCluster := &wazuhv1.WazuhCluster{}
+		if err := r.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, latestCluster); err != nil {
+			return err
+		}
+		r.updateCondition(latestCluster, conditionType, metav1.ConditionFalse, reason, message)
+		if err := r.Status().Update(ctx, latestCluster); err != nil {
+			return err
+		}
+		cluster.Status.Conditions = latestCluster.Status.Conditions
+		return nil
+	}); err != nil {
 		logf.FromContext(ctx).Error(err, "Failed to persist status condition", "conditionType", conditionType, "reason", reason)
 	}
 }
@@ -1378,14 +1403,31 @@ func (r *WazuhClusterReconciler) collectWazuhAgentMetrics(cluster *wazuhv1.Wazuh
 
 	// Get credentials from secret
 	credSecret := &corev1.Secret{}
-	secretName := fmt.Sprintf("%s-wazuh-api", cluster.Name)
+	secretName := constants.APICredentialsName(cluster.Name)
+	usernameKey := constants.SecretKeyAPIUsername
+	passwordKey := constants.SecretKeyAPIPassword
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.APICredentials != nil {
+		if customSecret := cluster.Spec.Manager.APICredentials.GetSecretName(); customSecret != "" {
+			secretName = customSecret
+		}
+		if cluster.Spec.Manager.APICredentials.UsernameKey != "" {
+			usernameKey = cluster.Spec.Manager.APICredentials.UsernameKey
+		} else if secretName != constants.APICredentialsName(cluster.Name) {
+			usernameKey = "username"
+		}
+		if cluster.Spec.Manager.APICredentials.PasswordKey != "" {
+			passwordKey = cluster.Spec.Manager.APICredentials.PasswordKey
+		} else if secretName != constants.APICredentialsName(cluster.Name) {
+			passwordKey = "password"
+		}
+	}
 	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cluster.Namespace}, credSecret); err != nil {
 		log.V(1).Info("Cannot get Wazuh API credentials for metrics", "error", err)
 		return
 	}
 
-	username := string(credSecret.Data["username"])
-	password := string(credSecret.Data["password"])
+	username := string(credSecret.Data[usernameKey])
+	password := string(credSecret.Data[passwordKey])
 	if username == "" || password == "" {
 		log.V(1).Info("Wazuh API credentials incomplete, skipping agent metrics")
 		return
@@ -1408,6 +1450,358 @@ func (r *WazuhClusterReconciler) collectWazuhAgentMetrics(cluster *wazuhv1.Wazuh
 
 	// Record agent metrics
 	metrics.SetWazuhAgentsConnected(cluster.Name, cluster.Namespace, summary.Active)
+}
+
+func (r *WazuhClusterReconciler) resolveAPICredentialsRef(cluster *wazuhv1.WazuhCluster) (secretName, usernameKey, passwordKey string) {
+	secretName = constants.APICredentialsName(cluster.Name)
+	usernameKey = constants.SecretKeyAPIUsername
+	passwordKey = constants.SecretKeyAPIPassword
+
+	if cluster.Spec.Manager == nil || cluster.Spec.Manager.APICredentials == nil {
+		return
+	}
+
+	ref := cluster.Spec.Manager.APICredentials
+	if customSecret := ref.GetSecretName(); customSecret != "" {
+		secretName = customSecret
+		usernameKey = "username"
+		passwordKey = "password"
+	}
+	if ref.UsernameKey != "" {
+		usernameKey = ref.UsernameKey
+	}
+	if ref.PasswordKey != "" {
+		passwordKey = ref.PasswordKey
+	}
+	return
+}
+
+func (r *WazuhClusterReconciler) computeAPICredentialsHash(ctx context.Context, cluster *wazuhv1.WazuhCluster) (string, error) {
+	secretName, usernameKey, passwordKey := r.resolveAPICredentialsRef(cluster)
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cluster.Namespace}, secret); err != nil {
+		return "", err
+	}
+
+	username := string(secret.Data[usernameKey])
+	password := string(secret.Data[passwordKey])
+	if username == "" && password == "" {
+		return "", nil
+	}
+
+	return utils.HashStrings(username, password), nil
+}
+
+func (r *WazuhClusterReconciler) reconcileAPICredentialsStatusAndRollout(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+	if cluster.Spec.Manager == nil {
+		return nil
+	}
+
+	newHash, err := r.computeAPICredentialsHash(ctx, cluster)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.V(1).Info("Wazuh API credentials secret not found yet, skipping API credentials rollout check")
+			return nil
+		}
+		return fmt.Errorf("failed to compute Wazuh API credentials hash: %w", err)
+	}
+	if newHash == "" {
+		return nil
+	}
+
+	if cluster.Status.Security == nil {
+		cluster.Status.Security = &wazuhv1.SecurityStatus{}
+	}
+	oldHash := cluster.Status.Security.APICredentialsHash
+	if oldHash == newHash {
+		return nil
+	}
+
+	// First reconciliation with a known hash: persist state without forcing restart.
+	if oldHash == "" {
+		cluster.Status.Security.APICredentialsHash = newHash
+		log.V(1).Info("Initialized API credentials hash in cluster status")
+		return nil
+	}
+
+	reason := "wazuh api credentials changed"
+	if err := r.triggerStatefulSetRestartWithHash(
+		ctx,
+		cluster.Namespace,
+		constants.ManagerMasterName(cluster.Name),
+		"manager-master",
+		reason,
+		apiCredentialRecoveryHashAnnotation,
+		newHash,
+	); err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to restart manager master after API credentials change: %w", err)
+	}
+
+	if err := r.triggerStatefulSetRestartWithHash(
+		ctx,
+		cluster.Namespace,
+		constants.ManagerWorkerName(cluster.Name),
+		"manager-workers",
+		reason,
+		apiCredentialRecoveryHashAnnotation,
+		newHash,
+	); err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to restart manager workers after API credentials change: %w", err)
+	}
+
+	if err := r.triggerDeploymentRestartWithHash(
+		ctx,
+		cluster.Namespace,
+		constants.DashboardName(cluster.Name),
+		"dashboard",
+		reason,
+		apiCredentialRecoveryHashAnnotation,
+		newHash,
+	); err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to restart dashboard after API credentials change: %w", err)
+	}
+
+	cluster.Status.Security.APICredentialsHash = newHash
+	log.Info("Triggered dependent restarts after API credentials change")
+	return nil
+}
+
+func (r *WazuhClusterReconciler) resolveAuthdCredentialsRef(cluster *wazuhv1.WazuhCluster) (secretName, passwordKey string, enabledOnMasterOnly bool, configured bool) {
+	enabledOnMasterOnly = true
+	if cluster.Spec.Manager == nil {
+		return "", "", enabledOnMasterOnly, false
+	}
+
+	var (
+		disabled    bool
+		usePassword bool
+	)
+
+	if cluster.Spec.Manager.Config != nil && cluster.Spec.Manager.Config.Auth != nil {
+		auth := cluster.Spec.Manager.Config.Auth
+		if auth.Disabled != nil {
+			disabled = *auth.Disabled
+		}
+		if auth.UsePassword != nil {
+			usePassword = *auth.UsePassword
+		}
+		if auth.EnabledOnMasterOnly != nil {
+			enabledOnMasterOnly = *auth.EnabledOnMasterOnly
+		}
+		if auth.PasswordSecretRef != nil {
+			secretName = auth.PasswordSecretRef.Name
+			passwordKey = auth.PasswordSecretRef.Key
+		}
+	}
+
+	// Backward compatibility: legacy top-level authdPasswordSecretRef.
+	if secretName == "" && cluster.Spec.Manager.AuthdPasswordSecretRef != nil {
+		secretName = cluster.Spec.Manager.AuthdPasswordSecretRef.Name
+		passwordKey = cluster.Spec.Manager.AuthdPasswordSecretRef.Key
+		usePassword = true
+	}
+
+	if passwordKey == "" {
+		passwordKey = defaultAuthdSecretKey(secretName)
+	}
+
+	if disabled || !usePassword || secretName == "" {
+		return "", "", enabledOnMasterOnly, false
+	}
+
+	return secretName, passwordKey, enabledOnMasterOnly, true
+}
+
+func (r *WazuhClusterReconciler) computeAuthdCredentialsHash(ctx context.Context, cluster *wazuhv1.WazuhCluster) (hash string, enabledOnMasterOnly bool, configured bool, err error) {
+	secretName, passwordKey, enabledOnMasterOnly, configured := r.resolveAuthdCredentialsRef(cluster)
+	if !configured {
+		return "", enabledOnMasterOnly, false, nil
+	}
+
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cluster.Namespace}, secret); err != nil {
+		return "", enabledOnMasterOnly, true, err
+	}
+
+	password := string(secret.Data[passwordKey])
+	if password == "" {
+		// Fallback between common key conventions.
+		altKey := "password"
+		if passwordKey == "password" {
+			altKey = "authd.pass"
+		}
+		password = string(secret.Data[altKey])
+	}
+	if password == "" {
+		return "", enabledOnMasterOnly, true, nil
+	}
+
+	return utils.HashStrings(password), enabledOnMasterOnly, true, nil
+}
+
+func (r *WazuhClusterReconciler) reconcileAuthdCredentialsStatusAndRollout(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+	if cluster.Spec.Manager == nil {
+		return nil
+	}
+
+	newHash, enabledOnMasterOnly, configured, err := r.computeAuthdCredentialsHash(ctx, cluster)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.V(1).Info("authd password secret not found yet, skipping authd credentials rollout check")
+			return nil
+		}
+		return fmt.Errorf("failed to compute authd credentials hash: %w", err)
+	}
+
+	if cluster.Status.Security == nil {
+		cluster.Status.Security = &wazuhv1.SecurityStatus{}
+	}
+	oldHash := cluster.Status.Security.AuthdCredentialsHash
+
+	// Not configured for authd password or empty password.
+	if !configured || newHash == "" {
+		if oldHash != "" {
+			cluster.Status.Security.AuthdCredentialsHash = ""
+		}
+		return nil
+	}
+
+	if oldHash == newHash {
+		return nil
+	}
+
+	// First observed hash: persist state without restart.
+	if oldHash == "" {
+		cluster.Status.Security.AuthdCredentialsHash = newHash
+		log.V(1).Info("Initialized authd credentials hash in cluster status")
+		return nil
+	}
+
+	reason := "wazuh authd password changed"
+	if err := r.triggerStatefulSetRestartWithHash(
+		ctx,
+		cluster.Namespace,
+		constants.ManagerMasterName(cluster.Name),
+		"manager-master",
+		reason,
+		authdCredentialRecoveryHashAnnotation,
+		newHash,
+	); err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to restart manager master after authd password change: %w", err)
+	}
+
+	if !enabledOnMasterOnly {
+		if err := r.triggerStatefulSetRestartWithHash(
+			ctx,
+			cluster.Namespace,
+			constants.ManagerWorkerName(cluster.Name),
+			"manager-workers",
+			reason,
+			authdCredentialRecoveryHashAnnotation,
+			newHash,
+		); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to restart manager workers after authd password change: %w", err)
+		}
+	}
+
+	cluster.Status.Security.AuthdCredentialsHash = newHash
+	log.Info("Triggered manager restart(s) after authd credentials change", "enabledOnMasterOnly", enabledOnMasterOnly)
+	return nil
+}
+
+func defaultAuthdSecretKey(secretName string) string {
+	if strings.HasSuffix(secretName, "-authd-pass") {
+		return "authd.pass"
+	}
+	return "password"
+}
+
+func (r *WazuhClusterReconciler) triggerStatefulSetRestartWithHash(
+	ctx context.Context,
+	namespace, name, component, reason, hashAnnotationKey, hash string,
+) error {
+	log := logf.FromContext(ctx)
+
+	return utils.RetryOnConflict(ctx, func() error {
+		sts := &appsv1.StatefulSet{}
+		if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, sts); err != nil {
+			return err
+		}
+
+		if sts.Spec.Replicas != nil && *sts.Spec.Replicas == 0 {
+			log.V(1).Info("Skipping restart - statefulset has 0 replicas", "statefulset", name, "component", component)
+			return nil
+		}
+
+		if sts.Spec.Template.Annotations == nil {
+			sts.Spec.Template.Annotations = make(map[string]string)
+		}
+
+		if sts.Spec.Template.Annotations[hashAnnotationKey] == hash {
+			log.V(1).Info("Restart already requested for current hash", "statefulset", name, "component", component, "annotation", hashAnnotationKey)
+			return nil
+		}
+
+		sts.Spec.Template.Annotations[constants.AnnotationRestartedAt] = time.Now().Format(time.RFC3339)
+		sts.Spec.Template.Annotations[constants.AnnotationRollingRestartTriggered] = "true"
+		sts.Spec.Template.Annotations[hashAnnotationKey] = hash
+
+		if err := r.Update(ctx, sts); err != nil {
+			return err
+		}
+
+		log.Info("Triggered rolling restart for statefulset",
+			"statefulset", name,
+			"component", component,
+			"reason", reason,
+			"annotation", hashAnnotationKey)
+		return nil
+	})
+}
+
+func (r *WazuhClusterReconciler) triggerDeploymentRestartWithHash(
+	ctx context.Context,
+	namespace, name, component, reason, hashAnnotationKey, hash string,
+) error {
+	log := logf.FromContext(ctx)
+
+	return utils.RetryOnConflict(ctx, func() error {
+		deployment := &appsv1.Deployment{}
+		if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, deployment); err != nil {
+			return err
+		}
+
+		if deployment.Spec.Replicas != nil && *deployment.Spec.Replicas == 0 {
+			log.V(1).Info("Skipping restart - deployment has 0 replicas", "deployment", name, "component", component)
+			return nil
+		}
+
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = make(map[string]string)
+		}
+
+		if deployment.Spec.Template.Annotations[hashAnnotationKey] == hash {
+			log.V(1).Info("Restart already requested for current hash", "deployment", name, "component", component, "annotation", hashAnnotationKey)
+			return nil
+		}
+
+		deployment.Spec.Template.Annotations[constants.AnnotationRestartedAt] = time.Now().Format(time.RFC3339)
+		deployment.Spec.Template.Annotations[constants.AnnotationRollingRestartTriggered] = "true"
+		deployment.Spec.Template.Annotations[hashAnnotationKey] = hash
+
+		if err := r.Update(ctx, deployment); err != nil {
+			return err
+		}
+
+		log.Info("Triggered rolling restart for deployment",
+			"deployment", name,
+			"component", component,
+			"reason", reason,
+			"annotation", hashAnnotationKey)
+		return nil
+	})
 }
 
 // recordCertificateExpiryDaysMetrics reads certificate secrets and records
@@ -2057,6 +2451,66 @@ func (r *WazuhClusterReconciler) findClustersForDecoder(ctx context.Context, obj
 	}
 }
 
+// findClustersForSecret finds WazuhClusters impacted by changes in watched secrets.
+// This complements Owns(Secret), which only catches secrets with owner references.
+func (r *WazuhClusterReconciler) findClustersForSecret(ctx context.Context, obj client.Object) []ctrl.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		return []ctrl.Request{}
+	}
+	log := logf.FromContext(ctx)
+
+	clusterList := &wazuhv1.WazuhClusterList{}
+	if err := r.List(ctx, clusterList, client.InNamespace(secret.Namespace)); err != nil {
+		log.Error(err, "Failed to list WazuhClusters for secret watch")
+		return []ctrl.Request{}
+	}
+
+	requests := []ctrl.Request{}
+	for _, cluster := range clusterList.Items {
+		expectedCredentials := constants.IndexerCredentialsName(cluster.Name)
+		expectedSecurity := constants.IndexerSecurityName(cluster.Name)
+		expectedAPICredentials := constants.APICredentialsName(cluster.Name)
+		expectedAuthdCredentials := fmt.Sprintf("%s-authd-pass", cluster.Name)
+		customAPICredentials := expectedAPICredentials
+		if cluster.Spec.Manager != nil && cluster.Spec.Manager.APICredentials != nil {
+			if ref := cluster.Spec.Manager.APICredentials.GetSecretName(); ref != "" {
+				customAPICredentials = ref
+			}
+		}
+		if cluster.Spec.Manager != nil {
+			if cluster.Spec.Manager.Config != nil &&
+				cluster.Spec.Manager.Config.Auth != nil &&
+				cluster.Spec.Manager.Config.Auth.PasswordSecretRef != nil &&
+				cluster.Spec.Manager.Config.Auth.PasswordSecretRef.Name != "" {
+				expectedAuthdCredentials = cluster.Spec.Manager.Config.Auth.PasswordSecretRef.Name
+			} else if cluster.Spec.Manager.AuthdPasswordSecretRef != nil && cluster.Spec.Manager.AuthdPasswordSecretRef.Name != "" {
+				expectedAuthdCredentials = cluster.Spec.Manager.AuthdPasswordSecretRef.Name
+			}
+		}
+
+		if secret.Name != expectedCredentials &&
+			secret.Name != expectedSecurity &&
+			secret.Name != expectedAPICredentials &&
+			secret.Name != customAPICredentials &&
+			secret.Name != expectedAuthdCredentials {
+			continue
+		}
+
+		requests = append(requests, ctrl.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      cluster.Name,
+				Namespace: cluster.Namespace,
+			},
+		})
+		log.V(1).Info("Enqueueing WazuhCluster for secret change",
+			"cluster", cluster.Name,
+			"secret", secret.Name)
+	}
+
+	return requests
+}
+
 // SetupWithManager sets up the controller with the Manager
 func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Wire the event recorder into sub-reconcilers
@@ -2076,6 +2530,12 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Use GenerationChangedPredicate on the primary resource to skip reconciles
 	// triggered by status-only updates. Owned resources keep default predicates
 	// so we still react to their status changes.
+	secretWatchPredicate := predicate.NewPredicateFuncs(func(obj client.Object) bool {
+		// Accept all Secret events here and filter in findClustersForSecret.
+		// This is required to catch custom apiCredentials secret names.
+		return obj != nil
+	})
+
 	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.WazuhCluster{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
 		Owns(&appsv1.StatefulSet{}).
@@ -2083,6 +2543,12 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&corev1.Secret{}).
+		// Watch key indexer secrets even when not owned by WazuhCluster (e.g., Helm-managed).
+		Watches(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.findClustersForSecret),
+			builder.WithPredicates(secretWatchPredicate),
+		).
 		Owns(&networkingv1.Ingress{}).
 		// Watch WazuhManager CRs - reconcile WazuhCluster when referenced manager changes
 		Watches(

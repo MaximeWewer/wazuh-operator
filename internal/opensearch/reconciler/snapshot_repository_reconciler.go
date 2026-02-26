@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -213,7 +214,7 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 		ObservedGeneration: repo.Generation,
 	})
 
-	if err := r.Status().Update(ctx, repo); err != nil {
+	if err := r.updateRepositoryStatusWithRetry(ctx, repo); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
@@ -414,13 +415,39 @@ func (r *SnapshotRepositoryReconciler) loadCredentials(ctx context.Context, name
 //
 //nolint:unparam // verified param kept for when repository verification is implemented
 func (r *SnapshotRepositoryReconciler) updateStatus(ctx context.Context, repo *wazuhv1.OpenSearchSnapshotRepository, phase wazuhv1.RepositoryPhase, message string, verified bool) error {
-	repo.Status.Phase = phase
-	repo.Status.Message = message
-	repo.Status.Verified = verified
-	now := metav1.Now()
-	repo.Status.LastSyncTime = &now
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchSnapshotRepository{}
+		if err := r.Get(ctx, types.NamespacedName{Name: repo.Name, Namespace: repo.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status.Phase = phase
+		latest.Status.Message = message
+		latest.Status.Verified = verified
+		now := metav1.Now()
+		latest.Status.LastSyncTime = &now
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		repo.Status = latest.Status
+		return nil
+	})
+}
 
-	return r.Status().Update(ctx, repo)
+// updateRepositoryStatusWithRetry persists full repository status with conflict retry.
+func (r *SnapshotRepositoryReconciler) updateRepositoryStatusWithRetry(ctx context.Context, repo *wazuhv1.OpenSearchSnapshotRepository) error {
+	desired := repo.Status
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchSnapshotRepository{}
+		if err := r.Get(ctx, types.NamespacedName{Name: repo.Name, Namespace: repo.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status = desired
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		repo.Status = latest.Status
+		return nil
+	})
 }
 
 // Delete handles cleanup when a snapshot repository is deleted (called by controller)

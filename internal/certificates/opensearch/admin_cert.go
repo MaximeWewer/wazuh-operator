@@ -156,6 +156,10 @@ func GenerateAdminCert(config *AdminCertConfig, ca *certcommon.CAResult) (*Admin
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode private key: %w", err)
 	}
+	keyPEM, err = certcommon.ConvertPrivateKeyPEMToPKCS8(keyPEM)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert admin private key to PKCS#8: %w", err)
+	}
 
 	return &AdminCertResult{
 		Certificate:    cert,

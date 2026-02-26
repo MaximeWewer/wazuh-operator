@@ -603,7 +603,6 @@ const ossecConfTemplate = `<!--
     <purge>{{ if .Auth.Purge }}yes{{ else }}no{{ end }}</purge>
     <use_password>{{ if .Auth.UsePassword }}yes{{ else }}no{{ end }}</use_password>
 {{- if and .Auth.UsePassword .AuthdPassword }}
-    <authd_pass>{{ .AuthdPassword }}</authd_pass>
 {{- end }}
     <ciphers>{{ .Auth.Ciphers }}</ciphers>
     <ssl_verify_host>{{ if .Auth.SSLVerifyHost }}yes{{ else }}no{{ end }}</ssl_verify_host>

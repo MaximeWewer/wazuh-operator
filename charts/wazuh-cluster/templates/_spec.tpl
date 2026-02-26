@@ -108,6 +108,25 @@ Combines sizing profiles with credentials and other configurations
   {{- $_ := set $manager "apiCredentials" $apiCredentials -}}
 {{- end -}}
 
+{{- /* Apply manager authd password secret reference only when enabled */ -}}
+{{- $managerConfig := default dict $manager.config -}}
+{{- $managerAuth := default dict $managerConfig.auth -}}
+{{- $authdSecretName := "" -}}
+{{- $authdSecretKey := "" -}}
+{{- if and .Values.externalSecrets .Values.externalSecrets.enabled .Values.externalSecrets.wazuhAuthd .Values.externalSecrets.wazuhAuthd.name -}}
+  {{- $authdSecretName = .Values.externalSecrets.wazuhAuthd.name -}}
+  {{- $authdSecretKey = default "password" .Values.externalSecrets.wazuhAuthd.passwordKey -}}
+{{- else if and .Values.secrets.wazuhAuthd.enabled .Values.secrets.wazuhAuthd.password -}}
+  {{- $authdSecretName = printf "%s-authd-pass" $clusterName -}}
+  {{- $authdSecretKey = "authd.pass" -}}
+{{- end -}}
+{{- if $authdSecretName -}}
+  {{- $_ := set $managerAuth "usePassword" true -}}
+  {{- $_ := set $managerAuth "passwordSecretRef" (dict "name" $authdSecretName "key" $authdSecretKey) -}}
+  {{- $_ := set $managerConfig "auth" $managerAuth -}}
+  {{- $_ := set $manager "config" $managerConfig -}}
+{{- end -}}
+
 {{- /* Apply logRotation config if set in values (independent of sizing profile) */ -}}
 {{- if (default dict .Values.cluster.spec.manager).logRotation -}}
   {{- $_ := set $manager "logRotation" .Values.cluster.spec.manager.logRotation -}}

@@ -25,6 +25,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -143,6 +145,23 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 	if policyInfo == nil {
 		log.Info("Creating snapshot policy", "name", policy.Name, "repository", repoName)
 		if err := snapshotAPI.CreatePolicy(ctx, policy.Name, snapshotPolicy); err != nil {
+			// OpenSearch may return 400 "Sequence number and primary term must be provided"
+			// if the policy already exists (e.g. brief race/eventual consistency window).
+			if isSnapshotPolicyVersionRequiredError(err) {
+				log.Info("Snapshot policy already exists, retrying as update", "name", policy.Name, "repository", repoName)
+				latestPolicyInfo, getErr := snapshotAPI.GetPolicyInfo(ctx, policy.Name)
+				if getErr == nil && latestPolicyInfo != nil {
+					if updateErr := r.updateSnapshotPolicyWithRetry(ctx, snapshotAPI, policy.Name, snapshotPolicy, latestPolicyInfo); updateErr == nil {
+						// Converted create race into successful update.
+						err = nil
+					} else {
+						err = updateErr
+					}
+				}
+			}
+			if err == nil {
+				goto policyApplied
+			}
 			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create snapshot policy: %v", err)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
@@ -151,7 +170,7 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 		}
 	} else {
 		log.Info("Updating snapshot policy", "name", policy.Name, "repository", repoName)
-		if err := snapshotAPI.UpdatePolicy(ctx, policy.Name, snapshotPolicy, policyInfo.SeqNo, policyInfo.PrimaryTerm); err != nil {
+		if err := r.updateSnapshotPolicyWithRetry(ctx, snapshotAPI, policy.Name, snapshotPolicy, policyInfo); err != nil {
 			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to update snapshot policy: %v", err)); updateErr != nil {
 				log.Error(updateErr, "Failed to update status")
 			}
@@ -160,6 +179,7 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 		}
 	}
 
+policyApplied:
 	r.recordEvent(policy, corev1.EventTypeNormal, "Synced", "Snapshot policy reconciled successfully")
 
 	// Compute spec hash for drift detection
@@ -184,6 +204,68 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 
 	log.Info("Snapshot policy reconciliation completed", "name", policy.Name, "repository", repoName)
 	return nil
+}
+
+func isSnapshotPolicyVersionRequiredError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "sequence number and primary term must be provided")
+}
+
+func isSnapshotPolicyConflictError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "version_conflict_engine_exception") ||
+		strings.Contains(msg, "\"status\":409") ||
+		strings.Contains(msg, "version conflict")
+}
+
+func (r *SnapshotPolicyReconciler) updateSnapshotPolicyWithRetry(
+	ctx context.Context,
+	snapshotAPI *api.SnapshotAPI,
+	policyName string,
+	snapshotPolicy api.SnapshotPolicy,
+	policyInfo *api.SnapshotPolicyInfo,
+) error {
+	current := policyInfo
+	const maxAttempts = 4
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if current == nil {
+			latest, err := snapshotAPI.GetPolicyInfo(ctx, policyName)
+			if err != nil {
+				return fmt.Errorf("failed to refresh snapshot policy metadata: %w", err)
+			}
+			if latest == nil {
+				return fmt.Errorf("snapshot policy %s not found during update", policyName)
+			}
+			current = latest
+		}
+
+		err := snapshotAPI.UpdatePolicy(ctx, policyName, snapshotPolicy, current.SeqNo, current.PrimaryTerm)
+		if err == nil {
+			return nil
+		}
+		if !isSnapshotPolicyConflictError(err) || attempt == maxAttempts {
+			return err
+		}
+
+		// Reload latest seq_no/primary_term and retry on optimistic-lock conflicts.
+		latest, getErr := snapshotAPI.GetPolicyInfo(ctx, policyName)
+		if getErr != nil {
+			return fmt.Errorf("failed to refresh snapshot policy metadata after conflict: %w", getErr)
+		}
+		if latest == nil {
+			return fmt.Errorf("snapshot policy %s disappeared during conflict retry", policyName)
+		}
+		current = latest
+	}
+
+	return fmt.Errorf("unexpected snapshot policy update retry termination")
 }
 
 // recordEvent emits an event if the recorder is available
@@ -253,14 +335,23 @@ func (r *SnapshotPolicyReconciler) buildSnapshotPolicy(policy *wazuhv1.OpenSearc
 
 // updateStatus updates the policy status
 func (r *SnapshotPolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.OpenSearchSnapshotPolicy, phase wazuhv1.OpenSearchResourcePhase, message string) error {
-	policy.Status.Phase = phase
-	policy.Status.Message = message
-	now := metav1.Now()
-	policy.Status.LastSyncTime = &now
-
 	metrics.SetResourceSyncStatus("OpenSearchSnapshotPolicy", policy.Namespace, policy.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
-	return r.Status().Update(ctx, policy)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchSnapshotPolicy{}
+		if err := r.Get(ctx, types.NamespacedName{Name: policy.Name, Namespace: policy.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status.Phase = phase
+		latest.Status.Message = message
+		now := metav1.Now()
+		latest.Status.LastSyncTime = &now
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		policy.Status = latest.Status
+		return nil
+	})
 }
 
 // handleDeletion handles snapshot policy cleanup on deletion

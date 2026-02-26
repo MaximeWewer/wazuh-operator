@@ -86,7 +86,7 @@ func NewSnapshotAPI(client *Client) *SnapshotAPI {
 
 // CreatePolicy creates a snapshot management policy
 func (a *SnapshotAPI) CreatePolicy(ctx context.Context, policyID string, policy SnapshotPolicy) error {
-	resp, err := a.client.Put(ctx, "/_plugins/_sm/policies/"+policyID, policy)
+	resp, err := a.client.Post(ctx, "/_plugins/_sm/policies/"+policyID, policy)
 	if err != nil {
 		return fmt.Errorf("failed to create snapshot policy: %w", err)
 	}
@@ -103,6 +103,7 @@ func (a *SnapshotAPI) CreatePolicy(ctx context.Context, policyID string, policy 
 // SnapshotPolicyInfo includes policy and version metadata for updates
 type SnapshotPolicyInfo struct {
 	Policy      SnapshotPolicy `json:"policy"`
+	SMPolicy    SnapshotPolicy `json:"sm_policy"`
 	SeqNo       int64          `json:"_seq_no"`
 	PrimaryTerm int64          `json:"_primary_term"`
 }
@@ -137,6 +138,11 @@ func (a *SnapshotAPI) GetPolicy(ctx context.Context, policyID string) (*Snapshot
 	info, err := a.GetPolicyInfo(ctx, policyID)
 	if err != nil || info == nil {
 		return nil, err
+	}
+	// OpenSearch snapshot management API returns the policy in "sm_policy"
+	// while older/internal variants may use "policy".
+	if info.SMPolicy.Name != "" || info.SMPolicy.Description != "" || info.SMPolicy.SnapshotConfig != nil {
+		return &info.SMPolicy, nil
 	}
 	return &info.Policy, nil
 }
