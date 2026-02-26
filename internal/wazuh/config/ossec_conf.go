@@ -193,6 +193,17 @@ type AuthConfig struct {
 	// When false, authd is enabled on all nodes (master and workers)
 	// +kubebuilder:default=true
 	EnabledOnMasterOnly bool
+	// Force controls agent replacement when duplicate names or IPs are detected
+	Force *AuthForceConfig
+}
+
+// AuthForceConfig holds configuration for the <force> block inside <auth>
+type AuthForceConfig struct {
+	Enabled               bool
+	DisconnectedTime      string
+	DisconnectedTimeEnabled bool
+	AfterRegistrationTime string
+	KeyMismatch           bool
 }
 
 // SecretKeyReference references a secret key
@@ -609,6 +620,14 @@ const ossecConfTemplate = `<!--
     <ssl_manager_cert>{{ .Auth.SSLManagerCert }}</ssl_manager_cert>
     <ssl_manager_key>{{ .Auth.SSLManagerKey }}</ssl_manager_key>
     <ssl_auto_negotiate>{{ if .Auth.SSLAutoNegotiate }}yes{{ else }}no{{ end }}</ssl_auto_negotiate>
+{{- if .Auth.Force }}
+    <force>
+      <enabled>{{ if .Auth.Force.Enabled }}yes{{ else }}no{{ end }}</enabled>
+      <disconnected_time enabled="{{ if .Auth.Force.DisconnectedTimeEnabled }}yes{{ else }}no{{ end }}">{{ .Auth.Force.DisconnectedTime }}</disconnected_time>
+      <after_registration_time>{{ .Auth.Force.AfterRegistrationTime }}</after_registration_time>
+      <key_mismatch>{{ if .Auth.Force.KeyMismatch }}yes{{ else }}no{{ end }}</key_mismatch>
+    </force>
+{{- end }}
   </auth>
 
 {{- if .ExtraConfig }}
@@ -821,6 +840,31 @@ func AuthConfigFromSpec(spec *v1.OSSECAuthSpec) *AuthConfig {
 	}
 	if spec.EnabledOnMasterOnly != nil {
 		config.EnabledOnMasterOnly = *spec.EnabledOnMasterOnly
+	}
+	if spec.Force != nil {
+		force := &AuthForceConfig{
+			Enabled:                 true,
+			DisconnectedTime:        "1h",
+			DisconnectedTimeEnabled: true,
+			AfterRegistrationTime:   "1h",
+			KeyMismatch:             true,
+		}
+		if spec.Force.Enabled != nil {
+			force.Enabled = *spec.Force.Enabled
+		}
+		if spec.Force.DisconnectedTime != "" {
+			force.DisconnectedTime = spec.Force.DisconnectedTime
+		}
+		if spec.Force.DisconnectedTimeEnabled != nil {
+			force.DisconnectedTimeEnabled = *spec.Force.DisconnectedTimeEnabled
+		}
+		if spec.Force.AfterRegistrationTime != "" {
+			force.AfterRegistrationTime = spec.Force.AfterRegistrationTime
+		}
+		if spec.Force.KeyMismatch != nil {
+			force.KeyMismatch = *spec.Force.KeyMismatch
+		}
+		config.Force = force
 	}
 
 	return config

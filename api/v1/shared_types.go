@@ -893,6 +893,41 @@ type OSSECAuthSpec struct {
 	// +optional
 	// +kubebuilder:default=true
 	EnabledOnMasterOnly *bool `json:"enabledOnMasterOnly,omitempty"`
+
+	// Force controls agent replacement when duplicate names or IPs are detected
+	// +optional
+	Force *OSSECAuthForceSpec `json:"force,omitempty"`
+}
+
+// OSSECAuthForceSpec defines the <force> block inside <auth>
+type OSSECAuthForceSpec struct {
+	// Enabled toggles whether to force insertion of an agent if there is a duplicate name or IP
+	// +optional
+	// +kubebuilder:default=true
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// DisconnectedTime specifies the minimum time an agent must be disconnected before replacement.
+	// Uses duration suffixes: s (seconds), m (minutes), h (hours), d (days). Set to "0" to force
+	// replacement of any disconnected agent.
+	// +optional
+	// +kubebuilder:default="1h"
+	DisconnectedTime string `json:"disconnectedTime,omitempty"`
+
+	// DisconnectedTimeEnabled toggles the disconnected_time condition
+	// +optional
+	// +kubebuilder:default=true
+	DisconnectedTimeEnabled *bool `json:"disconnectedTimeEnabled,omitempty"`
+
+	// AfterRegistrationTime specifies the minimum time since registration before replacement.
+	// Uses duration suffixes: s (seconds), m (minutes), h (hours), d (days). Set to "0" to always allow.
+	// +optional
+	// +kubebuilder:default="1h"
+	AfterRegistrationTime string `json:"afterRegistrationTime,omitempty"`
+
+	// KeyMismatch forces replacement when the agent key differs from the one registered by the manager
+	// +optional
+	// +kubebuilder:default=true
+	KeyMismatch *bool `json:"keyMismatch,omitempty"`
 }
 
 // ============================================================================

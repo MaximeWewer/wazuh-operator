@@ -238,13 +238,26 @@ Configuration for safe scale-down operations. See [Drain Strategy](features/drai
 
 | Field                 | Type         | Required | Default | Description      |
 | --------------------- | ------------ | -------- | ------- | ---------------- |
-| `disabled`            | bool         | No       | `false` | Disable authd    |
-| `port`                | int          | No       | `1515`  | Port             |
-| `useSourceIP`         | bool         | No       | `false` | Use source IP    |
-| `purge`               | bool         | No       | `true`  | Purge old keys   |
-| `usePassword`         | bool         | No       | `false` | Require password |
-| `passwordSecretRef`   | SecretKeyRef | No       | -       | Password secret  |
-| `enabledOnMasterOnly` | bool         | No       | `true`  | Master only      |
+| `disabled`            | bool                                          | No       | `false` | Disable authd    |
+| `port`                | int                                           | No       | `1515`  | Port             |
+| `useSourceIP`         | bool                                          | No       | `false` | Use source IP    |
+| `purge`               | bool                                          | No       | `true`  | Purge old keys   |
+| `usePassword`         | bool                                          | No       | `false` | Require password |
+| `passwordSecretRef`   | SecretKeyRef                                  | No       | -       | Password secret  |
+| `enabledOnMasterOnly` | bool                                          | No       | `true`  | Master only      |
+| `force`               | [OSSECAuthForceSpec](#ossecauthforcespec)      | No       | -       | Agent replacement policy |
+
+### OSSECAuthForceSpec
+
+Controls agent replacement when duplicate names or IP addresses are detected. All configured conditions must be satisfied to perform the replacement. If omitted, the `<force>` block is not generated (Wazuh defaults apply).
+
+| Field                     | Type   | Required | Default | Description                                                                 |
+| ------------------------- | ------ | -------- | ------- | --------------------------------------------------------------------------- |
+| `enabled`                 | bool   | No       | `true`  | Toggle forced insertion on duplicate name/IP                                |
+| `disconnectedTime`        | string | No       | `1h`    | Min time agent must be disconnected before replacement (e.g. `0`, `30m`, `1h`, `1d`) |
+| `disconnectedTimeEnabled` | bool   | No       | `true`  | Toggle the disconnected time condition                                      |
+| `afterRegistrationTime`   | string | No       | `1h`    | Min time since registration before replacement (e.g. `0`, `30m`, `1h`)     |
+| `keyMismatch`             | bool   | No       | `true`  | Replace when agent key differs from registered key                          |
 
 ### MasterSpec
 

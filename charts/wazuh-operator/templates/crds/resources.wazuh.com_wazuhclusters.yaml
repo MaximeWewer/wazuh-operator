@@ -1,3 +1,4 @@
+{{- if .Values.crds.install }}
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -22400,6 +22401,40 @@ spec:
                               EnabledOnMasterOnly when true, enables authd only on master node
                               When false, authd is enabled on all nodes (master and workers)
                             type: boolean
+                          force:
+                            description: Force controls agent replacement when duplicate
+                              names or IPs are detected
+                            properties:
+                              afterRegistrationTime:
+                                default: 1h
+                                description: |-
+                                  AfterRegistrationTime specifies the minimum time since registration before replacement.
+                                  Uses duration suffixes: s (seconds), m (minutes), h (hours), d (days). Set to "0" to always allow.
+                                type: string
+                              disconnectedTime:
+                                default: 1h
+                                description: |-
+                                  DisconnectedTime specifies the minimum time an agent must be disconnected before replacement.
+                                  Uses duration suffixes: s (seconds), m (minutes), h (hours), d (days). Set to "0" to force
+                                  replacement of any disconnected agent.
+                                type: string
+                              disconnectedTimeEnabled:
+                                default: true
+                                description: DisconnectedTimeEnabled toggles the disconnected_time
+                                  condition
+                                type: boolean
+                              enabled:
+                                default: true
+                                description: Enabled toggles whether to force insertion
+                                  of an agent if there is a duplicate name or IP
+                                type: boolean
+                              keyMismatch:
+                                default: true
+                                description: KeyMismatch forces replacement when the
+                                  agent key differs from the one registered by the
+                                  manager
+                                type: boolean
+                            type: object
                           passwordSecretRef:
                             description: |-
                               PasswordSecretRef references a secret containing the authd password
@@ -38825,3 +38860,4 @@ spec:
     storage: true
     subresources:
       status: {}
+{{- end }}
