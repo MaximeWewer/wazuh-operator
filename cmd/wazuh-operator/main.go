@@ -20,7 +20,9 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,13 +30,16 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
@@ -126,6 +131,10 @@ func main() {
 	flag.IntVar(&maxConcurrentReconciles, "max-concurrent-reconciles", 1,
 		"The maximum number of concurrent Reconciles which can be run for the WazuhCluster controller.")
 	flag.Parse()
+
+	// Read rate limiting configuration from environment variables (set by Helm chart)
+	rateLimitConfig := loadRateLimitConfig(maxConcurrentReconciles)
+	maxConcurrentReconciles = rateLimitConfig.maxConcurrent
 
 	// Setup logging from environment variables (LOG_FORMAT, LOG_LEVEL)
 	logConfig := logging.LoadFromEnv()
@@ -328,6 +337,7 @@ func main() {
 		TCPRouteAvailable:       gatewayAPIStatus.TCPRouteAvailable,
 		UDPRouteAvailable:       gatewayAPIStatus.UDPRouteAvailable,
 		MaxConcurrentReconciles: maxConcurrentReconciles,
+		RateLimiter:             rateLimitConfig.rateLimiter,
 		Watchdog:                reconcileWatchdog,
 	}
 	if err := wazuhClusterReconciler.SetupWithManager(mgr); err != nil {
@@ -601,4 +611,83 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+// rateLimitResult holds the parsed rate limiting configuration.
+type rateLimitResult struct {
+	maxConcurrent int
+	rateLimiter   workqueue.TypedRateLimiter[reconcile.Request]
+}
+
+// loadRateLimitConfig reads RATE_LIMIT_* environment variables (set by Helm chart)
+// and builds a controller rate limiter. The flagMaxConcurrent parameter is the
+// value from --max-concurrent-reconciles; the env var overrides it when set.
+func loadRateLimitConfig(flagMaxConcurrent int) rateLimitResult {
+	result := rateLimitResult{maxConcurrent: flagMaxConcurrent}
+
+	if os.Getenv("RATE_LIMIT_ENABLED") != "true" {
+		return result
+	}
+
+	// Override max concurrent from env var if set
+	if v := os.Getenv("RATE_LIMIT_MAX_CONCURRENT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			result.maxConcurrent = n
+		} else {
+			setupLog.Error(fmt.Errorf("invalid RATE_LIMIT_MAX_CONCURRENT: %s", v), "using flag default", "default", flagMaxConcurrent)
+		}
+	}
+
+	// Parse exponential backoff parameters (defaults match controller-runtime)
+	baseDelay := 5 * time.Millisecond
+	if v := os.Getenv("RATE_LIMIT_BASE_DELAY"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			baseDelay = d
+		} else {
+			setupLog.Error(fmt.Errorf("invalid RATE_LIMIT_BASE_DELAY: %s", v), "using default", "default", baseDelay)
+		}
+	}
+
+	maxDelay := 1000 * time.Second
+	if v := os.Getenv("RATE_LIMIT_MAX_DELAY"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			maxDelay = d
+		} else {
+			setupLog.Error(fmt.Errorf("invalid RATE_LIMIT_MAX_DELAY: %s", v), "using default", "default", maxDelay)
+		}
+	}
+
+	// Parse bucket rate limiter parameters
+	qps := rate.Limit(10)
+	if v := os.Getenv("RATE_LIMIT_QPS"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			qps = rate.Limit(f)
+		} else {
+			setupLog.Error(fmt.Errorf("invalid RATE_LIMIT_QPS: %s", v), "using default", "default", qps)
+		}
+	}
+
+	burst := 100
+	if v := os.Getenv("RATE_LIMIT_BURST"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			burst = n
+		} else {
+			setupLog.Error(fmt.Errorf("invalid RATE_LIMIT_BURST: %s", v), "using default", "default", burst)
+		}
+	}
+
+	result.rateLimiter = workqueue.NewTypedMaxOfRateLimiter(
+		workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](baseDelay, maxDelay),
+		&workqueue.TypedBucketRateLimiter[reconcile.Request]{Limiter: rate.NewLimiter(qps, burst)},
+	)
+
+	setupLog.Info("rate limiting configured",
+		"maxConcurrent", result.maxConcurrent,
+		"baseDelay", baseDelay,
+		"maxDelay", maxDelay,
+		"qps", float64(qps),
+		"burst", burst,
+	)
+
+	return result
 }

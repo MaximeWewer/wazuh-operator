@@ -31,10 +31,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -115,6 +117,10 @@ type WazuhClusterReconciler struct {
 	// MaxConcurrentReconciles is the maximum number of concurrent Reconciles
 	// which can be run. Defaults to 1.
 	MaxConcurrentReconciles int
+
+	// RateLimiter overrides the default controller rate limiter.
+	// When nil, controller-runtime's default is used.
+	RateLimiter workqueue.TypedRateLimiter[reconcile.Request]
 
 	// Watchdog is touched after each successful reconcile so the readiness
 	// probe can detect a stuck reconcile loop.
@@ -2596,10 +2602,15 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		maxConcurrent = 1
 	}
 
+	opts := controller.Options{
+		MaxConcurrentReconciles: maxConcurrent,
+	}
+	if r.RateLimiter != nil {
+		opts.RateLimiter = r.RateLimiter
+	}
+
 	return ctrlBuilder.
-		WithOptions(controller.Options{
-			MaxConcurrentReconciles: maxConcurrent,
-		}).
+		WithOptions(opts).
 		Named("wazuhcluster").
 		Complete(r)
 }
