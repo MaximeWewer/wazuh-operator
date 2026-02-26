@@ -297,7 +297,7 @@ To resolve:
 
 ```bash
 # 1. Delete all Wazuh/OpenSearch CRDs to clear stored version tracking
-kubectl delete crds $(kubectl get crds -o name | grep resources.wazuh.com)
+kubectl delete $(kubectl get crds -o name | grep resources.wazuh.com)
 
 # 2. Remove the finalizer from the stuck namespace
 kubectl get namespace <namespace> -o json \
