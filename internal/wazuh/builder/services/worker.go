@@ -161,7 +161,8 @@ func (b *WorkerServiceBuilder) Build() *corev1.Service {
 func (b *WorkerServiceBuilder) BuildHeadless() *corev1.Service {
 	b.headless = true
 	svc := b.Build()
-	// Strip NodePort values — headless services (ClusterIP: None) do not support them
+	// Headless services must be ClusterIP type with ClusterIP: None
+	svc.Spec.Type = corev1.ServiceTypeClusterIP
 	for i := range svc.Spec.Ports {
 		svc.Spec.Ports[i].NodePort = 0
 	}
