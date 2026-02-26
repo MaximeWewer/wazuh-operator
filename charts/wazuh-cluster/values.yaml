@@ -585,16 +585,6 @@ cluster:
         # -- Local internal options (content for /var/ossec/etc/local_internal_options.conf)
         localInternalOptions: ""
 
-        # -- Per-worker configuration overrides for specific worker indices
-        overrides: []
-        # Example:
-        #   - index: 0
-        #     description: "Cloud log collection worker"
-        #     extraConfig: |
-        #       <wodle name="aws-s3">
-        #         <disabled>no</disabled>
-        #       </wodle>
-
         # @extra cluster.spec.manager.workers.podDisruptionBudget Workers PodDisruptionBudget
         podDisruptionBudget:
           # -- Enable PDB for workers

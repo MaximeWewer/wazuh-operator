@@ -273,7 +273,6 @@ kubectl delete -f <(helm template my-wazuh-cluster ./charts/wazuh-cluster --name
 | cluster.spec.manager.workers.ingress.tls | list | `[]` | Ingress TLS configuration |
 | cluster.spec.manager.workers.localInternalOptions | string | `""` | Local internal options (content for /var/ossec/etc/local_internal_options.conf) |
 | cluster.spec.manager.workers.nodeSelector | object | `{}` | Workers node selector |
-| cluster.spec.manager.workers.overrides | list | `[]` | Per-worker configuration overrides for specific worker indices |
 | cluster.spec.manager.workers.podAnnotations | object | `{}` | Workers pod annotations |
 | cluster.spec.manager.workers.podDisruptionBudget.enabled | bool | `false` | Enable PDB for workers |
 | cluster.spec.manager.workers.podDisruptionBudget.maxUnavailable | int | `1` | Maximum unavailable worker pods |
