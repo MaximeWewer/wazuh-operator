@@ -96,21 +96,33 @@ func TestLeaderElectionChecker(t *testing.T) {
 }
 
 func TestWatchdog(t *testing.T) {
-	t.Run("fresh watchdog passes", func(t *testing.T) {
+	t.Run("fresh watchdog passes (not activated)", func(t *testing.T) {
 		w := NewWatchdog(1 * time.Minute)
 		if err := w.Check(); err != nil {
 			t.Errorf("expected nil, got %v", err)
 		}
 	})
 
-	t.Run("touch resets timer", func(t *testing.T) {
+	t.Run("unactivated watchdog stays healthy even after timeout", func(t *testing.T) {
 		now := time.Now()
 		w := &Watchdog{
-			lastSeen: now.Add(-2 * time.Minute),
-			timeout:  1 * time.Minute,
-			now:      func() time.Time { return now },
+			timeout: 1 * time.Minute,
+			now:     func() time.Time { return now.Add(10 * time.Minute) },
 		}
-		// Before touch: should fail
+		if err := w.Check(); err != nil {
+			t.Errorf("expected nil for unactivated watchdog, got %v", err)
+		}
+	})
+
+	t.Run("touch activates and resets timer", func(t *testing.T) {
+		now := time.Now()
+		w := &Watchdog{
+			activated: true,
+			lastSeen:  now.Add(-2 * time.Minute),
+			timeout:   1 * time.Minute,
+			now:       func() time.Time { return now },
+		}
+		// Before touch: should fail (activated and expired)
 		if err := w.Check(); err == nil {
 			t.Error("expected error for expired watchdog, got nil")
 		}
@@ -121,15 +133,27 @@ func TestWatchdog(t *testing.T) {
 		}
 	})
 
-	t.Run("expired watchdog fails", func(t *testing.T) {
+	t.Run("expired activated watchdog fails", func(t *testing.T) {
 		now := time.Now()
 		w := &Watchdog{
-			lastSeen: now.Add(-10 * time.Minute),
-			timeout:  5 * time.Minute,
-			now:      func() time.Time { return now },
+			activated: true,
+			lastSeen:  now.Add(-10 * time.Minute),
+			timeout:   5 * time.Minute,
+			now:       func() time.Time { return now },
 		}
 		if err := w.Check(); err == nil {
 			t.Error("expected error for expired watchdog, got nil")
+		}
+	})
+
+	t.Run("first touch activates watchdog", func(t *testing.T) {
+		w := NewWatchdog(1 * time.Minute)
+		if w.activated {
+			t.Error("expected watchdog to start unactivated")
+		}
+		w.Touch()
+		if !w.activated {
+			t.Error("expected watchdog to be activated after Touch()")
 		}
 	})
 

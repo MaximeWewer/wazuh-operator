@@ -210,7 +210,6 @@ Combines sizing profiles with credentials and other configurations
   {{- end -}}
   {{- if and $idx.service (not $idx.service.type) }}{{ $_ := unset $idx.service "type" }}{{ end -}}
   {{- if not $idx.updateStrategy }}{{ $_ := unset $idx "updateStrategy" }}{{ end -}}
-  {{- if not $idx.clusterName }}{{ $_ := unset $idx "clusterName" }}{{ end -}}
   {{- if $idx.serviceAccount -}}
     {{- if and (not $idx.serviceAccount.create) (not $idx.serviceAccount.name) (not $idx.serviceAccount.annotations) (not $idx.serviceAccount.labels) -}}
       {{- $_ := unset $idx "serviceAccount" -}}
@@ -242,22 +241,18 @@ Combines sizing profiles with credentials and other configurations
     {{- if not $mgr.image.repository }}{{ $_ := unset $mgr.image "repository" }}{{ end -}}
     {{- if not $mgr.image.tag }}{{ $_ := unset $mgr.image "tag" }}{{ end -}}
   {{- end -}}
-  {{- /* Manager config string cleanup */ -}}
-  {{- if $mgr.config -}}
-    {{- if not $mgr.config.masterConfig }}{{ $_ := unset $mgr.config "masterConfig" }}{{ end -}}
-    {{- if not $mgr.config.workerConfig }}{{ $_ := unset $mgr.config "workerConfig" }}{{ end -}}
-    {{- if not $mgr.config.localInternalOptions }}{{ $_ := unset $mgr.config "localInternalOptions" }}{{ end -}}
-  {{- end -}}
   {{- /* Master cleanup */ -}}
   {{- if $mgr.master -}}
     {{- if and $mgr.master.service (not $mgr.master.service.type) }}{{ $_ := unset $mgr.master.service "type" }}{{ end -}}
     {{- if not $mgr.master.extraConfig }}{{ $_ := unset $mgr.master "extraConfig" }}{{ end -}}
+    {{- if not $mgr.master.localInternalOptions }}{{ $_ := unset $mgr.master "localInternalOptions" }}{{ end -}}
     {{- if and $mgr.master.serviceAccount (not $mgr.master.serviceAccount.create) }}{{ $_ := unset $mgr.master "serviceAccount" }}{{ end -}}
   {{- end -}}
   {{- /* Workers cleanup */ -}}
   {{- if $mgr.workers -}}
     {{- if and $mgr.workers.service (not $mgr.workers.service.type) }}{{ $_ := unset $mgr.workers.service "type" }}{{ end -}}
     {{- if not $mgr.workers.extraConfig }}{{ $_ := unset $mgr.workers "extraConfig" }}{{ end -}}
+    {{- if not $mgr.workers.localInternalOptions }}{{ $_ := unset $mgr.workers "localInternalOptions" }}{{ end -}}
     {{- if and $mgr.workers.serviceAccount (not $mgr.workers.serviceAccount.create) }}{{ $_ := unset $mgr.workers "serviceAccount" }}{{ end -}}
   {{- end -}}
 {{- end -}}

@@ -7276,10 +7276,6 @@ spec:
                           Deprecated: LoadBalancerIP is deprecated in Kubernetes 1.24+.
                           Use service annotations for your cloud provider instead.
                         type: string
-                      nodePort:
-                        description: NodePort for NodePort services
-                        format: int32
-                        type: integer
                       ports:
                         description: Custom service ports configuration
                         items:
@@ -9047,10 +9043,6 @@ spec:
                         minimum: 1
                         type: integer
                     type: object
-                  clusterName:
-                    default: wazuh
-                    description: Cluster name
-                    type: string
                   clusterSettings:
                     description: |-
                       ClusterSettings defines cluster-level settings to apply via the Cluster Settings API
@@ -21895,10 +21887,6 @@ spec:
                           Deprecated: LoadBalancerIP is deprecated in Kubernetes 1.24+.
                           Use service annotations for your cloud provider instead.
                         type: string
-                      nodePort:
-                        description: NodePort for NodePort services
-                        format: int32
-                        type: integer
                       ports:
                         description: Custom service ports configuration
                         items:
@@ -22206,8 +22194,14 @@ spec:
                     type: array
                     x-kubernetes-preserve-unknown-fields: true
                   updateStrategy:
-                    default: RollingUpdate
-                    description: Update strategy
+                    default: OnDelete
+                    description: |-
+                      Update strategy for the StatefulSet
+                      "OnDelete" (default) gives the operator control over pod-by-pod restarts
+                      "RollingUpdate" lets Kubernetes handle rolling updates automatically
+                    enum:
+                    - OnDelete
+                    - RollingUpdate
                     type: string
                 type: object
               indexerRef:
@@ -22541,9 +22535,6 @@ spec:
                             description: SMTPServer is the SMTP server address
                             type: string
                         type: object
-                      localInternalOptions:
-                        description: Local internal options
-                        type: string
                       logging:
                         description: Logging section configuration for ossec.conf
                         properties:
@@ -22557,9 +22548,6 @@ spec:
                             - plain,json
                             type: string
                         type: object
-                      masterConfig:
-                        description: Master configuration overlay (raw XML to append)
-                        type: string
                       remote:
                         description: Remote section configuration for ossec.conf
                         properties:
@@ -22586,9 +22574,6 @@ spec:
                             description: QueueSize for the queue
                             type: integer
                         type: object
-                      workerConfig:
-                        description: Worker configuration overlay (raw XML to append)
-                        type: string
                     type: object
                   filebeatSSLVerificationMode:
                     default: full
@@ -29216,6 +29201,9 @@ spec:
                               type: object
                             type: array
                         type: object
+                      localInternalOptions:
+                        description: Local internal options (content for /var/ossec/etc/local_internal_options.conf)
+                        type: string
                       nodeSelector:
                         additionalProperties:
                           type: string
@@ -29533,10 +29521,6 @@ spec:
                               Deprecated: LoadBalancerIP is deprecated in Kubernetes 1.24+.
                               Use service annotations for your cloud provider instead.
                             type: string
-                          nodePort:
-                            description: NodePort for NodePort services
-                            format: int32
-                            type: integer
                           ports:
                             description: Custom service ports configuration
                             items:
@@ -29842,6 +29826,16 @@ spec:
                           type: object
                         type: array
                         x-kubernetes-preserve-unknown-fields: true
+                      updateStrategy:
+                        default: OnDelete
+                        description: |-
+                          Update strategy for the StatefulSet
+                          "OnDelete" (default) gives the operator control over pod-by-pod restarts
+                          "RollingUpdate" lets Kubernetes handle rolling updates automatically
+                        enum:
+                        - OnDelete
+                        - RollingUpdate
+                        type: string
                     type: object
                   networkPolicy:
                     description: Network policy for manager pods
@@ -36744,6 +36738,9 @@ spec:
                               type: object
                             type: array
                         type: object
+                      localInternalOptions:
+                        description: Local internal options (content for /var/ossec/etc/local_internal_options.conf)
+                        type: string
                       nodeSelector:
                         additionalProperties:
                           type: string
@@ -37111,10 +37108,6 @@ spec:
                               Deprecated: LoadBalancerIP is deprecated in Kubernetes 1.24+.
                               Use service annotations for your cloud provider instead.
                             type: string
-                          nodePort:
-                            description: NodePort for NodePort services
-                            format: int32
-                            type: integer
                           ports:
                             description: Custom service ports configuration
                             items:
@@ -37420,6 +37413,16 @@ spec:
                           type: object
                         type: array
                         x-kubernetes-preserve-unknown-fields: true
+                      updateStrategy:
+                        default: OnDelete
+                        description: |-
+                          Update strategy for the StatefulSet
+                          "OnDelete" (default) gives the operator control over pod-by-pod restarts
+                          "RollingUpdate" lets Kubernetes handle rolling updates automatically
+                        enum:
+                        - OnDelete
+                        - RollingUpdate
+                        type: string
                     type: object
                 required:
                 - master

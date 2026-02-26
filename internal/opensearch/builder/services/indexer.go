@@ -37,6 +37,7 @@ type IndexerServiceBuilder struct {
 	labels         map[string]string
 	annotations    map[string]string
 	loadBalancerIP string
+	ports          []corev1.ServicePort
 }
 
 // NewIndexerServiceBuilder creates a new IndexerServiceBuilder
@@ -93,10 +94,34 @@ func (b *IndexerServiceBuilder) WithLoadBalancerIP(ip string) *IndexerServiceBui
 	return b
 }
 
+// WithPorts sets custom service ports
+func (b *IndexerServiceBuilder) WithPorts(ports []corev1.ServicePort) *IndexerServiceBuilder {
+	b.ports = ports
+	return b
+}
+
 // Build creates the Service
 func (b *IndexerServiceBuilder) Build() *corev1.Service {
 	labels := b.buildLabels()
 	selectorLabels := b.buildSelectorLabels()
+
+	ports := b.ports
+	if len(ports) == 0 {
+		ports = []corev1.ServicePort{
+			{
+				Name:       constants.PortNameIndexerREST,
+				Port:       constants.PortIndexerREST,
+				TargetPort: intstr.FromInt(int(constants.PortIndexerREST)),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       constants.PortNameIndexerTransport,
+				Port:       constants.PortIndexerTransport,
+				TargetPort: intstr.FromInt(int(constants.PortIndexerTransport)),
+				Protocol:   corev1.ProtocolTCP,
+			},
+		}
+	}
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -108,20 +133,7 @@ func (b *IndexerServiceBuilder) Build() *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Type:     b.serviceType,
 			Selector: selectorLabels,
-			Ports: []corev1.ServicePort{
-				{
-					Name:       constants.PortNameIndexerREST,
-					Port:       constants.PortIndexerREST,
-					TargetPort: intstr.FromInt(int(constants.PortIndexerREST)),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       constants.PortNameIndexerTransport,
-					Port:       constants.PortIndexerTransport,
-					TargetPort: intstr.FromInt(int(constants.PortIndexerTransport)),
-					Protocol:   corev1.ProtocolTCP,
-				},
-			},
+			Ports:    ports,
 		},
 	}
 

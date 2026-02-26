@@ -612,8 +612,20 @@ func (r *IndexerReconciler) getConfigHash(ctx context.Context, cluster *wazuhv1.
 // reconcileServices reconciles indexer services
 func (r *IndexerReconciler) reconcileServices(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	serviceBuilder := services.NewIndexerServiceBuilder(cluster.Name, cluster.Namespace)
-	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Service != nil && len(cluster.Spec.Indexer.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(cluster.Spec.Indexer.Service.Annotations)
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Service != nil {
+		svcSpec := cluster.Spec.Indexer.Service
+		if svcSpec.Type != "" {
+			serviceBuilder.WithServiceType(svcSpec.Type)
+		}
+		if len(svcSpec.Annotations) > 0 {
+			serviceBuilder.WithAnnotations(svcSpec.Annotations)
+		}
+		if svcSpec.LoadBalancerIP != "" {
+			serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
+		}
+		if len(svcSpec.Ports) > 0 {
+			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
+		}
 	}
 
 	// Regular service
@@ -695,6 +707,11 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 	// Set image pull policy if configured
 	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Image != nil && cluster.Spec.Indexer.Image.PullPolicy != "" {
 		stsBuilder.WithImagePullPolicy(cluster.Spec.Indexer.Image.PullPolicy)
+	}
+
+	// Set update strategy from CRD
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.UpdateStrategy != "" {
+		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Indexer.UpdateStrategy))
 	}
 
 	sts := stsBuilder.Build()
@@ -944,6 +961,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		containerSecurityContext      *corev1.SecurityContext
 		terminationGracePeriodSeconds *int64
 		imagePullPolicy               corev1.PullPolicy
+		updateStrategy                string
 	)
 	version := cluster.Spec.Version
 	imagePullSecrets := cluster.Spec.ImagePullSecrets
@@ -970,9 +988,14 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		securityContext = cluster.Spec.Indexer.SecurityContext
 		containerSecurityContext = cluster.Spec.Indexer.ContainerSecurityContext
 		terminationGracePeriodSeconds = cluster.Spec.Indexer.TerminationGracePeriodSeconds
-		if cluster.Spec.Indexer.Image != nil && cluster.Spec.Indexer.Image.PullPolicy != "" {
-			imagePullPolicy = cluster.Spec.Indexer.Image.PullPolicy
+		if cluster.Spec.Indexer.Image != nil {
+			if cluster.Spec.Indexer.Image.PullPolicy != "" {
+				imagePullPolicy = cluster.Spec.Indexer.Image.PullPolicy
+			}
+			image = cluster.Spec.Indexer.Image.ResolveImage(constants.DefaultWazuhIndexerImage, version)
 		}
+
+		updateStrategy = cluster.Spec.Indexer.UpdateStrategy
 
 		// Apply cluster-level anti-affinity if enabled
 		if affinityutil.ShouldApplyIndexerAntiAffinity(cluster) {
@@ -1048,6 +1071,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		ContainerSecurityContext:      containerSecurityContext,
 		TerminationGracePeriodSeconds: terminationGracePeriodSeconds,
 		ImagePullPolicy:               imagePullPolicy,
+		UpdateStrategy:                updateStrategy,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute indexer spec hash, proceeding without spec hash tracking")
@@ -1105,6 +1129,17 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		if len(podAnnotations) > 0 {
 			stsBuilder.WithPodAnnotations(podAnnotations)
 		}
+		if securityContext != nil {
+			stsBuilder.WithSecurityContext(securityContext)
+		}
+		if containerSecurityContext != nil {
+			stsBuilder.WithContainerSecurityContext(containerSecurityContext)
+		}
+	}
+
+	// Set custom image if configured
+	if image != "" {
+		stsBuilder.WithImage(image)
 	}
 
 	// Wire extra volumes, init containers, and sidecar containers
@@ -1152,6 +1187,11 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 	// Set image pull policy if configured
 	if imagePullPolicy != "" {
 		stsBuilder.WithImagePullPolicy(imagePullPolicy)
+	}
+
+	// Set update strategy from CRD (nodePool inherits from cluster-level indexer spec)
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.UpdateStrategy != "" {
+		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(cluster.Spec.Indexer.UpdateStrategy))
 	}
 
 	sts := stsBuilder.Build()
@@ -1850,8 +1890,20 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 
 	// Build Services
 	serviceBuilder := services.NewIndexerServiceBuilder(indexer.Name, indexer.Namespace)
-	if indexer.Spec.Service != nil && len(indexer.Spec.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(indexer.Spec.Service.Annotations)
+	if indexer.Spec.Service != nil {
+		svcSpec := indexer.Spec.Service
+		if svcSpec.Type != "" {
+			serviceBuilder.WithServiceType(svcSpec.Type)
+		}
+		if len(svcSpec.Annotations) > 0 {
+			serviceBuilder.WithAnnotations(svcSpec.Annotations)
+		}
+		if svcSpec.LoadBalancerIP != "" {
+			serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
+		}
+		if len(svcSpec.Ports) > 0 {
+			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
+		}
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(indexer, service, r.Scheme); err != nil {
@@ -1892,6 +1944,9 @@ func (r *IndexerReconciler) ReconcileStandalone(ctx context.Context, indexer *wa
 	}
 	if indexer.Spec.Image != nil && indexer.Spec.Image.PullPolicy != "" {
 		stsBuilder.WithImagePullPolicy(indexer.Spec.Image.PullPolicy)
+	}
+	if indexer.Spec.UpdateStrategy != "" {
+		stsBuilder.WithUpdateStrategy(appsv1.StatefulSetUpdateStrategyType(indexer.Spec.UpdateStrategy))
 	}
 
 	sts := stsBuilder.Build()

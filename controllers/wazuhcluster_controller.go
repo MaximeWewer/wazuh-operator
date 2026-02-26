@@ -346,7 +346,6 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 					StorageSize:  indexer.Spec.StorageSize,
 					Image:        indexer.Spec.Image,
 					JavaOpts:     indexer.Spec.JavaOpts,
-					ClusterName:  indexer.Spec.ClusterName,
 					Credentials:  indexer.Spec.Credentials,
 					Service:      indexer.Spec.Service,
 					NodeSelector: indexer.Spec.NodeSelector,

@@ -978,10 +978,6 @@ spec:
                   type: string
                 description: Annotations for the StatefulSet
                 type: object
-              clusterName:
-                default: wazuh
-                description: OpenSearch cluster name
-                type: string
               clusterRef:
                 description: Reference to a WazuhCluster (optional)
                 properties:
@@ -7299,10 +7295,6 @@ spec:
                       Deprecated: LoadBalancerIP is deprecated in Kubernetes 1.24+.
                       Use service annotations for your cloud provider instead.
                     type: string
-                  nodePort:
-                    description: NodePort for NodePort services
-                    format: int32
-                    type: integer
                   ports:
                     description: Custom service ports configuration
                     items:
@@ -7496,6 +7488,23 @@ spec:
                           Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
                         pattern: ^\d+[dhm]$
                         type: string
+                      indexerRenewalThreshold:
+                        default: 30d
+                        description: |-
+                          IndexerRenewalThreshold for indexer node certificates as a duration string
+                          Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
+                          Examples: "30d", "12h", "30m"
+                          Certificates will be renewed when they expire within this duration
+                        pattern: ^\d+[dhm]$
+                        type: string
+                      indexerValidity:
+                        default: 365d
+                        description: |-
+                          IndexerValidity for indexer node certificates as a duration string
+                          Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
+                          Examples: "365d" (1 year), "24h" (1 day), "30m" (30 minutes)
+                        pattern: ^\d+[dhm]$
+                        type: string
                       keyAlgorithm:
                         default: RSA
                         description: |-
@@ -7518,26 +7527,9 @@ spec:
                         default: Security
                         description: OrganizationalUnit
                         type: string
-                      renewalThreshold:
-                        default: 30d
-                        description: |-
-                          RenewalThreshold for node certificates as a duration string
-                          Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
-                          Examples: "30d", "12h", "30m"
-                          Certificates will be renewed when they expire within this duration
-                        pattern: ^\d+[dhm]$
-                        type: string
                       state:
                         default: California
                         description: State or Province
-                        type: string
-                      validity:
-                        default: 365d
-                        description: |-
-                          Validity for node certificates as a duration string
-                          Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
-                          Examples: "365d" (1 year), "24h" (1 day), "30m" (30 minutes)
-                        pattern: ^\d+[dhm]$
                         type: string
                     type: object
                   customCerts:
@@ -7707,8 +7699,14 @@ spec:
                 type: array
                 x-kubernetes-preserve-unknown-fields: true
               updateStrategy:
-                default: RollingUpdate
-                description: Update strategy
+                default: OnDelete
+                description: |-
+                  Update strategy for the StatefulSet
+                  "OnDelete" (default) gives the operator control over pod-by-pod restarts
+                  "RollingUpdate" lets Kubernetes handle rolling updates automatically
+                enum:
+                - OnDelete
+                - RollingUpdate
                 type: string
               version:
                 description: Version of OpenSearch to deploy (auto-derived from Wazuh

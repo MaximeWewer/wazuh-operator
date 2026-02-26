@@ -66,6 +66,120 @@ func TestDashboardDeploymentBuilder_EnableSSL_FalseHTTP(t *testing.T) {
 	}
 }
 
+func TestDashboardDeploymentBuilder_CustomImage(t *testing.T) {
+	dns.Initialize()
+
+	t.Run("default image when no override", func(t *testing.T) {
+		deploy := NewDashboardDeploymentBuilder("cluster", "ns").WithVersion("4.9.0").Build()
+		got := getDashboardContainer(t, deploy.Spec.Template.Spec.Containers).Image
+		want := "wazuh/wazuh-dashboard:4.9.0"
+		if got != want {
+			t.Errorf("image = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("custom image overrides default", func(t *testing.T) {
+		deploy := NewDashboardDeploymentBuilder("cluster", "ns").
+			WithVersion("4.9.0").
+			WithImage("custom-repo/my-dashboard:v1").
+			Build()
+		got := getDashboardContainer(t, deploy.Spec.Template.Spec.Containers).Image
+		want := "custom-repo/my-dashboard:v1"
+		if got != want {
+			t.Errorf("image = %q, want %q", got, want)
+		}
+	})
+}
+
+func TestDashboardDeploymentBuilder_SecurityContextOverride(t *testing.T) {
+	dns.Initialize()
+
+	t.Run("default pod security context", func(t *testing.T) {
+		deploy := NewDashboardDeploymentBuilder("cluster", "ns").Build()
+		sc := deploy.Spec.Template.Spec.SecurityContext
+		if sc == nil {
+			t.Fatal("expected pod security context")
+		}
+		if sc.FSGroup == nil || *sc.FSGroup != 1000 {
+			t.Error("expected default FSGroup=1000")
+		}
+		if sc.RunAsUser == nil || *sc.RunAsUser != 1000 {
+			t.Error("expected default RunAsUser=1000")
+		}
+		if sc.RunAsNonRoot == nil || !*sc.RunAsNonRoot {
+			t.Error("expected default RunAsNonRoot=true")
+		}
+		if sc.SeccompProfile == nil || sc.SeccompProfile.Type != corev1.SeccompProfileTypeRuntimeDefault {
+			t.Error("expected default SeccompProfile=RuntimeDefault")
+		}
+	})
+
+	t.Run("override FSGroup", func(t *testing.T) {
+		gid := int64(2000)
+		deploy := NewDashboardDeploymentBuilder("cluster", "ns").
+			WithSecurityContext(&corev1.PodSecurityContext{
+				FSGroup: &gid,
+			}).
+			Build()
+		sc := deploy.Spec.Template.Spec.SecurityContext
+		if *sc.FSGroup != 2000 {
+			t.Errorf("FSGroup = %d, want 2000", *sc.FSGroup)
+		}
+		// Defaults should still be preserved
+		if *sc.RunAsUser != 1000 {
+			t.Errorf("RunAsUser = %d, want 1000 (default)", *sc.RunAsUser)
+		}
+		if !*sc.RunAsNonRoot {
+			t.Error("expected RunAsNonRoot=true (default)")
+		}
+	})
+}
+
+func TestDashboardDeploymentBuilder_ContainerSecurityContextOverride(t *testing.T) {
+	dns.Initialize()
+
+	t.Run("default container security context", func(t *testing.T) {
+		deploy := NewDashboardDeploymentBuilder("cluster", "ns").Build()
+		sc := getDashboardContainer(t, deploy.Spec.Template.Spec.Containers).SecurityContext
+		if sc == nil {
+			t.Fatal("expected container security context")
+		}
+		if sc.AllowPrivilegeEscalation == nil || !*sc.AllowPrivilegeEscalation {
+			t.Error("expected default AllowPrivilegeEscalation=true")
+		}
+	})
+
+	t.Run("override AllowPrivilegeEscalation", func(t *testing.T) {
+		f := false
+		deploy := NewDashboardDeploymentBuilder("cluster", "ns").
+			WithContainerSecurityContext(&corev1.SecurityContext{
+				AllowPrivilegeEscalation: &f,
+			}).
+			Build()
+		sc := getDashboardContainer(t, deploy.Spec.Template.Spec.Containers).SecurityContext
+		if sc.AllowPrivilegeEscalation == nil || *sc.AllowPrivilegeEscalation {
+			t.Error("expected AllowPrivilegeEscalation=false (overridden)")
+		}
+	})
+
+	t.Run("add ReadOnlyRootFilesystem", func(t *testing.T) {
+		tr := true
+		deploy := NewDashboardDeploymentBuilder("cluster", "ns").
+			WithContainerSecurityContext(&corev1.SecurityContext{
+				ReadOnlyRootFilesystem: &tr,
+			}).
+			Build()
+		sc := getDashboardContainer(t, deploy.Spec.Template.Spec.Containers).SecurityContext
+		if sc.ReadOnlyRootFilesystem == nil || !*sc.ReadOnlyRootFilesystem {
+			t.Error("expected ReadOnlyRootFilesystem=true")
+		}
+		// Default should still be preserved
+		if !*sc.AllowPrivilegeEscalation {
+			t.Error("expected AllowPrivilegeEscalation=true (default)")
+		}
+	})
+}
+
 func getDashboardContainer(t *testing.T, containers []corev1.Container) corev1.Container {
 	t.Helper()
 	if len(containers) == 0 {

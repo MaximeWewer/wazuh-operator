@@ -373,8 +373,20 @@ func (r *DashboardReconciler) resolveAPIEndpointCredentials(ctx context.Context,
 // reconcileService reconciles the dashboard service
 func (r *DashboardReconciler) reconcileService(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	serviceBuilder := osservices.NewDashboardServiceBuilder(cluster.Name, cluster.Namespace)
-	if cluster.Spec.Dashboard != nil && cluster.Spec.Dashboard.Service != nil && len(cluster.Spec.Dashboard.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(cluster.Spec.Dashboard.Service.Annotations)
+	if cluster.Spec.Dashboard != nil && cluster.Spec.Dashboard.Service != nil {
+		svcSpec := cluster.Spec.Dashboard.Service
+		if svcSpec.Type != "" {
+			serviceBuilder.WithServiceType(svcSpec.Type)
+		}
+		if len(svcSpec.Annotations) > 0 {
+			serviceBuilder.WithAnnotations(svcSpec.Annotations)
+		}
+		if svcSpec.LoadBalancerIP != "" {
+			serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
+		}
+		if len(svcSpec.Ports) > 0 {
+			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
+		}
 	}
 	service := serviceBuilder.Build()
 
@@ -790,8 +802,11 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		securityContext = cluster.Spec.Dashboard.SecurityContext
 		containerSecurityContext = cluster.Spec.Dashboard.ContainerSecurityContext
 		terminationGracePeriodSeconds = cluster.Spec.Dashboard.TerminationGracePeriodSeconds
-		if cluster.Spec.Dashboard.Image != nil && cluster.Spec.Dashboard.Image.PullPolicy != "" {
-			imagePullPolicy = cluster.Spec.Dashboard.Image.PullPolicy
+		if cluster.Spec.Dashboard.Image != nil {
+			image = cluster.Spec.Dashboard.Image.ResolveImage(constants.DefaultWazuhDashboardImage, cluster.Spec.Version)
+			if cluster.Spec.Dashboard.Image.PullPolicy != "" {
+				imagePullPolicy = cluster.Spec.Dashboard.Image.PullPolicy
+			}
 		}
 	}
 
@@ -915,6 +930,27 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 	if len(extraContainers) > 0 {
 		deployBuilder.WithExtraContainers(extraContainers)
 	}
+
+	// Set image override from CRD
+	if cluster.Spec.Dashboard != nil && cluster.Spec.Dashboard.Image != nil {
+		dashboardImage := cluster.Spec.Dashboard.Image.ResolveImage(constants.DefaultWazuhDashboardImage, cluster.Spec.Version)
+		if dashboardImage != "" {
+			deployBuilder.WithImage(dashboardImage)
+		}
+	}
+	// Set security context overrides
+	if securityContext != nil {
+		deployBuilder.WithSecurityContext(securityContext)
+	}
+	if containerSecurityContext != nil {
+		deployBuilder.WithContainerSecurityContext(containerSecurityContext)
+	}
+	// Set termination grace period
+	dashboardTerminationGracePeriod := constants.DefaultDashboardTerminationGracePeriod
+	if terminationGracePeriodSeconds != nil {
+		dashboardTerminationGracePeriod = *terminationGracePeriodSeconds
+	}
+	deployBuilder.WithTerminationGracePeriodSeconds(&dashboardTerminationGracePeriod)
 
 	if certHash != "" {
 		deployBuilder.WithCertHash(certHash)
@@ -1269,8 +1305,20 @@ func (r *DashboardReconciler) ReconcileStandalone(ctx context.Context, dashboard
 
 	// Build Service
 	serviceBuilder := osservices.NewDashboardServiceBuilder(dashboard.Name, dashboard.Namespace)
-	if dashboard.Spec.Service != nil && len(dashboard.Spec.Service.Annotations) > 0 {
-		serviceBuilder.WithAnnotations(dashboard.Spec.Service.Annotations)
+	if dashboard.Spec.Service != nil {
+		svcSpec := dashboard.Spec.Service
+		if svcSpec.Type != "" {
+			serviceBuilder.WithServiceType(svcSpec.Type)
+		}
+		if len(svcSpec.Annotations) > 0 {
+			serviceBuilder.WithAnnotations(svcSpec.Annotations)
+		}
+		if svcSpec.LoadBalancerIP != "" {
+			serviceBuilder.WithLoadBalancerIP(svcSpec.LoadBalancerIP)
+		}
+		if len(svcSpec.Ports) > 0 {
+			serviceBuilder.WithPorts(convertServicePorts(svcSpec.Ports))
+		}
 	}
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(dashboard, service, r.Scheme); err != nil {

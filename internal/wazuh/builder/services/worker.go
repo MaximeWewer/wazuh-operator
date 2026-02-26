@@ -28,14 +28,16 @@ import (
 
 // WorkerServiceBuilder builds Services for Wazuh Manager Worker nodes
 type WorkerServiceBuilder struct {
-	name        string
-	namespace   string
-	clusterName string
-	version     string
-	serviceType corev1.ServiceType
-	headless    bool
-	labels      map[string]string
-	annotations map[string]string
+	name           string
+	namespace      string
+	clusterName    string
+	version        string
+	serviceType    corev1.ServiceType
+	headless       bool
+	labels         map[string]string
+	annotations    map[string]string
+	ports          []corev1.ServicePort
+	loadBalancerIP string
 }
 
 // NewWorkerServiceBuilder creates a new WorkerServiceBuilder
@@ -87,10 +89,46 @@ func (b *WorkerServiceBuilder) WithAnnotations(annotations map[string]string) *W
 	return b
 }
 
+// WithPorts sets custom service ports
+func (b *WorkerServiceBuilder) WithPorts(ports []corev1.ServicePort) *WorkerServiceBuilder {
+	b.ports = ports
+	return b
+}
+
+// WithLoadBalancerIP sets the load balancer IP (deprecated in K8s 1.24+)
+func (b *WorkerServiceBuilder) WithLoadBalancerIP(ip string) *WorkerServiceBuilder {
+	b.loadBalancerIP = ip
+	return b
+}
+
 // Build creates the Service
 func (b *WorkerServiceBuilder) Build() *corev1.Service {
 	labels := b.buildLabels()
 	selectorLabels := b.buildSelectorLabels()
+
+	ports := b.ports
+	if len(ports) == 0 {
+		ports = []corev1.ServicePort{
+			{
+				Name:       constants.PortNameManagerAPI,
+				Port:       constants.PortManagerAPI,
+				TargetPort: intstr.FromInt(int(constants.PortManagerAPI)),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       constants.PortNameManagerAgentEvents,
+				Port:       constants.PortManagerAgentEvents,
+				TargetPort: intstr.FromInt(int(constants.PortManagerAgentEvents)),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			{
+				Name:       constants.PortNameManagerCluster,
+				Port:       constants.PortManagerCluster,
+				TargetPort: intstr.FromInt(int(constants.PortManagerCluster)),
+				Protocol:   corev1.ProtocolTCP,
+			},
+		}
+	}
 
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -102,32 +140,18 @@ func (b *WorkerServiceBuilder) Build() *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Type:     b.serviceType,
 			Selector: selectorLabels,
-			Ports: []corev1.ServicePort{
-				{
-					Name:       constants.PortNameManagerAPI,
-					Port:       constants.PortManagerAPI,
-					TargetPort: intstr.FromInt(int(constants.PortManagerAPI)),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       constants.PortNameManagerAgentEvents,
-					Port:       constants.PortManagerAgentEvents,
-					TargetPort: intstr.FromInt(int(constants.PortManagerAgentEvents)),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       constants.PortNameManagerCluster,
-					Port:       constants.PortManagerCluster,
-					TargetPort: intstr.FromInt(int(constants.PortManagerCluster)),
-					Protocol:   corev1.ProtocolTCP,
-				},
-			},
+			Ports:    ports,
 		},
 	}
 
 	// Handle headless service
 	if b.headless {
 		svc.Spec.ClusterIP = corev1.ClusterIPNone
+	}
+
+	// Deprecated: LoadBalancerIP is deprecated in K8s 1.24+, use service annotations instead
+	if b.loadBalancerIP != "" {
+		svc.Spec.LoadBalancerIP = b.loadBalancerIP //nolint:staticcheck // deprecated but still supported
 	}
 
 	return svc

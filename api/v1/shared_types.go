@@ -118,6 +118,10 @@ type WazuhMasterSpec struct {
 	// +optional
 	ExtraConfig string `json:"extraConfig,omitempty"`
 
+	// Local internal options (content for /var/ossec/etc/local_internal_options.conf)
+	// +optional
+	LocalInternalOptions string `json:"localInternalOptions,omitempty"`
+
 	// Environment variables
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
@@ -152,6 +156,14 @@ type WazuhMasterSpec struct {
 	// Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
 	// +optional
 	ServiceAccount *ServiceAccountConfig `json:"serviceAccount,omitempty"`
+
+	// Update strategy for the StatefulSet
+	// "OnDelete" (default) gives the operator control over pod-by-pod restarts
+	// "RollingUpdate" lets Kubernetes handle rolling updates automatically
+	// +optional
+	// +kubebuilder:default="OnDelete"
+	// +kubebuilder:validation:Enum=OnDelete;RollingUpdate
+	UpdateStrategy string `json:"updateStrategy,omitempty"`
 }
 
 // WazuhWorkerSpec defines the worker nodes configuration
@@ -239,6 +251,10 @@ type WazuhWorkerSpec struct {
 	// +optional
 	ExtraConfig string `json:"extraConfig,omitempty"`
 
+	// Local internal options (content for /var/ossec/etc/local_internal_options.conf)
+	// +optional
+	LocalInternalOptions string `json:"localInternalOptions,omitempty"`
+
 	// Environment variables
 	// +optional
 	// +kubebuilder:pruning:PreserveUnknownFields
@@ -282,6 +298,14 @@ type WazuhWorkerSpec struct {
 	// Supports cloud identity integrations (GKE Workload Identity, AWS IRSA, Azure Workload Identity)
 	// +optional
 	ServiceAccount *ServiceAccountConfig `json:"serviceAccount,omitempty"`
+
+	// Update strategy for the StatefulSet
+	// "OnDelete" (default) gives the operator control over pod-by-pod restarts
+	// "RollingUpdate" lets Kubernetes handle rolling updates automatically
+	// +optional
+	// +kubebuilder:default="OnDelete"
+	// +kubebuilder:validation:Enum=OnDelete;RollingUpdate
+	UpdateStrategy string `json:"updateStrategy,omitempty"`
 }
 
 // GetReplicas returns the number of worker replicas, defaulting to DefaultManagerWorkerReplicas if not set
@@ -326,6 +350,24 @@ type ImageSpec struct {
 	PullPolicy corev1.PullPolicy `json:"pullPolicy,omitempty"`
 }
 
+// ResolveImage returns the full container image string (repository:tag).
+// If Repository is set, it takes precedence over defaultRepo.
+// If Tag is set, it takes precedence over defaultTag.
+func (s *ImageSpec) ResolveImage(defaultRepo, defaultTag string) string {
+	repo := defaultRepo
+	tag := defaultTag
+	if s != nil && s.Repository != "" {
+		repo = s.Repository
+	}
+	if s != nil && s.Tag != "" {
+		tag = s.Tag
+	}
+	if tag != "" {
+		return repo + ":" + tag
+	}
+	return repo
+}
+
 // ServiceSpec defines service configuration
 type ServiceSpec struct {
 	// Service type
@@ -345,10 +387,6 @@ type ServiceSpec struct {
 	// Custom service ports configuration
 	// +optional
 	Ports []ServicePortSpec `json:"ports,omitempty"`
-
-	// NodePort for NodePort services
-	// +optional
-	NodePort int32 `json:"nodePort,omitempty"`
 }
 
 // ServicePortSpec defines a single service port configuration
@@ -680,18 +718,6 @@ func (c *CredentialsSecretRef) IsExternalSecret() bool {
 
 // WazuhConfigSpec defines custom Wazuh configuration
 type WazuhConfigSpec struct {
-	// Master configuration overlay (raw XML to append)
-	// +optional
-	MasterConfig string `json:"masterConfig,omitempty"`
-
-	// Worker configuration overlay (raw XML to append)
-	// +optional
-	WorkerConfig string `json:"workerConfig,omitempty"`
-
-	// Local internal options
-	// +optional
-	LocalInternalOptions string `json:"localInternalOptions,omitempty"`
-
 	// Global section configuration for ossec.conf
 	// +optional
 	Global *OSSECGlobalSpec `json:"global,omitempty"`

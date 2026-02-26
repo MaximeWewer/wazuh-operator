@@ -239,11 +239,6 @@ type WazuhIndexerClusterSpec struct {
 	// +kubebuilder:default="-Xms1g -Xmx1g -Dlog4j2.formatMsgNoLookups=true"
 	JavaOpts string `json:"javaOpts,omitempty"`
 
-	// Cluster name
-	// +optional
-	// +kubebuilder:default="wazuh"
-	ClusterName string `json:"clusterName,omitempty"`
-
 	// Credentials for indexer
 	// +optional
 	Credentials *CredentialsSecretRef `json:"credentials,omitempty"`
@@ -301,9 +296,12 @@ type WazuhIndexerClusterSpec struct {
 	// +optional
 	NetworkPolicy *NetworkPolicySpec `json:"networkPolicy,omitempty"`
 
-	// Update strategy
+	// Update strategy for the StatefulSet
+	// "OnDelete" (default) gives the operator control over pod-by-pod restarts
+	// "RollingUpdate" lets Kubernetes handle rolling updates automatically
 	// +optional
-	// +kubebuilder:default="RollingUpdate"
+	// +kubebuilder:default="OnDelete"
+	// +kubebuilder:validation:Enum=OnDelete;RollingUpdate
 	UpdateStrategy string `json:"updateStrategy,omitempty"`
 
 	// Additional volumes

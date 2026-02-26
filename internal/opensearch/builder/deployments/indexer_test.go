@@ -89,6 +89,130 @@ func TestIndexerStatefulSetBuilder_VersionAwarePaths(t *testing.T) {
 	}
 }
 
+func TestIndexerStatefulSetBuilder_CustomImage(t *testing.T) {
+	t.Run("default image when no override", func(t *testing.T) {
+		sts := NewIndexerStatefulSetBuilder("cluster", "ns").WithVersion("4.9.0").Build()
+		got := sts.Spec.Template.Spec.Containers[0].Image
+		want := constants.DefaultWazuhIndexerImage + ":4.9.0"
+		if got != want {
+			t.Errorf("image = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("custom image overrides default", func(t *testing.T) {
+		sts := NewIndexerStatefulSetBuilder("cluster", "ns").
+			WithVersion("4.9.0").
+			WithImage("custom-repo/my-indexer:v1").
+			Build()
+		got := sts.Spec.Template.Spec.Containers[0].Image
+		want := "custom-repo/my-indexer:v1"
+		if got != want {
+			t.Errorf("image = %q, want %q", got, want)
+		}
+	})
+}
+
+func TestIndexerStatefulSetBuilder_SecurityContextOverride(t *testing.T) {
+	t.Run("default pod security context", func(t *testing.T) {
+		sts := NewIndexerStatefulSetBuilder("cluster", "ns").Build()
+		sc := sts.Spec.Template.Spec.SecurityContext
+		if sc == nil {
+			t.Fatal("expected pod security context")
+		}
+		if sc.FSGroup == nil || *sc.FSGroup != 1000 {
+			t.Error("expected default FSGroup=1000")
+		}
+		if sc.RunAsUser == nil || *sc.RunAsUser != 1000 {
+			t.Error("expected default RunAsUser=1000")
+		}
+	})
+
+	t.Run("override FSGroup", func(t *testing.T) {
+		gid := int64(2000)
+		sts := NewIndexerStatefulSetBuilder("cluster", "ns").
+			WithSecurityContext(&corev1.PodSecurityContext{
+				FSGroup: &gid,
+			}).
+			Build()
+		sc := sts.Spec.Template.Spec.SecurityContext
+		if *sc.FSGroup != 2000 {
+			t.Errorf("FSGroup = %d, want 2000", *sc.FSGroup)
+		}
+		// RunAsUser should still be the default
+		if *sc.RunAsUser != 1000 {
+			t.Errorf("RunAsUser = %d, want 1000 (default)", *sc.RunAsUser)
+		}
+	})
+
+	t.Run("override supplemental groups", func(t *testing.T) {
+		sts := NewIndexerStatefulSetBuilder("cluster", "ns").
+			WithSecurityContext(&corev1.PodSecurityContext{
+				SupplementalGroups: []int64{1001, 1002},
+			}).
+			Build()
+		sc := sts.Spec.Template.Spec.SecurityContext
+		if len(sc.SupplementalGroups) != 2 {
+			t.Errorf("SupplementalGroups = %v, want [1001 1002]", sc.SupplementalGroups)
+		}
+	})
+}
+
+func TestIndexerStatefulSetBuilder_ContainerSecurityContextOverride(t *testing.T) {
+	t.Run("default container security context", func(t *testing.T) {
+		sts := NewIndexerStatefulSetBuilder("cluster", "ns").Build()
+		sc := sts.Spec.Template.Spec.Containers[0].SecurityContext
+		if sc == nil {
+			t.Fatal("expected container security context")
+		}
+		if *sc.AllowPrivilegeEscalation {
+			t.Error("expected AllowPrivilegeEscalation=false")
+		}
+		if sc.Capabilities == nil || len(sc.Capabilities.Drop) == 0 || sc.Capabilities.Drop[0] != "ALL" {
+			t.Error("expected Drop ALL capabilities")
+		}
+	})
+
+	t.Run("override ReadOnlyRootFilesystem", func(t *testing.T) {
+		ro := true
+		sts := NewIndexerStatefulSetBuilder("cluster", "ns").
+			WithContainerSecurityContext(&corev1.SecurityContext{
+				ReadOnlyRootFilesystem: &ro,
+			}).
+			Build()
+		sc := sts.Spec.Template.Spec.Containers[0].SecurityContext
+		if sc.ReadOnlyRootFilesystem == nil || !*sc.ReadOnlyRootFilesystem {
+			t.Error("expected ReadOnlyRootFilesystem=true")
+		}
+		// Defaults should still be preserved
+		if *sc.AllowPrivilegeEscalation {
+			t.Error("expected AllowPrivilegeEscalation=false (default)")
+		}
+	})
+
+	t.Run("full override", func(t *testing.T) {
+		uid := int64(5000)
+		sts := NewIndexerStatefulSetBuilder("cluster", "ns").
+			WithContainerSecurityContext(&corev1.SecurityContext{
+				AllowPrivilegeEscalation: boolPtr(true),
+				RunAsUser:                &uid,
+				Capabilities: &corev1.Capabilities{
+					Add: []corev1.Capability{"NET_BIND_SERVICE"},
+				},
+			}).
+			Build()
+		sc := sts.Spec.Template.Spec.Containers[0].SecurityContext
+		if !*sc.AllowPrivilegeEscalation {
+			t.Error("expected AllowPrivilegeEscalation=true (overridden)")
+		}
+		if *sc.RunAsUser != 5000 {
+			t.Errorf("RunAsUser = %d, want 5000", *sc.RunAsUser)
+		}
+		if sc.Capabilities.Add[0] != "NET_BIND_SERVICE" {
+			t.Error("expected Add NET_BIND_SERVICE")
+		}
+	})
+}
+
 func hasMountPath(mounts []corev1.VolumeMount, path string) bool {
 	for _, mount := range mounts {
 		if mount.MountPath == path {

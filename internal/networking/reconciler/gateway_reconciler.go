@@ -77,6 +77,11 @@ func (r *GatewayReconciler) Reconcile(ctx context.Context, cluster *wazuhv1.Wazu
 		return fmt.Errorf("failed to reconcile manager gateway routes: %w", err)
 	}
 
+	// Reconcile Worker Gateway API routes
+	if err := r.reconcileWorkerRoutes(ctx, cluster); err != nil {
+		return fmt.Errorf("failed to reconcile worker gateway routes: %w", err)
+	}
+
 	// Reconcile Indexer Gateway API routes
 	if err := r.reconcileIndexerRoutes(ctx, cluster); err != nil {
 		return fmt.Errorf("failed to reconcile indexer gateway routes: %w", err)
@@ -238,6 +243,138 @@ func (r *GatewayReconciler) reconcileManagerRoutes(ctx context.Context, cluster 
 		syslogRoute := routes.BuildSyslogUDPRoute(cluster.Name, cluster.Namespace, gatewayAPI, true)
 		if err := controllerutil.SetControllerReference(cluster, syslogRoute, r.Scheme); err != nil {
 			return fmt.Errorf("failed to set controller reference for syslog UDPRoute: %w", err)
+		}
+		if err := r.createOrUpdateUDPRoute(ctx, syslogRoute); err != nil {
+			return err
+		}
+	} else {
+		if err := r.deleteUDPRouteIfExists(ctx, syslogRouteName, cluster.Namespace); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// reconcileWorkerRoutes reconciles HTTPRoute, TCPRoute, and UDPRoute for the Manager Workers
+func (r *GatewayReconciler) reconcileWorkerRoutes(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	// Get GatewayAPI spec from Workers
+	var gatewayAPI *wazuhv1.GatewayAPISpec
+	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.GatewayAPI != nil {
+		gatewayAPI = cluster.Spec.Manager.Workers.GatewayAPI
+	}
+
+	apiRouteName := fmt.Sprintf("%s-manager-worker-api", cluster.Name)
+	enrollmentRouteName := fmt.Sprintf("%s-manager-worker-enrollment", cluster.Name)
+	eventsRouteName := fmt.Sprintf("%s-manager-worker-events", cluster.Name)
+	clusterRouteName := fmt.Sprintf("%s-manager-worker-cluster", cluster.Name)
+	syslogRouteName := fmt.Sprintf("%s-manager-worker-syslog", cluster.Name)
+
+	// If GatewayAPI is not enabled, delete existing routes if any
+	if gatewayAPI == nil || !gatewayAPI.Enabled {
+		if err := r.deleteHTTPRouteIfExists(ctx, apiRouteName, cluster.Namespace); err != nil {
+			return err
+		}
+		if err := r.deleteTCPRouteIfExists(ctx, enrollmentRouteName, cluster.Namespace); err != nil {
+			return err
+		}
+		if err := r.deleteTCPRouteIfExists(ctx, eventsRouteName, cluster.Namespace); err != nil {
+			return err
+		}
+		if err := r.deleteTCPRouteIfExists(ctx, clusterRouteName, cluster.Namespace); err != nil {
+			return err
+		}
+		if err := r.deleteUDPRouteIfExists(ctx, syslogRouteName, cluster.Namespace); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// Validate mutual exclusivity with Ingress
+	if cluster.Spec.Manager.Workers.Ingress != nil && cluster.Spec.Manager.Workers.Ingress.Enabled {
+		return fmt.Errorf("manager workers: GatewayAPI and Ingress cannot both be enabled")
+	}
+
+	// Reconcile Worker API HTTPRoute (isMaster=false)
+	log.Info("Reconciling Worker API HTTPRoute", "name", apiRouteName)
+	apiRoute := routes.BuildManagerAPIHTTPRoute(cluster.Name, cluster.Namespace, gatewayAPI, false)
+	if err := controllerutil.SetControllerReference(cluster, apiRoute, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for worker API HTTPRoute: %w", err)
+	}
+	if err := r.createOrUpdateHTTPRoute(ctx, apiRoute); err != nil {
+		return err
+	}
+
+	// Reconcile TCPRoutes if enabled
+	if gatewayAPI.TCP != nil && gatewayAPI.TCP.Enabled {
+		// Enrollment route (port 1515)
+		if gatewayAPI.TCP.EnrollmentEnabled {
+			log.Info("Reconciling Worker Enrollment TCPRoute", "name", enrollmentRouteName)
+			enrollmentRoute := routes.BuildAgentEnrollmentTCPRoute(cluster.Name, cluster.Namespace, gatewayAPI, false)
+			if err := controllerutil.SetControllerReference(cluster, enrollmentRoute, r.Scheme); err != nil {
+				return fmt.Errorf("failed to set controller reference for worker enrollment TCPRoute: %w", err)
+			}
+			if err := r.createOrUpdateTCPRoute(ctx, enrollmentRoute); err != nil {
+				return err
+			}
+		} else {
+			if err := r.deleteTCPRouteIfExists(ctx, enrollmentRouteName, cluster.Namespace); err != nil {
+				return err
+			}
+		}
+
+		// Events route (port 1514)
+		if gatewayAPI.TCP.EventsEnabled {
+			log.Info("Reconciling Worker Events TCPRoute", "name", eventsRouteName)
+			eventsRoute := routes.BuildAgentEventsTCPRoute(cluster.Name, cluster.Namespace, gatewayAPI, false)
+			if err := controllerutil.SetControllerReference(cluster, eventsRoute, r.Scheme); err != nil {
+				return fmt.Errorf("failed to set controller reference for worker events TCPRoute: %w", err)
+			}
+			if err := r.createOrUpdateTCPRoute(ctx, eventsRoute); err != nil {
+				return err
+			}
+		} else {
+			if err := r.deleteTCPRouteIfExists(ctx, eventsRouteName, cluster.Namespace); err != nil {
+				return err
+			}
+		}
+
+		// Cluster route (port 1516)
+		if gatewayAPI.TCP.ClusterEnabled {
+			log.Info("Reconciling Worker Cluster TCPRoute", "name", clusterRouteName)
+			clusterRoute := routes.BuildClusterCommTCPRoute(cluster.Name, cluster.Namespace, gatewayAPI, false)
+			if err := controllerutil.SetControllerReference(cluster, clusterRoute, r.Scheme); err != nil {
+				return fmt.Errorf("failed to set controller reference for worker cluster TCPRoute: %w", err)
+			}
+			if err := r.createOrUpdateTCPRoute(ctx, clusterRoute); err != nil {
+				return err
+			}
+		} else {
+			if err := r.deleteTCPRouteIfExists(ctx, clusterRouteName, cluster.Namespace); err != nil {
+				return err
+			}
+		}
+	} else {
+		// TCP not enabled, delete all TCP routes
+		if err := r.deleteTCPRouteIfExists(ctx, enrollmentRouteName, cluster.Namespace); err != nil {
+			return err
+		}
+		if err := r.deleteTCPRouteIfExists(ctx, eventsRouteName, cluster.Namespace); err != nil {
+			return err
+		}
+		if err := r.deleteTCPRouteIfExists(ctx, clusterRouteName, cluster.Namespace); err != nil {
+			return err
+		}
+	}
+
+	// Reconcile UDPRoute for syslog if enabled
+	if gatewayAPI.UDP != nil && gatewayAPI.UDP.Enabled {
+		log.Info("Reconciling Worker Syslog UDPRoute", "name", syslogRouteName)
+		syslogRoute := routes.BuildSyslogUDPRoute(cluster.Name, cluster.Namespace, gatewayAPI, false)
+		if err := controllerutil.SetControllerReference(cluster, syslogRoute, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference for worker syslog UDPRoute: %w", err)
 		}
 		if err := r.createOrUpdateUDPRoute(ctx, syslogRoute); err != nil {
 			return err
