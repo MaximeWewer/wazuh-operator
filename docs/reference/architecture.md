@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framework that manages the complete lifecycle of Wazuh security monitoring platform deployments on Kubernetes. It follows the operator pattern with declarative resource management through 25 Custom Resource Definitions (CRDs) and 25 reconciliation controllers.
+The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framework that manages the complete lifecycle of Wazuh security monitoring platform deployments on Kubernetes. It follows the operator pattern with declarative resource management through 21 Custom Resource Definitions (CRDs) and 21 reconciliation controllers.
 
 ## Technology Stack
 
@@ -46,9 +46,8 @@ flowchart TD
         subgraph CRM[Controller Runtime Manager]
             CRM1["Manages controller lifecycle · Shared caches and informers<br/>Leader election · Metrics server · Health checks"]
         end
-        subgraph Controllers[25 Reconciliation Controllers]
+        subgraph Controllers[21 Reconciliation Controllers]
             WCR["WazuhClusterReconciler (Main)<br/>Orchestrates all components · Delegates to helper reconcilers"]
-            COMP["Component Controllers (4)<br/>WazuhManager, WazuhIndexer, etc."]
             CONFIG["Config Controllers (4)<br/>Rules, Decoders, Certificates, Filebeat"]
             SEC["OpenSearch Security Controllers (5)<br/>Users, Roles, RoleMappings, etc."]
             IDX["OpenSearch Index Controllers (5)<br/>Indices, Templates, ISM Policies"]
@@ -81,7 +80,7 @@ flowchart TD
 
 **Components**:
 
-- 25 CRD type definitions
+- 21 CRD type definitions
 - Validation markers (Kubebuilder)
 - Status subresources
 - Short names and categories
@@ -252,13 +251,13 @@ builder := statefulsets.NewManagerBuilder(name, namespace).
 
 ## Data Architecture
 
-### Custom Resource Definitions (25 CRDs)
+### Custom Resource Definitions (21 CRDs)
 
-**API Group**: `resources.wazuh.com/v1` ()
+**API Group**: `resources.wazuh.com/v1`
 
 **Categories**:
 
-1. **Wazuh Core** (5): WazuhCluster, WazuhManager, WazuhWorker, OpenSearchIndexer, OpenSearchDashboard
+1. **Wazuh Core** (1): WazuhCluster
 2. **Wazuh Config** (4): WazuhRule, WazuhDecoder, WazuhCertificate, WazuhFilebeat
 3. **Wazuh Backup** (2): WazuhBackup, WazuhRestore
 4. **OpenSearch Security** (6): OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchActionGroup, OpenSearchTenant, OpenSearchAuthConfig
@@ -270,7 +269,7 @@ builder := statefulsets.NewManagerBuilder(name, namespace).
 - `spec`: Desired state (user-defined)
 - `status`: Observed state (operator-managed)
 - `conditions`: Standard K8s conditions (Ready, Progressing, Degraded)
-- References: Cross-CR references (clusterRef, managerRef, etc.)
+- References: Cross-CR references (clusterRef, etc.)
 
 ### Status Reporting
 
@@ -603,5 +602,5 @@ curl http://localhost:8081/readyz?verbose
 
 Two webhooks are implemented:
 
-- **WazuhCluster** (`api/v1/wazuhcluster_webhook.go`): Validation webhook (spec validation, mode exclusion, TLS config) and defaulting webhook (TLS defaults, replica defaults)
+- **WazuhCluster** (`api/v1/wazuhcluster_webhook.go`): Validation webhook (spec validation, TLS config) and defaulting webhook (TLS defaults, replica defaults)
 - **OpenSearchAuthConfig** (`api/v1/opensearchauthconfig_webhook.go`): Validation webhook for authentication configuration

@@ -34,12 +34,11 @@ The Wazuh Operator is a Kubernetes operator built with Go and Kubebuilder, follo
 
 The operator follows the standard Kubernetes operator pattern with:
 
-- **Custom Resource Definitions (CRDs)**: 25 CRDs for declarative resource management
+- **Custom Resource Definitions (CRDs)**: 21 CRDs for declarative resource management
 
-  - Wazuh Core: WazuhCluster, WazuhManager, WazuhWorker
+  - Wazuh Core: WazuhCluster
   - Wazuh Config: WazuhRule, WazuhDecoder, WazuhCertificate, WazuhFilebeat
   - Wazuh Backup: WazuhBackup, WazuhRestore
-  - OpenSearch Core: OpenSearchIndexer, OpenSearchDashboard
   - OpenSearch Security: OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchActionGroup, OpenSearchTenant, OpenSearchAuthConfig
   - OpenSearch Index: OpenSearchIndex, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchPolicy, OpenSearchSnapshotPolicy
   - OpenSearch Backup: OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore
@@ -143,7 +142,7 @@ make test       # Run unit tests
 **Layered Kubernetes Operator Architecture**:
 
 1. **API Layer** (`api/v1/`): CRD type definitions (v1 storage version)
-2. **Controller Layer** (`controllers/`): Reconciliation logic (25 controllers)
+2. **Controller Layer** (`controllers/`): Reconciliation logic (21 controllers)
 3. **Business Logic Layer** (`internal/`):
    - `wazuh/`: Wazuh reconcilers, config, builders, drain (NO cross-domain imports)
    - `opensearch/`: OpenSearch reconcilers, API clients, config, builders (NO cross-domain imports)

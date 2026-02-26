@@ -55,20 +55,16 @@ Inline mode covers **90% of deployment scenarios**:
 - Multi-tenant setups (one cluster per namespace)
 - Production clusters with simple topology
 
-## Inline vs Reference Mode
+## Benefits of Inline Mode
 
-| Feature | Inline Mode | Reference Mode |
-|---------|-------------|----------------|
-| **Configuration** | All in one CR | Separate component CRs |
-| **Updates** | Atomic | Per-component |
-| **Sharing** | Not supported | Share components across clusters |
-| **RBAC** | Cluster-level | Component-level granularity |
-| **Complexity** | Lower | Higher |
-| **CRs Count** | 1 | 4+ (cluster + components) |
-| **Use Case** | Most deployments | Complex multi-cluster |
-| **Status** | **Recommended** | Advanced scenarios |
-
-For advanced scenarios requiring shared components or independent lifecycle management, see [Reference Mode](./reference-mode.md).
+| Feature | Description |
+|---------|-------------|
+| **Configuration** | All in one CR |
+| **Updates** | Atomic |
+| **RBAC** | Cluster-level permissions only |
+| **Complexity** | Low |
+| **CRs Count** | 1 |
+| **Use Case** | All deployments |
 
 ## How It Works
 
@@ -78,7 +74,7 @@ For advanced scenarios requiring shared components or independent lifecycle mana
 4. **Owner references** - All resources owned by the WazuhCluster CR
 5. **Garbage collection** - Deleting the cluster removes all resources
 
-The operator does **NOT** create separate `WazuhManager`, `OpenSearchIndexer`, or `OpenSearchDashboard` CRs in inline mode.
+The operator creates StatefulSets, Services, ConfigMaps, and Secrets directly from the inline specs.
 
 ## Sample Manifests
 
@@ -98,20 +94,13 @@ kubectl apply -f config/samples/wazuh_v1_wazuhcluster_inline_mode.yaml
 
 **Symptom**: WazuhCluster created but no StatefulSets/Deployments appear
 
-**Solution**: Verify inline specs are present (not `*Ref` fields):
+**Solution**: Verify inline specs are present:
 
 ```bash
 kubectl get wazuhcluster -n wazuh -o yaml | grep -E "manager:|indexer:|dashboard:"
 ```
 
-### Cannot Share Components
-
-**Symptom**: Want to share indexer across multiple clusters
-
-**Solution**: Inline mode doesn't support sharing. Use [Reference Mode](./reference-mode.md) instead.
-
 ## See Also
 
-- [Reference Mode](./reference-mode.md) - Advanced deployment pattern
 - [Quick Start Guide](../getting-started/quick-start.md)
 - [CRD Reference](../CRD-REFERENCE.md)

@@ -114,12 +114,10 @@ make deploy IMG=wazuh-operator:dev
 ```bash
 kubectl get crds | grep wazuh
 
-# Expected (25 CRDs total):
+# Expected (21 CRDs total):
 # opensearchactiongroups.resources.wazuh.com
 # opensearchauthconfigs.resources.wazuh.com
 # opensearchcomponenttemplates.resources.wazuh.com
-# opensearchdashboards.resources.wazuh.com
-# opensearchindexers.resources.wazuh.com
 # opensearchindextemplates.resources.wazuh.com
 # opensearchindices.resources.wazuh.com
 # opensearchismpolicies.resources.wazuh.com
@@ -136,10 +134,8 @@ kubectl get crds | grep wazuh
 # wazuhclusters.resources.wazuh.com
 # wazuhdecoders.resources.wazuh.com
 # wazuhfilebeats.resources.wazuh.com
-# wazuhmanagers.resources.wazuh.com
 # wazuhrestores.resources.wazuh.com
 # wazuhrules.resources.wazuh.com
-# wazuhworkers.resources.wazuh.com
 ```
 
 ### Check Operator Logs

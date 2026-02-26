@@ -58,14 +58,10 @@ spec:
           metadata:
             type: object
           spec:
-            description: |-
-              WazuhClusterSpec defines the desired state of WazuhCluster
-              Supports two modes:
-              1. Inline mode (default): Define manager, indexer, dashboard specs inline
-              2. Reference mode: Use managerRef, indexerRef, dashboardRef to reference separate CRDs
+            description: WazuhClusterSpec defines the desired state of WazuhCluster
             properties:
               dashboard:
-                description: Dashboard configuration (inline mode)
+                description: Dashboard configuration
                 properties:
                   affinity:
                     description: Affinity
@@ -7957,18 +7953,6 @@ spec:
                         type: boolean
                     type: object
                 type: object
-              dashboardRef:
-                description: Reference to a WazuhDashboard resource (reference mode)
-                properties:
-                  name:
-                    description: Name of the component resource
-                    type: string
-                  namespace:
-                    description: Namespace of the component (defaults to same namespace)
-                    type: string
-                required:
-                - name
-                type: object
               drain:
                 description: Drain strategy configuration for safe scale-down operations
                 properties:
@@ -8075,7 +8059,7 @@ spec:
                   x-kubernetes-map-type: atomic
                 type: array
               indexer:
-                description: Indexer configuration (inline mode)
+                description: Indexer configuration
                 properties:
                   affinity:
                     description: Affinity
@@ -22203,24 +22187,12 @@ spec:
                     - RollingUpdate
                     type: string
                 type: object
-              indexerRef:
-                description: Reference to a WazuhIndexer resource (reference mode)
-                properties:
-                  name:
-                    description: Name of the component resource
-                    type: string
-                  namespace:
-                    description: Namespace of the component (defaults to same namespace)
-                    type: string
-                required:
-                - name
-                type: object
               license:
                 default: basic
                 description: License type for the cluster
                 type: string
               manager:
-                description: Manager configuration (inline mode)
+                description: Manager configuration
                 properties:
                   antiAffinity:
                     description: |-
@@ -36745,34 +36717,6 @@ spec:
                           type: string
                         description: Node selector
                         type: object
-                      overrides:
-                        description: |-
-                          Per-pod configuration overrides for specific worker indices
-                          This allows specializing individual worker pods (e.g., worker-0 for cloud log collection)
-                        items:
-                          description: |-
-                            WorkerOverride defines per-pod configuration for a specific worker
-                            Use this to specialize individual worker pods (e.g., cloud log collection on worker-0)
-                          properties:
-                            description:
-                              description: Description of this worker's specialization
-                                (for documentation)
-                              type: string
-                            extraConfig:
-                              description: |-
-                                Extra configuration to inject into ossec.conf for this specific worker
-                                This is merged with the base workers.extraConfig
-                              type: string
-                            index:
-                              description: Index of the worker pod (0-based, corresponds
-                                to pod name suffix like worker-0, worker-1)
-                              format: int32
-                              minimum: 0
-                              type: integer
-                          required:
-                          - index
-                          type: object
-                        type: array
                       podAnnotations:
                         additionalProperties:
                           type: string
@@ -37426,18 +37370,6 @@ spec:
                 required:
                 - master
                 - workers
-                type: object
-              managerRef:
-                description: Reference to a WazuhManager resource (reference mode)
-                properties:
-                  name:
-                    description: Name of the component resource
-                    type: string
-                  namespace:
-                    description: Namespace of the component (defaults to same namespace)
-                    type: string
-                required:
-                - name
                 type: object
               monitoring:
                 description: Monitoring configuration
@@ -38658,6 +38590,11 @@ spec:
                     description: |-
                       APICredentialsHash is the hash of the last applied Wazuh API credentials
                       used by manager workers/master and dashboard.
+                    type: string
+                  authdCredentialsHash:
+                    description: |-
+                      AuthdCredentialsHash is the hash of the last applied authd password secret
+                      used by Wazuh manager authd enrollment.
                     type: string
                   credentialsHash:
                     description: |-

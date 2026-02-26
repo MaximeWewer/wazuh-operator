@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Wazuh Operator implements **25 Kubernetes controllers** that watch Custom Resources and reconcile them to their desired state. Each controller follows the Kubernetes operator pattern with reconciliation loops. These controllers manage **25 Custom Resource Definitions (CRDs)**.
+The Wazuh Operator implements **21 Kubernetes controllers** that watch Custom Resources and reconcile them to their desired state. Each controller follows the Kubernetes operator pattern with reconciliation loops. These controllers manage **21 Custom Resource Definitions (CRDs)**.
 
 ## Controller Architecture
 
@@ -40,13 +40,10 @@ The main orchestrating controller that manages the complete Wazuh cluster lifecy
 - `CertificateReconciler`: TLS cert generation/renewal
 - `IndexerReconciler`: OpenSearch indexer management
 - `DashboardReconciler`: Dashboard deployment
-- `WorkerReconciler`: Worker drain operations (CheckScaleDownDrain, EvaluateDrainFeasibility) + standalone WazuhWorker CRD reconciliation
-- `ManagerReconciler`: Standalone WazuhManager CRD reconciliation only
+- `WorkerReconciler`: Worker drain operations (CheckScaleDownDrain, EvaluateDrainFeasibility)
 - `MonitoringReconciler`: Prometheus integration
 
 > **Note**: For WazuhCluster reconciliation, ClusterReconciler handles all manager/worker logic directly.
-> ManagerReconciler and WorkerReconciler are only used for standalone CRDs (WazuhManager, WazuhWorker)
-> and for worker drain operations.
 
 **RBAC Permissions**:
 
@@ -57,63 +54,6 @@ The main orchestrating controller that manages the complete Wazuh cluster lifecy
 - ServiceMonitors (Prometheus integration)
 - PodDisruptionBudgets (HA)
 - RBAC roles/rolebindings
-
----
-
-## Wazuh Component Controllers (4)
-
-### WazuhManager Controller
-
-**controllers/wazuhmanager_controller.go**
-
-Manages standalone WazuhManager CRs (used in reference mode).
-
-**Reconciles**:
-
-- Master StatefulSet (1 replica)
-- Worker StatefulSet (N replicas)
-- Services (cluster, API, agent enrollment)
-- ConfigMaps (ossec.conf, local_internal_options.conf)
-- Secrets (cluster key, API credentials, authd password)
-
-### WazuhWorker Controller
-
-**controllers/wazuhworker_controller.go**
-
-Manages standalone WazuhWorker CRs (delegates to WorkerReconciler.ReconcileStandalone).
-
-### OpenSearchIndexer Controller
-
-**controllers/opensearchindexer_controller.go**
-
-Manages standalone OpenSearchIndexer CRs.
-
-**Reconciles**:
-
-- StatefulSet (1-N replicas or NodePools for advanced topology)
-- Service (HTTP + transport)
-- ConfigMaps (opensearch.yml, security config, JVM options)
-- Secrets (admin credentials, node certificates)
-- Init Job (security plugin initialization)
-
-**Advanced Features**:
-
-- NodePools: Dedicated node roles (master, data, ingest, coordinating, ml)
-- Shard allocation awareness
-- Per-nodePool storage and resource configuration
-
-### OpenSearchDashboard Controller
-
-**controllers/opensearchdashboard_controller.go**
-
-Manages standalone OpenSearchDashboard CRs.
-
-**Reconciles**:
-
-- Deployment (1-N replicas)
-- Service (HTTP)
-- ConfigMap (opensearch_dashboards.yml)
-- Ingress (optional)
 
 ---
 

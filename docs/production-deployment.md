@@ -513,17 +513,17 @@ Multiple WazuhCluster resources can coexist in the same namespace. Each cluster 
 
 ### Cross-Namespace References
 
-Components can reference resources in other namespaces:
+OpenSearch security CRDs and other configuration CRDs can reference a WazuhCluster in another namespace via `clusterRef`:
 
 ```yaml
 apiVersion: resources.wazuh.com/v1
-kind: WazuhCluster
+kind: OpenSearchUser
 metadata:
-  namespace: wazuh-prod
+  namespace: wazuh-config
 spec:
-  managerRef:
-    name: shared-manager
-    namespace: wazuh-shared
+  clusterRef:
+    name: my-cluster
+    namespace: wazuh
 ```
 
 > **Note:** Ensure the operator has RBAC permissions in referenced namespaces.
@@ -539,18 +539,13 @@ The operator includes admission webhooks for validating WazuhCluster resources.
 The webhook validates:
 
 - **Version format:** Must be semver (e.g., `4.9.2`)
-- **Configuration mode:** Cannot mix inline and reference modes
 - **Component specifications:** Manager, Indexer, Dashboard configs
 - **TLS configuration:** custom certificates and auto-generated certs
-- **Topology changes:** Prevents invalid mode transitions
+- **Topology changes:** Prevents invalid indexer topology mode transitions
 
 ### Example Validation Errors
 
 ```bash
-# Mixed mode error
-Error: spec: cannot mix inline configuration (manager, indexer, dashboard)
-       with references (managerRef, indexerRef, dashboardRef)
-
 # Invalid version
 Error: spec.version: must be in semver format (e.g., 4.9.2)
 ```
@@ -579,10 +574,7 @@ Each CRD has a dedicated finalizer:
 | Resource            | Finalizer                                           |
 | ------------------- | --------------------------------------------------- |
 | WazuhCluster        | `wazuhcluster.resources.wazuh.com/finalizer`        |
-| WazuhManager        | `wazuhmanager.resources.wazuh.com/finalizer`        |
 | WazuhBackup         | `wazuhbackup.resources.wazuh.com/finalizer`         |
-| OpenSearchIndexer   | `opensearchindexer.resources.wazuh.com/finalizer`   |
-| OpenSearchDashboard | `opensearchdashboard.resources.wazuh.com/finalizer` |
 
 ### Cleanup Behavior
 

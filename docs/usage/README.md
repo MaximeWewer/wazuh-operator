@@ -12,8 +12,7 @@ Documentation for users of the Wazuh Operator.
 
 ### Core Configuration
 
-- [Inline Mode](features/inline-mode.md) - Default configuration pattern (recommended)
-- [Reference Mode](features/reference-mode.md) - Advanced pattern with separate CRs
+- [Inline Mode](features/inline-mode.md) - Configuration pattern
 - [Credentials](features/credentials.md) - Password and secret management
 - [TLS Configuration](features/tls.md) - Certificate management
 - [Sizing Profiles](features/sizing.md) - Cluster sizing guide
@@ -53,7 +52,7 @@ Documentation for users of the Wazuh Operator.
 
 ## Reference
 
-- [CRD Reference](CRD-REFERENCE.md) - Complete API documentation for all 25 CRDs
+- [CRD Reference](CRD-REFERENCE.md) - Complete API documentation for all 21 CRDs
 
 ## Troubleshooting
 

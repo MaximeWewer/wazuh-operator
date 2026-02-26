@@ -2,71 +2,26 @@
 
 ## Overview
 
-The Wazuh Operator defines 25 Custom Resource Definitions (CRDs) organized into 6 logical categories. All CRDs use API group `resources.wazuh.com` with version `v1` (storage version). Version `v1` is still served for backward compatibility.
+The Wazuh Operator defines 21 Custom Resource Definitions (CRDs) organized into 6 logical categories. All CRDs use API group `resources.wazuh.com` with version `v1` (storage version). Version `v1` is still served for backward compatibility.
 
 ## CRD Categories
 
-### 1. Wazuh Core CRDs (5)
+### 1. Wazuh Core CRDs (1)
 
 These CRDs define the main Wazuh cluster components.
 
 #### WazuhCluster
 
 - **Purpose**: Main orchestrating CRD for deploying a complete Wazuh cluster
-- **Modes**:
-  - Inline mode: Define manager, indexer, dashboard specs directly
-  - Reference mode: Reference separate component CRDs via `managerRef`, `indexerRef`, `dashboardRef`
 - **Key Fields**:
   - `version`: Wazuh version (format: `X.Y.Z`)
-  - `manager`: Inline manager configuration
-  - `indexer`: Inline indexer configuration
-  - `dashboard`: Inline dashboard configuration
+  - `manager`: Manager configuration (master + workers)
+  - `indexer`: Indexer configuration (replicas, node pools, storage)
+  - `dashboard`: Dashboard configuration (replicas, ingress)
   - `tls`: TLS/certificate configuration
   - `monitoring`: Prometheus monitoring integration
   - `drain`: Safe scale-down strategy configuration
 - **Short Name**: `wc`
-
-#### WazuhManager
-
-- **Purpose**: Defines Wazuh Manager cluster (master + workers)
-- **Key Fields**:
-  - `master`: Master node specification
-  - `workers`: Worker nodes specification (replicas, resources, storage)
-  - `clusterKeySecretRef`: Internal cluster communication key
-  - `apiCredentials`: Wazuh API credentials
-  - `logRotation`: Automated log cleanup configuration
-- **Short Name**: `wmgr`
-
-#### WazuhWorker
-
-- **Purpose**: Standalone CRD for managing per-worker overrides
-- **Key Fields**:
-  - `clusterRef`: Reference to WazuhCluster
-  - `workerIndex`: Worker index (0-based)
-  - `extraConfig`: Extra ossec.conf XML
-  - `resources`: Resource overrides
-  - `nodeSelector`: Node selector overrides
-  - `tolerations`: Toleration overrides
-- **Short Name**: `wwork`
-
-#### OpenSearchIndexer
-
-- **Purpose**: Defines OpenSearch indexer cluster for storing Wazuh alerts/archives
-- **Key Fields**:
-  - `replicas`: Number of indexer nodes
-  - `nodePools`: Advanced topology with dedicated node roles (data, master, ingest, etc.)
-  - `storageSize`: PVC size per node
-  - `opensearchConfig`: Custom OpenSearch configuration
-- **Short Name**: `osidxr`
-
-#### OpenSearchDashboard
-
-- **Purpose**: Defines Web UI dashboard for Wazuh visualization
-- **Key Fields**:
-  - `replicas`: Number of dashboard instances
-  - `indexerRef`: Reference to associated OpenSearchIndexer
-  - `ingress`: Ingress configuration for external access
-- **Short Name**: `osdash`
 
 ### 2. Wazuh Configuration CRDs (4)
 
@@ -150,7 +105,7 @@ These CRDs manage OpenSearch security configuration (users, roles, permissions, 
 
 - **Purpose**: Define OpenSearch users
 - **Key Fields**:
-  - `clusterRef`: Target WazuhCluster/WazuhIndexer
+  - `clusterRef`: Target WazuhCluster
   - `username`: User name
   - `passwordSecretRef`: Reference to Secret containing password
   - `backendRoles`: Backend role assignments
@@ -295,7 +250,6 @@ These CRDs handle OpenSearch snapshot-based backup and restore.
 ### Reference Types
 
 - `WazuhClusterReference`: Cross-CRD reference to WazuhCluster
-- `ComponentRef`: Reference to WazuhManager/OpenSearchIndexer/OpenSearchDashboard
 - `SecretKeyRef`: Reference to Secret key for sensitive data
 - `ConfigMapReference`: Reference to ConfigMap data
 
@@ -340,29 +294,28 @@ All CRDs use Kubebuilder validation markers:
 ## Relationships
 
 ```text
-WazuhCluster (1) ─┬─> (1) WazuhManager ──> (1..N) Manager Pods
-                  ├─> (0..N) WazuhWorker ──> Per-worker overrides
-                  ├─> (1) OpenSearchIndexer ──> (1..N) Indexer Pods (StatefulSet)
-                  └─> (1) OpenSearchDashboard ─> (1..N) Dashboard Pods
+WazuhCluster (1) ─┬─> (1..N) Manager Pods (master + workers)
+                  ├─> (1..N) Indexer Pods (StatefulSet)
+                  └─> (1..N) Dashboard Pods (Deployment)
 
-WazuhCluster (1) ───> (0..N) WazuhRule ────> Manager ConfigMaps
-WazuhCluster (1) ───> (0..N) WazuhDecoder ─> Manager ConfigMaps
-WazuhCluster (1) ───> (0..1) WazuhCertificate ─> TLS Secrets
+WazuhCluster (1) <──── (0..N) WazuhRule ────> Manager ConfigMaps
+WazuhCluster (1) <──── (0..N) WazuhDecoder ─> Manager ConfigMaps
+WazuhCluster (1) <──── (0..1) WazuhCertificate ─> TLS Secrets
 
-OpenSearchIndexer (1) ───> (0..N) OpenSearchUser ──┐
-OpenSearchIndexer (1) ───> (0..N) OpenSearchRole ──┤─> OpenSearch Security API
-OpenSearchIndexer (1) ───> (0..N) OpenSearchRoleMapping ┘
+WazuhCluster (1) <──── (0..N) OpenSearchUser ──┐
+WazuhCluster (1) <──── (0..N) OpenSearchRole ──┤─> OpenSearch Security API
+WazuhCluster (1) <──── (0..N) OpenSearchRoleMapping ┘
 
-OpenSearchIndexer (1) ───> (0..N) OpenSearchIndex ──┐
-OpenSearchIndexer (1) ───> (0..N) OpenSearchIndexTemplate ─┤─> OpenSearch Index API
-OpenSearchIndexer (1) ───> (0..N) OpenSearchISMPolicy ─────┘
+WazuhCluster (1) <──── (0..N) OpenSearchIndex ──┐
+WazuhCluster (1) <──── (0..N) OpenSearchIndexTemplate ─┤─> OpenSearch Index API
+WazuhCluster (1) <──── (0..N) OpenSearchISMPolicy ─────┘
 
-OpenSearchIndexer (1) ───> (0..N) OpenSearchSnapshotRepository ──┐
-OpenSearchIndexer (1) ───> (0..N) OpenSearchSnapshot ────────────┤─> OpenSearch Snapshot API
-OpenSearchIndexer (1) ───> (0..N) OpenSearchRestore ─────────────┘
+WazuhCluster (1) <──── (0..N) OpenSearchSnapshotRepository ──┐
+WazuhCluster (1) <──── (0..N) OpenSearchSnapshot ────────────┤─> OpenSearch Snapshot API
+WazuhCluster (1) <──── (0..N) OpenSearchRestore ─────────────┘
 
-WazuhManager (1) ───> (0..N) WazuhBackup ──> S3/MinIO (tar archives)
-WazuhManager (1) ───> (0..N) WazuhRestore ─> S3/MinIO (tar archives)
+WazuhCluster (1) <──── (0..N) WazuhBackup ──> S3/MinIO (tar archives)
+WazuhCluster (1) <──── (0..N) WazuhRestore ─> S3/MinIO (tar archives)
 ```
 
 ## API Group and Versioning

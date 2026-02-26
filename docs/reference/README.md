@@ -8,8 +8,8 @@ This directory contains generated reference documentation for AI-assisted develo
 - **[Architecture](./architecture.md)** - Complete system design, patterns, component architecture
 - **[Technology Stack](./technology-stack.md)** - Detailed technology decisions and justifications
 - **[Source Tree Analysis](./source-tree-analysis.md)** - Annotated directory structure with descriptions
-- **[Data Models](./data-models.md)** - All 25 CRDs with schemas, relationships, validation
-- **[API Contracts](./api-contracts.md)** - 25 controllers, reconciliation flows, RBAC, patterns
+- **[Data Models](./data-models.md)** - All 21 CRDs with schemas, relationships, validation
+- **[API Contracts](./api-contracts.md)** - 21 controllers, reconciliation flows, RBAC, patterns
 
 ## Purpose
 
