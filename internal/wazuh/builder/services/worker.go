@@ -160,7 +160,12 @@ func (b *WorkerServiceBuilder) Build() *corev1.Service {
 // BuildHeadless creates a headless Service for StatefulSet pod discovery
 func (b *WorkerServiceBuilder) BuildHeadless() *corev1.Service {
 	b.headless = true
-	return b.Build()
+	svc := b.Build()
+	// Strip NodePort values — headless services (ClusterIP: None) do not support them
+	for i := range svc.Spec.Ports {
+		svc.Spec.Ports[i].NodePort = 0
+	}
+	return svc
 }
 
 // buildLabels builds the complete label set

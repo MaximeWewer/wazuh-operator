@@ -162,10 +162,8 @@ func (b *IndexerServiceBuilder) Build() *corev1.Service {
 // BuildHeadless creates a headless Service for StatefulSet pod discovery
 // Returns a service with name "{clusterName}-indexer-headless" and ClusterIP: None
 func (b *IndexerServiceBuilder) BuildHeadless() *corev1.Service {
-	// Save original name
 	originalName := b.name
 
-	// Set headless mode and append -headless suffix
 	b.headless = true
 	b.name = originalName + "-headless"
 
@@ -174,6 +172,11 @@ func (b *IndexerServiceBuilder) BuildHeadless() *corev1.Service {
 	// Restore original state for subsequent calls
 	b.headless = false
 	b.name = originalName
+
+	// Strip NodePort values — headless services (ClusterIP: None) do not support them
+	for i := range svc.Spec.Ports {
+		svc.Spec.Ports[i].NodePort = 0
+	}
 
 	return svc
 }

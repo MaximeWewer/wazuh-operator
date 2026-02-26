@@ -173,8 +173,11 @@ func (b *ManagerServiceBuilder) Build() *corev1.Service {
 func (b *ManagerServiceBuilder) BuildHeadless() *corev1.Service {
 	b.headless = true
 	svc := b.Build()
-	// Headless services for StatefulSets typically have a different name
 	svc.Name = b.name + "-headless"
+	// Strip NodePort values — headless services (ClusterIP: None) do not support them
+	for i := range svc.Spec.Ports {
+		svc.Spec.Ports[i].NodePort = 0
+	}
 	return svc
 }
 
