@@ -2180,6 +2180,10 @@ func (r *IndexerReconciler) restartDeployment(ctx context.Context, namespace, na
 	return utils.RetryOnConflict(ctx, func() error {
 		var deployment appsv1.Deployment
 		if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &deployment); err != nil {
+			if errors.IsNotFound(err) {
+				log.V(1).Info("Deployment not yet created, skipping restart", "component", component, "deployment", name)
+				return nil
+			}
 			return fmt.Errorf("failed to get %s deployment %s: %w", component, name, err)
 		}
 
@@ -2209,6 +2213,10 @@ func (r *IndexerReconciler) restartStatefulSet(ctx context.Context, namespace, n
 	return utils.RetryOnConflict(ctx, func() error {
 		var sts appsv1.StatefulSet
 		if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &sts); err != nil {
+			if errors.IsNotFound(err) {
+				log.V(1).Info("StatefulSet not yet created, skipping restart", "component", component, "statefulset", name)
+				return nil
+			}
 			return fmt.Errorf("failed to get %s statefulset %s: %w", component, name, err)
 		}
 
