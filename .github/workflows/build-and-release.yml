@@ -381,15 +381,16 @@ jobs:
           } > release_notes.md
 
           if [ -n "${PREVIOUS_TAG}" ]; then
-            echo "### Recent commits" >> release_notes.md
+            echo "### Commits" >> release_notes.md
             echo "" >> release_notes.md
-            git log "${PREVIOUS_TAG}..HEAD" --no-merges --pretty=format:"- %h %s" --max-count=5 >> release_notes.md
+            git log "${PREVIOUS_TAG}..HEAD" --no-merges --pretty=format:"- %h %s" >> release_notes.md
             echo "" >> release_notes.md
 
             echo "" >> release_notes.md
-            echo "### Recent pull requests" >> release_notes.md
+            echo "### Pull requests" >> release_notes.md
             echo "" >> release_notes.md
-            gh pr list --repo "${REPO}" --state merged --limit 5 \
+            gh pr list --repo "${REPO}" --state merged --base main \
+              --search "merged:>=$(git log -1 --format=%aI "${PREVIOUS_TAG}")" \
               --json number,title --jq '.[] | "- #\(.number) \(.title)"' >> release_notes.md
             echo "" >> release_notes.md
           else
