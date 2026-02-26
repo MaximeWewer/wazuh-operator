@@ -1696,10 +1696,6 @@ func (r *IndexerReconciler) verifyDrainComplete(ctx context.Context, cluster *wa
 
 // ensureOpenSearchClient creates or reuses an OpenSearch client
 func (r *IndexerReconciler) ensureOpenSearchClient(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
-	if r.osClient != nil {
-		return nil
-	}
-
 	factory := r.getClientFactory()
 	newClient, err := factory.GetClientForCluster(ctx, cluster)
 	if err != nil {
@@ -2234,7 +2230,7 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 		return nil
 	}
 
-	// Get credentials from secret
+	// Get credentials secret
 	credSecretName := constants.IndexerCredentialsName(cluster.Name)
 	credSecret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: credSecretName, Namespace: cluster.Namespace}, credSecret); err != nil {
@@ -2245,20 +2241,7 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 		return fmt.Errorf("failed to get credentials secret: %w", err)
 	}
 
-	// Get credentials from secret
-	adminUsername := string(credSecret.Data[constants.SecretKeyAdminUsername])
-	if adminUsername == "" {
-		adminUsername = constants.DefaultOpenSearchAdminUsername
-	}
-	password := string(credSecret.Data[constants.SecretKeyAdminPassword])
-	if password == "" {
-		log.V(1).Info("Admin password not found in credentials secret")
-		return nil
-	}
-
-	// Compute combined hash to check if we've already synced this config.
-	// Include both credentials and internal_users.yml so changes in either source
-	// trigger securityadmin.sh.
+	// Get security config secret (contains internal_users.yml)
 	securitySecretName := constants.IndexerSecurityName(cluster.Name)
 	securitySecret := &corev1.Secret{}
 	internalUsersContent := ""
@@ -2272,22 +2255,18 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 		internalUsersContent = string(internalUsers)
 	}
 
+	// Compute hashes for change detection.
+	// credentialsHash tracks admin/kibana passwords; internalUsersHash tracks the full
+	// internal_users.yml content. Changes in either trigger securityadmin.sh.
 	credentialsHash := patch.ComputeSecretHash(credSecret.Data)
-	combinedSyncData := map[string][]byte{
-		"credentials_hash": []byte(credentialsHash),
-	}
-	if internalUsersContent != "" {
-		combinedSyncData[constants.SecretKeyInternalUsers] = []byte(internalUsersContent)
-	}
 	internalUsersHash := ""
 	if internalUsersContent != "" {
 		internalUsersHash = patch.ComputeSecretHash(map[string][]byte{
 			constants.SecretKeyInternalUsers: []byte(internalUsersContent),
 		})
 	}
-	configHash := patch.ComputeSecretHash(combinedSyncData)
 
-	// Check if we've already synced this configuration.
+	// Compare against stored hash to determine what changed
 	storedHash := ""
 	if cluster.Status.Security != nil {
 		storedHash = cluster.Status.Security.CredentialsHash
@@ -2297,25 +2276,24 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 	internalUsersChanged := internalUsersHash != storedInternalUsersHash
 
 	if cluster.Status.Security != nil && !credentialsChanged && !internalUsersChanged {
-		log.V(1).Info("Security credentials already synced", "hash", configHash)
+		log.V(1).Info("Security credentials already synced",
+			"credentialsHash", credentialsHash, "internalUsersHash", internalUsersHash)
 		return nil
 	}
 
-	// Sync internal users via securityadmin.sh only. This avoids bootstrap deadlocks
-	// when credentials have changed and the REST API can no longer authenticate.
+	// Sync internal users via securityadmin.sh (uses admin TLS certs, not REST API).
+	// This avoids bootstrap deadlocks when credentials changed and REST API rejects the old password.
 	if r.SecurityAdminExecutor == nil {
 		log.V(1).Info("SecurityAdminExecutor not configured, skipping internal_users sync")
 		return nil
 	}
-	log.Info("Credentials/internal_users hash changed, applying internal_users via securityadmin.sh",
-		"username", adminUsername,
+	log.Info("Applying internal_users via securityadmin.sh",
 		"credentialsChanged", credentialsChanged,
 		"internalUsersChanged", internalUsersChanged)
 	if saErr := r.SecurityAdminExecutor.ApplyInternalUsers(ctx, cluster.Name, cluster.Namespace, cluster.Spec.Version, internalUsersContent); saErr != nil {
 		log.Error(saErr, "securityadmin.sh internal_users sync failed")
 		return nil
 	}
-	log.Info("Credentials pushed via securityadmin.sh", "username", adminUsername)
 
 	// Update status to track that we've synced this config
 	if cluster.Status.Security == nil {
@@ -2324,8 +2302,8 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 	cluster.Status.Security.CredentialsHash = joinSecuritySyncHash(credentialsHash, internalUsersHash)
 
 	// Manager (master/workers) and Dashboard consume indexer credentials via env vars
-	// (SecretKeyRef), which are only read at pod startup. Restart them after status hash
-	// update so the new state is persisted even if a restart call fails.
+	// (SecretKeyRef), which are only read at pod startup. Restart them so they pick up
+	// the new credentials.
 	if credentialsChanged {
 		restartHash := credentialsHash
 		if err := r.restartIndexerStatefulSets(ctx, cluster, restartHash); err != nil {
@@ -2342,7 +2320,8 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 		}
 	}
 
-	log.Info("Security credentials synced successfully", "hash", configHash)
+	log.Info("Security credentials synced successfully",
+		"credentialsHash", credentialsHash, "internalUsersHash", internalUsersHash)
 	if r.Recorder != nil {
 		r.Recorder.Event(cluster, corev1.EventTypeNormal, "SecurityCredentialsSynced",
 			"Internal users synchronized to security index")

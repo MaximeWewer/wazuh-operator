@@ -38,6 +38,10 @@ func TestIndexerStatefulSetBuilder_VersionAwarePaths(t *testing.T) {
 				constants.PathIndexerBase + "/opensearch.yml",
 				constants.PathIndexerLegacySecurityConfig + "/internal_users.yml",
 				constants.PathIndexerLegacySecurityConfig + "/roles_mapping.yml",
+				constants.PathIndexerLegacySecurityConfig + "/roles.yml",
+				constants.PathIndexerLegacySecurityConfig + "/action_groups.yml",
+				constants.PathIndexerLegacySecurityConfig + "/tenants.yml",
+				constants.PathIndexerLegacySecurityConfig + "/config.yml",
 				constants.PathIndexerLegacyCerts,
 			},
 			notExpectedMounts: []string{
@@ -54,6 +58,10 @@ func TestIndexerStatefulSetBuilder_VersionAwarePaths(t *testing.T) {
 				constants.PathIndexerConfig + "/opensearch.yml",
 				constants.PathIndexerSecurityConfig + "/internal_users.yml",
 				constants.PathIndexerSecurityConfig + "/roles_mapping.yml",
+				constants.PathIndexerSecurityConfig + "/roles.yml",
+				constants.PathIndexerSecurityConfig + "/action_groups.yml",
+				constants.PathIndexerSecurityConfig + "/tenants.yml",
+				constants.PathIndexerSecurityConfig + "/config.yml",
 				constants.PathIndexerCerts,
 			},
 			notExpectedMounts: []string{

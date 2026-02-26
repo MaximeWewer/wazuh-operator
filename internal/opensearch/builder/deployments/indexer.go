@@ -635,6 +635,8 @@ func (b *IndexerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 			ReadOnly:  true,
 		},
 		// Security config at the correct location based on Wazuh version
+		// All files are required for the security plugin to auto-initialize the
+		// .opendistro_security index when allow_default_init_securityindex is true.
 		{
 			Name:      constants.VolumeNameConfigProcessed,
 			MountPath: securityConfigDir + "/internal_users.yml",
@@ -645,6 +647,30 @@ func (b *IndexerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 			Name:      constants.VolumeNameConfigProcessed,
 			MountPath: securityConfigDir + "/roles_mapping.yml",
 			SubPath:   constants.SecretKeyRolesMapping,
+			ReadOnly:  true,
+		},
+		{
+			Name:      constants.VolumeNameConfigProcessed,
+			MountPath: securityConfigDir + "/roles.yml",
+			SubPath:   constants.SecretKeyRoles,
+			ReadOnly:  true,
+		},
+		{
+			Name:      constants.VolumeNameConfigProcessed,
+			MountPath: securityConfigDir + "/action_groups.yml",
+			SubPath:   constants.SecretKeyActionGroups,
+			ReadOnly:  true,
+		},
+		{
+			Name:      constants.VolumeNameConfigProcessed,
+			MountPath: securityConfigDir + "/tenants.yml",
+			SubPath:   constants.SecretKeyTenants,
+			ReadOnly:  true,
+		},
+		{
+			Name:      constants.VolumeNameConfigProcessed,
+			MountPath: securityConfigDir + "/config.yml",
+			SubPath:   constants.SecretKeySecurityConfig,
 			ReadOnly:  true,
 		},
 	}

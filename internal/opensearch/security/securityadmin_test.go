@@ -29,24 +29,28 @@ func TestBuildInternalUsersCommand(t *testing.T) {
 		wazuhVersion  string
 		wantPreferred string
 		wantFallback  string
+		wantCertsDir  string
 	}{
 		{
 			name:          "modern version (>= 4.14.0) prefers config dir with legacy fallback",
 			wazuhVersion:  "4.14.0",
 			wantPreferred: constants.PathIndexerSecurityConfig + "/internal_users.yml",
 			wantFallback:  constants.PathIndexerLegacySecurityConfig + "/internal_users.yml",
+			wantCertsDir:  constants.PathIndexerCerts,
 		},
 		{
 			name:          "legacy version (< 4.14.0) prefers legacy dir with config fallback",
 			wazuhVersion:  "4.13.0",
 			wantPreferred: constants.PathIndexerLegacySecurityConfig + "/internal_users.yml",
 			wantFallback:  constants.PathIndexerSecurityConfig + "/internal_users.yml",
+			wantCertsDir:  constants.PathIndexerLegacyCerts,
 		},
 		{
 			name:          "newer version prefers config dir with legacy fallback",
 			wazuhVersion:  "4.15.1",
 			wantPreferred: constants.PathIndexerSecurityConfig + "/internal_users.yml",
 			wantFallback:  constants.PathIndexerLegacySecurityConfig + "/internal_users.yml",
+			wantCertsDir:  constants.PathIndexerCerts,
 		},
 	}
 
@@ -96,8 +100,8 @@ func TestBuildInternalUsersCommand(t *testing.T) {
 			}
 
 			// Verify TLS cert flags are present
-			if !strings.Contains(script, "-cacert "+constants.PathIndexerCerts+"/ca.crt") {
-				t.Error("expected -cacert flag with correct path")
+			if !strings.Contains(script, "-cacert "+tt.wantCertsDir+"/ca.crt") {
+				t.Errorf("expected -cacert flag with certs dir %s", tt.wantCertsDir)
 			}
 			if !strings.Contains(script, "-cert "+constants.PathIndexerAdminCerts+"/tls.crt") {
 				t.Error("expected -cert flag with correct path")
