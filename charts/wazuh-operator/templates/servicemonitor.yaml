@@ -17,6 +17,11 @@ spec:
   endpoints:
   - port: metrics
     path: /metrics
+    {{- if .Values.operator.metrics.secure }}
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: true
+    {{- end }}
     interval: {{ .Values.operator.serviceMonitor.interval | quote }}
     scrapeTimeout: {{ .Values.operator.serviceMonitor.scrapeTimeout | quote }}
 {{- end }}

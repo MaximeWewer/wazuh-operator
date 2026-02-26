@@ -51,6 +51,7 @@ spec:
         - --health-probe-bind-address=:{{ .Values.operator.healthProbe.port }}
         {{- if .Values.operator.metrics.enabled }}
         - --metrics-bind-address=:{{ .Values.operator.metrics.port }}
+        - --metrics-secure={{ .Values.operator.metrics.secure }}
         {{- else }}
         - --metrics-bind-address=0
         {{- end }}

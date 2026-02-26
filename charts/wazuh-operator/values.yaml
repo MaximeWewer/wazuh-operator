@@ -90,6 +90,8 @@ operator:
     enabled: true
     # -- Metrics port
     port: 8080
+    # -- Serve metrics over HTTPS (requires TLS configuration in ServiceMonitor if true)
+    secure: false
     # @extra operator.metrics.service Metrics service configuration
     service:
       # -- Metrics service type
