@@ -16,6 +16,23 @@ limitations under the License.
 
 package reconciler
 
+import corev1 "k8s.io/api/core/v1"
+
+// preserveNodePorts copies server-assigned NodePort values from the existing
+// Service to the desired Service for ports where the desired NodePort is 0.
+func preserveNodePorts(desired, existing *corev1.Service) {
+	for i := range desired.Spec.Ports {
+		if desired.Spec.Ports[i].NodePort == 0 {
+			for _, ep := range existing.Spec.Ports {
+				if ep.Port == desired.Spec.Ports[i].Port && ep.Protocol == desired.Spec.Ports[i].Protocol {
+					desired.Spec.Ports[i].NodePort = ep.NodePort
+					break
+				}
+			}
+		}
+	}
+}
+
 // mapsEqualStr compares two string maps for equality.
 func mapsEqualStr(a, b map[string]string) bool {
 	if len(a) != len(b) {

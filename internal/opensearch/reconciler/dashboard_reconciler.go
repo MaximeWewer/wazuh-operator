@@ -1311,6 +1311,7 @@ func (r *DashboardReconciler) createOrUpdate(ctx context.Context, obj client.Obj
 			if currentSvc, ok := current.(*corev1.Service); ok {
 				svc.Spec.ClusterIP = currentSvc.Spec.ClusterIP
 				svc.Spec.ClusterIPs = currentSvc.Spec.ClusterIPs
+				preserveNodePorts(svc, currentSvc)
 				if apiequality.Semantic.DeepEqual(svc.Spec, currentSvc.Spec) &&
 					mapsEqualStr(svc.Labels, currentSvc.Labels) &&
 					mapsEqualStr(svc.Annotations, currentSvc.Annotations) {

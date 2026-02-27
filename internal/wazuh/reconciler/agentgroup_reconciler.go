@@ -465,6 +465,23 @@ func mapsEqual(a, b map[string]string) bool {
 	return true
 }
 
+// preserveNodePorts copies server-assigned NodePort values from the existing
+// Service to the desired Service for ports where the desired NodePort is 0.
+// This prevents unnecessary updates caused by K8s-assigned NodePort numbers
+// not being present in the desired spec.
+func preserveNodePorts(desired, existing *corev1.Service) {
+	for i := range desired.Spec.Ports {
+		if desired.Spec.Ports[i].NodePort == 0 {
+			for _, ep := range existing.Spec.Ports {
+				if ep.Port == desired.Spec.Ports[i].Port && ep.Protocol == desired.Spec.Ports[i].Protocol {
+					desired.Spec.Ports[i].NodePort = ep.NodePort
+					break
+				}
+			}
+		}
+	}
+}
+
 // AgentGroupFileInfo holds information about agent group files for mounting to manager pods
 type AgentGroupFileInfo struct {
 	ConfigMapName string

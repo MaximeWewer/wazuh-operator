@@ -2248,11 +2248,13 @@ func (r *ClusterReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 			return err
 		}
 
-		// Preserve immutable fields for Services and skip no-op updates
+		// Preserve immutable/server-assigned fields for Services and skip no-op updates
 		if svc, ok := obj.(*corev1.Service); ok {
 			if existingSvc, ok := existing.(*corev1.Service); ok {
 				svc.Spec.ClusterIP = existingSvc.Spec.ClusterIP
 				svc.Spec.ClusterIPs = existingSvc.Spec.ClusterIPs
+				// Preserve server-assigned NodePort values
+				preserveNodePorts(svc, existingSvc)
 				// Skip update if spec, labels, and annotations haven't changed
 				if apiequality.Semantic.DeepEqual(svc.Spec, existingSvc.Spec) &&
 					mapsEqual(svc.Labels, existingSvc.Labels) &&
