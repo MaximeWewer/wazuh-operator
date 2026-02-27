@@ -26,6 +26,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -1785,6 +1786,11 @@ func (r *WazuhClusterReconciler) updateDrainStatus(ctx context.Context, cluster 
 		latestCluster := &wazuhv1.WazuhCluster{}
 		if err := r.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, latestCluster); err != nil {
 			return err
+		}
+
+		// Skip if drain status is unchanged
+		if apiequality.Semantic.DeepEqual(latestCluster.Status.Drain, cluster.Status.Drain) {
+			return nil
 		}
 
 		// Copy drain status from working cluster
