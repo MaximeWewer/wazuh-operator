@@ -163,7 +163,9 @@ func (r *RuleReconciler) Reconcile(ctx context.Context, rule *wazuhv1.WazuhRule)
 	appliedNodes := r.determineAppliedNodes(rule, cluster)
 	rule.Status.AppliedToNodes = appliedNodes
 
-	// Set ready condition and phase
+	// Set ready condition and phase — only update timestamp and emit event on transition
+	wasApplied := rule.Status.Phase == wazuhv1.RulePhaseApplied &&
+		rule.Status.ObservedGeneration == rule.Generation
 	rule.Status.Phase = wazuhv1.RulePhaseApplied
 	r.setCondition(rule, ConditionTypeReady, metav1.ConditionTrue, "RuleApplied",
 		fmt.Sprintf("Rule applied to %d node(s)", len(appliedNodes)))
@@ -171,14 +173,13 @@ func (r *RuleReconciler) Reconcile(ctx context.Context, rule *wazuhv1.WazuhRule)
 	// Update observed generation
 	rule.Status.ObservedGeneration = rule.Generation
 
-	// Update timestamp
-	now := metav1.Now()
-	rule.Status.LastAppliedTime = &now
-
-	// Record success event
-	if r.Recorder != nil {
-		r.Recorder.Event(rule, corev1.EventTypeNormal, "RuleApplied",
-			fmt.Sprintf("Rule %s applied successfully", rule.Name))
+	if !wasApplied {
+		now := metav1.Now()
+		rule.Status.LastAppliedTime = &now
+		if r.Recorder != nil {
+			r.Recorder.Event(rule, corev1.EventTypeNormal, "RuleApplied",
+				fmt.Sprintf("Rule %s applied successfully", rule.Name))
+		}
 	}
 
 	// Update status
@@ -237,12 +238,14 @@ func (r *RuleReconciler) reconcileConfigMap(ctx context.Context, rule *wazuhv1.W
 		return "", err
 	}
 
-	// Update existing
-	existing.Data = cm.Data
-	existing.Labels = cm.Labels
-	log.V(1).Info("Updating rule ConfigMap", "name", cm.Name)
-	if err := r.Update(ctx, existing); err != nil {
-		return "", err
+	// Update only if data or labels changed
+	if !mapsEqual(existing.Data, cm.Data) || !mapsEqual(existing.Labels, cm.Labels) {
+		existing.Data = cm.Data
+		existing.Labels = cm.Labels
+		log.V(1).Info("Updating rule ConfigMap", "name", cm.Name)
+		if err := r.Update(ctx, existing); err != nil {
+			return "", err
+		}
 	}
 
 	return configMapName, nil

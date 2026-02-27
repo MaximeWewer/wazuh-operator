@@ -136,8 +136,6 @@ func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *w
 		return fmt.Errorf("failed to %s component template: %w", action, err)
 	}
 
-	r.recordEvent(template, corev1.EventTypeNormal, "Synced", "Component template reconciled successfully")
-
 	// Compute spec hash for drift detection
 	specHash, hashErr := patch.ComputeSpecHash(template.Spec)
 	if hashErr == nil && template.Status.LastAppliedHash != "" && template.Status.LastAppliedHash != specHash {
@@ -153,9 +151,13 @@ func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *w
 		template.Status.LastAppliedHash = specHash
 	}
 
-	// Update status
-	if err := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseReady, "Component template reconciled successfully"); err != nil {
+	wasReady := template.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
+		template.Status.ObservedGeneration == template.Generation
+	if err := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseReady, "Component template reconciled successfully", !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
+	}
+	if !wasReady {
+		r.recordEvent(template, corev1.EventTypeNormal, "Synced", "Component template reconciled successfully")
 	}
 
 	log.Info("Component template reconciliation completed", "name", template.Name)
@@ -188,11 +190,14 @@ func (r *ComponentTemplateReconciler) buildComponentTemplate(template *wazuhv1.O
 }
 
 // updateStatus updates the template status with retry on conflict
-func (r *ComponentTemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1.OpenSearchComponentTemplate, phase wazuhv1.OpenSearchResourcePhase, message string) error {
+func (r *ComponentTemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1.OpenSearchComponentTemplate, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
 	template.Status.Phase = phase
 	template.Status.Message = message
-	now := metav1.Now()
-	template.Status.LastSyncTime = &now
+	template.Status.ObservedGeneration = template.Generation
+	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+		now := metav1.Now()
+		template.Status.LastSyncTime = &now
+	}
 
 	metrics.SetResourceSyncStatus("OpenSearchComponentTemplate", template.Namespace, template.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 

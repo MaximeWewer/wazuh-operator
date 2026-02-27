@@ -146,8 +146,6 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSe
 		}
 	}
 
-	r.recordEvent(policy, corev1.EventTypeNormal, "Synced", "ISM policy reconciled successfully")
-
 	// Compute spec hash for drift detection
 	specHash, hashErr := patch.ComputeSpecHash(policy.Spec)
 	if hashErr == nil && policy.Status.LastAppliedHash != "" && policy.Status.LastAppliedHash != specHash {
@@ -163,9 +161,13 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSe
 		policy.Status.LastAppliedHash = specHash
 	}
 
-	// Update status
-	if err := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseReady, "ISM policy reconciled successfully"); err != nil {
+	wasReady := policy.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
+		policy.Status.ObservedGeneration == policy.Generation
+	if err := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseReady, "ISM policy reconciled successfully", !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
+	}
+	if !wasReady {
+		r.recordEvent(policy, corev1.EventTypeNormal, "Synced", "ISM policy reconciled successfully")
 	}
 
 	log.Info("ISM policy reconciliation completed", "name", policy.Name)
@@ -236,11 +238,14 @@ func (r *PolicyReconciler) buildISMPolicy(policy *wazuhv1.OpenSearchISMPolicy) a
 }
 
 // updateStatus updates the policy status with retry on conflict
-func (r *PolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.OpenSearchISMPolicy, phase wazuhv1.OpenSearchResourcePhase, message string) error {
+func (r *PolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.OpenSearchISMPolicy, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
 	policy.Status.Phase = phase
 	policy.Status.Message = message
-	now := metav1.Now()
-	policy.Status.LastSyncTime = &now
+	policy.Status.ObservedGeneration = policy.Generation
+	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+		now := metav1.Now()
+		policy.Status.LastSyncTime = &now
+	}
 
 	metrics.SetResourceSyncStatus("OpenSearchISMPolicy", policy.Namespace, policy.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 

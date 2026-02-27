@@ -180,8 +180,6 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 	}
 
 policyApplied:
-	r.recordEvent(policy, corev1.EventTypeNormal, "Synced", "Snapshot policy reconciled successfully")
-
 	// Compute spec hash for drift detection
 	specHash, hashErr := patch.ComputeSpecHash(policy.Spec)
 	if hashErr == nil && policy.Status.LastAppliedHash != "" && policy.Status.LastAppliedHash != specHash {
@@ -197,9 +195,13 @@ policyApplied:
 		policy.Status.LastAppliedHash = specHash
 	}
 
-	// Update status
-	if err := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseReady, "Snapshot policy reconciled successfully"); err != nil {
+	wasReady := policy.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
+		policy.Status.ObservedGeneration == policy.Generation
+	if err := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseReady, "Snapshot policy reconciled successfully", !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
+	}
+	if !wasReady {
+		r.recordEvent(policy, corev1.EventTypeNormal, "Synced", "Snapshot policy reconciled successfully")
 	}
 
 	log.Info("Snapshot policy reconciliation completed", "name", policy.Name, "repository", repoName)
@@ -334,7 +336,7 @@ func (r *SnapshotPolicyReconciler) buildSnapshotPolicy(policy *wazuhv1.OpenSearc
 }
 
 // updateStatus updates the policy status
-func (r *SnapshotPolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.OpenSearchSnapshotPolicy, phase wazuhv1.OpenSearchResourcePhase, message string) error {
+func (r *SnapshotPolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.OpenSearchSnapshotPolicy, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
 	metrics.SetResourceSyncStatus("OpenSearchSnapshotPolicy", policy.Namespace, policy.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -344,8 +346,11 @@ func (r *SnapshotPolicyReconciler) updateStatus(ctx context.Context, policy *waz
 		}
 		latest.Status.Phase = phase
 		latest.Status.Message = message
-		now := metav1.Now()
-		latest.Status.LastSyncTime = &now
+		latest.Status.ObservedGeneration = policy.Generation
+		if len(updateTimestamp) == 0 || updateTimestamp[0] {
+			now := metav1.Now()
+			latest.Status.LastSyncTime = &now
+		}
 		if err := r.Status().Update(ctx, latest); err != nil {
 			return err
 		}

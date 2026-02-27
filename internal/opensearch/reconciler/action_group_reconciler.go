@@ -136,8 +136,6 @@ func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenS
 		return fmt.Errorf("failed to %s action group: %w", action, err)
 	}
 
-	r.recordEvent(ag, corev1.EventTypeNormal, "Synced", "Action group reconciled successfully")
-
 	// Compute spec hash for drift detection
 	specHash, hashErr := patch.ComputeSpecHash(ag.Spec)
 	if hashErr == nil && ag.Status.LastAppliedHash != "" && ag.Status.LastAppliedHash != specHash {
@@ -153,9 +151,13 @@ func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenS
 		ag.Status.LastAppliedHash = specHash
 	}
 
-	// Update status
-	if err := r.updateStatus(ctx, ag, wazuhv1.OpenSearchResourcePhaseReady, "Action group reconciled successfully"); err != nil {
+	wasReady := ag.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
+		ag.Status.ObservedGeneration == ag.Generation
+	if err := r.updateStatus(ctx, ag, wazuhv1.OpenSearchResourcePhaseReady, "Action group reconciled successfully", !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
+	}
+	if !wasReady {
+		r.recordEvent(ag, corev1.EventTypeNormal, "Synced", "Action group reconciled successfully")
 	}
 
 	log.Info("Action group reconciliation completed", "name", ag.Name)
@@ -179,11 +181,14 @@ func (r *ActionGroupReconciler) buildActionGroup(ag *wazuhv1.OpenSearchActionGro
 }
 
 // updateStatus updates the action group status with retry on conflict
-func (r *ActionGroupReconciler) updateStatus(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup, phase wazuhv1.OpenSearchResourcePhase, message string) error {
+func (r *ActionGroupReconciler) updateStatus(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
 	ag.Status.Phase = phase
 	ag.Status.Message = message
-	now := metav1.Now()
-	ag.Status.LastSyncTime = &now
+	ag.Status.ObservedGeneration = ag.Generation
+	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+		now := metav1.Now()
+		ag.Status.LastSyncTime = &now
+	}
 
 	metrics.SetResourceSyncStatus("OpenSearchActionGroup", ag.Namespace, ag.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 

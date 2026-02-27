@@ -134,8 +134,6 @@ func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.
 		return fmt.Errorf("failed to %s role mapping: %w", action, err)
 	}
 
-	r.recordEvent(mapping, corev1.EventTypeNormal, "Synced", "Role mapping reconciled successfully")
-
 	// Compute spec hash for drift detection
 	specHash, hashErr := patch.ComputeSpecHash(mapping.Spec)
 	if hashErr == nil && mapping.Status.LastAppliedHash != "" && mapping.Status.LastAppliedHash != specHash {
@@ -151,9 +149,13 @@ func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.
 		mapping.Status.LastAppliedHash = specHash
 	}
 
-	// Update status
-	if err := r.updateStatus(ctx, mapping, wazuhv1.OpenSearchResourcePhaseReady, "Role mapping reconciled successfully"); err != nil {
+	wasReady := mapping.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
+		mapping.Status.ObservedGeneration == mapping.Generation
+	if err := r.updateStatus(ctx, mapping, wazuhv1.OpenSearchResourcePhaseReady, "Role mapping reconciled successfully", !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
+	}
+	if !wasReady {
+		r.recordEvent(mapping, corev1.EventTypeNormal, "Synced", "Role mapping reconciled successfully")
 	}
 
 	log.Info("Role mapping reconciliation completed", "name", mapping.Name)
@@ -179,11 +181,14 @@ func (r *RoleMappingReconciler) buildRoleMapping(mapping *wazuhv1.OpenSearchRole
 }
 
 // updateStatus updates the role mapping status with retry on conflict
-func (r *RoleMappingReconciler) updateStatus(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping, phase wazuhv1.OpenSearchResourcePhase, message string) error {
+func (r *RoleMappingReconciler) updateStatus(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
 	mapping.Status.Phase = phase
 	mapping.Status.Message = message
-	now := metav1.Now()
-	mapping.Status.LastSyncTime = &now
+	mapping.Status.ObservedGeneration = mapping.Generation
+	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+		now := metav1.Now()
+		mapping.Status.LastSyncTime = &now
+	}
 
 	metrics.SetResourceSyncStatus("OpenSearchRoleMapping", mapping.Namespace, mapping.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 

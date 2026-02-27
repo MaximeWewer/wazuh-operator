@@ -209,20 +209,24 @@ func (r *AgentGroupReconciler) Reconcile(ctx context.Context, group *wazuhv1.Waz
 		group.Status.AgentCount = groupInfo.Count
 	}
 
-	// Set ready
+	// Set ready — only update LastSyncTime and emit event when transitioning to ready
+	wasReady := group.Status.Phase == wazuhv1.AgentGroupPhaseReady &&
+		group.Status.ObservedGeneration == group.Generation
 	group.Status.Phase = wazuhv1.AgentGroupPhaseReady
 	r.setCondition(group, ConditionTypeGroupSynced, metav1.ConditionTrue, "Synced",
 		fmt.Sprintf("Agent group %s is synced", groupName))
 	r.setCondition(group, ConditionTypeReady, metav1.ConditionTrue, "Ready",
 		fmt.Sprintf("Agent group %s is ready", groupName))
 	group.Status.ObservedGeneration = group.Generation
-	now := metav1.Now()
-	group.Status.LastSyncTime = &now
 	group.Status.Message = ""
 
-	if r.Recorder != nil {
-		r.Recorder.Event(group, corev1.EventTypeNormal, "Synced",
-			fmt.Sprintf("Agent group %s synced successfully", groupName))
+	if !wasReady {
+		now := metav1.Now()
+		group.Status.LastSyncTime = &now
+		if r.Recorder != nil {
+			r.Recorder.Event(group, corev1.EventTypeNormal, "Synced",
+				fmt.Sprintf("Agent group %s synced successfully", groupName))
+		}
 	}
 
 	if err := r.updateStatus(ctx, group); err != nil {
@@ -438,10 +442,27 @@ func (r *AgentGroupReconciler) reconcileFilesConfigMap(ctx context.Context, grou
 		return fmt.Errorf("failed to get files ConfigMap: %w", err)
 	}
 
-	// Update if data changed
-	existing.Data = desired.Data
-	existing.Labels = desired.Labels
-	return r.Update(ctx, existing)
+	// Update only if data or labels changed
+	if !mapsEqual(existing.Data, desired.Data) || !mapsEqual(existing.Labels, desired.Labels) {
+		log.Info("Updating agent group files ConfigMap", "configMap", cmName)
+		existing.Data = desired.Data
+		existing.Labels = desired.Labels
+		return r.Update(ctx, existing)
+	}
+	return nil
+}
+
+// mapsEqual returns true if both maps have the same keys and values.
+func mapsEqual(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
 }
 
 // AgentGroupFileInfo holds information about agent group files for mounting to manager pods

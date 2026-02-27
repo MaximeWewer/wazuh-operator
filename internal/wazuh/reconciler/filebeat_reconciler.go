@@ -157,12 +157,16 @@ func (r *FilebeatReconciler) Reconcile(ctx context.Context, filebeat *wazuhv1.Wa
 		Name: configmaps.GetConfigMapName(cluster.Name),
 	}
 
+	// Only emit event when transitioning to ready
+	wasReady := filebeat.Status.Phase == wazuhv1.FilebeatPhaseReady &&
+		filebeat.Status.ObservedGeneration == filebeat.Generation
+
 	if err := r.updateStatus(ctx, filebeat, wazuhv1.FilebeatPhaseReady, "Configuration applied successfully"); err != nil {
 		log.Error(err, "Failed to update status")
 		return err
 	}
 
-	if r.Recorder != nil {
+	if !wasReady && r.Recorder != nil {
 		r.Recorder.Event(filebeat, corev1.EventTypeNormal, constants.EventReasonFilebeatConfigUpdated, "Filebeat configuration updated successfully")
 	}
 
@@ -313,12 +317,14 @@ func (r *FilebeatReconciler) reconcileConfigMap(ctx context.Context, filebeat *w
 		return err
 	}
 
-	// Update existing ConfigMap
-	existing.Data = cm.Data
-	existing.Labels = cm.Labels
-	log.V(1).Info("Updating Filebeat ConfigMap", "name", cm.Name)
-	if err := r.Update(ctx, existing); err != nil {
-		return fmt.Errorf("failed to update configmap: %w", err)
+	// Update only if data or labels changed
+	if !mapsEqual(existing.Data, cm.Data) || !mapsEqual(existing.Labels, cm.Labels) {
+		existing.Data = cm.Data
+		existing.Labels = cm.Labels
+		log.V(1).Info("Updating Filebeat ConfigMap", "name", cm.Name)
+		if err := r.Update(ctx, existing); err != nil {
+			return fmt.Errorf("failed to update configmap: %w", err)
+		}
 	}
 
 	return nil
@@ -363,11 +369,17 @@ func (r *FilebeatReconciler) setCondition(filebeat *wazuhv1.WazuhFilebeat, condi
 
 // updateStatus updates the WazuhFilebeat status with retry on conflict
 func (r *FilebeatReconciler) updateStatus(ctx context.Context, filebeat *wazuhv1.WazuhFilebeat, phase wazuhv1.FilebeatPhase, message string) error {
+	// Only update LastAppliedTime when transitioning to a new state
+	wasReady := filebeat.Status.Phase == phase &&
+		filebeat.Status.ObservedGeneration == filebeat.Generation &&
+		filebeat.Status.Message == message
 	filebeat.Status.Phase = phase
 	filebeat.Status.Message = message
 	filebeat.Status.ObservedGeneration = filebeat.Generation
-	now := metav1.Now()
-	filebeat.Status.LastAppliedTime = &now
+	if !wasReady {
+		now := metav1.Now()
+		filebeat.Status.LastAppliedTime = &now
+	}
 
 	desiredStatus := filebeat.Status
 	return utils.RetryOnConflict(ctx, func() error {

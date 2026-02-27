@@ -391,8 +391,11 @@ func (r *AuthConfigReconciler) updateStatus(ctx context.Context, authConfig *waz
 	authConfig.Status.ConfigSynced = phase == "Ready"
 	authConfig.Status.DashboardConfigSynced = phase == "Ready"
 
-	now := metav1.Now()
-	if phase == "Ready" {
+	// Only update LastSyncTime when transitioning to Ready
+	wasReady := authConfig.Status.Phase == wazuhv1.OpenSearchResourcePhase("Ready") &&
+		authConfig.Status.ObservedGeneration == authConfig.Generation
+	if phase == "Ready" && !wasReady {
+		now := metav1.Now()
 		authConfig.Status.LastSyncTime = &now
 	}
 

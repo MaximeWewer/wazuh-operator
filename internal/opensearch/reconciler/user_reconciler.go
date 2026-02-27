@@ -120,8 +120,6 @@ func (r *UserReconciler) Reconcile(ctx context.Context, user *wazuhv1.OpenSearch
 		return fmt.Errorf("failed to create/update user: %w", err)
 	}
 
-	r.recordEvent(user, corev1.EventTypeNormal, "Synced", "User successfully synchronized to OpenSearch")
-
 	// Compute spec hash for drift detection
 	specHash, hashErr := patch.ComputeSpecHash(user.Spec)
 	if hashErr == nil && user.Status.LastAppliedHash != "" && user.Status.LastAppliedHash != specHash {
@@ -137,9 +135,14 @@ func (r *UserReconciler) Reconcile(ctx context.Context, user *wazuhv1.OpenSearch
 		user.Status.LastAppliedHash = specHash
 	}
 
-	// Update status
-	if err := r.updateStatus(ctx, user, wazuhv1.OpenSearchResourcePhaseReady, "User reconciled successfully"); err != nil {
+	// Update status — only update timestamp and emit event on transition
+	wasReady := user.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
+		user.Status.ObservedGeneration == user.Generation
+	if err := r.updateStatus(ctx, user, wazuhv1.OpenSearchResourcePhaseReady, "User reconciled successfully", !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
+	}
+	if !wasReady {
+		r.recordEvent(user, corev1.EventTypeNormal, "Synced", "User successfully synchronized to OpenSearch")
 	}
 
 	log.Info("User reconciliation completed", "name", user.Name)
@@ -210,11 +213,14 @@ func (r *UserReconciler) getOpenSearchClient(ctx context.Context, user *wazuhv1.
 }
 
 // updateStatus updates the user status with retry on conflict
-func (r *UserReconciler) updateStatus(ctx context.Context, user *wazuhv1.OpenSearchUser, phase wazuhv1.OpenSearchResourcePhase, message string) error {
+func (r *UserReconciler) updateStatus(ctx context.Context, user *wazuhv1.OpenSearchUser, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
 	user.Status.Phase = phase
 	user.Status.Message = message
-	now := metav1.Now()
-	user.Status.LastSyncTime = &now
+	user.Status.ObservedGeneration = user.Generation
+	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+		now := metav1.Now()
+		user.Status.LastSyncTime = &now
+	}
 
 	metrics.SetResourceSyncStatus("OpenSearchUser", user.Namespace, user.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 

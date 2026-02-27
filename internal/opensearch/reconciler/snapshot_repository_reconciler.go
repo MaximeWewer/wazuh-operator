@@ -193,16 +193,20 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 		snapshotCount = int32(len(snapshots.Snapshots))
 	}
 
-	// Update status to Ready
+	// Update status to Ready — only update timestamps on transition
+	wasReady := repo.Status.Phase == wazuhv1.RepositoryPhaseReady &&
+		repo.Status.ObservedGeneration == repo.Generation
 	repo.Status.Phase = wazuhv1.RepositoryPhaseReady
 	repo.Status.Message = "Repository is ready"
 	repo.Status.Verified = verified
 	repo.Status.SnapshotCount = snapshotCount
 	repo.Status.ObservedGeneration = repo.Generation
-	now := metav1.Now()
-	repo.Status.LastSyncTime = &now
-	if verified {
-		repo.Status.LastVerifiedTime = &now
+	if !wasReady {
+		now := metav1.Now()
+		repo.Status.LastSyncTime = &now
+		if verified {
+			repo.Status.LastVerifiedTime = &now
+		}
 	}
 
 	// Set condition
@@ -218,7 +222,9 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
-	r.recordEvent(repo, corev1.EventTypeNormal, "Synced", "Snapshot repository reconciled successfully")
+	if !wasReady {
+		r.recordEvent(repo, corev1.EventTypeNormal, "Synced", "Snapshot repository reconciled successfully")
+	}
 
 	log.Info("Snapshot repository reconciliation completed", "name", repo.Name, "verified", verified, "snapshots", snapshotCount)
 	return nil
@@ -425,8 +431,6 @@ func (r *SnapshotRepositoryReconciler) updateStatus(ctx context.Context, repo *w
 		latest.Status.Phase = phase
 		latest.Status.Message = message
 		latest.Status.Verified = verified
-		now := metav1.Now()
-		latest.Status.LastSyncTime = &now
 		if err := r.Status().Update(ctx, latest); err != nil {
 			return err
 		}

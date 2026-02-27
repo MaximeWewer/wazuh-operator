@@ -137,8 +137,6 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.Op
 		return fmt.Errorf("failed to %s index template: %w", action, err)
 	}
 
-	r.recordEvent(template, corev1.EventTypeNormal, "Synced", "Index template reconciled successfully")
-
 	// Compute spec hash for drift detection
 	specHash, hashErr := patch.ComputeSpecHash(template.Spec)
 	if hashErr == nil && template.Status.LastAppliedHash != "" && template.Status.LastAppliedHash != specHash {
@@ -154,9 +152,13 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.Op
 		template.Status.LastAppliedHash = specHash
 	}
 
-	// Update status
-	if err := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseReady, "Index template reconciled successfully"); err != nil {
+	wasReady := template.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
+		template.Status.ObservedGeneration == template.Generation
+	if err := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseReady, "Index template reconciled successfully", !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
+	}
+	if !wasReady {
+		r.recordEvent(template, corev1.EventTypeNormal, "Synced", "Index template reconciled successfully")
 	}
 
 	log.Info("Index template reconciliation completed", "name", template.Name)
@@ -220,11 +222,14 @@ func (r *TemplateReconciler) buildIndexTemplate(template *wazuhv1.OpenSearchInde
 }
 
 // updateStatus updates the template status with retry on conflict
-func (r *TemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1.OpenSearchIndexTemplate, phase wazuhv1.OpenSearchResourcePhase, message string) error {
+func (r *TemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1.OpenSearchIndexTemplate, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
 	template.Status.Phase = phase
 	template.Status.Message = message
-	now := metav1.Now()
-	template.Status.LastSyncTime = &now
+	template.Status.ObservedGeneration = template.Generation
+	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+		now := metav1.Now()
+		template.Status.LastSyncTime = &now
+	}
 
 	metrics.SetResourceSyncStatus("OpenSearchIndexTemplate", template.Namespace, template.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 

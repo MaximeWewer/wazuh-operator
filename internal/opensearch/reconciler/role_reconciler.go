@@ -108,8 +108,6 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, role *wazuhv1.OpenSearch
 		return fmt.Errorf("failed to create/update role: %w", err)
 	}
 
-	r.recordEvent(role, corev1.EventTypeNormal, "Synced", "Role successfully synchronized to OpenSearch")
-
 	// Compute spec hash for drift detection
 	specHash, hashErr := patch.ComputeSpecHash(role.Spec)
 	if hashErr == nil && role.Status.LastAppliedHash != "" && role.Status.LastAppliedHash != specHash {
@@ -126,9 +124,14 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, role *wazuhv1.OpenSearch
 		role.Status.LastAppliedHash = specHash
 	}
 
-	// Update status
-	if err := r.updateStatus(ctx, role, wazuhv1.OpenSearchResourcePhaseReady, "Role reconciled successfully"); err != nil {
+	// Update status — only update timestamp and emit event on transition
+	wasReady := role.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
+		role.Status.ObservedGeneration == role.Generation
+	if err := r.updateStatus(ctx, role, wazuhv1.OpenSearchResourcePhaseReady, "Role reconciled successfully", !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
+	}
+	if !wasReady {
+		r.recordEvent(role, corev1.EventTypeNormal, "Synced", "Role successfully synchronized to OpenSearch")
 	}
 
 	log.Info("Role reconciliation completed", "name", role.Name)
@@ -191,11 +194,14 @@ func (r *RoleReconciler) getOpenSearchClient(ctx context.Context, role *wazuhv1.
 }
 
 // updateStatus updates the role status with retry on conflict
-func (r *RoleReconciler) updateStatus(ctx context.Context, role *wazuhv1.OpenSearchRole, phase wazuhv1.OpenSearchResourcePhase, message string) error {
+func (r *RoleReconciler) updateStatus(ctx context.Context, role *wazuhv1.OpenSearchRole, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
 	role.Status.Phase = phase
 	role.Status.Message = message
-	now := metav1.Now()
-	role.Status.LastSyncTime = &now
+	role.Status.ObservedGeneration = role.Generation
+	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+		now := metav1.Now()
+		role.Status.LastSyncTime = &now
+	}
 
 	metrics.SetResourceSyncStatus("OpenSearchRole", role.Namespace, role.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 

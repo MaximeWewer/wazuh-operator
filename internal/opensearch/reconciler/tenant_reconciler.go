@@ -136,8 +136,6 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSe
 		return fmt.Errorf("failed to %s tenant: %w", action, err)
 	}
 
-	r.recordEvent(tenant, corev1.EventTypeNormal, "Synced", "Tenant reconciled successfully")
-
 	// Compute spec hash for drift detection
 	specHash, hashErr := patch.ComputeSpecHash(tenant.Spec)
 	if hashErr == nil && tenant.Status.LastAppliedHash != "" && tenant.Status.LastAppliedHash != specHash {
@@ -153,9 +151,13 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSe
 		tenant.Status.LastAppliedHash = specHash
 	}
 
-	// Update status
-	if err := r.updateStatus(ctx, tenant, wazuhv1.OpenSearchResourcePhaseReady, "Tenant reconciled successfully"); err != nil {
+	wasReady := tenant.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
+		tenant.Status.ObservedGeneration == tenant.Generation
+	if err := r.updateStatus(ctx, tenant, wazuhv1.OpenSearchResourcePhaseReady, "Tenant reconciled successfully", !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
+	}
+	if !wasReady {
+		r.recordEvent(tenant, corev1.EventTypeNormal, "Synced", "Tenant reconciled successfully")
 	}
 
 	log.Info("Tenant reconciliation completed", "name", tenant.Name)
@@ -177,11 +179,14 @@ func (r *TenantReconciler) buildTenant(tenant *wazuhv1.OpenSearchTenant) api.Ten
 }
 
 // updateStatus updates the tenant status with retry on conflict
-func (r *TenantReconciler) updateStatus(ctx context.Context, tenant *wazuhv1.OpenSearchTenant, phase wazuhv1.OpenSearchResourcePhase, message string) error {
+func (r *TenantReconciler) updateStatus(ctx context.Context, tenant *wazuhv1.OpenSearchTenant, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
 	tenant.Status.Phase = phase
 	tenant.Status.Message = message
-	now := metav1.Now()
-	tenant.Status.LastSyncTime = &now
+	tenant.Status.ObservedGeneration = tenant.Generation
+	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+		now := metav1.Now()
+		tenant.Status.LastSyncTime = &now
+	}
 
 	metrics.SetResourceSyncStatus("OpenSearchTenant", tenant.Namespace, tenant.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 

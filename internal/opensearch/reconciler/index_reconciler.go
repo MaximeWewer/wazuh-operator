@@ -146,8 +146,9 @@ func (r *IndexReconciler) Reconcile(ctx context.Context, index *wazuhv1.OpenSear
 		index.Status.LastAppliedHash = specHash
 	}
 
-	// Update status
-	if err := r.updateStatus(ctx, index, wazuhv1.OpenSearchResourcePhaseReady, "Index reconciled successfully"); err != nil {
+	wasReady := index.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
+		index.Status.ObservedGeneration == index.Generation
+	if err := r.updateStatus(ctx, index, wazuhv1.OpenSearchResourcePhaseReady, "Index reconciled successfully", !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
@@ -225,11 +226,14 @@ func (r *IndexReconciler) getOpenSearchClient(ctx context.Context, index *wazuhv
 }
 
 // updateStatus updates the index status with retry on conflict
-func (r *IndexReconciler) updateStatus(ctx context.Context, index *wazuhv1.OpenSearchIndex, phase wazuhv1.OpenSearchResourcePhase, message string) error {
+func (r *IndexReconciler) updateStatus(ctx context.Context, index *wazuhv1.OpenSearchIndex, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
 	index.Status.Phase = phase
 	index.Status.Message = message
-	now := metav1.Now()
-	index.Status.LastSyncTime = &now
+	index.Status.ObservedGeneration = index.Generation
+	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+		now := metav1.Now()
+		index.Status.LastSyncTime = &now
+	}
 
 	metrics.SetResourceSyncStatus("OpenSearchIndex", index.Namespace, index.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 

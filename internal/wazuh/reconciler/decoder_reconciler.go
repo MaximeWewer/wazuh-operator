@@ -163,7 +163,9 @@ func (r *DecoderReconciler) Reconcile(ctx context.Context, decoder *wazuhv1.Wazu
 	appliedNodes := r.determineAppliedNodes(decoder, cluster)
 	decoder.Status.AppliedToNodes = appliedNodes
 
-	// Set ready condition and phase
+	// Set ready condition and phase — only update timestamp and emit event on transition
+	wasApplied := decoder.Status.Phase == wazuhv1.DecoderPhaseApplied &&
+		decoder.Status.ObservedGeneration == decoder.Generation
 	decoder.Status.Phase = wazuhv1.DecoderPhaseApplied
 	r.setCondition(decoder, DecoderConditionTypeReady, metav1.ConditionTrue, "DecoderApplied",
 		fmt.Sprintf("Decoder applied to %d node(s)", len(appliedNodes)))
@@ -171,14 +173,13 @@ func (r *DecoderReconciler) Reconcile(ctx context.Context, decoder *wazuhv1.Wazu
 	// Update observed generation
 	decoder.Status.ObservedGeneration = decoder.Generation
 
-	// Update timestamp
-	now := metav1.Now()
-	decoder.Status.LastAppliedTime = &now
-
-	// Record success event
-	if r.Recorder != nil {
-		r.Recorder.Event(decoder, corev1.EventTypeNormal, "DecoderApplied",
-			fmt.Sprintf("Decoder %s applied successfully", decoder.Name))
+	if !wasApplied {
+		now := metav1.Now()
+		decoder.Status.LastAppliedTime = &now
+		if r.Recorder != nil {
+			r.Recorder.Event(decoder, corev1.EventTypeNormal, "DecoderApplied",
+				fmt.Sprintf("Decoder %s applied successfully", decoder.Name))
+		}
 	}
 
 	// Update status
@@ -237,12 +238,14 @@ func (r *DecoderReconciler) reconcileConfigMap(ctx context.Context, decoder *waz
 		return "", err
 	}
 
-	// Update existing
-	existing.Data = cm.Data
-	existing.Labels = cm.Labels
-	log.V(1).Info("Updating decoder ConfigMap", "name", cm.Name)
-	if err := r.Update(ctx, existing); err != nil {
-		return "", err
+	// Update only if data or labels changed
+	if !mapsEqual(existing.Data, cm.Data) || !mapsEqual(existing.Labels, cm.Labels) {
+		existing.Data = cm.Data
+		existing.Labels = cm.Labels
+		log.V(1).Info("Updating decoder ConfigMap", "name", cm.Name)
+		if err := r.Update(ctx, existing); err != nil {
+			return "", err
+		}
 	}
 
 	return configMapName, nil
