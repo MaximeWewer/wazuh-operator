@@ -256,8 +256,14 @@ func (r *IndexReconciler) handleDeletion(ctx context.Context, index *wazuhv1.Ope
 		log.Error(err, "Failed to delete index from OpenSearch, proceeding with finalizer removal")
 	}
 
-	controllerutil.RemoveFinalizer(index, constants.IndexFinalizer)
-	return r.Update(ctx, index)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchIndex{}
+		if err := r.Get(ctx, types.NamespacedName{Name: index.Name, Namespace: index.Namespace}, latest); err != nil {
+			return err
+		}
+		controllerutil.RemoveFinalizer(latest, constants.IndexFinalizer)
+		return r.Client.Update(ctx, latest)
+	})
 }
 
 // Delete handles cleanup when an index is deleted

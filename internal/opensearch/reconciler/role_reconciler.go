@@ -222,8 +222,14 @@ func (r *RoleReconciler) handleDeletion(ctx context.Context, role *wazuhv1.OpenS
 		log.Error(err, "Failed to delete role from OpenSearch, proceeding with finalizer removal")
 	}
 
-	controllerutil.RemoveFinalizer(role, constants.RoleFinalizer)
-	return r.Update(ctx, role)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchRole{}
+		if err := r.Get(ctx, types.NamespacedName{Name: role.Name, Namespace: role.Namespace}, latest); err != nil {
+			return err
+		}
+		controllerutil.RemoveFinalizer(latest, constants.RoleFinalizer)
+		return r.Client.Update(ctx, latest)
+	})
 }
 
 // Delete handles cleanup when a role is deleted

@@ -253,12 +253,14 @@ func (r *SnapshotRepositoryReconciler) handleDeletion(ctx context.Context, repo 
 	}
 
 	// Remove finalizer
-	controllerutil.RemoveFinalizer(repo, SnapshotRepositoryFinalizer)
-	if err := r.Update(ctx, repo); err != nil {
-		return fmt.Errorf("failed to remove finalizer: %w", err)
-	}
-
-	return nil
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchSnapshotRepository{}
+		if err := r.Get(ctx, types.NamespacedName{Name: repo.Name, Namespace: repo.Namespace}, latest); err != nil {
+			return err
+		}
+		controllerutil.RemoveFinalizer(latest, SnapshotRepositoryFinalizer)
+		return r.Client.Update(ctx, latest)
+	})
 }
 
 // recordEvent emits an event if the recorder is available

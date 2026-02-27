@@ -2096,16 +2096,16 @@ func (r *IndexerReconciler) reconcileSecurityInitJob(ctx context.Context, cluste
 	if credentialsChanged {
 		restartHash := credentialsHash
 		if err := r.restartIndexerStatefulSets(ctx, cluster, restartHash); err != nil {
-			log.Error(err, "Failed to trigger indexer restart after credential sync")
+			return fmt.Errorf("failed to trigger indexer restart after credential sync: %w", err)
 		}
 		if err := r.restartManagerMaster(ctx, cluster, restartHash); err != nil {
-			log.Error(err, "Failed to restart manager master after credential sync")
+			return fmt.Errorf("failed to restart manager master after credential sync: %w", err)
 		}
 		if err := r.restartManagerWorkers(ctx, cluster, restartHash); err != nil {
-			log.Error(err, "Failed to restart manager workers after credential sync")
+			return fmt.Errorf("failed to restart manager workers after credential sync: %w", err)
 		}
 		if err := r.restartDashboard(ctx, cluster, restartHash); err != nil {
-			log.Error(err, "Failed to restart dashboard after credential sync")
+			return fmt.Errorf("failed to restart dashboard after credential sync: %w", err)
 		}
 	}
 

@@ -362,8 +362,14 @@ func (r *SnapshotPolicyReconciler) handleDeletion(ctx context.Context, policy *w
 		log.Error(err, "Failed to delete snapshot policy from OpenSearch, proceeding with finalizer removal")
 	}
 
-	controllerutil.RemoveFinalizer(policy, constants.SnapshotPolicyFinalizer)
-	return r.Update(ctx, policy)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchSnapshotPolicy{}
+		if err := r.Get(ctx, types.NamespacedName{Name: policy.Name, Namespace: policy.Namespace}, latest); err != nil {
+			return err
+		}
+		controllerutil.RemoveFinalizer(latest, constants.SnapshotPolicyFinalizer)
+		return r.Client.Update(ctx, latest)
+	})
 }
 
 // Delete handles cleanup when a snapshot policy is deleted

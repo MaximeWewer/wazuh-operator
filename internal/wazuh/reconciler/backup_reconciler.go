@@ -344,8 +344,14 @@ func (r *BackupReconciler) handleDeletion(ctx context.Context, backup *wazuhv1.W
 	// Kubernetes garbage collection will handle owned resources (Job, CronJob, RBAC)
 	// Remove the finalizer
 	r.recordEvent(backup, corev1.EventTypeNormal, "Deleted", "Backup resources cleaned up")
-	controllerutil.RemoveFinalizer(backup, WazuhBackupFinalizer)
-	if err := r.Update(ctx, backup); err != nil {
+	if err := utils.RetryOnConflict(ctx, func() error {
+		latest := &wazuhv1.WazuhBackup{}
+		if err := r.Get(ctx, types.NamespacedName{Name: backup.Name, Namespace: backup.Namespace}, latest); err != nil {
+			return err
+		}
+		controllerutil.RemoveFinalizer(latest, WazuhBackupFinalizer)
+		return r.Client.Update(ctx, latest)
+	}); err != nil {
 		return fmt.Errorf("failed to remove finalizer: %w", err)
 	}
 

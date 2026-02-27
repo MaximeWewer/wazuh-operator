@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	retry "k8s.io/client-go/util/retry"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -108,8 +109,14 @@ func (r *WazuhAgentGroupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				return ctrl.Result{}, err
 			}
 
-			controllerutil.RemoveFinalizer(group, wazuhreconciler.AgentGroupFinalizer)
-			if err := r.Update(ctx, group); err != nil {
+			if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				latest := &wazuhv1.WazuhAgentGroup{}
+				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+					return err
+				}
+				controllerutil.RemoveFinalizer(latest, wazuhreconciler.AgentGroupFinalizer)
+				return r.Update(ctx, latest)
+			}); err != nil {
 				log.Error(err, "Failed to remove finalizer")
 				return ctrl.Result{}, err
 			}
@@ -121,8 +128,14 @@ func (r *WazuhAgentGroupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// Add finalizer if not present
 	if !controllerutil.ContainsFinalizer(group, wazuhreconciler.AgentGroupFinalizer) {
 		log.Info("Adding finalizer to WazuhAgentGroup", "name", group.Name)
-		controllerutil.AddFinalizer(group, wazuhreconciler.AgentGroupFinalizer)
-		if err := r.Update(ctx, group); err != nil {
+		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latest := &wazuhv1.WazuhAgentGroup{}
+			if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+				return err
+			}
+			controllerutil.AddFinalizer(latest, wazuhreconciler.AgentGroupFinalizer)
+			return r.Update(ctx, latest)
+		}); err != nil {
 			log.Error(err, "Failed to add finalizer")
 			return ctrl.Result{}, err
 		}

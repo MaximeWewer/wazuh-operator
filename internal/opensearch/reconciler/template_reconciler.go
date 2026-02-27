@@ -251,8 +251,14 @@ func (r *TemplateReconciler) handleDeletion(ctx context.Context, template *wazuh
 		log.Error(err, "Failed to delete index template from OpenSearch, proceeding with finalizer removal")
 	}
 
-	controllerutil.RemoveFinalizer(template, constants.IndexTemplateFinalizer)
-	return r.Update(ctx, template)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchIndexTemplate{}
+		if err := r.Get(ctx, types.NamespacedName{Name: template.Name, Namespace: template.Namespace}, latest); err != nil {
+			return err
+		}
+		controllerutil.RemoveFinalizer(latest, constants.IndexTemplateFinalizer)
+		return r.Client.Update(ctx, latest)
+	})
 }
 
 // Delete handles cleanup when a template is deleted

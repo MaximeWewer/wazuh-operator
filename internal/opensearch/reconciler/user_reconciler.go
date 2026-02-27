@@ -241,8 +241,14 @@ func (r *UserReconciler) handleDeletion(ctx context.Context, user *wazuhv1.OpenS
 		log.Error(err, "Failed to delete user from OpenSearch, proceeding with finalizer removal")
 	}
 
-	controllerutil.RemoveFinalizer(user, constants.UserFinalizer)
-	return r.Update(ctx, user)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchUser{}
+		if err := r.Get(ctx, types.NamespacedName{Name: user.Name, Namespace: user.Namespace}, latest); err != nil {
+			return err
+		}
+		controllerutil.RemoveFinalizer(latest, constants.UserFinalizer)
+		return r.Client.Update(ctx, latest)
+	})
 }
 
 // Delete handles cleanup when a user is deleted

@@ -267,12 +267,14 @@ func (r *ManualSnapshotReconciler) handleDeletion(ctx context.Context, snapshot 
 
 	// Remove finalizer
 	r.recordEvent(snapshot, corev1.EventTypeNormal, "Deleted", "Snapshot CRD deleted, snapshot data retained in repository")
-	controllerutil.RemoveFinalizer(snapshot, ManualSnapshotFinalizer)
-	if err := r.Update(ctx, snapshot); err != nil {
-		return fmt.Errorf("failed to remove finalizer: %w", err)
-	}
-
-	return nil
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchSnapshot{}
+		if err := r.Get(ctx, types.NamespacedName{Name: snapshot.Name, Namespace: snapshot.Namespace}, latest); err != nil {
+			return err
+		}
+		controllerutil.RemoveFinalizer(latest, ManualSnapshotFinalizer)
+		return r.Client.Update(ctx, latest)
+	})
 }
 
 // updateStatus updates the snapshot status

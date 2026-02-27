@@ -208,8 +208,14 @@ func (r *TenantReconciler) handleDeletion(ctx context.Context, tenant *wazuhv1.O
 		log.Error(err, "Failed to delete tenant from OpenSearch, proceeding with finalizer removal")
 	}
 
-	controllerutil.RemoveFinalizer(tenant, constants.TenantFinalizer)
-	return r.Update(ctx, tenant)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchTenant{}
+		if err := r.Get(ctx, types.NamespacedName{Name: tenant.Name, Namespace: tenant.Namespace}, latest); err != nil {
+			return err
+		}
+		controllerutil.RemoveFinalizer(latest, constants.TenantFinalizer)
+		return r.Client.Update(ctx, latest)
+	})
 }
 
 // Delete handles cleanup when a tenant is deleted

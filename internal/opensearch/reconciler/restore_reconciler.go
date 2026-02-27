@@ -285,12 +285,14 @@ func (r *RestoreReconciler) handleDeletion(ctx context.Context, restore *wazuhv1
 
 	// Remove finalizer
 	r.recordEvent(restore, corev1.EventTypeNormal, "Deleted", "Restore CRD deleted, restored data retained")
-	controllerutil.RemoveFinalizer(restore, RestoreFinalizer)
-	if err := r.Update(ctx, restore); err != nil {
-		return fmt.Errorf("failed to remove finalizer: %w", err)
-	}
-
-	return nil
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchRestore{}
+		if err := r.Get(ctx, types.NamespacedName{Name: restore.Name, Namespace: restore.Namespace}, latest); err != nil {
+			return err
+		}
+		controllerutil.RemoveFinalizer(latest, RestoreFinalizer)
+		return r.Client.Update(ctx, latest)
+	})
 }
 
 // updateStatus updates the restore status

@@ -267,8 +267,14 @@ func (r *PolicyReconciler) handleDeletion(ctx context.Context, policy *wazuhv1.O
 		log.Error(err, "Failed to delete ISM policy from OpenSearch, proceeding with finalizer removal")
 	}
 
-	controllerutil.RemoveFinalizer(policy, constants.ISMPolicyFinalizer)
-	return r.Update(ctx, policy)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchISMPolicy{}
+		if err := r.Get(ctx, types.NamespacedName{Name: policy.Name, Namespace: policy.Namespace}, latest); err != nil {
+			return err
+		}
+		controllerutil.RemoveFinalizer(latest, constants.ISMPolicyFinalizer)
+		return r.Client.Update(ctx, latest)
+	})
 }
 
 // Delete handles cleanup when a policy is deleted

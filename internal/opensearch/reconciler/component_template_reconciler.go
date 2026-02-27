@@ -219,8 +219,14 @@ func (r *ComponentTemplateReconciler) handleDeletion(ctx context.Context, templa
 		log.Error(err, "Failed to delete component template from OpenSearch, proceeding with finalizer removal")
 	}
 
-	controllerutil.RemoveFinalizer(template, constants.ComponentTemplateFinalizer)
-	return r.Update(ctx, template)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchComponentTemplate{}
+		if err := r.Get(ctx, types.NamespacedName{Name: template.Name, Namespace: template.Namespace}, latest); err != nil {
+			return err
+		}
+		controllerutil.RemoveFinalizer(latest, constants.ComponentTemplateFinalizer)
+		return r.Client.Update(ctx, latest)
+	})
 }
 
 // Delete handles cleanup when a component template is deleted

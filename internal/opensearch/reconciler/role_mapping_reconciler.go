@@ -210,8 +210,14 @@ func (r *RoleMappingReconciler) handleDeletion(ctx context.Context, mapping *waz
 		log.Error(err, "Failed to delete role mapping from OpenSearch, proceeding with finalizer removal")
 	}
 
-	controllerutil.RemoveFinalizer(mapping, constants.RoleMappingFinalizer)
-	return r.Update(ctx, mapping)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchRoleMapping{}
+		if err := r.Get(ctx, types.NamespacedName{Name: mapping.Name, Namespace: mapping.Namespace}, latest); err != nil {
+			return err
+		}
+		controllerutil.RemoveFinalizer(latest, constants.RoleMappingFinalizer)
+		return r.Client.Update(ctx, latest)
+	})
 }
 
 // Delete handles cleanup when a role mapping is deleted

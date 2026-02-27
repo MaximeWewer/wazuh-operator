@@ -357,8 +357,14 @@ func (r *WazuhRestoreReconciler) handleDeletion(ctx context.Context, restore *wa
 
 	// Kubernetes garbage collection will handle owned resources
 	r.recordEvent(restore, corev1.EventTypeNormal, "Deleted", "Restore resources cleaned up")
-	controllerutil.RemoveFinalizer(restore, WazuhRestoreFinalizer)
-	if err := r.Update(ctx, restore); err != nil {
+	if err := utils.RetryOnConflict(ctx, func() error {
+		latest := &wazuhv1.WazuhRestore{}
+		if err := r.Get(ctx, types.NamespacedName{Name: restore.Name, Namespace: restore.Namespace}, latest); err != nil {
+			return err
+		}
+		controllerutil.RemoveFinalizer(latest, WazuhRestoreFinalizer)
+		return r.Client.Update(ctx, latest)
+	}); err != nil {
 		return fmt.Errorf("failed to remove finalizer: %w", err)
 	}
 

@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	retry "k8s.io/client-go/util/retry"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -110,8 +111,14 @@ func (r *WazuhRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 			}
 
 			// Remove finalizer
-			controllerutil.RemoveFinalizer(rule, wazuhreconciler.RuleFinalizer)
-			if err := r.Update(ctx, rule); err != nil {
+			if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				latest := &wazuhv1.WazuhRule{}
+				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+					return err
+				}
+				controllerutil.RemoveFinalizer(latest, wazuhreconciler.RuleFinalizer)
+				return r.Update(ctx, latest)
+			}); err != nil {
 				log.Error(err, "Failed to remove finalizer")
 				return ctrl.Result{}, err
 			}
@@ -123,8 +130,14 @@ func (r *WazuhRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	// Add finalizer if not present
 	if !controllerutil.ContainsFinalizer(rule, wazuhreconciler.RuleFinalizer) {
 		log.Info("Adding finalizer to WazuhRule", "name", rule.Name)
-		controllerutil.AddFinalizer(rule, wazuhreconciler.RuleFinalizer)
-		if err := r.Update(ctx, rule); err != nil {
+		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latest := &wazuhv1.WazuhRule{}
+			if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+				return err
+			}
+			controllerutil.AddFinalizer(latest, wazuhreconciler.RuleFinalizer)
+			return r.Update(ctx, latest)
+		}); err != nil {
 			log.Error(err, "Failed to add finalizer")
 			return ctrl.Result{}, err
 		}

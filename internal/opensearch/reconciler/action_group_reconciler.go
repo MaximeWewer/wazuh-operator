@@ -210,8 +210,14 @@ func (r *ActionGroupReconciler) handleDeletion(ctx context.Context, ag *wazuhv1.
 		log.Error(err, "Failed to delete action group from OpenSearch, proceeding with finalizer removal")
 	}
 
-	controllerutil.RemoveFinalizer(ag, constants.ActionGroupFinalizer)
-	return r.Update(ctx, ag)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchActionGroup{}
+		if err := r.Get(ctx, types.NamespacedName{Name: ag.Name, Namespace: ag.Namespace}, latest); err != nil {
+			return err
+		}
+		controllerutil.RemoveFinalizer(latest, constants.ActionGroupFinalizer)
+		return r.Client.Update(ctx, latest)
+	})
 }
 
 // Delete handles cleanup when an action group is deleted
