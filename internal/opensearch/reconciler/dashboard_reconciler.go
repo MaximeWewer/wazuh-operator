@@ -1329,6 +1329,17 @@ func (r *DashboardReconciler) createOrUpdate(ctx context.Context, obj client.Obj
 			}
 		}
 
+		// Skip no-op updates for Secrets
+		if sec, ok := obj.(*corev1.Secret); ok {
+			if currentSec, ok := current.(*corev1.Secret); ok {
+				if mapsEqualBytes(sec.Data, currentSec.Data) &&
+					mapsEqualStr(sec.Labels, currentSec.Labels) &&
+					mapsEqualStr(sec.Annotations, currentSec.Annotations) {
+					return nil
+				}
+			}
+		}
+
 		log.V(1).Info("Updating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
 		obj.SetResourceVersion(current.GetResourceVersion())
 		return r.Update(ctx, obj)

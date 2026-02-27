@@ -74,3 +74,17 @@ func mapsEqualStr(a, b map[string]string) bool {
 	}
 	return true
 }
+
+// mapsEqualBytes compares two byte-slice maps for equality.
+func mapsEqualBytes(a, b map[string][]byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		bv, ok := b[k]
+		if !ok || string(v) != string(bv) {
+			return false
+		}
+	}
+	return true
+}

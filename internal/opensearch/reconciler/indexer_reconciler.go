@@ -1797,6 +1797,17 @@ func (r *IndexerReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 			}
 		}
 
+		// Skip no-op updates for Secrets
+		if sec, ok := obj.(*corev1.Secret); ok {
+			if existingSec, ok := existing.(*corev1.Secret); ok {
+				if mapsEqualBytes(sec.Data, existingSec.Data) &&
+					mapsEqualStr(sec.Labels, existingSec.Labels) &&
+					mapsEqualStr(sec.Annotations, existingSec.Annotations) {
+					return nil
+				}
+			}
+		}
+
 		log.V(1).Info("Updating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
 		obj.SetResourceVersion(existing.GetResourceVersion())
 		return r.Update(ctx, obj)

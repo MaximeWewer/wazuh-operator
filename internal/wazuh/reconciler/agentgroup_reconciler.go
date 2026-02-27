@@ -470,6 +470,19 @@ func mapsEqual(a, b map[string]string) bool {
 	return true
 }
 
+func mapsEqualBytes(a, b map[string][]byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		bv, ok := b[k]
+		if !ok || string(v) != string(bv) {
+			return false
+		}
+	}
+	return true
+}
+
 // preserveServiceDefaults copies all server-assigned and server-defaulted
 // fields from the existing Service into the desired Service so that
 // apiequality.Semantic.DeepEqual does not report false diffs.

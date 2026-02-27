@@ -686,6 +686,12 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	return ctrl.Result{RequeueAfter: requeueInterval}, nil
 }
 
+// maxRolloutAge is the maximum time a pending rollout can stay in the list
+// before being considered stale and automatically dropped. This prevents
+// stuck rollouts (e.g. from a previous operator version or manual intervention)
+// from keeping the reconciliation interval at 5s indefinitely.
+const maxRolloutAge = 15 * time.Minute
+
 // checkAndUpdatePendingRollouts checks the status of any pending rollouts and updates the cluster status
 // Returns true if there are still pending rollouts
 func (r *WazuhClusterReconciler) checkAndUpdatePendingRollouts(ctx context.Context, cluster *wazuhv1.WazuhCluster) bool {
@@ -702,6 +708,17 @@ func (r *WazuhClusterReconciler) checkAndUpdatePendingRollouts(ctx context.Conte
 	for _, rollout := range cluster.Status.CertificateRollouts.PendingRollouts {
 		if rollout.Ready {
 			// Already completed, drop from the list
+			continue
+		}
+
+		// Drop stale rollouts that have been pending for too long
+		age := time.Since(rollout.StartTime.Time)
+		if age > maxRolloutAge {
+			log.Info("Dropping stale certificate rollout",
+				"component", rollout.Component,
+				"workload", rollout.WorkloadName,
+				"age", age,
+				"reason", rollout.Reason)
 			continue
 		}
 
@@ -743,10 +760,12 @@ func (r *WazuhClusterReconciler) checkAndUpdatePendingRollouts(ctx context.Conte
 		}
 
 		hasPending = true
-		log.V(1).Info("Certificate rollout still in progress",
+		log.Info("Certificate rollout still in progress",
 			"component", rollout.Component,
+			"workload", rollout.WorkloadName,
 			"status", status.Message,
-			"duration", status.Duration)
+			"age", age,
+			"reason", rollout.Reason)
 		updatedRollouts = append(updatedRollouts, rollout)
 	}
 
@@ -754,6 +773,9 @@ func (r *WazuhClusterReconciler) checkAndUpdatePendingRollouts(ctx context.Conte
 	cluster.Status.CertificateRollouts.PendingRollouts = updatedRollouts
 	cluster.Status.CertificateRollouts.RolloutsInProgress = hasPending
 
+	if hasPending {
+		log.Info("Pending certificate rollouts remaining", "count", len(updatedRollouts))
+	}
 	return hasPending
 }
 
@@ -827,9 +849,11 @@ func (r *WazuhClusterReconciler) updateRollingRestartStatus(
 	masterRestart, workerRestart *rolling.RestartResult,
 	hasRollingRestart bool,
 ) {
-	// If nothing is happening and no status exists, skip
-	if !hasRollingRestart && indexerRestart == nil && masterRestart == nil && workerRestart == nil {
-		// Clear status if it was previously set and everything is now idle
+	// Nothing in progress → clear the entire status block (if set) and return.
+	// This covers both "all nil results" (no update pending) and "all Complete"
+	// results. Keeping an empty non-nil struct would cause a spurious status
+	// diff on the next cycle when it finally becomes nil.
+	if !hasRollingRestart {
 		if cluster.Status.RollingRestart != nil {
 			cluster.Status.RollingRestart = nil
 		}

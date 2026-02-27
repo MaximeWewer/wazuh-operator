@@ -2272,6 +2272,27 @@ func (r *ClusterReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 			}
 		}
 
+		// Skip no-op updates for Secrets
+		if sec, ok := obj.(*corev1.Secret); ok {
+			if existingSec, ok := existing.(*corev1.Secret); ok {
+				if mapsEqualBytes(sec.Data, existingSec.Data) &&
+					mapsEqual(sec.Labels, existingSec.Labels) &&
+					mapsEqual(sec.Annotations, existingSec.Annotations) {
+					return nil
+				}
+			}
+		}
+
+		// Skip no-op updates for ServiceAccounts
+		if sa, ok := obj.(*corev1.ServiceAccount); ok {
+			if existingSA, ok := existing.(*corev1.ServiceAccount); ok {
+				if mapsEqual(sa.Labels, existingSA.Labels) &&
+					mapsEqual(sa.Annotations, existingSA.Annotations) {
+					return nil
+				}
+			}
+		}
+
 		log.V(1).Info("Updating resource", "kind", obj.GetObjectKind().GroupVersionKind().Kind, "name", obj.GetName())
 		obj.SetResourceVersion(existing.GetResourceVersion())
 		return r.Update(ctx, obj)
