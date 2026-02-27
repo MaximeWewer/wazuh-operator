@@ -3001,7 +3001,13 @@ func (r *ClusterReconciler) reconcileWorkerHPA(ctx context.Context, cluster *waz
 		return fmt.Errorf("failed to get worker HPA: %w", err)
 	}
 
-	// Update HPA if needed
+	// Skip update if nothing changed
+	if apiequality.Semantic.DeepEqual(existing.Spec, workerHPA.Spec) &&
+		mapsEqual(existing.Labels, workerHPA.Labels) {
+		return nil
+	}
+
+	// Update HPA
 	workerHPA.SetResourceVersion(existing.GetResourceVersion())
 	log.V(1).Info("Updating Worker HPA", "name", hpaName)
 	if err := r.Update(ctx, workerHPA); err != nil {

@@ -126,23 +126,50 @@ func (r *WazuhCertificateReconciler) updateCertificateStatus(ctx context.Context
 		if err := r.Get(ctx, types.NamespacedName{Name: cert.Name, Namespace: cert.Namespace}, latest); err != nil {
 			return err
 		}
-		latest.Status.Phase = phase
+		// Check if status actually changed to avoid no-op updates
+		newPhase := phase
+		newSecretRef := &corev1.LocalObjectReference{Name: cert.Spec.SecretName}
+
+		var newCondStatus metav1.ConditionStatus
+		var newReason, newMessage string
+		if phase == wazuhv1.CertificatePhaseReady {
+			newCondStatus = metav1.ConditionTrue
+			newReason = "ReconcileSuccess"
+			newMessage = "Certificate reconciled successfully"
+		} else {
+			newCondStatus = metav1.ConditionFalse
+			newReason = "ReconcileFailed"
+			newMessage = message
+		}
+
+		// Check if anything actually changed
+		existingCond := meta.FindStatusCondition(latest.Status.Conditions, wazuhv1.CertificateConditionReady)
+		if latest.Status.Phase == newPhase &&
+			latest.Status.ObservedGeneration == latest.Generation &&
+			latest.Status.SecretRef != nil && latest.Status.SecretRef.Name == newSecretRef.Name &&
+			existingCond != nil &&
+			existingCond.Status == newCondStatus &&
+			existingCond.Reason == newReason &&
+			existingCond.Message == newMessage &&
+			existingCond.ObservedGeneration == latest.Generation {
+			return nil
+		}
+
+		latest.Status.Phase = newPhase
 		latest.Status.ObservedGeneration = latest.Generation
-		latest.Status.SecretRef = &corev1.LocalObjectReference{Name: cert.Spec.SecretName}
+		latest.Status.SecretRef = newSecretRef
 
 		readyCond := metav1.Condition{
 			Type:               wazuhv1.CertificateConditionReady,
 			ObservedGeneration: latest.Generation,
 			LastTransitionTime: metav1.Now(),
+			Status:             newCondStatus,
+			Reason:             newReason,
+			Message:            newMessage,
 		}
-		if phase == wazuhv1.CertificatePhaseReady {
-			readyCond.Status = metav1.ConditionTrue
-			readyCond.Reason = "ReconcileSuccess"
-			readyCond.Message = "Certificate reconciled successfully"
-		} else {
-			readyCond.Status = metav1.ConditionFalse
-			readyCond.Reason = "ReconcileFailed"
-			readyCond.Message = message
+		// Preserve LastTransitionTime if status didn't change
+		if existingCond != nil && existingCond.Status == newCondStatus {
+			readyCond.LastTransitionTime = existingCond.LastTransitionTime
 		}
 		meta.SetStatusCondition(&latest.Status.Conditions, readyCond)
 

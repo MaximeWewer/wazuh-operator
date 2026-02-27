@@ -23,6 +23,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -232,6 +233,13 @@ func (r *BackupReconciler) reconcileCronJob(ctx context.Context, backup *wazuhv1
 			return nil
 		}
 		return err
+	}
+
+	// Skip update if nothing changed
+	if apiequality.Semantic.DeepEqual(existing.Spec, cronJob.Spec) &&
+		mapsEqual(existing.Labels, cronJob.Labels) {
+		backup.Status.CronJobName = cronJob.Name
+		return nil
 	}
 
 	// Update existing CronJob

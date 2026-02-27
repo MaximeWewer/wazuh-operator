@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -441,6 +442,13 @@ func (r *GatewayReconciler) createOrUpdateHTTPRoute(ctx context.Context, route *
 		return fmt.Errorf("failed to get HTTPRoute: %w", err)
 	}
 
+	// Skip update if nothing changed
+	if apiequality.Semantic.DeepEqual(existing.Spec, route.Spec) &&
+		mapsEqual(existing.Labels, route.Labels) &&
+		mapsEqual(existing.Annotations, route.Annotations) {
+		return nil
+	}
+
 	// Update existing route
 	log.V(1).Info("Updating HTTPRoute", "name", route.Name)
 	route.SetResourceVersion(existing.GetResourceVersion())
@@ -467,6 +475,13 @@ func (r *GatewayReconciler) createOrUpdateTCPRoute(ctx context.Context, route *g
 		return fmt.Errorf("failed to get TCPRoute: %w", err)
 	}
 
+	// Skip update if nothing changed
+	if apiequality.Semantic.DeepEqual(existing.Spec, route.Spec) &&
+		mapsEqual(existing.Labels, route.Labels) &&
+		mapsEqual(existing.Annotations, route.Annotations) {
+		return nil
+	}
+
 	// Update existing route
 	log.V(1).Info("Updating TCPRoute", "name", route.Name)
 	route.SetResourceVersion(existing.GetResourceVersion())
@@ -491,6 +506,13 @@ func (r *GatewayReconciler) createOrUpdateUDPRoute(ctx context.Context, route *g
 			return fmt.Errorf("gateway API CRDs not installed: UDPRoute CRD is required for UDP routing, install Gateway API experimental CRDs first (kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/latest/download/experimental-install.yaml)")
 		}
 		return fmt.Errorf("failed to get UDPRoute: %w", err)
+	}
+
+	// Skip update if nothing changed
+	if apiequality.Semantic.DeepEqual(existing.Spec, route.Spec) &&
+		mapsEqual(existing.Labels, route.Labels) &&
+		mapsEqual(existing.Annotations, route.Annotations) {
+		return nil
 	}
 
 	// Update existing route

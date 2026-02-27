@@ -3621,7 +3621,13 @@ func (r *IndexerReconciler) reconcileIndexerPDB(ctx context.Context, cluster *wa
 		return fmt.Errorf("failed to get indexer PDB: %w", err)
 	}
 
-	// Update PDB if needed
+	// Skip update if nothing changed
+	if apiequality.Semantic.DeepEqual(existing.Spec, indexerPDB.Spec) &&
+		mapsEqualStr(existing.Labels, indexerPDB.Labels) {
+		return nil
+	}
+
+	// Update PDB
 	indexerPDB.SetResourceVersion(existing.GetResourceVersion())
 	log.Info("Updating Indexer PDB", "name", pdbName)
 	if err := r.Update(ctx, indexerPDB); err != nil {
@@ -3691,7 +3697,13 @@ func (r *IndexerReconciler) reconcileHPA(ctx context.Context, cluster *wazuhv1.W
 		return fmt.Errorf("failed to get indexer HPA: %w", err)
 	}
 
-	// Update HPA if needed
+	// Skip update if nothing changed
+	if apiequality.Semantic.DeepEqual(existing.Spec, indexerHPA.Spec) &&
+		mapsEqualStr(existing.Labels, indexerHPA.Labels) {
+		return nil
+	}
+
+	// Update HPA
 	indexerHPA.SetResourceVersion(existing.GetResourceVersion())
 	log.V(1).Info("Updating Indexer HPA", "name", hpaName)
 	if err := r.Update(ctx, indexerHPA); err != nil {

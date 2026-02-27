@@ -710,7 +710,13 @@ func (r *DashboardReconciler) reconcilePDB(ctx context.Context, cluster *wazuhv1
 		return fmt.Errorf("failed to get dashboard PDB: %w", err)
 	}
 
-	// Update PDB if needed
+	// Skip update if nothing changed
+	if apiequality.Semantic.DeepEqual(existing.Spec, dashboardPDB.Spec) &&
+		mapsEqualStr(existing.Labels, dashboardPDB.Labels) {
+		return nil
+	}
+
+	// Update PDB
 	dashboardPDB.SetResourceVersion(existing.GetResourceVersion())
 	log.V(1).Info("Updating Dashboard PDB", "name", pdbName)
 	if err := r.Update(ctx, dashboardPDB); err != nil {
@@ -774,7 +780,13 @@ func (r *DashboardReconciler) reconcileHPA(ctx context.Context, cluster *wazuhv1
 		return fmt.Errorf("failed to get dashboard HPA: %w", err)
 	}
 
-	// Update HPA if needed
+	// Skip update if nothing changed
+	if apiequality.Semantic.DeepEqual(existing.Spec, dashboardHPA.Spec) &&
+		mapsEqualStr(existing.Labels, dashboardHPA.Labels) {
+		return nil
+	}
+
+	// Update HPA
 	dashboardHPA.SetResourceVersion(existing.GetResourceVersion())
 	log.V(1).Info("Updating Dashboard HPA", "name", hpaName)
 	if err := r.Update(ctx, dashboardHPA); err != nil {

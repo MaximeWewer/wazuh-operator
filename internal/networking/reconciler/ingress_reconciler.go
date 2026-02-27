@@ -21,6 +21,7 @@ import (
 	"fmt"
 
 	networkingv1 "k8s.io/api/networking/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -234,6 +235,13 @@ func (r *IngressReconciler) createOrUpdateIngress(ctx context.Context, ingress *
 			return r.Create(ctx, ingress)
 		} else if err != nil {
 			return fmt.Errorf("failed to get Ingress: %w", err)
+		}
+
+		// Skip update if nothing changed
+		if apiequality.Semantic.DeepEqual(existing.Spec, ingress.Spec) &&
+			mapsEqual(existing.Labels, ingress.Labels) &&
+			mapsEqual(existing.Annotations, ingress.Annotations) {
+			return nil
 		}
 
 		// Update existing ingress

@@ -22,6 +22,7 @@ import (
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -142,6 +143,12 @@ func (r *MonitoringReconciler) reconcileServiceMonitor(ctx context.Context, clus
 			return nil
 		}
 		return err
+	}
+
+	// Skip update if nothing changed
+	if apiequality.Semantic.DeepEqual(existing.Spec, desired.Spec) &&
+		mapsEqual(existing.Labels, desired.Labels) {
+		return nil
 	}
 
 	// Update existing ServiceMonitor
