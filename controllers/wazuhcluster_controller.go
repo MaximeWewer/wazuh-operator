@@ -844,7 +844,10 @@ func (r *WazuhClusterReconciler) updateRollingRestartStatus(
 		cluster.Status.RollingRestart = &wazuhv1.RollingRestartStatus{}
 	}
 
-	if indexerRestart != nil && indexerRestart.Phase != rolling.RestartPhaseIdle {
+	// Only write status for InProgress phase. Idle and Complete are terminal —
+	// writing Complete with a new LastTransitionTime every cycle causes a hot
+	// reconciliation loop (status update → watch fires → new reconcile → repeat).
+	if indexerRestart != nil && indexerRestart.Phase == rolling.RestartPhaseInProgress {
 		if cluster.Status.RollingRestart.Indexer == nil {
 			cluster.Status.RollingRestart.Indexer = &wazuhv1.ComponentRollingRestart{StartTime: &now}
 		}
@@ -858,7 +861,7 @@ func (r *WazuhClusterReconciler) updateRollingRestartStatus(
 		cluster.Status.RollingRestart.Indexer = nil
 	}
 
-	if masterRestart != nil && masterRestart.Phase != rolling.RestartPhaseIdle {
+	if masterRestart != nil && masterRestart.Phase == rolling.RestartPhaseInProgress {
 		if cluster.Status.RollingRestart.ManagerMaster == nil {
 			cluster.Status.RollingRestart.ManagerMaster = &wazuhv1.ComponentRollingRestart{StartTime: &now}
 		}
@@ -872,7 +875,7 @@ func (r *WazuhClusterReconciler) updateRollingRestartStatus(
 		cluster.Status.RollingRestart.ManagerMaster = nil
 	}
 
-	if workerRestart != nil && workerRestart.Phase != rolling.RestartPhaseIdle {
+	if workerRestart != nil && workerRestart.Phase == rolling.RestartPhaseInProgress {
 		if cluster.Status.RollingRestart.ManagerWorker == nil {
 			cluster.Status.RollingRestart.ManagerWorker = &wazuhv1.ComponentRollingRestart{StartTime: &now}
 		}
