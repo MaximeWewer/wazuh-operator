@@ -36,6 +36,23 @@ import (
 func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *wazuhv1.WazuhCertificate) error {
 	log := logf.FromContext(ctx)
 
+	// Check if the secret already exists and is still valid — skip generation if so
+	existingSecret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: cert.Spec.SecretName, Namespace: cert.Namespace}, existingSecret); err == nil {
+		// Secret exists — check if cert is parsable and still valid
+		if certPEM, ok := existingSecret.Data[constants.SecretKeyTLSCert]; ok {
+			if keyPEM, ok2 := existingSecret.Data[constants.SecretKeyTLSKey]; ok2 {
+				if parsed, parseErr := certificates.ParseNodeCert(certPEM, keyPEM); parseErr == nil {
+					if parsed.DaysUntilExpiry() > 30 {
+						log.V(1).Info("Standalone certificate still valid, skipping regeneration",
+							"name", cert.Spec.SecretName, "daysUntilExpiry", parsed.DaysUntilExpiry())
+						return nil
+					}
+				}
+			}
+		}
+	}
+
 	// Get or create CA for signing
 	caResult, err := r.getOrCreateStandaloneCA(ctx, cert)
 	if err != nil {
@@ -280,6 +297,10 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 	} else if err != nil {
 		return fmt.Errorf("failed to get secret: %w", err)
 	} else {
+		// Skip update if data and labels haven't changed
+		if byteMapEqual(found.Data, secret.Data) && stringMapEqual(found.Labels, secret.Labels) {
+			return nil
+		}
 		secret.SetResourceVersion(found.GetResourceVersion())
 		if err := r.Update(ctx, secret); err != nil {
 			return fmt.Errorf("failed to update secret: %w", err)

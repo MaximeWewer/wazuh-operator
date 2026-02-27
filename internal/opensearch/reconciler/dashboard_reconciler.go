@@ -1294,11 +1294,27 @@ func (r *DashboardReconciler) createOrUpdate(ctx context.Context, obj client.Obj
 			return err
 		}
 
-		// Preserve immutable fields for Services
+		// Preserve immutable fields for Services and skip no-op updates
 		if svc, ok := obj.(*corev1.Service); ok {
 			if currentSvc, ok := current.(*corev1.Service); ok {
 				svc.Spec.ClusterIP = currentSvc.Spec.ClusterIP
 				svc.Spec.ClusterIPs = currentSvc.Spec.ClusterIPs
+				if apiequality.Semantic.DeepEqual(svc.Spec, currentSvc.Spec) &&
+					mapsEqualStr(svc.Labels, currentSvc.Labels) &&
+					mapsEqualStr(svc.Annotations, currentSvc.Annotations) {
+					return nil
+				}
+			}
+		}
+
+		// Skip no-op updates for ConfigMaps
+		if cm, ok := obj.(*corev1.ConfigMap); ok {
+			if currentCM, ok := current.(*corev1.ConfigMap); ok {
+				if mapsEqualStr(cm.Data, currentCM.Data) &&
+					mapsEqualStr(cm.Labels, currentCM.Labels) &&
+					mapsEqualStr(cm.Annotations, currentCM.Annotations) {
+					return nil
+				}
 			}
 		}
 

@@ -281,12 +281,14 @@ func (r *AuthConfigReconciler) reconcileIndexerSecurityConfig(
 		}
 		log.Info("Created security config ConfigMap", "name", configMapName)
 	} else {
-		// Update existing ConfigMap
-		existing.Data = cm.Data
-		if err := r.Update(ctx, existing); err != nil {
-			return err
+		// Update existing ConfigMap only if data changed
+		if !mapsEqualStr(existing.Data, cm.Data) {
+			existing.Data = cm.Data
+			if err := r.Update(ctx, existing); err != nil {
+				return err
+			}
+			log.Info("Updated security config ConfigMap", "name", configMapName)
 		}
-		log.Info("Updated security config ConfigMap", "name", configMapName)
 	}
 
 	return nil
@@ -351,12 +353,14 @@ func (r *AuthConfigReconciler) reconcileDashboardConfig(
 		}
 		log.Info("Created dashboard auth config ConfigMap", "name", configMapName)
 	} else {
-		// Update existing ConfigMap
-		existing.Data = cm.Data
-		if err := r.Update(ctx, existing); err != nil {
-			return err
+		// Update existing ConfigMap only if data changed
+		if !mapsEqualStr(existing.Data, cm.Data) {
+			existing.Data = cm.Data
+			if err := r.Update(ctx, existing); err != nil {
+				return err
+			}
+			log.Info("Updated dashboard auth config ConfigMap", "name", configMapName)
 		}
-		log.Info("Updated dashboard auth config ConfigMap", "name", configMapName)
 	}
 
 	return nil

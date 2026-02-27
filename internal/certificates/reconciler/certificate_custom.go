@@ -269,6 +269,11 @@ func (r *CertificateReconciler) ensureCustomCertSecret(ctx context.Context, clus
 		return fmt.Errorf("failed to get existing secret %s: %w", secretName, err)
 	}
 
+	// Skip update if data and labels haven't changed
+	if byteMapEqual(existing.Data, data) && stringMapEqual(existing.Labels, secret.Labels) {
+		return nil
+	}
+
 	// Update existing secret data
 	existing.Data = data
 	existing.Labels = secret.Labels
