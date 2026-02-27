@@ -2226,20 +2226,23 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			builder.WithPredicates(secretWatchPredicate),
 		).
 		Owns(&networkingv1.Ingress{}).
-		// Watch WazuhRule CRs - reconcile WazuhCluster when rules change
+		// Watch WazuhRule CRs - reconcile WazuhCluster when rules spec changes
 		Watches(
 			&wazuhv1.WazuhRule{},
 			handler.EnqueueRequestsFromMapFunc(r.findClustersForRule),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
-		// Watch WazuhDecoder CRs - reconcile WazuhCluster when decoders change
+		// Watch WazuhDecoder CRs - reconcile WazuhCluster when decoders spec changes
 		Watches(
 			&wazuhv1.WazuhDecoder{},
 			handler.EnqueueRequestsFromMapFunc(r.findClustersForDecoder),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
-		// Watch WazuhAgentGroup CRs - reconcile WazuhCluster when agent group files change
+		// Watch WazuhAgentGroup CRs - reconcile WazuhCluster when agent group spec changes
 		Watches(
 			&wazuhv1.WazuhAgentGroup{},
 			handler.EnqueueRequestsFromMapFunc(r.findClustersForAgentGroup),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		)
 
 	// Only add Gateway API watches if enabled AND the specific CRDs are available

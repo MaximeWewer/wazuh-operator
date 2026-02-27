@@ -27,8 +27,10 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
@@ -111,10 +113,11 @@ func (r *WazuhFilebeatReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.WazuhFilebeat{}).
 		Owns(&corev1.ConfigMap{}).
-		// Watch for changes in WazuhCluster that this filebeat references
+		// Watch for WazuhCluster spec changes that this filebeat references
 		Watches(
 			&wazuhv1.WazuhCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.findFilebeatForCluster),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
 		Named("wazuhfilebeat").
 		Complete(r)

@@ -35,9 +35,11 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
@@ -160,10 +162,11 @@ func (r *WazuhRuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.WazuhRule{}).
 		Owns(&corev1.ConfigMap{}).
-		// Watch for WazuhCluster changes to re-reconcile rules when cluster changes
+		// Watch for WazuhCluster spec changes to re-reconcile rules when cluster changes
 		Watches(
 			&wazuhv1.WazuhCluster{},
 			handler.EnqueueRequestsFromMapFunc(r.findRulesForCluster),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
 		Named("wazuhrule").
 		Complete(r)
