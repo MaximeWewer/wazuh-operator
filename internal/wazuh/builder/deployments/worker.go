@@ -486,7 +486,7 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			Command: []string{
 				"/bin/bash",
 				"-c",
-				"chown -R 999:999 /var/ossec",
+				"find /var/ossec -writable -exec chown 999:999 {} +",
 			},
 			VolumeMounts: b.buildVolumeMounts(),
 		},
