@@ -1777,9 +1777,7 @@ func (r *IndexerReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 		// Preserve immutable/server-assigned fields for Services and skip no-op updates
 		if svc, ok := obj.(*corev1.Service); ok {
 			if existingSvc, ok := existing.(*corev1.Service); ok {
-				svc.Spec.ClusterIP = existingSvc.Spec.ClusterIP
-				svc.Spec.ClusterIPs = existingSvc.Spec.ClusterIPs
-				preserveNodePorts(svc, existingSvc)
+				preserveServiceDefaults(svc, existingSvc)
 				if apiequality.Semantic.DeepEqual(svc.Spec, existingSvc.Spec) &&
 					mapsEqualStr(svc.Labels, existingSvc.Labels) &&
 					mapsEqualStr(svc.Annotations, existingSvc.Annotations) {

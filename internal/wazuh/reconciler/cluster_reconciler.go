@@ -2251,10 +2251,7 @@ func (r *ClusterReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 		// Preserve immutable/server-assigned fields for Services and skip no-op updates
 		if svc, ok := obj.(*corev1.Service); ok {
 			if existingSvc, ok := existing.(*corev1.Service); ok {
-				svc.Spec.ClusterIP = existingSvc.Spec.ClusterIP
-				svc.Spec.ClusterIPs = existingSvc.Spec.ClusterIPs
-				// Preserve server-assigned NodePort values
-				preserveNodePorts(svc, existingSvc)
+				preserveServiceDefaults(svc, existingSvc)
 				// Skip update if spec, labels, and annotations haven't changed
 				if apiequality.Semantic.DeepEqual(svc.Spec, existingSvc.Spec) &&
 					mapsEqual(svc.Labels, existingSvc.Labels) &&
@@ -2785,6 +2782,11 @@ func (r *ClusterReconciler) createOrUpdateRole(ctx context.Context, role *rbacv1
 		return err
 	}
 
+	// Skip update if rules and labels are unchanged
+	if apiequality.Semantic.DeepEqual(role.Rules, existing.Rules) &&
+		mapsEqual(role.Labels, existing.Labels) {
+		return nil
+	}
 	log.V(1).Info("Updating Role", "name", role.Name)
 	role.SetResourceVersion(existing.GetResourceVersion())
 	return r.Update(ctx, role)
@@ -2803,6 +2805,12 @@ func (r *ClusterReconciler) createOrUpdateRoleBinding(ctx context.Context, roleB
 		return err
 	}
 
+	// Skip update if role ref, subjects and labels are unchanged
+	if apiequality.Semantic.DeepEqual(roleBinding.RoleRef, existing.RoleRef) &&
+		apiequality.Semantic.DeepEqual(roleBinding.Subjects, existing.Subjects) &&
+		mapsEqual(roleBinding.Labels, existing.Labels) {
+		return nil
+	}
 	log.V(1).Info("Updating RoleBinding", "name", roleBinding.Name)
 	roleBinding.SetResourceVersion(existing.GetResourceVersion())
 	return r.Update(ctx, roleBinding)
@@ -2821,6 +2829,11 @@ func (r *ClusterReconciler) createOrUpdateCronJob(ctx context.Context, cronJob *
 		return err
 	}
 
+	// Skip update if spec and labels are unchanged
+	if apiequality.Semantic.DeepEqual(cronJob.Spec, existing.Spec) &&
+		mapsEqual(cronJob.Labels, existing.Labels) {
+		return nil
+	}
 	log.V(1).Info("Updating CronJob", "name", cronJob.Name)
 	cronJob.SetResourceVersion(existing.GetResourceVersion())
 	return r.Update(ctx, cronJob)
@@ -2940,6 +2953,11 @@ func (r *ClusterReconciler) reconcileManagerPDB(ctx context.Context, cluster *wa
 		latest := &policyv1.PodDisruptionBudget{}
 		if err := r.Get(ctx, types.NamespacedName{Name: pdbName, Namespace: cluster.Namespace}, latest); err != nil {
 			return err
+		}
+		// Skip update if spec and labels are unchanged
+		if apiequality.Semantic.DeepEqual(managerPDB.Spec, latest.Spec) &&
+			mapsEqual(managerPDB.Labels, latest.Labels) {
+			return nil
 		}
 		managerPDB.SetResourceVersion(latest.GetResourceVersion())
 		log.V(1).Info("Updating Manager PDB", "name", pdbName)

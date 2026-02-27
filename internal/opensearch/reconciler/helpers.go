@@ -18,9 +18,38 @@ package reconciler
 
 import corev1 "k8s.io/api/core/v1"
 
-// preserveNodePorts copies server-assigned NodePort values from the existing
-// Service to the desired Service for ports where the desired NodePort is 0.
-func preserveNodePorts(desired, existing *corev1.Service) {
+// preserveServiceDefaults copies all server-assigned and server-defaulted
+// fields from the existing Service into the desired Service so that
+// apiequality.Semantic.DeepEqual does not report false diffs.
+func preserveServiceDefaults(desired, existing *corev1.Service) {
+	// Immutable fields assigned by the API server
+	desired.Spec.ClusterIP = existing.Spec.ClusterIP
+	desired.Spec.ClusterIPs = existing.Spec.ClusterIPs
+
+	// Fields defaulted by the API server when not explicitly set
+	if desired.Spec.IPFamilyPolicy == nil {
+		desired.Spec.IPFamilyPolicy = existing.Spec.IPFamilyPolicy
+	}
+	if desired.Spec.IPFamilies == nil {
+		desired.Spec.IPFamilies = existing.Spec.IPFamilies
+	}
+	if desired.Spec.InternalTrafficPolicy == nil {
+		desired.Spec.InternalTrafficPolicy = existing.Spec.InternalTrafficPolicy
+	}
+	if desired.Spec.ExternalTrafficPolicy == "" {
+		desired.Spec.ExternalTrafficPolicy = existing.Spec.ExternalTrafficPolicy
+	}
+	if desired.Spec.SessionAffinity == "" {
+		desired.Spec.SessionAffinity = existing.Spec.SessionAffinity
+	}
+	if desired.Spec.HealthCheckNodePort == 0 {
+		desired.Spec.HealthCheckNodePort = existing.Spec.HealthCheckNodePort
+	}
+	if desired.Spec.AllocateLoadBalancerNodePorts == nil {
+		desired.Spec.AllocateLoadBalancerNodePorts = existing.Spec.AllocateLoadBalancerNodePorts
+	}
+
+	// Server-assigned NodePort values
 	for i := range desired.Spec.Ports {
 		if desired.Spec.Ports[i].NodePort == 0 {
 			for _, ep := range existing.Spec.Ports {
