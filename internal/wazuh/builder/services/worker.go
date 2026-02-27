@@ -179,6 +179,7 @@ func (b *WorkerServiceBuilder) Build() *corev1.Service {
 func (b *WorkerServiceBuilder) BuildHeadless() *corev1.Service {
 	b.headless = true
 	svc := b.Build()
+	svc.Name = b.name + "-headless"
 	// Headless services must be ClusterIP type with ClusterIP: None
 	svc.Spec.Type = corev1.ServiceTypeClusterIP
 	for i := range svc.Spec.Ports {
