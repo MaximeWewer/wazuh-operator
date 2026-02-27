@@ -232,6 +232,26 @@ func DefaultRulesetConfig() *RulesetConfig {
 	}
 }
 
+// IndexerConfig holds configuration for the <indexer> section
+type IndexerConfig struct {
+	Enabled    bool
+	Hosts      []string
+	CACertPath string
+	CertPath   string
+	KeyPath    string
+}
+
+// DefaultIndexerConfig returns an IndexerConfig with sensible defaults
+func DefaultIndexerConfig(indexerHost string) *IndexerConfig {
+	return &IndexerConfig{
+		Enabled:    true,
+		Hosts:      []string{fmt.Sprintf("https://%s:%d", indexerHost, constants.PortIndexerREST)},
+		CACertPath: constants.PathFilebeatCAFile,
+		CertPath:   constants.PathFilebeatCertFile,
+		KeyPath:    constants.PathFilebeatKeyFile,
+	}
+}
+
 // DefaultAuthConfig returns an AuthConfig with sensible defaults
 func DefaultAuthConfig() *AuthConfig {
 	return &AuthConfig{
@@ -297,6 +317,8 @@ type OSSECConfig struct {
 	Auth *AuthConfig
 	// RulesetConfig holds the <ruleset> section configuration
 	Ruleset *RulesetConfig
+	// IndexerConfig holds the <indexer> section configuration
+	Indexer *IndexerConfig
 	// AuthdPassword is the resolved password for authd (if UsePassword is true)
 	AuthdPassword string
 }
@@ -326,6 +348,7 @@ func DefaultOSSECConfig(clusterName, nodeName string) *OSSECConfig {
 		Remote:            DefaultRemoteConfig(),
 		Auth:              DefaultAuthConfig(),
 		Ruleset:           DefaultRulesetConfig(),
+		Indexer:           DefaultIndexerConfig(fmt.Sprintf("%s-indexer", clusterName)),
 		AuthdPassword:     "",
 	}
 }
@@ -509,6 +532,7 @@ func BuildMasterConfigWithConfig(clusterName, namespace, nodeName, clusterKey, e
 		Remote:            remote,
 		Auth:              auth,
 		Ruleset:           DefaultRulesetConfig(),
+		Indexer:           DefaultIndexerConfig(fmt.Sprintf("%s-indexer", clusterName)),
 		AuthdPassword:     authdPassword,
 	}
 	return NewOSSECConfigBuilder(config).Build()
@@ -548,6 +572,7 @@ func BuildWorkerConfigWithConfig(clusterName, namespace, nodeName, clusterKey st
 		Remote:            remote,
 		Auth:              auth,
 		Ruleset:           DefaultRulesetConfig(),
+		Indexer:           DefaultIndexerConfig(fmt.Sprintf("%s-indexer", clusterName)),
 		AuthdPassword:     authdPassword,
 	}
 	return NewOSSECConfigBuilder(config).Build()
@@ -630,6 +655,22 @@ const ossecConfTemplate = `<!--
     <protocol>{{ .Remote.Protocol }}</protocol>
     <queue_size>{{ .Remote.QueueSize }}</queue_size>
   </remote>
+
+  <indexer>
+    <enabled>{{ if .Indexer.Enabled }}yes{{ else }}no{{ end }}</enabled>
+    <hosts>
+{{- range .Indexer.Hosts }}
+      <host>{{ . }}</host>
+{{- end }}
+    </hosts>
+    <ssl>
+      <certificate_authorities>
+        <ca>{{ .Indexer.CACertPath }}</ca>
+      </certificate_authorities>
+      <certificate>{{ .Indexer.CertPath }}</certificate>
+      <key>{{ .Indexer.KeyPath }}</key>
+    </ssl>
+  </indexer>
 
   <ruleset>
 {{- range .Ruleset.DecoderDirs }}
