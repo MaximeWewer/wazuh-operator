@@ -701,8 +701,7 @@ func (r *WazuhClusterReconciler) checkAndUpdatePendingRollouts(ctx context.Conte
 
 	for _, rollout := range cluster.Status.CertificateRollouts.PendingRollouts {
 		if rollout.Ready {
-			// Already completed, keep it for history (could trim old ones later)
-			updatedRollouts = append(updatedRollouts, rollout)
+			// Already completed, drop from the list
 			continue
 		}
 
@@ -734,23 +733,20 @@ func (r *WazuhClusterReconciler) checkAndUpdatePendingRollouts(ctx context.Conte
 		}
 
 		if status.Ready {
-			// Rollout completed
-			rollout.Ready = true
+			// Rollout completed — log, record metrics, and drop from list
 			log.Info("Certificate rollout completed",
 				"component", rollout.Component,
 				"duration", status.Duration,
 				"reason", rollout.Reason)
-
-			// Record metrics
 			metrics.RecordCertificateRolloutWait(cluster.Name, cluster.Namespace, rollout.Component, status.Duration.Seconds())
-		} else {
-			hasPending = true
-			log.V(1).Info("Certificate rollout still in progress",
-				"component", rollout.Component,
-				"status", status.Message,
-				"duration", status.Duration)
+			continue
 		}
 
+		hasPending = true
+		log.V(1).Info("Certificate rollout still in progress",
+			"component", rollout.Component,
+			"status", status.Message,
+			"duration", status.Duration)
 		updatedRollouts = append(updatedRollouts, rollout)
 	}
 
