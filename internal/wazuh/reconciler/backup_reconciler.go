@@ -402,6 +402,9 @@ func (r *BackupReconciler) updateStatus(ctx context.Context, backup *wazuhv1.Waz
 		if err := r.Get(ctx, types.NamespacedName{Name: backup.Name, Namespace: backup.Namespace}, latest); err != nil {
 			return err
 		}
+		if apiequality.Semantic.DeepEqual(latest.Status, desiredStatus) {
+			return nil
+		}
 		latest.Status = desiredStatus
 		if err := r.Status().Update(ctx, latest); err != nil {
 			return err

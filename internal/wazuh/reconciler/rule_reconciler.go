@@ -24,6 +24,7 @@ import (
 	"sort"
 
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -251,7 +252,8 @@ func (r *RuleReconciler) reconcileConfigMap(ctx context.Context, rule *wazuhv1.W
 	return configMapName, nil
 }
 
-// setCondition sets a status condition on the rule
+// setCondition sets a status condition on the rule.
+// meta.SetStatusCondition preserves LastTransitionTime when status is unchanged.
 func (r *RuleReconciler) setCondition(rule *wazuhv1.WazuhRule, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&rule.Status.Conditions, metav1.Condition{
 		Type:               conditionType,
@@ -259,17 +261,20 @@ func (r *RuleReconciler) setCondition(rule *wazuhv1.WazuhRule, conditionType str
 		ObservedGeneration: rule.Generation,
 		Reason:             reason,
 		Message:            message,
-		LastTransitionTime: metav1.Now(),
 	})
 }
 
-// updateStatus updates the rule status with retry on conflict
+// updateStatus updates the rule status with retry on conflict.
+// Skips the write when the status is unchanged.
 func (r *RuleReconciler) updateStatus(ctx context.Context, rule *wazuhv1.WazuhRule) error {
 	desiredStatus := rule.Status
 	return utils.RetryOnConflict(ctx, func() error {
 		latest := &wazuhv1.WazuhRule{}
 		if err := r.Get(ctx, types.NamespacedName{Name: rule.Name, Namespace: rule.Namespace}, latest); err != nil {
 			return err
+		}
+		if apiequality.Semantic.DeepEqual(latest.Status, desiredStatus) {
+			return nil
 		}
 		latest.Status = desiredStatus
 		if err := r.Status().Update(ctx, latest); err != nil {

@@ -23,6 +23,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -370,22 +371,27 @@ func (r *FilebeatReconciler) setCondition(filebeat *wazuhv1.WazuhFilebeat, condi
 // updateStatus updates the WazuhFilebeat status with retry on conflict
 func (r *FilebeatReconciler) updateStatus(ctx context.Context, filebeat *wazuhv1.WazuhFilebeat, phase wazuhv1.FilebeatPhase, message string) error {
 	// Only update LastAppliedTime when transitioning to a new state
-	wasReady := filebeat.Status.Phase == phase &&
+	unchanged := filebeat.Status.Phase == phase &&
 		filebeat.Status.ObservedGeneration == filebeat.Generation &&
 		filebeat.Status.Message == message
+	if unchanged {
+		return nil
+	}
+
 	filebeat.Status.Phase = phase
 	filebeat.Status.Message = message
 	filebeat.Status.ObservedGeneration = filebeat.Generation
-	if !wasReady {
-		now := metav1.Now()
-		filebeat.Status.LastAppliedTime = &now
-	}
+	now := metav1.Now()
+	filebeat.Status.LastAppliedTime = &now
 
 	desiredStatus := filebeat.Status
 	return utils.RetryOnConflict(ctx, func() error {
 		latest := &wazuhv1.WazuhFilebeat{}
 		if err := r.Get(ctx, types.NamespacedName{Name: filebeat.Name, Namespace: filebeat.Namespace}, latest); err != nil {
 			return err
+		}
+		if apiequality.Semantic.DeepEqual(latest.Status, desiredStatus) {
+			return nil
 		}
 		latest.Status = desiredStatus
 		if err := r.Status().Update(ctx, latest); err != nil {

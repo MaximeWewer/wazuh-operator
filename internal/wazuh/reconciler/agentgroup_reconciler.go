@@ -24,6 +24,7 @@ import (
 	"sort"
 
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -339,7 +340,8 @@ func (r *AgentGroupReconciler) getWazuhAPICredentials(ctx context.Context, clust
 	return string(secret.Data[constants.SecretKeyAPIUsername]), string(secret.Data[constants.SecretKeyAPIPassword]), nil
 }
 
-// setCondition sets a status condition on the agent group
+// setCondition sets a status condition on the agent group.
+// meta.SetStatusCondition preserves LastTransitionTime when status is unchanged.
 func (r *AgentGroupReconciler) setCondition(group *wazuhv1.WazuhAgentGroup, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 		Type:               conditionType,
@@ -347,17 +349,20 @@ func (r *AgentGroupReconciler) setCondition(group *wazuhv1.WazuhAgentGroup, cond
 		ObservedGeneration: group.Generation,
 		Reason:             reason,
 		Message:            message,
-		LastTransitionTime: metav1.Now(),
 	})
 }
 
-// updateStatus updates the agent group status with retry on conflict
+// updateStatus updates the agent group status with retry on conflict.
+// Skips the write when the status is unchanged.
 func (r *AgentGroupReconciler) updateStatus(ctx context.Context, group *wazuhv1.WazuhAgentGroup) error {
 	desiredStatus := group.Status
 	return utils.RetryOnConflict(ctx, func() error {
 		latest := &wazuhv1.WazuhAgentGroup{}
 		if err := r.Get(ctx, types.NamespacedName{Name: group.Name, Namespace: group.Namespace}, latest); err != nil {
 			return err
+		}
+		if apiequality.Semantic.DeepEqual(latest.Status, desiredStatus) {
+			return nil
 		}
 		latest.Status = desiredStatus
 		if err := r.Status().Update(ctx, latest); err != nil {

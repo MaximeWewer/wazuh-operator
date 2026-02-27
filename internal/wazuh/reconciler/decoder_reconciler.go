@@ -24,6 +24,7 @@ import (
 	"sort"
 
 	corev1 "k8s.io/api/core/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -251,7 +252,8 @@ func (r *DecoderReconciler) reconcileConfigMap(ctx context.Context, decoder *waz
 	return configMapName, nil
 }
 
-// setCondition sets a status condition on the decoder
+// setCondition sets a status condition on the decoder.
+// meta.SetStatusCondition preserves LastTransitionTime when status is unchanged.
 func (r *DecoderReconciler) setCondition(decoder *wazuhv1.WazuhDecoder, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&decoder.Status.Conditions, metav1.Condition{
 		Type:               conditionType,
@@ -259,17 +261,20 @@ func (r *DecoderReconciler) setCondition(decoder *wazuhv1.WazuhDecoder, conditio
 		ObservedGeneration: decoder.Generation,
 		Reason:             reason,
 		Message:            message,
-		LastTransitionTime: metav1.Now(),
 	})
 }
 
-// updateStatus updates the decoder status
+// updateStatus updates the decoder status.
+// Skips the write when the status is unchanged.
 func (r *DecoderReconciler) updateStatus(ctx context.Context, decoder *wazuhv1.WazuhDecoder) error {
 	desiredStatus := decoder.Status
 	return utils.RetryOnConflict(ctx, func() error {
 		latest := &wazuhv1.WazuhDecoder{}
 		if err := r.Get(ctx, types.NamespacedName{Name: decoder.Name, Namespace: decoder.Namespace}, latest); err != nil {
 			return err
+		}
+		if apiequality.Semantic.DeepEqual(latest.Status, desiredStatus) {
+			return nil
 		}
 		latest.Status = desiredStatus
 		if err := r.Status().Update(ctx, latest); err != nil {

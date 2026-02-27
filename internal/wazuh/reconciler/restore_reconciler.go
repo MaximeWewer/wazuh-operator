@@ -24,6 +24,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -402,6 +403,9 @@ func (r *WazuhRestoreReconciler) updateStatus(ctx context.Context, restore *wazu
 		latest := &wazuhv1.WazuhRestore{}
 		if err := r.Get(ctx, types.NamespacedName{Name: restore.Name, Namespace: restore.Namespace}, latest); err != nil {
 			return err
+		}
+		if apiequality.Semantic.DeepEqual(latest.Status, desiredStatus) {
+			return nil
 		}
 		latest.Status = desiredStatus
 		if err := r.Status().Update(ctx, latest); err != nil {
