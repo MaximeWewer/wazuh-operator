@@ -33,6 +33,8 @@ import (
 	meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	retry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -119,27 +121,33 @@ func (r *WazuhCertificateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 // updateCertificateStatus updates the WazuhCertificate status subresource
 func (r *WazuhCertificateReconciler) updateCertificateStatus(ctx context.Context, cert *wazuhv1.WazuhCertificate, phase wazuhv1.CertificatePhase, message string) error {
-	cert.Status.Phase = phase
-	cert.Status.ObservedGeneration = cert.Generation
-	cert.Status.SecretRef = &corev1.LocalObjectReference{Name: cert.Spec.SecretName}
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.WazuhCertificate{}
+		if err := r.Get(ctx, types.NamespacedName{Name: cert.Name, Namespace: cert.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status.Phase = phase
+		latest.Status.ObservedGeneration = latest.Generation
+		latest.Status.SecretRef = &corev1.LocalObjectReference{Name: cert.Spec.SecretName}
 
-	readyCond := metav1.Condition{
-		Type:               wazuhv1.CertificateConditionReady,
-		ObservedGeneration: cert.Generation,
-		LastTransitionTime: metav1.Now(),
-	}
-	if phase == wazuhv1.CertificatePhaseReady {
-		readyCond.Status = metav1.ConditionTrue
-		readyCond.Reason = "ReconcileSuccess"
-		readyCond.Message = "Certificate reconciled successfully"
-	} else {
-		readyCond.Status = metav1.ConditionFalse
-		readyCond.Reason = "ReconcileFailed"
-		readyCond.Message = message
-	}
-	meta.SetStatusCondition(&cert.Status.Conditions, readyCond)
+		readyCond := metav1.Condition{
+			Type:               wazuhv1.CertificateConditionReady,
+			ObservedGeneration: latest.Generation,
+			LastTransitionTime: metav1.Now(),
+		}
+		if phase == wazuhv1.CertificatePhaseReady {
+			readyCond.Status = metav1.ConditionTrue
+			readyCond.Reason = "ReconcileSuccess"
+			readyCond.Message = "Certificate reconciled successfully"
+		} else {
+			readyCond.Status = metav1.ConditionFalse
+			readyCond.Reason = "ReconcileFailed"
+			readyCond.Message = message
+		}
+		meta.SetStatusCondition(&latest.Status.Conditions, readyCond)
 
-	return r.Status().Update(ctx, cert)
+		return r.Status().Update(ctx, latest)
+	})
 }
 
 // SetupWithManager sets up the controller with the Manager

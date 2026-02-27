@@ -224,9 +224,19 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Update phase if pending
 	if cluster.Status.Phase == "" || cluster.Status.Phase == wazuhv1.ClusterPhasePending {
-		cluster.Status.Phase = wazuhv1.ClusterPhaseCreating
-		cluster.Status.Version = cluster.Spec.Version
-		if err := r.Status().Update(ctx, cluster); err != nil {
+		if err := utils.RetryOnConflict(ctx, func() error {
+			latest := &wazuhv1.WazuhCluster{}
+			if err := r.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, latest); err != nil {
+				return err
+			}
+			latest.Status.Phase = wazuhv1.ClusterPhaseCreating
+			latest.Status.Version = cluster.Spec.Version
+			if err := r.Status().Update(ctx, latest); err != nil {
+				return err
+			}
+			cluster.Status = latest.Status
+			return nil
+		}); err != nil {
 			log.Error(err, "Failed to update WazuhCluster status to Creating")
 			return ctrl.Result{}, err
 		}
