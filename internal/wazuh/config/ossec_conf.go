@@ -215,6 +215,23 @@ type SecretKeyReference struct {
 	Key string
 }
 
+// RulesetConfig holds configuration for the <ruleset> section
+type RulesetConfig struct {
+	RuleDirs        []string
+	DecoderDirs     []string
+	RuleExcludes    []string
+	DecoderExcludes []string
+	Lists           []string
+}
+
+// DefaultRulesetConfig returns a RulesetConfig with sensible defaults
+func DefaultRulesetConfig() *RulesetConfig {
+	return &RulesetConfig{
+		RuleDirs:    []string{"ruleset/rules", "etc/rules"},
+		DecoderDirs: []string{"ruleset/decoders", "etc/decoders"},
+	}
+}
+
 // DefaultAuthConfig returns an AuthConfig with sensible defaults
 func DefaultAuthConfig() *AuthConfig {
 	return &AuthConfig{
@@ -278,6 +295,8 @@ type OSSECConfig struct {
 	Remote *RemoteConfig
 	// AuthConfig holds the <auth> section configuration
 	Auth *AuthConfig
+	// RulesetConfig holds the <ruleset> section configuration
+	Ruleset *RulesetConfig
 	// AuthdPassword is the resolved password for authd (if UsePassword is true)
 	AuthdPassword string
 }
@@ -306,6 +325,7 @@ func DefaultOSSECConfig(clusterName, nodeName string) *OSSECConfig {
 		Logging:           DefaultLoggingConfig(),
 		Remote:            DefaultRemoteConfig(),
 		Auth:              DefaultAuthConfig(),
+		Ruleset:           DefaultRulesetConfig(),
 		AuthdPassword:     "",
 	}
 }
@@ -444,6 +464,14 @@ func (b *OSSECConfigBuilder) SetAuthConfig(auth *AuthConfig) *OSSECConfigBuilder
 	return b
 }
 
+// SetRulesetConfig sets the ruleset configuration
+func (b *OSSECConfigBuilder) SetRulesetConfig(ruleset *RulesetConfig) *OSSECConfigBuilder {
+	if ruleset != nil {
+		b.config.Ruleset = ruleset
+	}
+	return b
+}
+
 // SetAuthdPassword sets the resolved authd password
 func (b *OSSECConfigBuilder) SetAuthdPassword(password string) *OSSECConfigBuilder {
 	b.config.AuthdPassword = password
@@ -480,6 +508,7 @@ func BuildMasterConfigWithConfig(clusterName, namespace, nodeName, clusterKey, e
 		Logging:           logging,
 		Remote:            remote,
 		Auth:              auth,
+		Ruleset:           DefaultRulesetConfig(),
 		AuthdPassword:     authdPassword,
 	}
 	return NewOSSECConfigBuilder(config).Build()
@@ -518,6 +547,7 @@ func BuildWorkerConfigWithConfig(clusterName, namespace, nodeName, clusterKey st
 		Logging:           logging,
 		Remote:            remote,
 		Auth:              auth,
+		Ruleset:           DefaultRulesetConfig(),
 		AuthdPassword:     authdPassword,
 	}
 	return NewOSSECConfigBuilder(config).Build()
@@ -600,6 +630,24 @@ const ossecConfTemplate = `<!--
     <protocol>{{ .Remote.Protocol }}</protocol>
     <queue_size>{{ .Remote.QueueSize }}</queue_size>
   </remote>
+
+  <ruleset>
+{{- range .Ruleset.DecoderDirs }}
+    <decoder_dir>{{ . }}</decoder_dir>
+{{- end }}
+{{- range .Ruleset.RuleDirs }}
+    <rule_dir>{{ . }}</rule_dir>
+{{- end }}
+{{- range .Ruleset.RuleExcludes }}
+    <rule_exclude>{{ . }}</rule_exclude>
+{{- end }}
+{{- range .Ruleset.DecoderExcludes }}
+    <decoder_exclude>{{ . }}</decoder_exclude>
+{{- end }}
+{{- range .Ruleset.Lists }}
+    <list>{{ . }}</list>
+{{- end }}
+  </ruleset>
 
 {{- /* Auth section: enabled based on EnabledOnMasterOnly flag and node type */ -}}
 {{- $authDisabled := .Auth.Disabled -}}
@@ -870,15 +918,51 @@ func AuthConfigFromSpec(spec *v1.OSSECAuthSpec) *AuthConfig {
 	return config
 }
 
+// RulesetConfigFromSpec converts OSSECRulesetSpec to RulesetConfig
+// Returns default config if spec is nil
+func RulesetConfigFromSpec(spec *v1.OSSECRulesetSpec) *RulesetConfig {
+	defaults := DefaultRulesetConfig()
+	if spec == nil {
+		return defaults
+	}
+
+	config := &RulesetConfig{
+		RuleDirs:        defaults.RuleDirs,
+		DecoderDirs:     defaults.DecoderDirs,
+		RuleExcludes:    defaults.RuleExcludes,
+		DecoderExcludes: defaults.DecoderExcludes,
+		Lists:           defaults.Lists,
+	}
+
+	if len(spec.RuleDirs) > 0 {
+		config.RuleDirs = spec.RuleDirs
+	}
+	if len(spec.DecoderDirs) > 0 {
+		config.DecoderDirs = spec.DecoderDirs
+	}
+	if len(spec.RuleExcludes) > 0 {
+		config.RuleExcludes = spec.RuleExcludes
+	}
+	if len(spec.DecoderExcludes) > 0 {
+		config.DecoderExcludes = spec.DecoderExcludes
+	}
+	if len(spec.Lists) > 0 {
+		config.Lists = spec.Lists
+	}
+
+	return config
+}
+
 // WazuhConfigFromSpec converts WazuhConfigSpec to all config structs
 // This is a convenience function that converts all config sections at once
-func WazuhConfigFromSpec(spec *v1.WazuhConfigSpec) (global *GlobalConfig, alerts *AlertsConfig, logging *LoggingConfig, remote *RemoteConfig, auth *AuthConfig) {
+func WazuhConfigFromSpec(spec *v1.WazuhConfigSpec) (global *GlobalConfig, alerts *AlertsConfig, logging *LoggingConfig, remote *RemoteConfig, auth *AuthConfig, ruleset *RulesetConfig) {
 	if spec == nil {
-		return DefaultGlobalConfig(), DefaultAlertsConfig(), DefaultLoggingConfig(), DefaultRemoteConfig(), DefaultAuthConfig()
+		return DefaultGlobalConfig(), DefaultAlertsConfig(), DefaultLoggingConfig(), DefaultRemoteConfig(), DefaultAuthConfig(), DefaultRulesetConfig()
 	}
 	return GlobalConfigFromSpec(spec.Global),
 		AlertsConfigFromSpec(spec.Alerts),
 		LoggingConfigFromSpec(spec.Logging),
 		RemoteConfigFromSpec(spec.Remote),
-		AuthConfigFromSpec(spec.Auth)
+		AuthConfigFromSpec(spec.Auth),
+		RulesetConfigFromSpec(spec.Ruleset)
 }

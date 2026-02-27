@@ -197,6 +197,11 @@ kubectl delete -f <(helm template my-wazuh-cluster ./charts/wazuh-cluster --name
 | cluster.spec.manager.config.remote.port | int | `1514` | Remote listening port |
 | cluster.spec.manager.config.remote.protocol | string | `"tcp"` | Protocol: "tcp" or "udp" |
 | cluster.spec.manager.config.remote.queueSize | int | `131072` | Message queue size |
+| cluster.spec.manager.config.ruleset.decoderDirs | list | `["ruleset/decoders","etc/decoders"]` | Directories to load decoders from |
+| cluster.spec.manager.config.ruleset.decoderExcludes | list | `[]` | Decoder files to exclude from loading |
+| cluster.spec.manager.config.ruleset.lists | list | `[]` | CDB list files to load (without extension) |
+| cluster.spec.manager.config.ruleset.ruleDirs | list | `["ruleset/rules","etc/rules"]` | Directories to load rules from |
+| cluster.spec.manager.config.ruleset.ruleExcludes | list | `[]` | Rule files to exclude from loading |
 | cluster.spec.manager.filebeatSSLVerificationMode | string | `"full"` | Filebeat SSL verification mode: full, none, certificate |
 | cluster.spec.manager.image.pullPolicy | string | `""` | Manager image pull policy |
 | cluster.spec.manager.image.repository | string | `""` | Manager image repository (leave empty for operator default) |

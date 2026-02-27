@@ -2306,13 +2306,13 @@ func (r *ClusterReconciler) resolveSecretKey(ctx context.Context, namespace, sec
 
 // resolveManagerConfig resolves effective manager config from spec, including
 // backwards-compatible authd secret resolution.
-func (r *ClusterReconciler) resolveManagerConfig(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*config.GlobalConfig, *config.AlertsConfig, *config.LoggingConfig, *config.RemoteConfig, *config.AuthConfig, string, error) {
+func (r *ClusterReconciler) resolveManagerConfig(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*config.GlobalConfig, *config.AlertsConfig, *config.LoggingConfig, *config.RemoteConfig, *config.AuthConfig, *config.RulesetConfig, string, error) {
 	var spec *wazuhv1.WazuhConfigSpec
 	if cluster.Spec.Manager != nil {
 		spec = cluster.Spec.Manager.Config
 	}
 
-	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg := config.WazuhConfigFromSpec(spec)
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, rulesetCfg := config.WazuhConfigFromSpec(spec)
 	if authCfg == nil {
 		authCfg = config.DefaultAuthConfig()
 	}
@@ -2331,12 +2331,12 @@ func (r *ClusterReconciler) resolveManagerConfig(ctx context.Context, cluster *w
 	}
 
 	authdPassword := r.resolveAuthdPassword(ctx, cluster, authCfg)
-	return globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, nil
+	return globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, rulesetCfg, authdPassword, nil
 }
 
 // buildMasterOSSECConfig builds ossec.conf for manager master, honoring manager.config and authd secret refs.
 func (r *ClusterReconciler) buildMasterOSSECConfig(ctx context.Context, cluster *wazuhv1.WazuhCluster, extraConfig string) (string, error) {
-	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, err := r.resolveManagerConfig(ctx, cluster)
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, rulesetCfg, authdPassword, err := r.resolveManagerConfig(ctx, cluster)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve manager config: %w", err)
 	}
@@ -2349,6 +2349,7 @@ func (r *ClusterReconciler) buildMasterOSSECConfig(ctx context.Context, cluster 
 	ossecConfig.Logging = loggingCfg
 	ossecConfig.Remote = remoteCfg
 	ossecConfig.Auth = authCfg
+	ossecConfig.Ruleset = rulesetCfg
 	ossecConfig.AuthdPassword = authdPassword
 
 	return config.NewOSSECConfigBuilder(ossecConfig).Build()
@@ -2356,7 +2357,7 @@ func (r *ClusterReconciler) buildMasterOSSECConfig(ctx context.Context, cluster 
 
 // buildWorkerOSSECConfig builds ossec.conf for manager workers, honoring manager.config and authd secret refs.
 func (r *ClusterReconciler) buildWorkerOSSECConfig(ctx context.Context, cluster *wazuhv1.WazuhCluster, extraConfig string) (string, error) {
-	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, err := r.resolveManagerConfig(ctx, cluster)
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, rulesetCfg, authdPassword, err := r.resolveManagerConfig(ctx, cluster)
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve manager config: %w", err)
 	}
@@ -2372,6 +2373,7 @@ func (r *ClusterReconciler) buildWorkerOSSECConfig(ctx context.Context, cluster 
 	ossecConfig.Logging = loggingCfg
 	ossecConfig.Remote = remoteCfg
 	ossecConfig.Auth = authCfg
+	ossecConfig.Ruleset = rulesetCfg
 	ossecConfig.AuthdPassword = authdPassword
 
 	return config.NewOSSECConfigBuilder(ossecConfig).Build()
@@ -2412,7 +2414,7 @@ func (r *ClusterReconciler) authdPasswordSecretRef(cluster *wazuhv1.WazuhCluster
 		return "", "", false
 	}
 
-	_, _, _, _, authCfg := config.WazuhConfigFromSpec(cluster.Spec.Manager.Config)
+	_, _, _, _, authCfg, _ := config.WazuhConfigFromSpec(cluster.Spec.Manager.Config)
 	if authCfg == nil {
 		authCfg = config.DefaultAuthConfig()
 	}

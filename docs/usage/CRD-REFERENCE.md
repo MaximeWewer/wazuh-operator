@@ -191,11 +191,12 @@ Configuration for safe scale-down operations. See [Drain Strategy](features/drai
 
 | Field                  | Type                                  | Required | Default | Description                 |
 | ---------------------- | ------------------------------------- | -------- | ------- | --------------------------- |
-| `global`               | [OSSECGlobalSpec](#ossecglobalspec)   | No       | -       | Global section              |
-| `alerts`               | [OSSECAlertsSpec](#ossecalertsspec)   | No       | -       | Alerts section              |
-| `logging`              | [OSSECLoggingSpec](#ossecloggingspec) | No       | -       | Logging section             |
-| `remote`               | [OSSECRemoteSpec](#ossecremotespec)   | No       | -       | Remote section              |
-| `auth`                 | [OSSECAuthSpec](#ossecauthspec)       | No       | -       | Auth section                |
+| `global`               | [OSSECGlobalSpec](#ossecglobalspec)       | No       | -       | Global section              |
+| `alerts`               | [OSSECAlertsSpec](#ossecalertsspec)       | No       | -       | Alerts section              |
+| `logging`              | [OSSECLoggingSpec](#ossecloggingspec)     | No       | -       | Logging section             |
+| `remote`               | [OSSECRemoteSpec](#ossecremotespec)       | No       | -       | Remote section              |
+| `auth`                 | [OSSECAuthSpec](#ossecauthspec)           | No       | -       | Auth section                |
+| `ruleset`              | [OSSECRulesetSpec](#ossecrulesetspec)     | No       | -       | Ruleset section             |
 
 ### OSSECGlobalSpec
 
@@ -259,6 +260,18 @@ Controls agent replacement when duplicate names or IP addresses are detected. Al
 | `disconnectedTimeEnabled` | bool   | No       | `true`  | Toggle the disconnected time condition                                      |
 | `afterRegistrationTime`   | string | No       | `1h`    | Min time since registration before replacement (e.g. `0`, `30m`, `1h`)     |
 | `keyMismatch`             | bool   | No       | `true`  | Replace when agent key differs from registered key                          |
+
+### OSSECRulesetSpec
+
+Configures the `<ruleset>` section of `ossec.conf`, which tells Wazuh where to load rules, decoders, and CDB lists from. Default directories include both built-in (`ruleset/`) and custom (`etc/`) paths.
+
+| Field             | Type     | Required | Default                              | Description                                        |
+| ----------------- | -------- | -------- | ------------------------------------ | -------------------------------------------------- |
+| `ruleDirs`        | []string | No       | `["ruleset/rules", "etc/rules"]`     | Directories to load rules from                     |
+| `decoderDirs`     | []string | No       | `["ruleset/decoders", "etc/decoders"]` | Directories to load decoders from                |
+| `ruleExcludes`    | []string | No       | `[]`                                 | Rule files to exclude from loading                 |
+| `decoderExcludes` | []string | No       | `[]`                                 | Decoder files to exclude from loading              |
+| `lists`           | []string | No       | `[]`                                 | CDB list files to load (without `.cdb` extension)  |
 
 ### MasterSpec
 

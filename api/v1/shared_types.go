@@ -715,6 +715,10 @@ type WazuhConfigSpec struct {
 	// Auth section configuration for wazuh-authd
 	// +optional
 	Auth *OSSECAuthSpec `json:"auth,omitempty"`
+
+	// Ruleset section configuration for ossec.conf
+	// +optional
+	Ruleset *OSSECRulesetSpec `json:"ruleset,omitempty"`
 }
 
 // OSSECGlobalSpec defines the <global> section configuration
@@ -928,6 +932,29 @@ type OSSECAuthForceSpec struct {
 	// +optional
 	// +kubebuilder:default=true
 	KeyMismatch *bool `json:"keyMismatch,omitempty"`
+}
+
+// OSSECRulesetSpec defines the <ruleset> section configuration
+type OSSECRulesetSpec struct {
+	// RuleDirs specifies directories to load rules from
+	// +optional
+	RuleDirs []string `json:"ruleDirs,omitempty"`
+
+	// DecoderDirs specifies directories to load decoders from
+	// +optional
+	DecoderDirs []string `json:"decoderDirs,omitempty"`
+
+	// RuleExcludes specifies rule files to exclude from loading
+	// +optional
+	RuleExcludes []string `json:"ruleExcludes,omitempty"`
+
+	// DecoderExcludes specifies decoder files to exclude from loading
+	// +optional
+	DecoderExcludes []string `json:"decoderExcludes,omitempty"`
+
+	// Lists specifies CDB list files to load (without extension)
+	// +optional
+	Lists []string `json:"lists,omitempty"`
 }
 
 // ============================================================================

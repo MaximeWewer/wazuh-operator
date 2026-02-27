@@ -59,7 +59,7 @@ func TestResolveManagerConfig_PropagatesGlobalConfig(t *testing.T) {
 
 	reconciler := NewClusterReconciler(client, scheme)
 
-	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, err := reconciler.resolveManagerConfig(context.Background(), cluster)
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, _, authdPassword, err := reconciler.resolveManagerConfig(context.Background(), cluster)
 	if err != nil {
 		t.Fatalf("resolveManagerConfig failed: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestResolveManagerConfig_BackwardCompat_NilManager(t *testing.T) {
 
 	reconciler := NewClusterReconciler(client, scheme)
 
-	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, err := reconciler.resolveManagerConfig(context.Background(), cluster)
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, _, authdPassword, err := reconciler.resolveManagerConfig(context.Background(), cluster)
 	if err != nil {
 		t.Fatalf("resolveManagerConfig failed: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestResolveManagerConfig_BackwardCompat_NilManagerConfig(t *testing.T) {
 
 	reconciler := NewClusterReconciler(client, scheme)
 
-	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, authdPassword, err := reconciler.resolveManagerConfig(context.Background(), cluster)
+	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, _, authdPassword, err := reconciler.resolveManagerConfig(context.Background(), cluster)
 	if err != nil {
 		t.Fatalf("resolveManagerConfig failed: %v", err)
 	}

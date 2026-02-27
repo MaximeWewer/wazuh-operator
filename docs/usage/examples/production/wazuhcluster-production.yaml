@@ -61,6 +61,14 @@ spec:
         ciphers: "HIGH:!ADH:!EXP:!MD5:!RC4:!3DES:!CAMELLIA:@STRENGTH"
         sslVerifyHost: true
 
+      ruleset:
+        decoderDirs:
+          - "ruleset/decoders"
+          - "etc/decoders"
+        ruleDirs:
+          - "ruleset/rules"
+          - "etc/rules"
+
     master:
       storageSize: "100Gi"
       resources:

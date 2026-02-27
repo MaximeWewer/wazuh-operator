@@ -22580,6 +22580,40 @@ spec:
                             description: QueueSize for the queue
                             type: integer
                         type: object
+                      ruleset:
+                        description: Ruleset section configuration for ossec.conf
+                        properties:
+                          decoderDirs:
+                            description: DecoderDirs specifies directories to load
+                              decoders from
+                            items:
+                              type: string
+                            type: array
+                          decoderExcludes:
+                            description: DecoderExcludes specifies decoder files to
+                              exclude from loading
+                            items:
+                              type: string
+                            type: array
+                          lists:
+                            description: Lists specifies CDB list files to load (without
+                              extension)
+                            items:
+                              type: string
+                            type: array
+                          ruleDirs:
+                            description: RuleDirs specifies directories to load rules
+                              from
+                            items:
+                              type: string
+                            type: array
+                          ruleExcludes:
+                            description: RuleExcludes specifies rule files to exclude
+                              from loading
+                            items:
+                              type: string
+                            type: array
+                        type: object
                     type: object
                   filebeatSSLVerificationMode:
                     default: full

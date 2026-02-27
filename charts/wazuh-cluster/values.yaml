@@ -390,6 +390,23 @@ cluster:
           # -- Only allow registration on master node
           enabledOnMasterOnly: true
 
+        # @extra cluster.spec.manager.config.ruleset Ruleset configuration (rules and decoders)
+        ruleset:
+          # -- Directories to load rules from
+          ruleDirs:
+            - "ruleset/rules"
+            - "etc/rules"
+          # -- Directories to load decoders from
+          decoderDirs:
+            - "ruleset/decoders"
+            - "etc/decoders"
+          # -- Rule files to exclude from loading
+          ruleExcludes: []
+          # -- Decoder files to exclude from loading
+          decoderExcludes: []
+          # -- CDB list files to load (without extension)
+          lists: []
+
       # -- Filebeat SSL verification mode: full, none, certificate
       filebeatSSLVerificationMode: "full"
 

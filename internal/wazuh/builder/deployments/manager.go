@@ -504,6 +504,16 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	// Build init containers
 	initContainers := []corev1.Container{
 		b.buildInitContainer(),
+		{
+			Name:  "fix-ownership",
+			Image: image,
+			Command: []string{
+				"/bin/bash",
+				"-c",
+				"chown -R 999:999 /var/ossec",
+			},
+			VolumeMounts: b.buildVolumeMounts(),
+		},
 	}
 
 	// Append extra init containers
@@ -843,6 +853,11 @@ func (b *ManagerStatefulSetBuilder) buildInitContainerVolumeMounts() []corev1.Vo
 			MountPath: constants.PathWazuhConfig,
 			SubPath:   constants.SubPathWazuhEtc,
 		},
+		// Full PVC volume (no subpath) for chown -R to fix ownership of all PVC data
+		{
+			Name:      constants.VolumeNameWazuhData,
+			MountPath: "/wazuh-data",
+		},
 	}
 }
 
@@ -891,7 +906,12 @@ if [ -f /config-source/local_internal_options.conf ]; then
 fi
 echo "Configuration copy complete"
 ls -la /wazuh-config-mount/etc/ 2>/dev/null || true
-ls -la /etc/filebeat/ 2>/dev/null || true`,
+ls -la /etc/filebeat/ 2>/dev/null || true
+# Fix ownership of all PVC-backed data and emptyDir config
+echo "Fixing ownership to wazuh (999:999)..."
+chown -R 999:999 /wazuh-data
+chown -R 999:999 /wazuh-config-mount
+echo "Ownership fix complete"`,
 		},
 		VolumeMounts: b.buildInitContainerVolumeMounts(),
 	}
