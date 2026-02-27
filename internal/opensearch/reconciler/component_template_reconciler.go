@@ -24,6 +24,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	retry "k8s.io/client-go/util/retry"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -185,7 +187,7 @@ func (r *ComponentTemplateReconciler) buildComponentTemplate(template *wazuhv1.O
 	return componentTemplate
 }
 
-// updateStatus updates the template status
+// updateStatus updates the template status with retry on conflict
 func (r *ComponentTemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1.OpenSearchComponentTemplate, phase wazuhv1.OpenSearchResourcePhase, message string) error {
 	template.Status.Phase = phase
 	template.Status.Message = message
@@ -194,7 +196,19 @@ func (r *ComponentTemplateReconciler) updateStatus(ctx context.Context, template
 
 	metrics.SetResourceSyncStatus("OpenSearchComponentTemplate", template.Namespace, template.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
-	return r.Status().Update(ctx, template)
+	desiredStatus := template.Status
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchComponentTemplate{}
+		if err := r.Get(ctx, types.NamespacedName{Name: template.Name, Namespace: template.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status = desiredStatus
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		template.Status = latest.Status
+		return nil
+	})
 }
 
 // handleDeletion handles component template cleanup on deletion

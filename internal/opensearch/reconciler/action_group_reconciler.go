@@ -24,6 +24,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	retry "k8s.io/client-go/util/retry"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -176,7 +178,7 @@ func (r *ActionGroupReconciler) buildActionGroup(ag *wazuhv1.OpenSearchActionGro
 	}
 }
 
-// updateStatus updates the action group status
+// updateStatus updates the action group status with retry on conflict
 func (r *ActionGroupReconciler) updateStatus(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup, phase wazuhv1.OpenSearchResourcePhase, message string) error {
 	ag.Status.Phase = phase
 	ag.Status.Message = message
@@ -185,7 +187,19 @@ func (r *ActionGroupReconciler) updateStatus(ctx context.Context, ag *wazuhv1.Op
 
 	metrics.SetResourceSyncStatus("OpenSearchActionGroup", ag.Namespace, ag.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
-	return r.Status().Update(ctx, ag)
+	desiredStatus := ag.Status
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchActionGroup{}
+		if err := r.Get(ctx, types.NamespacedName{Name: ag.Name, Namespace: ag.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status = desiredStatus
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		ag.Status = latest.Status
+		return nil
+	})
 }
 
 // handleDeletion handles action group cleanup on deletion

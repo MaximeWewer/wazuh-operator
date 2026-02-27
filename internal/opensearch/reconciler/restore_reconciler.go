@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	retry "k8s.io/client-go/util/retry"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -316,7 +318,19 @@ func (r *RestoreReconciler) updateStatus(ctx context.Context, restore *wazuhv1.O
 		ObservedGeneration: restore.Generation,
 	})
 
-	return r.Status().Update(ctx, restore)
+	desiredStatus := restore.Status
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchRestore{}
+		if err := r.Get(ctx, types.NamespacedName{Name: restore.Name, Namespace: restore.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status = desiredStatus
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		restore.Status = latest.Status
+		return nil
+	})
 }
 
 // Delete handles cleanup when a restore CRD is deleted (called by controller)

@@ -24,6 +24,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	retry "k8s.io/client-go/util/retry"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -233,7 +235,7 @@ func (r *PolicyReconciler) buildISMPolicy(policy *wazuhv1.OpenSearchISMPolicy) a
 	return ismPolicy
 }
 
-// updateStatus updates the policy status
+// updateStatus updates the policy status with retry on conflict
 func (r *PolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.OpenSearchISMPolicy, phase wazuhv1.OpenSearchResourcePhase, message string) error {
 	policy.Status.Phase = phase
 	policy.Status.Message = message
@@ -242,7 +244,19 @@ func (r *PolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.Ope
 
 	metrics.SetResourceSyncStatus("OpenSearchISMPolicy", policy.Namespace, policy.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
-	return r.Status().Update(ctx, policy)
+	desiredStatus := policy.Status
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchISMPolicy{}
+		if err := r.Get(ctx, types.NamespacedName{Name: policy.Name, Namespace: policy.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status = desiredStatus
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		policy.Status = latest.Status
+		return nil
+	})
 }
 
 // handleDeletion handles ISM policy cleanup on deletion

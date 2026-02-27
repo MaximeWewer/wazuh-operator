@@ -40,6 +40,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
+	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
@@ -346,9 +347,21 @@ func (r *AgentGroupReconciler) setCondition(group *wazuhv1.WazuhAgentGroup, cond
 	})
 }
 
-// updateStatus updates the agent group status
+// updateStatus updates the agent group status with retry on conflict
 func (r *AgentGroupReconciler) updateStatus(ctx context.Context, group *wazuhv1.WazuhAgentGroup) error {
-	return r.Status().Update(ctx, group)
+	desiredStatus := group.Status
+	return utils.RetryOnConflict(ctx, func() error {
+		latest := &wazuhv1.WazuhAgentGroup{}
+		if err := r.Get(ctx, types.NamespacedName{Name: group.Name, Namespace: group.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status = desiredStatus
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		group.Status = latest.Status
+		return nil
+	})
 }
 
 // computeSpecHash computes a hash of the spec for drift detection

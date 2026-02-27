@@ -39,6 +39,7 @@ import (
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
+	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/validation"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -259,9 +260,21 @@ func (r *RuleReconciler) setCondition(rule *wazuhv1.WazuhRule, conditionType str
 	})
 }
 
-// updateStatus updates the rule status
+// updateStatus updates the rule status with retry on conflict
 func (r *RuleReconciler) updateStatus(ctx context.Context, rule *wazuhv1.WazuhRule) error {
-	return r.Status().Update(ctx, rule)
+	desiredStatus := rule.Status
+	return utils.RetryOnConflict(ctx, func() error {
+		latest := &wazuhv1.WazuhRule{}
+		if err := r.Get(ctx, types.NamespacedName{Name: rule.Name, Namespace: rule.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status = desiredStatus
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		rule.Status = latest.Status
+		return nil
+	})
 }
 
 // determineAppliedNodes determines which manager nodes the rule applies to

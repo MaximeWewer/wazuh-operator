@@ -26,6 +26,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	retry "k8s.io/client-go/util/retry"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -304,7 +306,19 @@ func (r *ManualSnapshotReconciler) updateStatus(ctx context.Context, snapshot *w
 		ObservedGeneration: snapshot.Generation,
 	})
 
-	return r.Status().Update(ctx, snapshot)
+	desiredStatus := snapshot.Status
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchSnapshot{}
+		if err := r.Get(ctx, types.NamespacedName{Name: snapshot.Name, Namespace: snapshot.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status = desiredStatus
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		snapshot.Status = latest.Status
+		return nil
+	})
 }
 
 // formatBytes formats bytes into human-readable string

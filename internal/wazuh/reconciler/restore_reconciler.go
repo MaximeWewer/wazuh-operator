@@ -38,6 +38,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
+	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/jobs"
 )
 
@@ -365,7 +366,7 @@ func (r *WazuhRestoreReconciler) handleDeletion(ctx context.Context, restore *wa
 	return nil
 }
 
-// updateStatus updates the WazuhRestore status
+// updateStatus updates the WazuhRestore status with retry on conflict
 func (r *WazuhRestoreReconciler) updateStatus(ctx context.Context, restore *wazuhv1.WazuhRestore, phase wazuhv1.WazuhRestorePhase, message string) error {
 	restore.Status.Phase = phase
 	restore.Status.Message = message
@@ -390,7 +391,19 @@ func (r *WazuhRestoreReconciler) updateStatus(ctx context.Context, restore *wazu
 		ObservedGeneration: restore.Generation,
 	})
 
-	return r.Status().Update(ctx, restore)
+	desiredStatus := restore.Status
+	return utils.RetryOnConflict(ctx, func() error {
+		latest := &wazuhv1.WazuhRestore{}
+		if err := r.Get(ctx, types.NamespacedName{Name: restore.Name, Namespace: restore.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status = desiredStatus
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		restore.Status = latest.Status
+		return nil
+	})
 }
 
 // Delete handles cleanup when a WazuhRestore CRD is deleted (called by controller)

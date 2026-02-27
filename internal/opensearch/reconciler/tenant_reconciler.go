@@ -24,6 +24,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	retry "k8s.io/client-go/util/retry"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -174,7 +176,7 @@ func (r *TenantReconciler) buildTenant(tenant *wazuhv1.OpenSearchTenant) api.Ten
 	}
 }
 
-// updateStatus updates the tenant status
+// updateStatus updates the tenant status with retry on conflict
 func (r *TenantReconciler) updateStatus(ctx context.Context, tenant *wazuhv1.OpenSearchTenant, phase wazuhv1.OpenSearchResourcePhase, message string) error {
 	tenant.Status.Phase = phase
 	tenant.Status.Message = message
@@ -183,7 +185,19 @@ func (r *TenantReconciler) updateStatus(ctx context.Context, tenant *wazuhv1.Ope
 
 	metrics.SetResourceSyncStatus("OpenSearchTenant", tenant.Namespace, tenant.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
-	return r.Status().Update(ctx, tenant)
+	desiredStatus := tenant.Status
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchTenant{}
+		if err := r.Get(ctx, types.NamespacedName{Name: tenant.Name, Namespace: tenant.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status = desiredStatus
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		tenant.Status = latest.Status
+		return nil
+	})
 }
 
 // handleDeletion handles tenant cleanup on deletion

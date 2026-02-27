@@ -36,6 +36,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
+	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
@@ -360,7 +361,7 @@ func (r *FilebeatReconciler) setCondition(filebeat *wazuhv1.WazuhFilebeat, condi
 	filebeat.Status.Conditions = append(filebeat.Status.Conditions, condition)
 }
 
-// updateStatus updates the WazuhFilebeat status
+// updateStatus updates the WazuhFilebeat status with retry on conflict
 func (r *FilebeatReconciler) updateStatus(ctx context.Context, filebeat *wazuhv1.WazuhFilebeat, phase wazuhv1.FilebeatPhase, message string) error {
 	filebeat.Status.Phase = phase
 	filebeat.Status.Message = message
@@ -368,7 +369,19 @@ func (r *FilebeatReconciler) updateStatus(ctx context.Context, filebeat *wazuhv1
 	now := metav1.Now()
 	filebeat.Status.LastAppliedTime = &now
 
-	return r.Status().Update(ctx, filebeat)
+	desiredStatus := filebeat.Status
+	return utils.RetryOnConflict(ctx, func() error {
+		latest := &wazuhv1.WazuhFilebeat{}
+		if err := r.Get(ctx, types.NamespacedName{Name: filebeat.Name, Namespace: filebeat.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status = desiredStatus
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		filebeat.Status = latest.Status
+		return nil
+	})
 }
 
 // Delete handles cleanup when a WazuhFilebeat is deleted

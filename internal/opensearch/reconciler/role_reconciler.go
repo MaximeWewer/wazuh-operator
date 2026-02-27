@@ -24,6 +24,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	retry "k8s.io/client-go/util/retry"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -188,7 +190,7 @@ func (r *RoleReconciler) getOpenSearchClient(ctx context.Context, role *wazuhv1.
 	return adapters.NewOpenSearchHTTPAdapter(config)
 }
 
-// updateStatus updates the role status
+// updateStatus updates the role status with retry on conflict
 func (r *RoleReconciler) updateStatus(ctx context.Context, role *wazuhv1.OpenSearchRole, phase wazuhv1.OpenSearchResourcePhase, message string) error {
 	role.Status.Phase = phase
 	role.Status.Message = message
@@ -197,7 +199,19 @@ func (r *RoleReconciler) updateStatus(ctx context.Context, role *wazuhv1.OpenSea
 
 	metrics.SetResourceSyncStatus("OpenSearchRole", role.Namespace, role.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
-	return r.Status().Update(ctx, role)
+	desiredStatus := role.Status
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchRole{}
+		if err := r.Get(ctx, types.NamespacedName{Name: role.Name, Namespace: role.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status = desiredStatus
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		role.Status = latest.Status
+		return nil
+	})
 }
 
 // handleDeletion handles role cleanup on deletion

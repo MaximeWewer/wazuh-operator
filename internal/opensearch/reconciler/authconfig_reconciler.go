@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	retry "k8s.io/client-go/util/retry"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -381,7 +382,7 @@ func (r *AuthConfigReconciler) getActiveAuthDomains(authConfig *wazuhv1.OpenSear
 	return domains
 }
 
-// updateStatus updates the status of the OpenSearchAuthConfig
+// updateStatus updates the status of the OpenSearchAuthConfig with retry on conflict
 func (r *AuthConfigReconciler) updateStatus(ctx context.Context, authConfig *wazuhv1.OpenSearchAuthConfig, phase wazuhv1.OpenSearchResourcePhase, message string) error {
 	authConfig.Status.Phase = phase
 	authConfig.Status.Message = message
@@ -395,7 +396,19 @@ func (r *AuthConfigReconciler) updateStatus(ctx context.Context, authConfig *waz
 		authConfig.Status.LastSyncTime = &now
 	}
 
-	return r.Status().Update(ctx, authConfig)
+	desiredStatus := authConfig.Status
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		latest := &wazuhv1.OpenSearchAuthConfig{}
+		if err := r.Get(ctx, types.NamespacedName{Name: authConfig.Name, Namespace: authConfig.Namespace}, latest); err != nil {
+			return err
+		}
+		latest.Status = desiredStatus
+		if err := r.Status().Update(ctx, latest); err != nil {
+			return err
+		}
+		authConfig.Status = latest.Status
+		return nil
+	})
 }
 
 // Ensure IndexerConfigMapBuilder uses our auth config builder
