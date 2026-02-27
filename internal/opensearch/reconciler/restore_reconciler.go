@@ -297,6 +297,11 @@ func (r *RestoreReconciler) handleDeletion(ctx context.Context, restore *wazuhv1
 
 // updateStatus updates the restore status
 func (r *RestoreReconciler) updateStatus(ctx context.Context, restore *wazuhv1.OpenSearchRestore, phase wazuhv1.OpenSearchRestorePhase, message string) error {
+	if restore.Status.Phase == phase && restore.Status.Message == message &&
+		restore.Status.ObservedGeneration == restore.Generation {
+		return nil
+	}
+
 	restore.Status.Phase = phase
 	restore.Status.Message = message
 	restore.Status.ObservedGeneration = restore.Generation

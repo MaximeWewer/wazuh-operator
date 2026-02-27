@@ -223,10 +223,17 @@ func (r *TemplateReconciler) buildIndexTemplate(template *wazuhv1.OpenSearchInde
 
 // updateStatus updates the template status with retry on conflict
 func (r *TemplateReconciler) updateStatus(ctx context.Context, template *wazuhv1.OpenSearchIndexTemplate, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
+	shouldUpdateTS := len(updateTimestamp) == 0 || updateTimestamp[0]
+
+	if template.Status.Phase == phase && template.Status.Message == message &&
+		template.Status.ObservedGeneration == template.Generation && !shouldUpdateTS {
+		return nil
+	}
+
 	template.Status.Phase = phase
 	template.Status.Message = message
 	template.Status.ObservedGeneration = template.Generation
-	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+	if shouldUpdateTS {
 		now := metav1.Now()
 		template.Status.LastSyncTime = &now
 	}

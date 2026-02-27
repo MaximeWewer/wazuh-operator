@@ -279,6 +279,15 @@ func (r *ManualSnapshotReconciler) handleDeletion(ctx context.Context, snapshot 
 
 // updateStatus updates the snapshot status
 func (r *ManualSnapshotReconciler) updateStatus(ctx context.Context, snapshot *wazuhv1.OpenSearchSnapshot, phase wazuhv1.SnapshotPhase, state, message string) error {
+	effectiveState := state
+	if effectiveState == "" {
+		effectiveState = snapshot.Status.State
+	}
+	if snapshot.Status.Phase == phase && snapshot.Status.Message == message &&
+		snapshot.Status.State == effectiveState && snapshot.Status.ObservedGeneration == snapshot.Generation {
+		return nil
+	}
+
 	snapshot.Status.Phase = phase
 	snapshot.Status.Message = message
 	if state != "" {

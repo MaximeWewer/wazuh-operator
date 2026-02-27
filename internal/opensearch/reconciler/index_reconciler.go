@@ -227,10 +227,17 @@ func (r *IndexReconciler) getOpenSearchClient(ctx context.Context, index *wazuhv
 
 // updateStatus updates the index status with retry on conflict
 func (r *IndexReconciler) updateStatus(ctx context.Context, index *wazuhv1.OpenSearchIndex, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
+	shouldUpdateTS := len(updateTimestamp) == 0 || updateTimestamp[0]
+
+	if index.Status.Phase == phase && index.Status.Message == message &&
+		index.Status.ObservedGeneration == index.Generation && !shouldUpdateTS {
+		return nil
+	}
+
 	index.Status.Phase = phase
 	index.Status.Message = message
 	index.Status.ObservedGeneration = index.Generation
-	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+	if shouldUpdateTS {
 		now := metav1.Now()
 		index.Status.LastSyncTime = &now
 	}

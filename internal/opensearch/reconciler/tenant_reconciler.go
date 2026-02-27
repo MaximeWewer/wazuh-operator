@@ -180,10 +180,17 @@ func (r *TenantReconciler) buildTenant(tenant *wazuhv1.OpenSearchTenant) api.Ten
 
 // updateStatus updates the tenant status with retry on conflict
 func (r *TenantReconciler) updateStatus(ctx context.Context, tenant *wazuhv1.OpenSearchTenant, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
+	shouldUpdateTS := len(updateTimestamp) == 0 || updateTimestamp[0]
+
+	if tenant.Status.Phase == phase && tenant.Status.Message == message &&
+		tenant.Status.ObservedGeneration == tenant.Generation && !shouldUpdateTS {
+		return nil
+	}
+
 	tenant.Status.Phase = phase
 	tenant.Status.Message = message
 	tenant.Status.ObservedGeneration = tenant.Generation
-	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+	if shouldUpdateTS {
 		now := metav1.Now()
 		tenant.Status.LastSyncTime = &now
 	}

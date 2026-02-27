@@ -182,10 +182,17 @@ func (r *RoleMappingReconciler) buildRoleMapping(mapping *wazuhv1.OpenSearchRole
 
 // updateStatus updates the role mapping status with retry on conflict
 func (r *RoleMappingReconciler) updateStatus(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
+	shouldUpdateTS := len(updateTimestamp) == 0 || updateTimestamp[0]
+
+	if mapping.Status.Phase == phase && mapping.Status.Message == message &&
+		mapping.Status.ObservedGeneration == mapping.Generation && !shouldUpdateTS {
+		return nil
+	}
+
 	mapping.Status.Phase = phase
 	mapping.Status.Message = message
 	mapping.Status.ObservedGeneration = mapping.Generation
-	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+	if shouldUpdateTS {
 		now := metav1.Now()
 		mapping.Status.LastSyncTime = &now
 	}

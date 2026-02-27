@@ -182,10 +182,17 @@ func (r *ActionGroupReconciler) buildActionGroup(ag *wazuhv1.OpenSearchActionGro
 
 // updateStatus updates the action group status with retry on conflict
 func (r *ActionGroupReconciler) updateStatus(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
+	shouldUpdateTS := len(updateTimestamp) == 0 || updateTimestamp[0]
+
+	if ag.Status.Phase == phase && ag.Status.Message == message &&
+		ag.Status.ObservedGeneration == ag.Generation && !shouldUpdateTS {
+		return nil
+	}
+
 	ag.Status.Phase = phase
 	ag.Status.Message = message
 	ag.Status.ObservedGeneration = ag.Generation
-	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+	if shouldUpdateTS {
 		now := metav1.Now()
 		ag.Status.LastSyncTime = &now
 	}

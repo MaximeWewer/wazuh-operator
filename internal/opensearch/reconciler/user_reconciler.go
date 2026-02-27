@@ -212,12 +212,21 @@ func (r *UserReconciler) getOpenSearchClient(ctx context.Context, user *wazuhv1.
 	return adapters.NewOpenSearchHTTPAdapter(config)
 }
 
-// updateStatus updates the user status with retry on conflict
+// updateStatus updates the user status with retry on conflict.
+// Skips the write when phase, message and generation are unchanged.
 func (r *UserReconciler) updateStatus(ctx context.Context, user *wazuhv1.OpenSearchUser, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
+	shouldUpdateTS := len(updateTimestamp) == 0 || updateTimestamp[0]
+
+	// Skip entirely when nothing changed
+	if user.Status.Phase == phase && user.Status.Message == message &&
+		user.Status.ObservedGeneration == user.Generation && !shouldUpdateTS {
+		return nil
+	}
+
 	user.Status.Phase = phase
 	user.Status.Message = message
 	user.Status.ObservedGeneration = user.Generation
-	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+	if shouldUpdateTS {
 		now := metav1.Now()
 		user.Status.LastSyncTime = &now
 	}

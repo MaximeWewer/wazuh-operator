@@ -388,12 +388,16 @@ func (r *AuthConfigReconciler) getActiveAuthDomains(authConfig *wazuhv1.OpenSear
 
 // updateStatus updates the status of the OpenSearchAuthConfig with retry on conflict
 func (r *AuthConfigReconciler) updateStatus(ctx context.Context, authConfig *wazuhv1.OpenSearchAuthConfig, phase wazuhv1.OpenSearchResourcePhase, message string) error {
-	authConfig.Status.Phase = phase
-	authConfig.Status.Message = message
-	authConfig.Status.ObservedGeneration = authConfig.Generation
-	authConfig.Status.ActiveAuthDomains = r.getActiveAuthDomains(authConfig)
-	authConfig.Status.ConfigSynced = phase == "Ready"
-	authConfig.Status.DashboardConfigSynced = phase == "Ready"
+	activeDomains := r.getActiveAuthDomains(authConfig)
+	configSynced := phase == "Ready"
+
+	// Skip entirely when nothing changed
+	if authConfig.Status.Phase == phase && authConfig.Status.Message == message &&
+		authConfig.Status.ObservedGeneration == authConfig.Generation &&
+		authConfig.Status.ConfigSynced == configSynced &&
+		authConfig.Status.DashboardConfigSynced == configSynced {
+		return nil
+	}
 
 	// Only update LastSyncTime when transitioning to Ready
 	wasReady := authConfig.Status.Phase == wazuhv1.OpenSearchResourcePhase("Ready") &&
@@ -402,6 +406,13 @@ func (r *AuthConfigReconciler) updateStatus(ctx context.Context, authConfig *waz
 		now := metav1.Now()
 		authConfig.Status.LastSyncTime = &now
 	}
+
+	authConfig.Status.Phase = phase
+	authConfig.Status.Message = message
+	authConfig.Status.ObservedGeneration = authConfig.Generation
+	authConfig.Status.ActiveAuthDomains = activeDomains
+	authConfig.Status.ConfigSynced = configSynced
+	authConfig.Status.DashboardConfigSynced = configSynced
 
 	desiredStatus := authConfig.Status
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {

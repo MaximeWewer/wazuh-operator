@@ -423,6 +423,10 @@ func (r *SnapshotRepositoryReconciler) loadCredentials(ctx context.Context, name
 //
 //nolint:unparam // verified param kept for when repository verification is implemented
 func (r *SnapshotRepositoryReconciler) updateStatus(ctx context.Context, repo *wazuhv1.OpenSearchSnapshotRepository, phase wazuhv1.RepositoryPhase, message string, verified bool) error {
+	if repo.Status.Phase == phase && repo.Status.Message == message && repo.Status.Verified == verified {
+		return nil
+	}
+
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		latest := &wazuhv1.OpenSearchSnapshotRepository{}
 		if err := r.Get(ctx, types.NamespacedName{Name: repo.Name, Namespace: repo.Namespace}, latest); err != nil {

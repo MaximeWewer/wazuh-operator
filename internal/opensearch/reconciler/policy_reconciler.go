@@ -239,10 +239,17 @@ func (r *PolicyReconciler) buildISMPolicy(policy *wazuhv1.OpenSearchISMPolicy) a
 
 // updateStatus updates the policy status with retry on conflict
 func (r *PolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.OpenSearchISMPolicy, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
+	shouldUpdateTS := len(updateTimestamp) == 0 || updateTimestamp[0]
+
+	if policy.Status.Phase == phase && policy.Status.Message == message &&
+		policy.Status.ObservedGeneration == policy.Generation && !shouldUpdateTS {
+		return nil
+	}
+
 	policy.Status.Phase = phase
 	policy.Status.Message = message
 	policy.Status.ObservedGeneration = policy.Generation
-	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+	if shouldUpdateTS {
 		now := metav1.Now()
 		policy.Status.LastSyncTime = &now
 	}

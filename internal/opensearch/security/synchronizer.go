@@ -225,8 +225,12 @@ func (s *SecurityConfigSynchronizer) createOrUpdateUser(ctx context.Context, osC
 	return nil
 }
 
-// updateUserStatus updates the status of an OpenSearchUser CRD
+// updateUserStatus updates the status of an OpenSearchUser CRD.
+// Skips the write when phase, message and generation are unchanged.
 func (s *SecurityConfigSynchronizer) updateUserStatus(ctx context.Context, user *wazuhv1.OpenSearchUser, phase wazuhv1.OpenSearchResourcePhase, message string) {
+	if user.Status.Phase == phase && user.Status.Message == message && user.Status.ObservedGeneration == user.Generation {
+		return
+	}
 	user.Status.Phase = phase
 	user.Status.Message = message
 	user.Status.LastSyncTime = &metav1.Time{Time: time.Now()}
@@ -310,8 +314,12 @@ func (s *SecurityConfigSynchronizer) buildSecurityRole(role *wazuhv1.OpenSearchR
 	return secRole
 }
 
-// updateRoleStatus updates the status of an OpenSearchRole CRD
+// updateRoleStatus updates the status of an OpenSearchRole CRD.
+// Skips the write when phase, message and generation are unchanged.
 func (s *SecurityConfigSynchronizer) updateRoleStatus(ctx context.Context, role *wazuhv1.OpenSearchRole, phase wazuhv1.OpenSearchResourcePhase, message string) {
+	if role.Status.Phase == phase && role.Status.Message == message && role.Status.ObservedGeneration == role.Generation {
+		return
+	}
 	role.Status.Phase = phase
 	role.Status.Message = message
 	role.Status.LastSyncTime = &metav1.Time{Time: time.Now()}
@@ -373,8 +381,12 @@ func (s *SecurityConfigSynchronizer) SyncRoleMappings(ctx context.Context, clust
 	return nil
 }
 
-// updateRoleMappingStatus updates the status of an OpenSearchRoleMapping CRD
+// updateRoleMappingStatus updates the status of an OpenSearchRoleMapping CRD.
+// Skips the write when phase, message and generation are unchanged.
 func (s *SecurityConfigSynchronizer) updateRoleMappingStatus(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping, phase wazuhv1.OpenSearchResourcePhase, message string) {
+	if mapping.Status.Phase == phase && mapping.Status.Message == message && mapping.Status.ObservedGeneration == mapping.Generation {
+		return
+	}
 	mapping.Status.Phase = phase
 	mapping.Status.Message = message
 	mapping.Status.LastSyncTime = &metav1.Time{Time: time.Now()}
@@ -434,8 +446,12 @@ func (s *SecurityConfigSynchronizer) SyncTenants(ctx context.Context, cluster *w
 	return nil
 }
 
-// updateTenantStatus updates the status of an OpenSearchTenant CRD
+// updateTenantStatus updates the status of an OpenSearchTenant CRD.
+// Skips the write when phase, message and generation are unchanged.
 func (s *SecurityConfigSynchronizer) updateTenantStatus(ctx context.Context, tenant *wazuhv1.OpenSearchTenant, phase wazuhv1.OpenSearchResourcePhase, message string) {
+	if tenant.Status.Phase == phase && tenant.Status.Message == message && tenant.Status.ObservedGeneration == tenant.Generation {
+		return
+	}
 	tenant.Status.Phase = phase
 	tenant.Status.Message = message
 	tenant.Status.LastSyncTime = &metav1.Time{Time: time.Now()}
@@ -495,8 +511,12 @@ func (s *SecurityConfigSynchronizer) SyncActionGroups(ctx context.Context, clust
 	return nil
 }
 
-// updateActionGroupStatus updates the status of an OpenSearchActionGroup CRD
+// updateActionGroupStatus updates the status of an OpenSearchActionGroup CRD.
+// Skips the write when phase, message and generation are unchanged.
 func (s *SecurityConfigSynchronizer) updateActionGroupStatus(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup, phase wazuhv1.OpenSearchResourcePhase, message string) {
+	if ag.Status.Phase == phase && ag.Status.Message == message && ag.Status.ObservedGeneration == ag.Generation {
+		return
+	}
 	ag.Status.Phase = phase
 	ag.Status.Message = message
 	ag.Status.LastSyncTime = &metav1.Time{Time: time.Now()}

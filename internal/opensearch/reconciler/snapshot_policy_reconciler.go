@@ -337,6 +337,13 @@ func (r *SnapshotPolicyReconciler) buildSnapshotPolicy(policy *wazuhv1.OpenSearc
 
 // updateStatus updates the policy status
 func (r *SnapshotPolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.OpenSearchSnapshotPolicy, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
+	shouldUpdateTS := len(updateTimestamp) == 0 || updateTimestamp[0]
+
+	if policy.Status.Phase == phase && policy.Status.Message == message &&
+		policy.Status.ObservedGeneration == policy.Generation && !shouldUpdateTS {
+		return nil
+	}
+
 	metrics.SetResourceSyncStatus("OpenSearchSnapshotPolicy", policy.Namespace, policy.Name, phase == wazuhv1.OpenSearchResourcePhaseReady)
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -347,7 +354,7 @@ func (r *SnapshotPolicyReconciler) updateStatus(ctx context.Context, policy *waz
 		latest.Status.Phase = phase
 		latest.Status.Message = message
 		latest.Status.ObservedGeneration = policy.Generation
-		if len(updateTimestamp) == 0 || updateTimestamp[0] {
+		if shouldUpdateTS {
 			now := metav1.Now()
 			latest.Status.LastSyncTime = &now
 		}

@@ -195,10 +195,17 @@ func (r *RoleReconciler) getOpenSearchClient(ctx context.Context, role *wazuhv1.
 
 // updateStatus updates the role status with retry on conflict
 func (r *RoleReconciler) updateStatus(ctx context.Context, role *wazuhv1.OpenSearchRole, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
+	shouldUpdateTS := len(updateTimestamp) == 0 || updateTimestamp[0]
+
+	if role.Status.Phase == phase && role.Status.Message == message &&
+		role.Status.ObservedGeneration == role.Generation && !shouldUpdateTS {
+		return nil
+	}
+
 	role.Status.Phase = phase
 	role.Status.Message = message
 	role.Status.ObservedGeneration = role.Generation
-	if len(updateTimestamp) == 0 || updateTimestamp[0] {
+	if shouldUpdateTS {
 		now := metav1.Now()
 		role.Status.LastSyncTime = &now
 	}
