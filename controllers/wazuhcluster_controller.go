@@ -1289,8 +1289,6 @@ func (r *WazuhClusterReconciler) updateStatus(ctx context.Context, cluster *wazu
 		}
 
 		latestCluster.Status.ObservedGeneration = latestCluster.Generation
-		now := metav1.Now()
-		latestCluster.Status.LastUpdateTime = &now
 
 		return r.Status().Update(ctx, latestCluster)
 	})
@@ -1776,9 +1774,6 @@ func (r *WazuhClusterReconciler) updateDrainStatus(ctx context.Context, cluster 
 
 		// Copy drain status from working cluster
 		latestCluster.Status.Drain = cluster.Status.Drain
-
-		now := metav1.Now()
-		latestCluster.Status.LastUpdateTime = &now
 
 		if err := r.Status().Update(ctx, latestCluster); err != nil {
 			log.Error(err, "Failed to update drain status")
