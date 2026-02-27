@@ -78,8 +78,10 @@ func (r *ClusterReconciler) OrchestrateManagerRollingRestart(ctx context.Context
 	}
 
 	if workerResult != nil && workerResult.Phase == rolling.RestartPhaseComplete {
-		metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "manager-worker", metrics.PhaseToValue(constants.DrainPhaseComplete))
-		metrics.ObserveDrainDuration(cluster.Name, cluster.Namespace, "manager-worker", time.Since(startTime).Seconds())
+		if cluster.Status.RollingRestart != nil && cluster.Status.RollingRestart.ManagerWorker != nil {
+			metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "manager-worker", metrics.PhaseToValue(constants.DrainPhaseComplete))
+			metrics.ObserveDrainDuration(cluster.Name, cluster.Namespace, "manager-worker", time.Since(startTime).Seconds())
+		}
 	}
 
 	// Step 2: Handle master after workers are complete
@@ -91,8 +93,10 @@ func (r *ClusterReconciler) OrchestrateManagerRollingRestart(ctx context.Context
 	}
 
 	if masterResult != nil && masterResult.Phase == rolling.RestartPhaseComplete {
-		metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "manager-master", metrics.PhaseToValue(constants.DrainPhaseComplete))
-		metrics.ObserveDrainDuration(cluster.Name, cluster.Namespace, "manager-master", time.Since(startTime).Seconds())
+		if cluster.Status.RollingRestart != nil && cluster.Status.RollingRestart.ManagerMaster != nil {
+			metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "manager-master", metrics.PhaseToValue(constants.DrainPhaseComplete))
+			metrics.ObserveDrainDuration(cluster.Name, cluster.Namespace, "manager-master", time.Since(startTime).Seconds())
+		}
 	}
 
 	return masterResult, workerResult, nil
@@ -129,8 +133,11 @@ func (r *ClusterReconciler) orchestrateWorkerRestart(ctx context.Context, cluste
 			"Rolling restart: deleted worker pod %s (%d/%d updated)", result.CurrentPod, result.UpdatedPods, result.TotalPods)
 	}
 	if result.Phase == rolling.RestartPhaseComplete {
-		r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonRollingRestartComplete,
-			"Rolling restart complete for manager workers")
+		// Only emit event if status was tracking an active restart (avoids repeated events)
+		if cluster.Status.RollingRestart != nil && cluster.Status.RollingRestart.ManagerWorker != nil {
+			r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonRollingRestartComplete,
+				"Rolling restart complete for manager workers")
+		}
 	}
 
 	return result, nil
@@ -167,8 +174,11 @@ func (r *ClusterReconciler) orchestrateMasterRestart(ctx context.Context, cluste
 			"Rolling restart: deleted master pod %s", result.CurrentPod)
 	}
 	if result.Phase == rolling.RestartPhaseComplete {
-		r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonRollingRestartComplete,
-			"Rolling restart complete for manager master")
+		// Only emit event if status was tracking an active restart (avoids repeated events)
+		if cluster.Status.RollingRestart != nil && cluster.Status.RollingRestart.ManagerMaster != nil {
+			r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonRollingRestartComplete,
+				"Rolling restart complete for manager master")
+		}
 	}
 
 	return result, nil

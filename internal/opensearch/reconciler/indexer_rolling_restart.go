@@ -100,10 +100,13 @@ func (r *IndexerReconciler) OrchestrateRollingRestart(ctx context.Context, clust
 			"Rolling restart: deleted indexer pod %s (%d/%d updated)", result.CurrentPod, result.UpdatedPods, result.TotalPods)
 	}
 	if result.Phase == rolling.RestartPhaseComplete {
-		metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "indexer", metrics.PhaseToValue(constants.DrainPhaseComplete))
-		metrics.ObserveDrainDuration(cluster.Name, cluster.Namespace, "indexer", time.Since(startTime).Seconds())
-		r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonRollingRestartComplete,
-			"Rolling restart complete for indexer")
+		// Only emit event/metrics if status was tracking an active restart (avoids repeated events)
+		if cluster.Status.RollingRestart != nil && cluster.Status.RollingRestart.Indexer != nil {
+			metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "indexer", metrics.PhaseToValue(constants.DrainPhaseComplete))
+			metrics.ObserveDrainDuration(cluster.Name, cluster.Namespace, "indexer", time.Since(startTime).Seconds())
+			r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonRollingRestartComplete,
+				"Rolling restart complete for indexer")
+		}
 	}
 
 	return result, nil
@@ -173,11 +176,13 @@ func (r *IndexerReconciler) orchestrateNodePoolRollingRestart(ctx context.Contex
 		return nil, nil
 	}
 
-	// All pools complete
-	metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "indexer", metrics.PhaseToValue(constants.DrainPhaseComplete))
-	metrics.ObserveDrainDuration(cluster.Name, cluster.Namespace, "indexer", time.Since(startTime).Seconds())
-	r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonRollingRestartComplete,
-		"Rolling restart complete for all indexer node pools")
+	// All pools complete — only emit event/metrics if status was tracking an active restart
+	if cluster.Status.RollingRestart != nil && cluster.Status.RollingRestart.Indexer != nil {
+		metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "indexer", metrics.PhaseToValue(constants.DrainPhaseComplete))
+		metrics.ObserveDrainDuration(cluster.Name, cluster.Namespace, "indexer", time.Since(startTime).Seconds())
+		r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonRollingRestartComplete,
+			"Rolling restart complete for all indexer node pools")
+	}
 
 	return &rolling.RestartResult{
 		Phase:       rolling.RestartPhaseComplete,
