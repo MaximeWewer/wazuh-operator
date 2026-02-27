@@ -849,42 +849,54 @@ func (r *WazuhClusterReconciler) updateRollingRestartStatus(
 	// reconciliation loop (status update → watch fires → new reconcile → repeat).
 	if indexerRestart != nil && indexerRestart.Phase == rolling.RestartPhaseInProgress {
 		if cluster.Status.RollingRestart.Indexer == nil {
-			cluster.Status.RollingRestart.Indexer = &wazuhv1.ComponentRollingRestart{StartTime: &now}
+			cluster.Status.RollingRestart.Indexer = &wazuhv1.ComponentRollingRestart{StartTime: &now, LastTransitionTime: &now}
+		}
+		if cluster.Status.RollingRestart.Indexer.Phase != string(indexerRestart.Phase) ||
+			cluster.Status.RollingRestart.Indexer.UpdatedPods != indexerRestart.UpdatedPods ||
+			cluster.Status.RollingRestart.Indexer.CurrentPod != indexerRestart.CurrentPod {
+			cluster.Status.RollingRestart.Indexer.LastTransitionTime = &now
 		}
 		cluster.Status.RollingRestart.Indexer.Phase = string(indexerRestart.Phase)
 		cluster.Status.RollingRestart.Indexer.TotalPods = indexerRestart.TotalPods
 		cluster.Status.RollingRestart.Indexer.UpdatedPods = indexerRestart.UpdatedPods
 		cluster.Status.RollingRestart.Indexer.CurrentPod = indexerRestart.CurrentPod
 		cluster.Status.RollingRestart.Indexer.Message = indexerRestart.Message
-		cluster.Status.RollingRestart.Indexer.LastTransitionTime = &now
 	} else {
 		cluster.Status.RollingRestart.Indexer = nil
 	}
 
 	if masterRestart != nil && masterRestart.Phase == rolling.RestartPhaseInProgress {
 		if cluster.Status.RollingRestart.ManagerMaster == nil {
-			cluster.Status.RollingRestart.ManagerMaster = &wazuhv1.ComponentRollingRestart{StartTime: &now}
+			cluster.Status.RollingRestart.ManagerMaster = &wazuhv1.ComponentRollingRestart{StartTime: &now, LastTransitionTime: &now}
+		}
+		if cluster.Status.RollingRestart.ManagerMaster.Phase != string(masterRestart.Phase) ||
+			cluster.Status.RollingRestart.ManagerMaster.UpdatedPods != masterRestart.UpdatedPods ||
+			cluster.Status.RollingRestart.ManagerMaster.CurrentPod != masterRestart.CurrentPod {
+			cluster.Status.RollingRestart.ManagerMaster.LastTransitionTime = &now
 		}
 		cluster.Status.RollingRestart.ManagerMaster.Phase = string(masterRestart.Phase)
 		cluster.Status.RollingRestart.ManagerMaster.TotalPods = masterRestart.TotalPods
 		cluster.Status.RollingRestart.ManagerMaster.UpdatedPods = masterRestart.UpdatedPods
 		cluster.Status.RollingRestart.ManagerMaster.CurrentPod = masterRestart.CurrentPod
 		cluster.Status.RollingRestart.ManagerMaster.Message = masterRestart.Message
-		cluster.Status.RollingRestart.ManagerMaster.LastTransitionTime = &now
 	} else {
 		cluster.Status.RollingRestart.ManagerMaster = nil
 	}
 
 	if workerRestart != nil && workerRestart.Phase == rolling.RestartPhaseInProgress {
 		if cluster.Status.RollingRestart.ManagerWorker == nil {
-			cluster.Status.RollingRestart.ManagerWorker = &wazuhv1.ComponentRollingRestart{StartTime: &now}
+			cluster.Status.RollingRestart.ManagerWorker = &wazuhv1.ComponentRollingRestart{StartTime: &now, LastTransitionTime: &now}
+		}
+		if cluster.Status.RollingRestart.ManagerWorker.Phase != string(workerRestart.Phase) ||
+			cluster.Status.RollingRestart.ManagerWorker.UpdatedPods != workerRestart.UpdatedPods ||
+			cluster.Status.RollingRestart.ManagerWorker.CurrentPod != workerRestart.CurrentPod {
+			cluster.Status.RollingRestart.ManagerWorker.LastTransitionTime = &now
 		}
 		cluster.Status.RollingRestart.ManagerWorker.Phase = string(workerRestart.Phase)
 		cluster.Status.RollingRestart.ManagerWorker.TotalPods = workerRestart.TotalPods
 		cluster.Status.RollingRestart.ManagerWorker.UpdatedPods = workerRestart.UpdatedPods
 		cluster.Status.RollingRestart.ManagerWorker.CurrentPod = workerRestart.CurrentPod
 		cluster.Status.RollingRestart.ManagerWorker.Message = workerRestart.Message
-		cluster.Status.RollingRestart.ManagerWorker.LastTransitionTime = &now
 	} else {
 		cluster.Status.RollingRestart.ManagerWorker = nil
 	}
@@ -1072,34 +1084,37 @@ func (r *WazuhClusterReconciler) cleanupResources(ctx context.Context, cluster *
 	return nil
 }
 
-// updateCondition updates a condition in the WazuhCluster status
+// updateCondition updates a condition in the WazuhCluster status.
+// It preserves LastTransitionTime when the status hasn't changed and skips
+// the update entirely when status, reason, message and generation are identical
+// to avoid triggering unnecessary status writes.
 func (r *WazuhClusterReconciler) updateCondition(cluster *wazuhv1.WazuhCluster, conditionType string, status metav1.ConditionStatus, reason, message string) {
-	condition := metav1.Condition{
+	for i, c := range cluster.Status.Conditions {
+		if c.Type == conditionType {
+			// Nothing changed — skip entirely to avoid a no-op status write
+			if c.Status == status && c.Reason == reason && c.Message == message && c.ObservedGeneration == cluster.Generation {
+				return
+			}
+			cluster.Status.Conditions[i].Reason = reason
+			cluster.Status.Conditions[i].Message = message
+			cluster.Status.Conditions[i].ObservedGeneration = cluster.Generation
+			if c.Status != status {
+				cluster.Status.Conditions[i].Status = status
+				cluster.Status.Conditions[i].LastTransitionTime = metav1.Now()
+			}
+			return
+		}
+	}
+
+	// Condition not found — append a new one
+	cluster.Status.Conditions = append(cluster.Status.Conditions, metav1.Condition{
 		Type:               conditionType,
 		Status:             status,
 		Reason:             reason,
 		Message:            message,
 		LastTransitionTime: metav1.Now(),
 		ObservedGeneration: cluster.Generation,
-	}
-
-	found := false
-	for i, c := range cluster.Status.Conditions {
-		if c.Type == conditionType {
-			if c.Status != status {
-				cluster.Status.Conditions[i] = condition
-			} else {
-				condition.LastTransitionTime = c.LastTransitionTime
-				cluster.Status.Conditions[i] = condition
-			}
-			found = true
-			break
-		}
-	}
-
-	if !found {
-		cluster.Status.Conditions = append(cluster.Status.Conditions, condition)
-	}
+	})
 }
 
 // persistCondition updates a condition to False in memory and persists it to the API server (best-effort).
