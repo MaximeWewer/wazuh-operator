@@ -170,18 +170,18 @@ kubectl get wazuhcluster wazuh-cluster -n wazuh -o yaml | grep -A 20 'conditions
 
 ## Quorum-Safe Rolling Restart Behavior
 
-The operator uses an **OnDelete** StatefulSet update strategy and manages pod-by-pod restarts
-itself, with cluster health verification between each pod replacement. This prevents split-brain
-for OpenSearch and total service disruption for Wazuh.
+The operator uses a **RollingUpdate** StatefulSet update strategy by default. Kubernetes handles
+rolling restarts automatically when the pod template changes (e.g., configuration, certificate,
+or spec hash updates).
 
-When a configuration or certificate change is detected, the operator:
+When a configuration or certificate change is detected:
 
-1. **Indexer**: Deletes one pod at a time (highest ordinal first), verifying OpenSearch cluster health
-   (not RED, no relocating/initializing shards, all nodes present) before each deletion
-2. **Manager Workers**: Restarts one worker at a time (highest ordinal first), verifying all pods
-   are ready before proceeding
-3. **Manager Master**: Restarted last, only after all workers are fully updated
-4. **Dashboard**: Standard rolling deployment (Deployment, not StatefulSet)
+1. **Indexer, Manager Master, Manager Workers**: Kubernetes performs a rolling update, replacing pods
+   one at a time (highest ordinal first)
+2. **Dashboard**: Standard rolling deployment (Deployment, not StatefulSet)
+
+> **Note:** You can switch to `OnDelete` strategy via the `updateStrategy` field if you need manual
+> control over pod restarts.
 
 Rolling restart progress is tracked in `.status.rollingRestart` and visible via:
 

@@ -365,6 +365,16 @@ kubectl delete -f <(helm template my-wazuh-cluster ./charts/wazuh-cluster --name
 {{- end }}
 {{- end }}
 
+### WazuhAgentGroup
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+{{- range .Values }}
+{{- if hasPrefix "wazuhAgentGroups" .Key }}
+{{ template "chart.valuesTableRow" . }}
+{{- end }}
+{{- end }}
+
 ### WazuhRestore
 
 | Key | Type | Default | Description |

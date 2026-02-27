@@ -1257,6 +1257,24 @@ wazuhDecoders: []
 #           <program_name>myapp</program_name>
 #         </decoder>
 
+# -- Wazuh agent groups to create
+# @default -- `[]`
+wazuhAgentGroups: []
+# Example:
+#   - name: linux-servers
+#     spec:
+#       groupName: linux
+#       description: "Linux servers group"
+#       agentConf: |
+#         <agent_config>
+#           <syscheck>
+#             <frequency>600</frequency>
+#           </syscheck>
+#         </agent_config>
+#       files:
+#         ar.conf: |
+#           restart-wazuh0 - ar.conf - 0
+
 # @section Wazuh Restore Configuration
 # Restore Wazuh Manager data from a backup.
 

@@ -325,7 +325,7 @@ Includes all fields from [MasterSpec](#masterspec) (including `extraVolumes`, `e
 | `podAnnotations`           | map[string]string                             | No       | -                  | Pod annotations                                                    |
 | `ingress`                  | [IngressSpec](#ingressspec)                   | No       | -                  | Ingress config                                                     |
 | `gatewayAPI`               | [GatewayAPISpec](#gatewayapispec)             | No       | -                  | Gateway API config                                                 |
-| `updateStrategy`           | string                                        | No       | `RollingUpdate`    | Update strategy (StatefulSets use OnDelete internally for quorum-safe restarts) |
+| `updateStrategy`           | string                                        | No       | `RollingUpdate`    | Update strategy (`RollingUpdate` or `OnDelete`)                    |
 | `extraVolumes`             | []Volume                                      | No       | -                  | Extra volumes                                                      |
 | `extraVolumeMounts`        | []VolumeMount                                 | No       | -                  | Extra volume mounts                                                |
 | `extraInitContainers`      | []Container                                   | No       | -                  | Extra init containers                                              |

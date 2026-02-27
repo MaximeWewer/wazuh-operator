@@ -540,6 +540,12 @@ kubectl delete -f <(helm template my-wazuh-cluster ./charts/wazuh-cluster --name
 |-----|------|---------|-------------|
 | wazuhDecoders | list | `[]` | Wazuh custom decoders to create |
 
+### WazuhAgentGroup
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| wazuhAgentGroups | list | `[]` | Wazuh agent groups to create |
+
 ### WazuhRestore
 
 | Key | Type | Default | Description |
