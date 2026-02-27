@@ -2312,14 +2312,27 @@ func (r *IndexerReconciler) SyncSecurityCRDs(ctx context.Context, cluster *wazuh
 		return fmt.Errorf("failed to sync security CRDs: %w", err)
 	}
 
-	// Update security status with sync results
-	now := metav1.Now()
-	cluster.Status.Security.LastSyncTime = &now
-	cluster.Status.Security.SyncedUsers = result.UsersUpdated + result.UsersCreated
-	cluster.Status.Security.SyncedRoles = result.RolesUpdated + result.RolesCreated
-	cluster.Status.Security.SyncedRoleMappings = result.MappingsUpdated + result.MappingsCreated
-	cluster.Status.Security.SyncedTenants = result.TenantsUpdated + result.TenantsCreated
-	cluster.Status.Security.SyncedActionGroups = result.ActionGroupsUpdated + result.ActionGroupsCreated
+	// Update security status with sync results — only update timestamp when counts change
+	newUsers := result.UsersUpdated + result.UsersCreated
+	newRoles := result.RolesUpdated + result.RolesCreated
+	newMappings := result.MappingsUpdated + result.MappingsCreated
+	newTenants := result.TenantsUpdated + result.TenantsCreated
+	newActionGroups := result.ActionGroupsUpdated + result.ActionGroupsCreated
+
+	if cluster.Status.Security.SyncedUsers != newUsers ||
+		cluster.Status.Security.SyncedRoles != newRoles ||
+		cluster.Status.Security.SyncedRoleMappings != newMappings ||
+		cluster.Status.Security.SyncedTenants != newTenants ||
+		cluster.Status.Security.SyncedActionGroups != newActionGroups ||
+		cluster.Status.Security.LastSyncTime == nil {
+		now := metav1.Now()
+		cluster.Status.Security.LastSyncTime = &now
+	}
+	cluster.Status.Security.SyncedUsers = newUsers
+	cluster.Status.Security.SyncedRoles = newRoles
+	cluster.Status.Security.SyncedRoleMappings = newMappings
+	cluster.Status.Security.SyncedTenants = newTenants
+	cluster.Status.Security.SyncedActionGroups = newActionGroups
 
 	if result.HasErrors() {
 		log.Error(fmt.Errorf("sync errors: %v", result.Errors), "Some security CRDs failed to sync")
