@@ -324,3 +324,27 @@ func (b *AuthConfigBuilder) ValidateChallengeSettings() error {
 
 	return nil
 }
+
+// ValidateMultiAuthRequiresBasic enforces the constraint from
+// security-dashboards-plugin (server/index.ts) that rejects any
+// opensearch_security.auth.type array longer than one entry unless it
+// contains "basicauth". Emitting such an array would make the dashboard
+// fail to start on OpenSearch 2.13 through 2.19 with
+// "Authentication type is not configured properly. basicauth is mandatory.".
+func (b *AuthConfigBuilder) ValidateMultiAuthRequiresBasic() error {
+	enabled := 0
+	if b.authConfig.OIDC != nil && b.authConfig.OIDC.Enabled {
+		enabled++
+	}
+	if b.authConfig.SAML != nil && b.authConfig.SAML.Enabled {
+		enabled++
+	}
+	basicOn := b.authConfig.BasicAuth != nil && b.authConfig.BasicAuth.Enabled
+	if basicOn {
+		enabled++
+	}
+	if enabled > 1 && !basicOn {
+		return fmt.Errorf("when more than one dashboard auth method is enabled, basicAuth.enabled must be true (opensearch-dashboards requires basicauth in auth.type array)")
+	}
+	return nil
+}

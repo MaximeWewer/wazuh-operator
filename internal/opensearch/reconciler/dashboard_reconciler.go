@@ -319,16 +319,19 @@ func (r *DashboardReconciler) getConfigHash(ctx context.Context, cluster *wazuhv
 	return patch.ComputeConfigHash(configMap.Data)
 }
 
-// ensureOIDCCookiePassword guarantees a stable value for the OIDC cookie password
-// used by opensearch-dashboards. If the user supplied a CookiePasswordRef it is
-// already resolved by ResolveAuthSecrets and we leave authSecrets untouched.
-// Otherwise we read-or-create a Secret owned by the WazuhCluster (one per cluster)
-// and inject the persisted value so every reconcile renders the same configuration.
+// ensureOIDCCookiePassword guarantees a stable value for the global
+// opensearch-dashboards cookie password. Dashboards uses it to HMAC-sign session
+// cookies for OIDC and SAML flows alike; the same value must therefore be
+// reused across reconciles and across dashboard replicas. If the user supplied
+// an OIDC CookiePasswordRef it is resolved upstream by ResolveAuthSecrets and
+// we leave authSecrets untouched.
 func (r *DashboardReconciler) ensureOIDCCookiePassword(ctx context.Context, cluster *wazuhv1.WazuhCluster, authConfig *wazuhv1.OpenSearchAuthConfig, authSecrets map[string]string) error {
-	if authConfig.Spec.OIDC == nil || !authConfig.Spec.OIDC.Enabled {
+	oidcEnabled := authConfig.Spec.OIDC != nil && authConfig.Spec.OIDC.Enabled
+	samlEnabled := authConfig.Spec.SAML != nil && authConfig.Spec.SAML.Enabled
+	if !oidcEnabled && !samlEnabled {
 		return nil
 	}
-	if authConfig.Spec.OIDC.Dashboard != nil && authConfig.Spec.OIDC.Dashboard.CookiePasswordRef != nil {
+	if oidcEnabled && authConfig.Spec.OIDC.Dashboard != nil && authConfig.Spec.OIDC.Dashboard.CookiePasswordRef != nil {
 		return nil // user-managed, already resolved upstream
 	}
 	if v, ok := authSecrets[opensearchconfig.AuthSecretKeyOIDCCookiePassword]; ok && v != "" {

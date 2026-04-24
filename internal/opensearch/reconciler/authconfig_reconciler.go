@@ -140,6 +140,13 @@ func (r *AuthConfigReconciler) validateConfig(authConfig *wazuhv1.OpenSearchAuth
 		return err
 	}
 
+	// Enforce the dashboard-side requirement that `basicauth` is part of any
+	// multi-auth configuration (checked by security-dashboards-plugin on all
+	// supported versions, 2.13 through 2.19).
+	if err := builder.ValidateMultiAuthRequiresBasic(); err != nil {
+		return err
+	}
+
 	// Validate OIDC config
 	if authConfig.Spec.OIDC != nil && authConfig.Spec.OIDC.Enabled {
 		oidcBuilder := config.NewOIDCConfigBuilder(authConfig.Spec.OIDC)
