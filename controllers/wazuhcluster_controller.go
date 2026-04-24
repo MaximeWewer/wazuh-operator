@@ -2168,6 +2168,30 @@ func (r *WazuhClusterReconciler) findClustersForAgentGroup(ctx context.Context, 
 	}
 }
 
+// findClustersForAuthConfig finds the WazuhCluster that an OpenSearchAuthConfig
+// references via clusterRef. Used to re-reconcile the cluster (and rebuild the
+// dashboard ConfigMap) when OIDC / SAML / LDAP settings change.
+func (r *WazuhClusterReconciler) findClustersForAuthConfig(ctx context.Context, obj client.Object) []ctrl.Request {
+	authConfig, ok := obj.(*wazuhv1.OpenSearchAuthConfig)
+	if !ok {
+		return []ctrl.Request{}
+	}
+
+	namespace := authConfig.Spec.ClusterRef.Namespace
+	if namespace == "" {
+		namespace = authConfig.Namespace
+	}
+
+	return []ctrl.Request{
+		{
+			NamespacedName: types.NamespacedName{
+				Name:      authConfig.Spec.ClusterRef.Name,
+				Namespace: namespace,
+			},
+		},
+	}
+}
+
 // findClustersForSecret finds WazuhClusters impacted by changes in watched secrets.
 // This complements Owns(Secret), which only catches secrets with owner references.
 func (r *WazuhClusterReconciler) findClustersForSecret(ctx context.Context, obj client.Object) []ctrl.Request {
@@ -2283,6 +2307,14 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&wazuhv1.WazuhAgentGroup{},
 			handler.EnqueueRequestsFromMapFunc(r.findClustersForAgentGroup),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
+		// Watch OpenSearchAuthConfig CRs - reconcile WazuhCluster when auth spec changes
+		// so the dashboard ConfigMap (opensearch_dashboards.yml) picks up OIDC / SAML / LDAP
+		// settings instead of silently falling back to basicauth.
+		Watches(
+			&wazuhv1.OpenSearchAuthConfig{},
+			handler.EnqueueRequestsFromMapFunc(r.findClustersForAuthConfig),
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		)
 

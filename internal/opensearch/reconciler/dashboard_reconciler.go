@@ -43,6 +43,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/deployments"
+	opensearchconfig "github.com/MaximeWewer/wazuh-operator/internal/opensearch/config"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/hpa"
 	osservices "github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/services"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
@@ -225,6 +226,21 @@ func (r *DashboardReconciler) reconcileConfigMap(ctx context.Context, cluster *w
 	configBuilder := configmaps.NewDashboardConfigMapBuilder(cluster.Name, cluster.Namespace)
 	if cluster.Spec.Dashboard != nil {
 		configBuilder.WithEnableSSL(cluster.Spec.Dashboard.EnableSSL)
+	}
+
+	// Apply authentication configuration from the matching OpenSearchAuthConfig CR.
+	// Without this, the generated opensearch_dashboards.yml always falls back to basicauth
+	// even when OIDC / SAML / LDAP is configured via an OpenSearchAuthConfig.
+	authConfig, err := opensearchconfig.FindAuthConfigForCluster(ctx, r.Client, cluster.Name, cluster.Namespace)
+	if err != nil {
+		log.Error(err, "Failed to list OpenSearchAuthConfigs, dashboard will use basicauth fallback")
+	} else if authConfig != nil {
+		authSecrets, secErr := opensearchconfig.ResolveAuthSecrets(ctx, r.Client, authConfig)
+		if secErr != nil {
+			log.Error(secErr, "Failed to resolve auth secrets, dashboard will use basicauth fallback", "authConfig", authConfig.Name)
+		} else {
+			configBuilder.WithAuthConfig(&authConfig.Spec).WithAuthSecrets(authSecrets)
+		}
 	}
 
 	// Pass wazuhPlugin configuration if defined

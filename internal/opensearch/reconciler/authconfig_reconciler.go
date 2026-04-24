@@ -31,7 +31,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
-	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/config"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
@@ -78,7 +77,7 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 	log := logf.FromContext(ctx)
 
 	// Resolve secrets
-	secrets, err := r.resolveSecrets(ctx, authConfig)
+	secrets, err := config.ResolveAuthSecrets(ctx, r.Client, authConfig)
 	if err != nil {
 		r.recordEvent(authConfig, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to resolve secrets: %v", err))
 		return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to resolve secrets: %v", err))
@@ -94,11 +93,16 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 	clusterName := authConfig.Spec.ClusterRef.Name
 	namespace := authConfig.Namespace
 
-	// Reconcile indexer security config
-	if err := r.reconcileIndexerSecurityConfig(ctx, authConfig, clusterName, namespace, secrets); err != nil {
-		r.recordEvent(authConfig, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to reconcile indexer config: %v", err))
-		return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to reconcile indexer config: %v", err))
-	}
+	// The indexer security config and the dashboard opensearch_dashboards.yml are now
+	// produced by IndexerReconciler and DashboardReconciler respectively (they fetch the
+	// matching OpenSearchAuthConfig themselves). The WazuhCluster controller watches
+	// OpenSearchAuthConfig, so updates here trigger a cluster reconcile which rebuilds
+	// both. This reconciler only needs to validate the spec and hot-apply it via
+	// securityadmin.sh so running indexers pick up the change without a pod restart.
+
+	// Best-effort cleanup of ConfigMaps this reconciler used to create before that
+	// wiring existed. Keeping them would leave orphan objects in the namespace forever.
+	r.cleanupLegacyConfigMaps(ctx, clusterName, namespace)
 
 	// Apply security config via securityadmin.sh (non-fatal if exec fails)
 	if r.SecurityAdminExecutor != nil {
@@ -107,12 +111,6 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 		} else {
 			log.Info("Security config applied via securityadmin.sh")
 		}
-	}
-
-	// Reconcile dashboard config
-	if err := r.reconcileDashboardConfig(ctx, authConfig, clusterName, namespace, secrets); err != nil {
-		r.recordEvent(authConfig, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to reconcile dashboard config: %v", err))
-		return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to reconcile dashboard config: %v", err))
 	}
 
 	log.Info("Auth config reconciliation completed",
@@ -128,71 +126,6 @@ func (r *AuthConfigReconciler) recordEvent(authConfig *wazuhv1.OpenSearchAuthCon
 	if r.Recorder != nil {
 		r.Recorder.Event(authConfig, eventType, reason, message)
 	}
-}
-
-// resolveSecrets resolves all secret references in the auth config
-func (r *AuthConfigReconciler) resolveSecrets(ctx context.Context, authConfig *wazuhv1.OpenSearchAuthConfig) (map[string]string, error) {
-	secrets := make(map[string]string)
-	namespace := authConfig.Namespace
-
-	// OIDC client secret
-	if authConfig.Spec.OIDC != nil && authConfig.Spec.OIDC.ClientSecretRef != nil {
-		value, err := r.getSecretValue(ctx, namespace, authConfig.Spec.OIDC.ClientSecretRef)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve OIDC client secret: %w", err)
-		}
-		secrets["oidc_client_secret"] = value
-	}
-
-	// OIDC cookie password
-	if authConfig.Spec.OIDC != nil && authConfig.Spec.OIDC.Dashboard != nil &&
-		authConfig.Spec.OIDC.Dashboard.CookiePasswordRef != nil {
-		value, err := r.getSecretValue(ctx, namespace, authConfig.Spec.OIDC.Dashboard.CookiePasswordRef)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve OIDC cookie password: %w", err)
-		}
-		secrets["oidc_cookie_password"] = value
-	}
-
-	// SAML exchange key
-	if authConfig.Spec.SAML != nil && authConfig.Spec.SAML.ExchangeKeyRef != nil {
-		value, err := r.getSecretValue(ctx, namespace, authConfig.Spec.SAML.ExchangeKeyRef)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve SAML exchange key: %w", err)
-		}
-		secrets["saml_exchange_key"] = value
-	}
-
-	// LDAP bind password
-	if authConfig.Spec.LDAP != nil && authConfig.Spec.LDAP.Authentication.BindPasswordRef != nil {
-		value, err := r.getSecretValue(ctx, namespace, authConfig.Spec.LDAP.Authentication.BindPasswordRef)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve LDAP bind password: %w", err)
-		}
-		secrets["ldap_bind_password"] = value
-	}
-
-	return secrets, nil
-}
-
-// getSecretValue retrieves a value from a Kubernetes secret
-func (r *AuthConfigReconciler) getSecretValue(ctx context.Context, namespace string, ref *wazuhv1.SecretKeyRef) (string, error) {
-	secret := &corev1.Secret{}
-	if err := r.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: namespace}, secret); err != nil {
-		return "", err
-	}
-
-	key := ref.Key
-	if key == "" {
-		key = "password"
-	}
-
-	value, ok := secret.Data[key]
-	if !ok {
-		return "", fmt.Errorf("key %s not found in secret %s", key, ref.Name)
-	}
-
-	return string(value), nil
 }
 
 // validateConfig validates the auth configuration
@@ -234,136 +167,31 @@ func (r *AuthConfigReconciler) validateConfig(authConfig *wazuhv1.OpenSearchAuth
 	return nil
 }
 
-// reconcileIndexerSecurityConfig creates/updates the security config for the indexer
-func (r *AuthConfigReconciler) reconcileIndexerSecurityConfig(
-	ctx context.Context,
-	authConfig *wazuhv1.OpenSearchAuthConfig,
-	clusterName, namespace string,
-	secrets map[string]string,
-) error {
+// cleanupLegacyConfigMaps deletes ConfigMaps this reconciler used to create before
+// indexer/dashboard wiring existed. Nothing mounts them, and they have no owner
+// references, so they would otherwise linger forever. Errors are logged but not
+// returned since cleanup must not block reconciliation.
+func (r *AuthConfigReconciler) cleanupLegacyConfigMaps(ctx context.Context, clusterName, namespace string) {
 	log := logf.FromContext(ctx)
 
-	// Build security config.yml
-	builder := config.NewAuthConfigBuilder(&authConfig.Spec)
-	for key, value := range secrets {
-		builder.WithSecret(key, value)
+	legacyNames := []string{
+		fmt.Sprintf("%s-security-config", clusterName),
+		constants.DashboardAuthConfigName(clusterName),
 	}
-	securityConfigYML := builder.BuildSecurityConfig()
-
-	// Create ConfigMap for security config
-	configMapName := fmt.Sprintf("%s-security-config", clusterName)
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      configMapName,
-			Namespace: namespace,
-			Labels: map[string]string{
-				constants.LabelName:      constants.AppName + "-security-config",
-				constants.LabelInstance:  clusterName,
-				constants.LabelComponent: constants.ComponentSecurity,
-				constants.LabelManagedBy: constants.OperatorName,
-			},
-		},
-		Data: map[string]string{
-			"config.yml": securityConfigYML,
-		},
-	}
-
-	// Check if ConfigMap exists
-	existing := &corev1.ConfigMap{}
-	err := r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: namespace}, existing)
-	if err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			return err
-		}
-		// Create new ConfigMap
-		if err := r.Create(ctx, cm); err != nil {
-			return err
-		}
-		log.Info("Created security config ConfigMap", "name", configMapName)
-	} else {
-		// Update existing ConfigMap only if data changed
-		if !mapsEqualStr(existing.Data, cm.Data) {
-			existing.Data = cm.Data
-			if err := r.Update(ctx, existing); err != nil {
-				return err
+	for _, name := range legacyNames {
+		cm := &corev1.ConfigMap{}
+		if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, cm); err != nil {
+			if client.IgnoreNotFound(err) != nil {
+				log.V(1).Info("Failed to check legacy ConfigMap", "name", name, "err", err)
 			}
-			log.Info("Updated security config ConfigMap", "name", configMapName)
+			continue
 		}
-	}
-
-	return nil
-}
-
-// reconcileDashboardConfig creates/updates the dashboard config for SSO
-func (r *AuthConfigReconciler) reconcileDashboardConfig(
-	ctx context.Context,
-	authConfig *wazuhv1.OpenSearchAuthConfig,
-	clusterName, namespace string,
-	secrets map[string]string,
-) error {
-	log := logf.FromContext(ctx)
-
-	// Check if OIDC or SAML is enabled (dashboard config is only needed for SSO)
-	needsSSOConfig := (authConfig.Spec.OIDC != nil && authConfig.Spec.OIDC.Enabled) ||
-		(authConfig.Spec.SAML != nil && authConfig.Spec.SAML.Enabled)
-
-	if !needsSSOConfig {
-		log.V(1).Info("No SSO methods enabled, skipping dashboard auth config")
-		return nil
-	}
-
-	// Build dashboard auth config
-	builder := config.NewDashboardAuthConfigBuilder(&authConfig.Spec)
-	for key, value := range secrets {
-		builder.WithSecret(key, value)
-	}
-	authSection, err := builder.BuildAuthSection()
-	if err != nil {
-		return fmt.Errorf("failed to build auth section: %w", err)
-	}
-
-	// Create ConfigMap for dashboard auth config
-	configMapName := constants.DashboardAuthConfigName(clusterName)
-	cm := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      configMapName,
-			Namespace: namespace,
-			Labels: map[string]string{
-				constants.LabelName:      constants.AppName + "-dashboard-auth",
-				constants.LabelInstance:  clusterName,
-				constants.LabelComponent: constants.ComponentDashboardAuth,
-				constants.LabelManagedBy: constants.OperatorName,
-			},
-		},
-		Data: map[string]string{
-			"auth.yml": authSection,
-		},
-	}
-
-	// Check if ConfigMap exists
-	existing := &corev1.ConfigMap{}
-	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: namespace}, existing)
-	if err != nil {
-		if client.IgnoreNotFound(err) != nil {
-			return err
+		if err := r.Delete(ctx, cm); err != nil && client.IgnoreNotFound(err) != nil {
+			log.V(1).Info("Failed to delete legacy ConfigMap", "name", name, "err", err)
+			continue
 		}
-		// Create new ConfigMap
-		if err := r.Create(ctx, cm); err != nil {
-			return err
-		}
-		log.Info("Created dashboard auth config ConfigMap", "name", configMapName)
-	} else {
-		// Update existing ConfigMap only if data changed
-		if !mapsEqualStr(existing.Data, cm.Data) {
-			existing.Data = cm.Data
-			if err := r.Update(ctx, existing); err != nil {
-				return err
-			}
-			log.Info("Updated dashboard auth config ConfigMap", "name", configMapName)
-		}
+		log.Info("Deleted legacy ConfigMap superseded by indexer/dashboard reconcilers", "name", name)
 	}
-
-	return nil
 }
 
 // getActiveAuthDomains returns the list of enabled auth methods
@@ -429,5 +257,3 @@ func (r *AuthConfigReconciler) updateStatus(ctx context.Context, authConfig *waz
 	})
 }
 
-// Ensure IndexerConfigMapBuilder uses our auth config builder
-var _ = configmaps.NewIndexerConfigMapBuilder

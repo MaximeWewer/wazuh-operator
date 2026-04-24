@@ -342,13 +342,31 @@ func (r *IndexerReconciler) reconcileSecrets(ctx context.Context, cluster *wazuh
 		return fmt.Errorf("failed to get existing indexer security secret: %w", err)
 	}
 
+	// If an OpenSearchAuthConfig targets this cluster, derive config.yml from it.
+	// Otherwise fall back to the default basicauth-only security config.
+	securityConfigYML := generateDefaultSecurityConfig()
+	if authConfig, err := config.FindAuthConfigForCluster(ctx, r.Client, cluster.Name, cluster.Namespace); err != nil {
+		log.Error(err, "Failed to list OpenSearchAuthConfigs, indexer will use default security config")
+	} else if authConfig != nil {
+		authSecrets, secErr := config.ResolveAuthSecrets(ctx, r.Client, authConfig)
+		if secErr != nil {
+			log.Error(secErr, "Failed to resolve auth secrets, indexer will use default security config", "authConfig", authConfig.Name)
+		} else {
+			b := config.NewAuthConfigBuilder(&authConfig.Spec)
+			for k, v := range authSecrets {
+				b.WithSecret(k, v)
+			}
+			securityConfigYML = []byte(b.BuildSecurityConfig())
+		}
+	}
+
 	securityBuilder := secrets.NewIndexerSecuritySecretBuilder(cluster.Name, cluster.Namespace)
 	securityBuilder.WithInternalUsers(generateDefaultInternalUsers(adminUsername, adminPassword, existingInternalUsers))
 	securityBuilder.WithRoles(generateDefaultRoles())
 	securityBuilder.WithRolesMapping(generateDefaultRolesMapping(adminDN))
 	securityBuilder.WithActionGroups(generateDefaultActionGroups())
 	securityBuilder.WithTenants(generateDefaultTenants())
-	securityBuilder.WithConfig(generateDefaultSecurityConfig())
+	securityBuilder.WithConfig(securityConfigYML)
 	securitySecret := securityBuilder.Build()
 
 	if err := controllerutil.SetControllerReference(cluster, securitySecret, r.Scheme); err != nil {
