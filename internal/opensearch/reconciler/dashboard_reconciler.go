@@ -28,6 +28,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -239,6 +240,13 @@ func (r *DashboardReconciler) reconcileConfigMap(ctx context.Context, cluster *w
 		if secErr != nil {
 			log.Error(secErr, "Failed to resolve auth secrets, dashboard will use basicauth fallback", "authConfig", authConfig.Name)
 		} else {
+			// Ensure a stable OIDC cookie password exists when the user did not supply one.
+			// Otherwise the dashboard config builder generates a fresh random value on every
+			// reconcile, which makes the rendered opensearch_dashboards.yml differ each pass
+			// and produces an infinite reconcile loop.
+			if err := r.ensureOIDCCookiePassword(ctx, cluster, authConfig, authSecrets); err != nil {
+				log.Error(err, "Failed to ensure OIDC cookie password, dashboard may reconcile-loop", "authConfig", authConfig.Name)
+			}
 			configBuilder.WithAuthConfig(&authConfig.Spec).WithAuthSecrets(authSecrets)
 		}
 	}
@@ -309,6 +317,78 @@ func (r *DashboardReconciler) getConfigHash(ctx context.Context, cluster *wazuhv
 		return ""
 	}
 	return patch.ComputeConfigHash(configMap.Data)
+}
+
+// ensureOIDCCookiePassword guarantees a stable value for the OIDC cookie password
+// used by opensearch-dashboards. If the user supplied a CookiePasswordRef it is
+// already resolved by ResolveAuthSecrets and we leave authSecrets untouched.
+// Otherwise we read-or-create a Secret owned by the WazuhCluster (one per cluster)
+// and inject the persisted value so every reconcile renders the same configuration.
+func (r *DashboardReconciler) ensureOIDCCookiePassword(ctx context.Context, cluster *wazuhv1.WazuhCluster, authConfig *wazuhv1.OpenSearchAuthConfig, authSecrets map[string]string) error {
+	if authConfig.Spec.OIDC == nil || !authConfig.Spec.OIDC.Enabled {
+		return nil
+	}
+	if authConfig.Spec.OIDC.Dashboard != nil && authConfig.Spec.OIDC.Dashboard.CookiePasswordRef != nil {
+		return nil // user-managed, already resolved upstream
+	}
+	if v, ok := authSecrets[opensearchconfig.AuthSecretKeyOIDCCookiePassword]; ok && v != "" {
+		return nil
+	}
+
+	secretName := fmt.Sprintf("%s-dashboard-oidc-cookie", cluster.Name)
+	key := types.NamespacedName{Name: secretName, Namespace: cluster.Namespace}
+
+	existing := &corev1.Secret{}
+	err := r.Get(ctx, key, existing)
+	if err != nil && !errors.IsNotFound(err) {
+		return fmt.Errorf("failed to get OIDC cookie secret %s: %w", secretName, err)
+	}
+	if err == nil {
+		if v, ok := existing.Data["cookie_password"]; ok && len(v) > 0 {
+			authSecrets[opensearchconfig.AuthSecretKeyOIDCCookiePassword] = string(v)
+			return nil
+		}
+	}
+
+	password, genErr := utils.GenerateRandomPassword(32)
+	if genErr != nil {
+		return fmt.Errorf("failed to generate OIDC cookie password: %w", genErr)
+	}
+
+	if errors.IsNotFound(err) {
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      secretName,
+				Namespace: cluster.Namespace,
+				Labels: map[string]string{
+					constants.LabelName:      constants.AppName + "-dashboard-oidc-cookie",
+					constants.LabelInstance:  cluster.Name,
+					constants.LabelComponent: constants.ComponentDashboard,
+					constants.LabelManagedBy: constants.OperatorName,
+				},
+			},
+			Type: corev1.SecretTypeOpaque,
+			Data: map[string][]byte{"cookie_password": []byte(password)},
+		}
+		if err := controllerutil.SetControllerReference(cluster, secret, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set owner reference on OIDC cookie secret: %w", err)
+		}
+		if err := r.Create(ctx, secret); err != nil && !errors.IsAlreadyExists(err) {
+			return fmt.Errorf("failed to create OIDC cookie secret: %w", err)
+		}
+	} else {
+		// Secret existed without cookie_password key: backfill it in-place so the
+		// next reconcile reads the same persisted value.
+		if existing.Data == nil {
+			existing.Data = map[string][]byte{}
+		}
+		existing.Data["cookie_password"] = []byte(password)
+		if err := r.Update(ctx, existing); err != nil {
+			return fmt.Errorf("failed to update OIDC cookie secret: %w", err)
+		}
+	}
+	authSecrets[opensearchconfig.AuthSecretKeyOIDCCookiePassword] = password
+	return nil
 }
 
 // resolveAPIEndpointCredentials resolves credentials from secret references for API endpoints
