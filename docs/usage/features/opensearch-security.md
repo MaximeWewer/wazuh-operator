@@ -50,8 +50,9 @@ metadata:
   name: admin
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   defaultAdmin: true # This user becomes the default admin
   passwordSecret:
     secretName: my-admin-credentials
@@ -121,8 +122,9 @@ metadata:
   name: readonly-user
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   passwordSecret:
     secretName: readonly-user-secret
     passwordKey: password
@@ -140,8 +142,9 @@ metadata:
   name: ldap-mapped-user
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   passwordSecret:
     secretName: ldap-user-secret
     passwordKey: password
@@ -162,8 +165,9 @@ metadata:
   name: hashed-user
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   # BCrypt hash of password
   hash: "$2y$12$abcdef..."
   openSearchRoles:
@@ -215,8 +219,9 @@ metadata:
   name: wazuh-alerts-reader
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   clusterPermissions:
     - cluster_composite_ops_ro
   indexPermissions:
@@ -237,8 +242,9 @@ metadata:
   name: team-a-alerts
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   indexPermissions:
     - indexPatterns:
         - "wazuh-alerts-*"
@@ -258,8 +264,9 @@ metadata:
   name: restricted-fields
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   indexPermissions:
     - indexPatterns:
         - "wazuh-alerts-*"
@@ -286,8 +293,9 @@ metadata:
   name: logs-admin
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   clusterPermissions:
     - cluster_monitor
     - indices:admin/template/get
@@ -349,8 +357,9 @@ metadata:
   name: wazuh-alerts-reader # Role name
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   users:
     - readonly-user
     - analyst-user
@@ -366,8 +375,9 @@ metadata:
   name: all_access
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   backendRoles:
     - cn=admins,ou=groups,dc=example,dc=com
     - security-admins
@@ -382,8 +392,9 @@ metadata:
   name: sensitive-data-access
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   # User must have BOTH backend roles
   andBackendRoles:
     - security-cleared
@@ -399,8 +410,9 @@ metadata:
   name: internal-full-access
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   hosts:
     - "192.168.1.*"
     - "10.0.0.*"
@@ -426,8 +438,9 @@ metadata:
   name: team-security
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   description: "Security team private space"
 ---
 apiVersion: resources.wazuh.com/v1
@@ -436,8 +449,9 @@ metadata:
   name: team-devops
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   description: "DevOps team private space"
 ```
 
@@ -450,8 +464,9 @@ metadata:
   name: security-team-role
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   tenantPermissions:
     - tenantPatterns:
         - "team-security"
@@ -485,8 +500,9 @@ metadata:
   name: wazuh-read
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   type: index
   allowedActions:
     - read
@@ -500,8 +516,9 @@ metadata:
   name: wazuh-write
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   type: index
   allowedActions:
     - write
@@ -515,8 +532,9 @@ metadata:
   name: wazuh-full
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   type: index
   allowedActions:
     - wazuh-read # Reference other action groups

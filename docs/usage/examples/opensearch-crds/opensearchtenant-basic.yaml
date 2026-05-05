@@ -7,9 +7,9 @@ metadata:
   namespace: wazuh
 spec:
   # Reference to the WazuhCluster
-  clusterRef:
-    name: wazuh-test
-    namespace: wazuh
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
 
   # Description of the tenant
   description: "Security Operations Center team tenant for isolated dashboards"
@@ -21,9 +21,9 @@ metadata:
   name: dev-team
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-test
-    namespace: wazuh
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
   description: "Development team tenant for application monitoring dashboards"
 ---
 # Tenant for compliance reporting
@@ -33,7 +33,7 @@ metadata:
   name: compliance
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-test
-    namespace: wazuh
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
   description: "Compliance team tenant for audit and regulatory dashboards"

@@ -6,9 +6,9 @@ metadata:
   namespace: wazuh
 spec:
   # Reference to the WazuhCluster
-  clusterRef:
-    name: wazuh-test
-    namespace: wazuh
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
 
   # Type: cluster, index, or all
   type: index
@@ -30,9 +30,9 @@ metadata:
   name: wazuh-alerts-manage
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-test
-    namespace: wazuh
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
   type: index
   allowedActions:
     - wazuh-alerts-read  # Include the read action group
@@ -49,9 +49,9 @@ metadata:
   name: cluster-monitor
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-test
-    namespace: wazuh
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
   type: cluster
   allowedActions:
     - cluster:monitor/health

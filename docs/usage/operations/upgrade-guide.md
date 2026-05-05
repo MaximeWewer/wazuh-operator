@@ -2,6 +2,42 @@
 
 This guide covers upgrading the Wazuh Operator and managed Wazuh clusters.
 
+## Breaking change: cross-namespace cluster references
+
+All resource CRDs now use explicit (name, namespace) cluster references and
+support targeting clusters that live in a different namespace from the CR.
+
+| Field shape | CRDs |
+|-------------|------|
+| `spec.clusterRefs: [{name, namespace}]` (list, both required, MinItems=1) | WazuhAgentGroup, WazuhRule, WazuhDecoder, WazuhFilebeat, OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchTenant, OpenSearchActionGroup, OpenSearchAuthConfig, OpenSearchISMPolicy, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchIndex, OpenSearchSnapshotPolicy, OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore |
+| `spec.clusterRef: {name, namespace}` (single, both required) | WazuhBackup, WazuhRestore, WazuhCertificate |
+
+Migrate every existing CR before upgrading the operator:
+
+```yaml
+# Before
+spec:
+  clusterRef:
+    name: wazuh-cluster      # namespace was optional, defaulted to CR namespace
+
+# After (multi-cluster CRs)
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh        # mandatory
+
+# After (Backup/Restore/Certificate)
+spec:
+  clusterRef:
+    name: wazuh-cluster
+    namespace: wazuh          # mandatory
+```
+
+For multi-cluster CRs, `status.clusterStatuses[]` reports per-target-cluster
+sync state; the top-level `status.phase` becomes the worst-case aggregate
+(`Failed` if any cluster fails, `Pending` if any is pending, `Ready` only
+when every target is ready).
+
 ## Overview
 
 | Component | Upgrade Method | Downtime |
@@ -30,8 +66,9 @@ metadata:
   name: pre-upgrade-$(date +%Y%m%d)
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   repository:
     name: backup-repo
   indices:
@@ -48,6 +85,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
   oneShot: true
   components:
     agentKeys: true
@@ -237,8 +275,9 @@ metadata:
   name: rollback-restore
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   repository:
     name: backup-repo
   snapshotName: pre-upgrade-20260118

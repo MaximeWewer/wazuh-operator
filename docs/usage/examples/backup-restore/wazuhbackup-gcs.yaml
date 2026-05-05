@@ -8,6 +8,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
 
   components:
     agentKeys: true
@@ -66,6 +67,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
 
   components:
     agentKeys: true

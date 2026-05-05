@@ -6,9 +6,9 @@ metadata:
   namespace: wazuh
 spec:
   # Reference to the WazuhCluster
-  clusterRef:
-    name: wazuh-test
-    namespace: wazuh
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
 
   # Version for template ordering
   version: 1
@@ -30,9 +30,9 @@ metadata:
   name: wazuh-base-mappings
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-test
-    namespace: wazuh
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
 
   version: 1
 
@@ -72,9 +72,9 @@ metadata:
   name: hot-tier-settings
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-test
-    namespace: wazuh
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
 
   version: 1
 

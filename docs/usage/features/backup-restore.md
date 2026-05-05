@@ -91,8 +91,9 @@ metadata:
   name: minio-backups
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   type: s3
   settings:
     bucket: wazuh-backups
@@ -116,8 +117,9 @@ metadata:
   name: aws-backups
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   type: s3
   settings:
     bucket: my-wazuh-backups
@@ -140,8 +142,9 @@ metadata:
   name: aws-backups-legacy
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   type: s3
   settings:
     bucket: my-wazuh-backups
@@ -164,8 +167,9 @@ metadata:
   name: gcs-backups
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   type: gcs
   settings:
     bucket: my-wazuh-snapshots
@@ -185,8 +189,9 @@ metadata:
   name: hdfs-backups
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   type: hdfs
   settings:
     uri: "hdfs://namenode:8020"
@@ -208,8 +213,9 @@ metadata:
   name: pre-upgrade
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   repository: minio-backups
   indices:
     - "wazuh-alerts-*"
@@ -243,8 +249,9 @@ metadata:
   name: daily-snapshots
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   repository:
     name: minio-backups
   description: "Daily automated snapshots"
@@ -277,8 +284,9 @@ metadata:
   name: restore-alerts
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   repository: minio-backups
   snapshot: pre-upgrade-20250105-143022
   indices:
@@ -329,6 +337,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
 
   # Components to backup
   components:
@@ -375,6 +384,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
   components:
     agentKeys: true
     fimDatabase: true
@@ -401,6 +411,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
   components:
     agentKeys: true
     fimDatabase: true
@@ -430,6 +441,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
   components:
     agentKeys: true
     fimDatabase: true
@@ -458,6 +470,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
   components:
     agentKeys: true
     fimDatabase: true
@@ -483,6 +496,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
 
   # Source: S3/MinIO location
   source:
@@ -519,6 +533,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
   source:
     wazuhBackupRef:
       name: daily-backup
@@ -540,6 +555,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
   source:
     gcs:
       bucket: my-wazuh-backups
@@ -564,6 +580,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
   source:
     azure:
       container: wazuh-backups
@@ -589,6 +606,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
   source:
     hdfs:
       uri: "http://namenode:9870/webhdfs/v1"

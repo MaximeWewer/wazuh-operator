@@ -20,6 +20,7 @@ spec:
   # Reference to the WazuhCluster to restore to
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
 
   # Source configuration - restore from S3/MinIO
   source:
@@ -72,6 +73,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
 
   source:
     s3:
@@ -103,6 +105,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
 
   # Reference an existing WazuhBackup resource
   # The restore will use the most recent successful backup

@@ -18,6 +18,7 @@ spec:
   # Reference to the WazuhCluster to backup
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
 
   # Full backup of all critical components
   components:
@@ -66,6 +67,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
 
   # Just backup agent keys for potential restoration
   components:

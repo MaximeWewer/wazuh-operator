@@ -11,8 +11,9 @@ metadata:
   name: pre-upgrade
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   # Repository must exist (created via OpenSearchSnapshotRepository CRD)
   repository: minio-backups
   # Index patterns to include in the snapshot
@@ -38,8 +39,9 @@ metadata:
   name: alerts-backup
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   repository: minio-backups
   indices:
     - "wazuh-alerts-*"

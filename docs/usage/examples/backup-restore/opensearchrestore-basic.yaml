@@ -11,8 +11,9 @@ metadata:
   name: restore-alerts
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   # Repository containing the snapshot
   repository: minio-backups
   # Snapshot name to restore from (check status.snapshotName from OpenSearchSnapshot)
@@ -42,8 +43,9 @@ metadata:
   name: restore-full
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   repository: minio-backups
   snapshot: pre-upgrade-20250105-143022
   # Restore all indices from snapshot

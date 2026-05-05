@@ -6,8 +6,9 @@ metadata:
   name: gcs-snapshots
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   type: gcs
   settings:
     bucket: my-wazuh-snapshots
@@ -26,8 +27,9 @@ metadata:
   name: gcs-snapshots-wi
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   type: gcs
   settings:
     bucket: my-wazuh-snapshots
@@ -46,8 +48,9 @@ metadata:
   name: hdfs-snapshots
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   type: hdfs
   settings:
     uri: "hdfs://namenode:8020"

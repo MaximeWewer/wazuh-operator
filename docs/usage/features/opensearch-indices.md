@@ -55,8 +55,9 @@ metadata:
   name: custom-logs
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   settings:
     numberOfShards: 3
     numberOfReplicas: 1
@@ -72,8 +73,9 @@ metadata:
   name: application-events
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   settings:
     numberOfShards: 2
     numberOfReplicas: 1
@@ -102,8 +104,9 @@ metadata:
   name: logs-2024-01
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   settings:
     numberOfShards: 3
     numberOfReplicas: 1
@@ -158,8 +161,9 @@ metadata:
   name: logs-template
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   indexPatterns:
     - "logs-*"
   priority: 100
@@ -185,8 +189,9 @@ metadata:
   name: wazuh-custom-template
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   indexPatterns:
     - "wazuh-custom-*"
   composedOf:
@@ -209,8 +214,9 @@ metadata:
   name: metrics-stream
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   indexPatterns:
     - "metrics-*"
   dataStream:
@@ -247,8 +253,9 @@ metadata:
   name: base-settings
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   template:
     settings:
       numberOfShards: 2
@@ -266,8 +273,9 @@ metadata:
   name: wazuh-mappings
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   template:
     mappings:
       properties:
@@ -348,8 +356,9 @@ metadata:
   name: wazuh-retention-30d
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   description: "Delete Wazuh indices after 30 days"
   defaultState: hot
   states:
@@ -377,8 +386,9 @@ metadata:
   name: wazuh-tiered-storage
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   description: "Move data through storage tiers"
   defaultState: hot
   states:
@@ -436,8 +446,9 @@ metadata:
   name: optimize-indices
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   defaultState: open
   states:
     - name: open
@@ -506,8 +517,9 @@ metadata:
   name: daily-backup
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   description: "Daily snapshot of all indices"
   enabled: true
   snapshotConfig:

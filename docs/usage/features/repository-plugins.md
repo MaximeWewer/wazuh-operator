@@ -151,8 +151,9 @@ kind: OpenSearchSnapshotRepository
 metadata:
   name: my-s3-repo
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   type: s3
   settings:
     bucket: my-snapshots

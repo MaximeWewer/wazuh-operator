@@ -48,8 +48,9 @@ metadata:
   name: minio-backups
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   type: s3
   settings:
     bucket: wazuh-snapshots

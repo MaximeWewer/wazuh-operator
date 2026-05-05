@@ -2,6 +2,28 @@
 
 This document provides a complete reference for all Custom Resource Definitions (CRDs) supported by the Wazuh Operator.
 
+## Cluster references
+
+Resource CRDs reference the WazuhCluster they apply to via either
+`spec.clusterRefs` (list, multi-cluster) or `spec.clusterRef` (single, one-shot
+operations). Both forms require `name` **and** `namespace`; cross-namespace
+references are supported.
+
+| Form | CRDs |
+|------|------|
+| `clusterRefs: [{name, namespace}]` (MinItems=1) | WazuhAgentGroup, WazuhRule, WazuhDecoder, WazuhFilebeat, OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchTenant, OpenSearchActionGroup, OpenSearchAuthConfig, OpenSearchISMPolicy, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchIndex, OpenSearchSnapshotPolicy, OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore |
+| `clusterRef: {name, namespace}` | WazuhBackup, WazuhRestore, WazuhCertificate |
+
+Multi-cluster CRDs report per-target-cluster reconciliation state via
+`status.clusterStatuses[]` (each entry: `name`, `namespace`, `phase`,
+`lastSyncTime`, `lastAppliedHash`, `message`). The top-level `status.phase`
+is the aggregate (`Failed` if any failed, `Pending` if any pending,
+`Ready` only when every target is ready).
+
+For OpenSearchSnapshot and OpenSearchRestore the operator currently runs the
+one-shot operation against the first entry only; submit a separate CR per
+additional cluster when targeting more than one.
+
 ## Table of Contents
 
 - [WazuhCluster](#wazuhcluster)
@@ -934,8 +956,9 @@ kind: WazuhAgentGroup
 metadata:
   name: linux-servers
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
   groupName: linux
   description: "Linux servers group"
   agentConf: |

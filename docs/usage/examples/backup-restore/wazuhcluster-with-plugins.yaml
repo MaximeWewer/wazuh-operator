@@ -50,8 +50,9 @@ metadata:
   name: s3-snapshots
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh
+  clusterRefs:
+    - name: wazuh
+      namespace: wazuh
   type: s3
   settings:
     bucket: my-wazuh-snapshots

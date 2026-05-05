@@ -7,8 +7,9 @@ metadata:
   namespace: wazuh
 spec:
   # Reference to the WazuhCluster this auth config applies to
-  clusterRef:
-    name: wazuh-cluster
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
 
   # Basic HTTP authentication against internal users database
   # This is enabled by default and is the recommended setup for most deployments

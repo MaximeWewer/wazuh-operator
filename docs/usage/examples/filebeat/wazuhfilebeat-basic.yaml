@@ -6,9 +6,9 @@ metadata:
   namespace: wazuh
 spec:
   # Reference to the WazuhCluster
-  clusterRef:
-    name: wazuh-test
-    namespace: wazuh
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
 
   # Alerts configuration (enabled by default)
   alerts:

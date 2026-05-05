@@ -21,6 +21,7 @@ spec:
   # Reference to the WazuhCluster to backup
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
 
   # Components to include in backup
   components:
@@ -89,6 +90,7 @@ metadata:
 spec:
   clusterRef:
     name: wazuh-cluster
+    namespace: wazuh
 
   components:
     agentKeys: true

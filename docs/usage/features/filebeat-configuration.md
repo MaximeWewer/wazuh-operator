@@ -138,9 +138,9 @@ metadata:
   name: wazuh-filebeat
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-test
-    namespace: wazuh
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
   alerts:
     enabled: true
   archives:
@@ -163,9 +163,9 @@ metadata:
   name: wazuh-filebeat-advanced
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-test
-    namespace: wazuh
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
   alerts:
     enabled: true
   archives:
@@ -200,9 +200,9 @@ metadata:
   name: wazuh-filebeat-custom
   namespace: wazuh
 spec:
-  clusterRef:
-    name: wazuh-test
-    namespace: wazuh
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
   alerts:
     enabled: true
   template:
