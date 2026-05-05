@@ -44,7 +44,7 @@ func TestRestoreReconciler_ReconcileRBAC_ServiceAccountCreateTrue(t *testing.T) 
 			Namespace: "wazuh",
 		},
 		Spec: wazuhv1.WazuhRestoreSpec{
-			ClusterRef: wazuhv1.WazuhClusterReference{Name: "wazuh-cluster"},
+			ClusterRef: wazuhv1.WazuhClusterRef{Name: "wazuh-cluster", Namespace: "wazuh"},
 			Source: wazuhv1.RestoreSource{
 				S3: &wazuhv1.S3RestoreSource{
 					Bucket: "bucket",
@@ -92,7 +92,7 @@ func TestRestoreReconciler_ReconcileRBAC_ServiceAccountCreateFalse(t *testing.T)
 			Namespace: "wazuh",
 		},
 		Spec: wazuhv1.WazuhRestoreSpec{
-			ClusterRef: wazuhv1.WazuhClusterReference{Name: "wazuh-cluster"},
+			ClusterRef: wazuhv1.WazuhClusterRef{Name: "wazuh-cluster", Namespace: "wazuh"},
 			Source: wazuhv1.RestoreSource{
 				S3: &wazuhv1.S3RestoreSource{
 					Bucket: "bucket",

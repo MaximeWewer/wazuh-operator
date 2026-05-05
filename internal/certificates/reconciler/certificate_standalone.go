@@ -36,9 +36,14 @@ import (
 func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *wazuhv1.WazuhCertificate) error {
 	log := logf.FromContext(ctx)
 
-	// Check if the secret already exists and is still valid — skip generation if so
+	// Check if the secret already exists and is still valid — skip generation if so.
+	// The secret lives in the target cluster's namespace.
+	existingNS := cert.Spec.ClusterRef.Namespace
+	if existingNS == "" {
+		existingNS = cert.Namespace
+	}
 	existingSecret := &corev1.Secret{}
-	if err := r.Get(ctx, types.NamespacedName{Name: cert.Spec.SecretName, Namespace: cert.Namespace}, existingSecret); err == nil {
+	if err := r.Get(ctx, types.NamespacedName{Name: cert.Spec.SecretName, Namespace: existingNS}, existingSecret); err == nil {
 		// Secret exists — check if cert is parsable and still valid
 		if certPEM, ok := existingSecret.Data[constants.SecretKeyTLSCert]; ok {
 			if keyPEM, ok2 := existingSecret.Data[constants.SecretKeyTLSKey]; ok2 {
@@ -265,25 +270,37 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 		return fmt.Errorf("unsupported certificate type: %s", cert.Spec.Type)
 	}
 
-	// Create or update the secret
+	// Create or update the secret in the target cluster's namespace so the
+	// cluster pods can mount it. Cross-namespace ownerReferences are forbidden,
+	// so use labels and a finalizer-driven cleanup instead.
+	targetNamespace := cert.Spec.ClusterRef.Namespace
+	if targetNamespace == "" {
+		targetNamespace = cert.Namespace
+	}
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cert.Spec.SecretName,
-			Namespace: cert.Namespace,
+			Namespace: targetNamespace,
 			Labels: map[string]string{
-				constants.LabelName:      "wazuh-certificate",
-				constants.LabelInstance:  cert.Name,
-				constants.LabelComponent: string(cert.Spec.Type),
-				constants.LabelPartOf:    constants.AppName,
-				constants.LabelManagedBy: constants.OperatorName,
+				constants.LabelName:                              "wazuh-certificate",
+				constants.LabelInstance:                          cert.Name,
+				constants.LabelComponent:                         string(cert.Spec.Type),
+				constants.LabelPartOf:                            constants.AppName,
+				constants.LabelManagedBy:                         constants.OperatorName,
+				"resources.wazuh.com/certificate-cr":             cert.Name,
+				"resources.wazuh.com/certificate-cr-namespace":   cert.Namespace,
 			},
 		},
 		Type: corev1.SecretTypeOpaque,
 		Data: certData,
 	}
 
-	if err := controllerutil.SetControllerReference(cert, secret, r.Scheme); err != nil {
-		return fmt.Errorf("failed to set controller reference: %w", err)
+	// Set ownerReference only when the secret stays in the CR's own namespace
+	// (Kubernetes forbids cross-namespace ownerReferences).
+	if targetNamespace == cert.Namespace {
+		if err := controllerutil.SetControllerReference(cert, secret, r.Scheme); err != nil {
+			return fmt.Errorf("failed to set controller reference: %w", err)
+		}
 	}
 
 	// Check if secret exists
@@ -338,10 +355,15 @@ func (r *CertificateReconciler) getOrCreateStandaloneCA(ctx context.Context, cer
 		return certificates.GenerateCA(caConfig)
 	}
 
-	// For other types, try to find existing CA from cluster reference
+	// For other types, try to find existing CA from cluster reference in
+	// the target cluster's namespace.
 	caSecretName := cert.Spec.ClusterRef.Name + "-ca"
+	caNS := cert.Spec.ClusterRef.Namespace
+	if caNS == "" {
+		caNS = cert.Namespace
+	}
 	caSecret := &corev1.Secret{}
-	if err := r.Get(ctx, types.NamespacedName{Name: caSecretName, Namespace: cert.Namespace}, caSecret); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Name: caSecretName, Namespace: caNS}, caSecret); err != nil {
 		if errors.IsNotFound(err) {
 			// Generate a new CA if none exists
 			caConfig := certificates.DefaultCAConfig(cert.Spec.ClusterRef.Name + "-ca")

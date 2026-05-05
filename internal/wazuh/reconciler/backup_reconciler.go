@@ -93,11 +93,12 @@ func (r *BackupReconciler) Reconcile(ctx context.Context, backup *wazuhv1.WazuhB
 		return r.handleDeletion(ctx, backup)
 	}
 
-	// Validate the referenced WazuhCluster exists
+	// Validate the referenced WazuhCluster exists.
+	// Cluster namespace comes from spec.clusterRef.namespace (cross-NS supported).
 	cluster := &wazuhv1.WazuhCluster{}
 	clusterKey := types.NamespacedName{
 		Name:      backup.Spec.ClusterRef.Name,
-		Namespace: backup.Namespace,
+		Namespace: backup.Spec.ClusterRef.Namespace,
 	}
 	if err := r.Get(ctx, clusterKey, cluster); err != nil {
 		if errors.IsNotFound(err) {

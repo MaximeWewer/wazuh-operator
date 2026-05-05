@@ -1,5 +1,3 @@
-//go:build broken_multi_cluster
-
 /*
 Copyright 2026.
 
@@ -288,8 +286,8 @@ func TestRuleValidator_Validate(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: wazuhv1.WazuhRuleSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name: "test-cluster",
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: "test-cluster", Namespace: "default"},
 					},
 					RuleName: "ssh_bruteforce",
 					Rules: `<group name="sshd">
@@ -309,8 +307,8 @@ func TestRuleValidator_Validate(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: wazuhv1.WazuhRuleSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name: "test-cluster",
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: "test-cluster", Namespace: "default"},
 					},
 					RuleName: "test_rule",
 					Rules:    "not valid xml",
@@ -326,8 +324,8 @@ func TestRuleValidator_Validate(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: wazuhv1.WazuhRuleSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name: "test-cluster",
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: "test-cluster", Namespace: "default"},
 					},
 					RuleName: "test_rule",
 					Rules: `<group name="test">
@@ -347,8 +345,8 @@ func TestRuleValidator_Validate(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: wazuhv1.WazuhRuleSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name: "test-cluster",
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: "test-cluster", Namespace: "default"},
 					},
 					RuleName: "invalid name with spaces",
 					Rules: `<group name="test">

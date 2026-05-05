@@ -126,18 +126,22 @@ spec:
                     type: integer
                 type: object
               clusterRef:
-                description: Target cluster for certificate management
+                description: |-
+                  Target cluster for certificate management.
+                  Both name and namespace are mandatory; the certificate Secret is created
+                  in the target cluster's namespace.
                 properties:
                   name:
                     description: Name of the WazuhCluster resource
+                    minLength: 1
                     type: string
                   namespace:
-                    description: |-
-                      Namespace of the WazuhCluster resource
-                      If empty, assumes the same namespace as the referencing resource
+                    description: Namespace of the WazuhCluster resource
+                    minLength: 1
                     type: string
                 required:
                 - name
+                - namespace
                 type: object
               distinguishedName:
                 description: Distinguished Name configuration

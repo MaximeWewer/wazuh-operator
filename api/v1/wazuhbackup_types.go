@@ -23,9 +23,12 @@ import (
 
 // WazuhBackupSpec defines the desired state of WazuhBackup
 type WazuhBackupSpec struct {
-	// ClusterRef references the WazuhCluster to backup
+	// ClusterRef references the WazuhCluster to backup.
+	// Both name and namespace are mandatory; cross-namespace references are
+	// supported (the backup Job is created in the cluster's namespace so RBAC
+	// stays namespace-local).
 	// +kubebuilder:validation:Required
-	ClusterRef WazuhClusterReference `json:"clusterRef"`
+	ClusterRef WazuhClusterRef `json:"clusterRef"`
 
 	// Components defines what Wazuh Manager data to backup
 	// +kubebuilder:validation:Required

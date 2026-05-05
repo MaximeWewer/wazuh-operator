@@ -37,11 +37,17 @@ import (
 	retry "k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	certreconciler "github.com/MaximeWewer/wazuh-operator/internal/certificates/reconciler"
 )
+
+// CertificateFinalizer ensures the cross-namespace Secret is cleaned up
+// when a WazuhCertificate is deleted (cross-NS ownerReferences are forbidden,
+// so garbage collection cannot reach the Secret).
+const CertificateFinalizer = "wazuhcertificate.resources.wazuh.com/finalizer"
 
 // WazuhCertificateReconciler reconciles a WazuhCertificate object
 type WazuhCertificateReconciler struct {
@@ -97,6 +103,43 @@ func (r *WazuhCertificateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 		log.Error(err, "Failed to get WazuhCertificate")
 		return ctrl.Result{}, err
+	}
+
+	// Handle deletion: clean up the cross-namespace Secret if it lives in a
+	// different namespace than the CR (ownerReferences cannot reach there).
+	if !cert.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(cert, CertificateFinalizer) {
+			if err := r.deleteCrossNSSecret(ctx, cert); err != nil {
+				log.Error(err, "Failed to delete cross-namespace certificate Secret")
+				return ctrl.Result{}, err
+			}
+			if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+				latest := &wazuhv1.WazuhCertificate{}
+				if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+					return err
+				}
+				controllerutil.RemoveFinalizer(latest, CertificateFinalizer)
+				return r.Update(ctx, latest)
+			}); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Add finalizer if absent so we can clean up cross-namespace Secrets later.
+	if !controllerutil.ContainsFinalizer(cert, CertificateFinalizer) {
+		if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			latest := &wazuhv1.WazuhCertificate{}
+			if err := r.Get(ctx, req.NamespacedName, latest); err != nil {
+				return err
+			}
+			controllerutil.AddFinalizer(latest, CertificateFinalizer)
+			return r.Update(ctx, latest)
+		}); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	// Delegate to helper reconciler
@@ -175,6 +218,33 @@ func (r *WazuhCertificateReconciler) updateCertificateStatus(ctx context.Context
 
 		return r.Status().Update(ctx, latest)
 	})
+}
+
+// deleteCrossNSSecret removes the certificate Secret from the target cluster's
+// namespace when it lives outside the CR's namespace (where ownerReferences
+// cannot do garbage collection). Same-namespace Secrets are GC'd via ownerRef.
+func (r *WazuhCertificateReconciler) deleteCrossNSSecret(ctx context.Context, cert *wazuhv1.WazuhCertificate) error {
+	targetNS := cert.Spec.ClusterRef.Namespace
+	if targetNS == "" || targetNS == cert.Namespace {
+		return nil
+	}
+	secret := &corev1.Secret{}
+	err := r.Get(ctx, types.NamespacedName{Name: cert.Spec.SecretName, Namespace: targetNS}, secret)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	// Only delete if the Secret carries our ownership labels.
+	if secret.Labels["resources.wazuh.com/certificate-cr"] != cert.Name ||
+		secret.Labels["resources.wazuh.com/certificate-cr-namespace"] != cert.Namespace {
+		return nil
+	}
+	if err := r.Delete(ctx, secret); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager

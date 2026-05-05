@@ -23,9 +23,11 @@ import (
 
 // WazuhCertificateSpec defines the desired state of WazuhCertificate
 type WazuhCertificateSpec struct {
-	// Target cluster for certificate management
+	// Target cluster for certificate management.
+	// Both name and namespace are mandatory; the certificate Secret is created
+	// in the target cluster's namespace.
 	// +kubebuilder:validation:Required
-	ClusterRef WazuhClusterReference `json:"clusterRef"`
+	ClusterRef WazuhClusterRef `json:"clusterRef"`
 
 	// Certificate type (ca, node, admin, filebeat)
 	// +kubebuilder:validation:Required

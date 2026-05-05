@@ -141,19 +141,16 @@ func (r *WazuhFilebeatReconciler) findFilebeatForCluster(ctx context.Context, ob
 
 	var requests []ctrl.Request
 	for _, fb := range filebeatList.Items {
-		// Check if this filebeat references the changed cluster
-		refNamespace := fb.Spec.ClusterRef.Namespace
-		if refNamespace == "" {
-			refNamespace = fb.Namespace
-		}
-
-		if fb.Spec.ClusterRef.Name == cluster.Name && refNamespace == cluster.Namespace {
-			requests = append(requests, ctrl.Request{
-				NamespacedName: client.ObjectKey{
-					Name:      fb.Name,
-					Namespace: fb.Namespace,
-				},
-			})
+		for _, ref := range fb.Spec.ClusterRefs {
+			if ref.Name == cluster.Name && ref.Namespace == cluster.Namespace {
+				requests = append(requests, ctrl.Request{
+					NamespacedName: client.ObjectKey{
+						Name:      fb.Name,
+						Namespace: fb.Namespace,
+					},
+				})
+				break
+			}
 		}
 	}
 

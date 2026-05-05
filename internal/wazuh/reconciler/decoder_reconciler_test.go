@@ -1,5 +1,3 @@
-//go:build broken_multi_cluster
-
 /*
 Copyright 2026.
 
@@ -8,12 +6,6 @@ you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
     http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
 */
 
 package reconciler
@@ -53,9 +45,8 @@ func TestDecoderReconciler_Reconcile(t *testing.T) {
 					Generation: 1,
 				},
 				Spec: wazuhv1.WazuhDecoderSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name:      "test-cluster",
-						Namespace: "default",
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: "test-cluster", Namespace: "default"},
 					},
 					DecoderName: "test_decoder",
 					Decoders: `<decoder name="test-decoder">
@@ -91,9 +82,8 @@ func TestDecoderReconciler_Reconcile(t *testing.T) {
 					Generation: 1,
 				},
 				Spec: wazuhv1.WazuhDecoderSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name:      "test-cluster",
-						Namespace: "default",
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: "test-cluster", Namespace: "default"},
 					},
 					DecoderName: "invalid_decoder",
 					Decoders:    "not valid xml",
@@ -111,10 +101,10 @@ func TestDecoderReconciler_Reconcile(t *testing.T) {
 			},
 			wantPhase:     wazuhv1.DecoderPhaseFailed,
 			wantConfigMap: false,
-			wantErr:       false, // Validation errors are handled gracefully
+			wantErr:       false,
 		},
 		{
-			name: "cluster not found sets pending",
+			name: "cluster not found leaves CR pending",
 			decoder: &wazuhv1.WazuhDecoder{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "orphan-decoder",
@@ -122,9 +112,8 @@ func TestDecoderReconciler_Reconcile(t *testing.T) {
 					Generation: 1,
 				},
 				Spec: wazuhv1.WazuhDecoderSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name:      "nonexistent-cluster",
-						Namespace: "default",
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: "nonexistent-cluster", Namespace: "default"},
 					},
 					DecoderName: "orphan_decoder",
 					Decoders: `<decoder name="orphan-decoder">
@@ -133,7 +122,7 @@ func TestDecoderReconciler_Reconcile(t *testing.T) {
 					TargetNodes: "all",
 				},
 			},
-			cluster:       nil, // No cluster
+			cluster:       nil,
 			wantPhase:     wazuhv1.DecoderPhasePending,
 			wantConfigMap: false,
 			wantErr:       false,
@@ -147,11 +136,10 @@ func TestDecoderReconciler_Reconcile(t *testing.T) {
 					Generation: 1,
 				},
 				Spec: wazuhv1.WazuhDecoderSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name:      "test-cluster",
-						Namespace: "default",
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: "test-cluster", Namespace: "default"},
 					},
-					DecoderName: "invalid name!", // Invalid: has space and exclamation
+					DecoderName: "invalid name!",
 					Decoders: `<decoder name="test">
   <prematch>^Test</prematch>
 </decoder>`,
@@ -180,9 +168,8 @@ func TestDecoderReconciler_Reconcile(t *testing.T) {
 					Generation: 1,
 				},
 				Spec: wazuhv1.WazuhDecoderSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name:      "test-cluster",
-						Namespace: "default",
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: "test-cluster", Namespace: "default"},
 					},
 					DecoderName: "master_decoder",
 					Decoders: `<decoder name="master-decoder">
@@ -213,7 +200,6 @@ func TestDecoderReconciler_Reconcile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Build fake client with objects
 			objs := []runtime.Object{tt.decoder}
 			if tt.cluster != nil {
 				objs = append(objs, tt.cluster)
@@ -232,25 +218,23 @@ func TestDecoderReconciler_Reconcile(t *testing.T) {
 				return
 			}
 
-			// Check phase
 			if tt.decoder.Status.Phase != tt.wantPhase {
 				t.Errorf("Reconcile() phase = %v, want %v", tt.decoder.Status.Phase, tt.wantPhase)
 			}
 
-			// Check ConfigMap creation
 			if tt.wantConfigMap {
 				cm := &corev1.ConfigMap{}
-				configMapName := tt.decoder.Name + "-decoder"
+				cmName := decoderConfigMapName(tt.decoder.Namespace, tt.decoder.Name)
+				targetNS := tt.decoder.Spec.ClusterRefs[0].Namespace
 				err := client.Get(context.Background(), types.NamespacedName{
-					Name:      configMapName,
-					Namespace: tt.decoder.Namespace,
+					Name:      cmName,
+					Namespace: targetNS,
 				}, cm)
 				if err != nil {
-					t.Errorf("Expected ConfigMap %s to be created, got error: %v", configMapName, err)
+					t.Errorf("Expected ConfigMap %s/%s to be created, got error: %v", targetNS, cmName, err)
 				}
 			}
 
-			// Check conditions are set
 			if len(tt.decoder.Status.Conditions) == 0 {
 				t.Error("Expected conditions to be set")
 			}
@@ -263,42 +247,27 @@ func TestDecoderReconciler_ListDecodersForCluster(t *testing.T) {
 	_ = wazuhv1.AddToScheme(scheme)
 
 	decoder1 := &wazuhv1.WazuhDecoder{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "decoder-1",
-			Namespace: "default",
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "decoder-1", Namespace: "default"},
 		Spec: wazuhv1.WazuhDecoderSpec{
-			ClusterRef: wazuhv1.WazuhClusterReference{
-				Name: "cluster-a",
-			},
+			ClusterRefs: []wazuhv1.WazuhClusterRef{{Name: "cluster-a", Namespace: "default"}},
 			DecoderName: "decoder_1",
 			Decoders:    `<decoder name="d1"><prematch>^1</prematch></decoder>`,
 		},
 	}
 
 	decoder2 := &wazuhv1.WazuhDecoder{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "decoder-2",
-			Namespace: "default",
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "decoder-2", Namespace: "default"},
 		Spec: wazuhv1.WazuhDecoderSpec{
-			ClusterRef: wazuhv1.WazuhClusterReference{
-				Name: "cluster-a",
-			},
+			ClusterRefs: []wazuhv1.WazuhClusterRef{{Name: "cluster-a", Namespace: "default"}},
 			DecoderName: "decoder_2",
 			Decoders:    `<decoder name="d2"><prematch>^2</prematch></decoder>`,
 		},
 	}
 
 	decoder3 := &wazuhv1.WazuhDecoder{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "decoder-3",
-			Namespace: "default",
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "decoder-3", Namespace: "default"},
 		Spec: wazuhv1.WazuhDecoderSpec{
-			ClusterRef: wazuhv1.WazuhClusterReference{
-				Name: "cluster-b", // Different cluster
-			},
+			ClusterRefs: []wazuhv1.WazuhClusterRef{{Name: "cluster-b", Namespace: "default"}},
 			DecoderName: "decoder_3",
 			Decoders:    `<decoder name="d3"><prematch>^3</prematch></decoder>`,
 		},
@@ -326,40 +295,37 @@ func TestDecoderReconciler_GetDecoderConfigMapsForCluster(t *testing.T) {
 	_ = wazuhv1.AddToScheme(scheme)
 
 	decoder1 := &wazuhv1.WazuhDecoder{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "decoder-1",
-			Namespace: "default",
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "decoder-1", Namespace: "default"},
 		Spec: wazuhv1.WazuhDecoderSpec{
-			ClusterRef: wazuhv1.WazuhClusterReference{
-				Name: "cluster-a",
-			},
+			ClusterRefs: []wazuhv1.WazuhClusterRef{{Name: "cluster-a", Namespace: "default"}},
 			DecoderName: "decoder_1",
 			Decoders:    `<decoder name="d1"><prematch>^1</prematch></decoder>`,
 		},
 		Status: wazuhv1.WazuhDecoderStatus{
 			Phase: wazuhv1.DecoderPhaseApplied,
-			ConfigMapRef: &wazuhv1.ConfigMapReference{
-				Name:      "decoder-1-decoder",
-				Namespace: "default",
+			ClusterStatuses: []wazuhv1.DecoderClusterStatus{
+				{
+					Name:      "cluster-a",
+					Namespace: "default",
+					Phase:     wazuhv1.DecoderPhaseApplied,
+					ConfigMapRef: &wazuhv1.ConfigMapReference{
+						Name:      decoderConfigMapName("default", "decoder-1"),
+						Namespace: "default",
+					},
+				},
 			},
 		},
 	}
 
 	decoder2 := &wazuhv1.WazuhDecoder{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "decoder-2",
-			Namespace: "default",
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "decoder-2", Namespace: "default"},
 		Spec: wazuhv1.WazuhDecoderSpec{
-			ClusterRef: wazuhv1.WazuhClusterReference{
-				Name: "cluster-a",
-			},
+			ClusterRefs: []wazuhv1.WazuhClusterRef{{Name: "cluster-a", Namespace: "default"}},
 			DecoderName: "decoder_2",
 			Decoders:    `<decoder name="d2"><prematch>^2</prematch></decoder>`,
 		},
 		Status: wazuhv1.WazuhDecoderStatus{
-			Phase: wazuhv1.DecoderPhasePending, // Not applied yet
+			Phase: wazuhv1.DecoderPhasePending,
 		},
 	}
 
@@ -375,13 +341,13 @@ func TestDecoderReconciler_GetDecoderConfigMapsForCluster(t *testing.T) {
 		t.Fatalf("GetDecoderConfigMapsForCluster() error = %v", err)
 	}
 
-	// Only decoder1 should be included (decoder2 is pending)
 	if len(configMaps) != 1 {
 		t.Errorf("GetDecoderConfigMapsForCluster() got %d configMaps, want 1", len(configMaps))
 	}
 
-	if configMaps[0].ConfigMapName != "decoder-1-decoder" {
-		t.Errorf("GetDecoderConfigMapsForCluster() configMap name = %s, want decoder-1-decoder", configMaps[0].ConfigMapName)
+	wantName := decoderConfigMapName("default", "decoder-1")
+	if configMaps[0].ConfigMapName != wantName {
+		t.Errorf("GetDecoderConfigMapsForCluster() configMap name = %s, want %s", configMaps[0].ConfigMapName, wantName)
 	}
 
 	if hash == "" {
@@ -394,16 +360,11 @@ func TestDecoderReconciler_DetermineAppliedNodes(t *testing.T) {
 	_ = wazuhv1.AddToScheme(scheme)
 
 	cluster := &wazuhv1.WazuhCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "default",
-		},
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cluster", Namespace: "default"},
 		Spec: wazuhv1.WazuhClusterSpec{
 			Version: "4.9.0",
 			Manager: &wazuhv1.WazuhManagerClusterSpec{
-				Workers: wazuhv1.WazuhWorkerSpec{
-					Replicas: int32Ptr(3),
-				},
+				Workers: wazuhv1.WazuhWorkerSpec{Replicas: int32Ptr(3)},
 			},
 		},
 	}
@@ -415,42 +376,16 @@ func TestDecoderReconciler_DetermineAppliedNodes(t *testing.T) {
 		wantMaster  bool
 		wantWorkers bool
 	}{
-		{
-			name:        "all nodes",
-			targetNodes: "all",
-			wantCount:   4, // 1 master + 3 workers
-			wantMaster:  true,
-			wantWorkers: true,
-		},
-		{
-			name:        "master only",
-			targetNodes: "master",
-			wantCount:   1,
-			wantMaster:  true,
-			wantWorkers: false,
-		},
-		{
-			name:        "workers only",
-			targetNodes: "workers",
-			wantCount:   3,
-			wantMaster:  false,
-			wantWorkers: true,
-		},
-		{
-			name:        "empty defaults to all",
-			targetNodes: "",
-			wantCount:   4,
-			wantMaster:  true,
-			wantWorkers: true,
-		},
+		{name: "all nodes", targetNodes: "all", wantCount: 4, wantMaster: true, wantWorkers: true},
+		{name: "master only", targetNodes: "master", wantCount: 1, wantMaster: true, wantWorkers: false},
+		{name: "workers only", targetNodes: "workers", wantCount: 3, wantMaster: false, wantWorkers: true},
+		{name: "empty defaults to all", targetNodes: "", wantCount: 4, wantMaster: true, wantWorkers: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			decoder := &wazuhv1.WazuhDecoder{
-				Spec: wazuhv1.WazuhDecoderSpec{
-					TargetNodes: tt.targetNodes,
-				},
+				Spec: wazuhv1.WazuhDecoderSpec{TargetNodes: tt.targetNodes},
 			}
 
 			reconciler := &DecoderReconciler{}

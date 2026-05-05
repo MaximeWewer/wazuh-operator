@@ -1,5 +1,3 @@
-//go:build broken_multi_cluster
-
 /*
 Copyright 2026.
 
@@ -159,9 +157,8 @@ var _ = Describe("WazuhRule Controller", func() {
 					Namespace: namespace,
 				},
 				Spec: wazuhv1.WazuhRuleSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name:      clusterName,
-						Namespace: namespace,
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: clusterName, Namespace: namespace},
 					},
 					RuleName:    "ssh_custom",
 					Description: "Custom SSH brute force detection",
@@ -186,9 +183,9 @@ var _ = Describe("WazuhRule Controller", func() {
 			_, err = ruleReconciler.Reconcile(ctx, reconcileRequest)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Checking the ConfigMap was created")
+			By("Checking the ConfigMap was created in the target cluster's namespace")
 			configMap := &corev1.ConfigMap{}
-			configMapName := fmt.Sprintf("%s-rule", ruleName)
+			configMapName := fmt.Sprintf("%s-%s-rule", namespace, ruleName)
 			Eventually(func() error {
 				return k8sClient.Get(ctx, types.NamespacedName{
 					Name:      configMapName,
@@ -212,8 +209,9 @@ var _ = Describe("WazuhRule Controller", func() {
 				return string(updatedRule.Status.Phase)
 			}, timeout, interval).Should(Equal(string(wazuhv1.RulePhaseApplied)))
 
-			Expect(updatedRule.Status.ConfigMapRef).NotTo(BeNil())
-			Expect(updatedRule.Status.ConfigMapRef.Name).To(Equal(configMapName))
+			Expect(updatedRule.Status.ClusterStatuses).To(HaveLen(1))
+			Expect(updatedRule.Status.ClusterStatuses[0].ConfigMapRef).NotTo(BeNil())
+			Expect(updatedRule.Status.ClusterStatuses[0].ConfigMapRef.Name).To(Equal(configMapName))
 		})
 
 		It("should fail validation for invalid XML content", func() {
@@ -224,9 +222,8 @@ var _ = Describe("WazuhRule Controller", func() {
 					Namespace: namespace,
 				},
 				Spec: wazuhv1.WazuhRuleSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name:      clusterName,
-						Namespace: namespace,
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: clusterName, Namespace: namespace},
 					},
 					RuleName: "invalid_rule",
 					Rules:    "this is not xml at all",
@@ -268,9 +265,8 @@ var _ = Describe("WazuhRule Controller", func() {
 					Namespace: namespace,
 				},
 				Spec: wazuhv1.WazuhRuleSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name:      clusterName,
-						Namespace: namespace,
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: clusterName, Namespace: namespace},
 					},
 					RuleName: "invalid_id_rule",
 					RuleID:   5000, // Outside custom range (100000-999999)
@@ -296,9 +292,8 @@ var _ = Describe("WazuhRule Controller", func() {
 					Namespace: namespace,
 				},
 				Spec: wazuhv1.WazuhRuleSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name:      "non-existent-cluster",
-						Namespace: namespace,
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: "non-existent-cluster", Namespace: namespace},
 					},
 					RuleName: "orphan_rule",
 					RuleID:   100001,
@@ -341,9 +336,8 @@ var _ = Describe("WazuhRule Controller", func() {
 					Namespace: namespace,
 				},
 				Spec: wazuhv1.WazuhRuleSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name:      clusterName,
-						Namespace: namespace,
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: clusterName, Namespace: namespace},
 					},
 					RuleName: "finalizer_test",
 					RuleID:   100001,
@@ -387,9 +381,8 @@ var _ = Describe("WazuhRule Controller", func() {
 					Namespace: namespace,
 				},
 				Spec: wazuhv1.WazuhRuleSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name:      clusterName,
-						Namespace: namespace,
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: clusterName, Namespace: namespace},
 					},
 					RuleName:    "master_only_rule",
 					RuleID:      100001,
@@ -416,13 +409,13 @@ var _ = Describe("WazuhRule Controller", func() {
 					Name:      ruleName,
 					Namespace: namespace,
 				}, updatedRule)
-				if err != nil {
+				if err != nil || len(updatedRule.Status.ClusterStatuses) == 0 {
 					return nil
 				}
-				return updatedRule.Status.AppliedToNodes
+				return updatedRule.Status.ClusterStatuses[0].AppliedToNodes
 			}, timeout, interval).Should(ContainElement(fmt.Sprintf("%s-manager-master-0", clusterName)))
 
-			Expect(updatedRule.Status.AppliedToNodes).To(HaveLen(1))
+			Expect(updatedRule.Status.ClusterStatuses[0].AppliedToNodes).To(HaveLen(1))
 		})
 	})
 })

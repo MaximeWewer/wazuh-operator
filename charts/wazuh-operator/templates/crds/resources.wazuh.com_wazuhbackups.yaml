@@ -63,18 +63,23 @@ spec:
                 description: BackupTimeout is the maximum duration for a backup operation
                 type: string
               clusterRef:
-                description: ClusterRef references the WazuhCluster to backup
+                description: |-
+                  ClusterRef references the WazuhCluster to backup.
+                  Both name and namespace are mandatory; cross-namespace references are
+                  supported (the backup Job is created in the cluster's namespace so RBAC
+                  stays namespace-local).
                 properties:
                   name:
                     description: Name of the WazuhCluster resource
+                    minLength: 1
                     type: string
                   namespace:
-                    description: |-
-                      Namespace of the WazuhCluster resource
-                      If empty, assumes the same namespace as the referencing resource
+                    description: Namespace of the WazuhCluster resource
+                    minLength: 1
                     type: string
                 required:
                 - name
+                - namespace
                 type: object
               components:
                 description: Components defines what Wazuh Manager data to backup

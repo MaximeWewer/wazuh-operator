@@ -1,5 +1,3 @@
-//go:build broken_multi_cluster
-
 /*
 Copyright 2026.
 
@@ -216,9 +214,8 @@ func TestDecoderValidator_Validate(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: wazuhv1.WazuhDecoderSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name:      "test-cluster",
-						Namespace: "default",
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: "test-cluster", Namespace: "default"},
 					},
 					DecoderName: "custom_decoder",
 					Decoders: `<decoder name="custom-app">
@@ -236,8 +233,8 @@ func TestDecoderValidator_Validate(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: wazuhv1.WazuhDecoderSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name: "test-cluster",
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: "test-cluster", Namespace: "default"},
 					},
 					DecoderName: "invalid",
 					Decoders:    "not xml content",
@@ -253,8 +250,8 @@ func TestDecoderValidator_Validate(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: wazuhv1.WazuhDecoderSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name: "test-cluster",
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: "test-cluster", Namespace: "default"},
 					},
 					DecoderName: "invalid name!",
 					Decoders: `<decoder name="test">
@@ -272,8 +269,8 @@ func TestDecoderValidator_Validate(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: wazuhv1.WazuhDecoderSpec{
-					ClusterRef: wazuhv1.WazuhClusterReference{
-						Name: "test-cluster",
+					ClusterRefs: []wazuhv1.WazuhClusterRef{
+						{Name: "test-cluster", Namespace: "default"},
 					},
 					DecoderName: "valid_name",
 					Decoders: `<decoder name="invalid@name">

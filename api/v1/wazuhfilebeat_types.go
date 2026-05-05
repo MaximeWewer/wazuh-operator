@@ -23,9 +23,15 @@ import (
 
 // WazuhFilebeatSpec defines the desired state of WazuhFilebeat
 type WazuhFilebeatSpec struct {
-	// ClusterRef references the WazuhCluster this configuration belongs to
+	// ClusterRefs lists the WazuhCluster instances this configuration applies to.
+	// Each entry must specify both name and namespace. The CR can live in any
+	// namespace; ConfigMaps are created in each target cluster's namespace.
 	// +kubebuilder:validation:Required
-	ClusterRef WazuhClusterReference `json:"clusterRef"`
+	// +kubebuilder:validation:MinItems=1
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+	ClusterRefs []WazuhClusterRef `json:"clusterRefs"`
 
 	// Alerts configures the alerts module
 	// +optional
@@ -226,50 +232,73 @@ const (
 
 // WazuhFilebeatStatus defines the observed state of WazuhFilebeat
 type WazuhFilebeatStatus struct {
-	// Phase represents the current phase
+	// Phase is the aggregate phase across all target clusters.
 	// +optional
 	Phase FilebeatPhase `json:"phase,omitempty"`
 
-	// Conditions represent the latest available observations
+	// Conditions represent the latest aggregate observations
 	// +listType=map
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// ConfigMapRef references the generated ConfigMap
-	// +optional
-	ConfigMapRef *ConfigMapReference `json:"configMapRef,omitempty"`
-
-	// LastAppliedTime is when the config was last applied
-	// +optional
-	LastAppliedTime *metav1.Time `json:"lastAppliedTime,omitempty"`
-
 	// ObservedGeneration is the last observed generation
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	// Message provides additional information
+	// Message provides additional aggregate information
 	// +optional
 	Message string `json:"message,omitempty"`
 
-	// TemplateVersion is the version of the applied template
+	// ClusterStatuses reports per-target-cluster reconciliation state.
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+	// +optional
+	ClusterStatuses []FilebeatClusterStatus `json:"clusterStatuses,omitempty"`
+}
+
+// FilebeatClusterStatus reports the reconciliation state for a single target cluster.
+type FilebeatClusterStatus struct {
+	// Name of the target WazuhCluster
+	Name string `json:"name"`
+
+	// Namespace of the target WazuhCluster
+	Namespace string `json:"namespace"`
+
+	// Phase on this cluster
+	// +optional
+	Phase FilebeatPhase `json:"phase,omitempty"`
+
+	// ConfigMapRef references the ConfigMap created in this cluster's namespace
+	// +optional
+	ConfigMapRef *ConfigMapReference `json:"configMapRef,omitempty"`
+
+	// LastAppliedTime is when the config was last applied to this cluster
+	// +optional
+	LastAppliedTime *metav1.Time `json:"lastAppliedTime,omitempty"`
+
+	// TemplateVersion is the version of the applied template on this cluster
 	// +optional
 	TemplateVersion string `json:"templateVersion,omitempty"`
 
-	// PipelineVersion is the version of the applied pipeline
+	// PipelineVersion is the version of the applied pipeline on this cluster
 	// +optional
 	PipelineVersion string `json:"pipelineVersion,omitempty"`
 
-	// ConfigHash is the hash of the current configuration
+	// ConfigHash is the hash of the configuration applied to this cluster
 	// +optional
 	ConfigHash string `json:"configHash,omitempty"`
+
+	// Message provides additional information about this cluster's state
+	// +optional
+	Message string `json:"message,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced,shortName=wfb
-// +kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=`.spec.clusterRef.name`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Alerts",type=boolean,JSONPath=`.spec.alerts.enabled`
 // +kubebuilder:printcolumn:name="Archives",type=boolean,JSONPath=`.spec.archives.enabled`

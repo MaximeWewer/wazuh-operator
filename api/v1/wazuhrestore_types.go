@@ -23,9 +23,10 @@ import (
 
 // WazuhRestoreSpec defines the desired state of WazuhRestore
 type WazuhRestoreSpec struct {
-	// ClusterRef references the WazuhCluster to restore to
+	// ClusterRef references the WazuhCluster to restore to.
+	// Both name and namespace are mandatory.
 	// +kubebuilder:validation:Required
-	ClusterRef WazuhClusterReference `json:"clusterRef"`
+	ClusterRef WazuhClusterRef `json:"clusterRef"`
 
 	// Source defines where to restore from
 	// +kubebuilder:validation:Required
