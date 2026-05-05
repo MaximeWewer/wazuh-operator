@@ -96,49 +96,29 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSe
 		return r.updateStatus(ctx, tenant, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
 	}
 
-	// Get OpenSearch client dynamically from cluster reference
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, tenant.Spec.ClusterRef, tenant.Namespace)
-	if err != nil {
-		r.recordEvent(tenant, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
-		return fmt.Errorf("failed to get OpenSearch client: %w", err)
-	}
-
-	// Create Security API client
-	securityAPI := api.NewSecurityAPI(apiClient)
-
-	// Check if tenant exists
-	existing, err := securityAPI.GetTenant(ctx, tenant.Name)
-	if err != nil {
-		if updateErr := r.updateStatus(ctx, tenant, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check tenant existence: %v", err)); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		r.recordEvent(tenant, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check tenant existence: %v", err))
-		return fmt.Errorf("failed to check tenant existence: %w", err)
-	}
-
-	// Build tenant from spec
 	osTenant := r.buildTenant(tenant)
+	specHash, _ := patch.ComputeSpecHash(tenant.Spec)
 
-	if existing == nil {
-		log.Info("Creating tenant", "name", tenant.Name)
-	} else {
-		log.Info("Updating tenant", "name", tenant.Name)
-	}
-	if err := securityAPI.CreateTenant(ctx, tenant.Name, osTenant); err != nil {
-		action := "create"
-		if existing != nil {
-			action = "update"
-		}
-		if updateErr := r.updateStatus(ctx, tenant, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s tenant: %v", action, err)); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		r.recordEvent(tenant, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to %s tenant: %v", action, err))
-		return fmt.Errorf("failed to %s tenant: %w", action, err)
-	}
+	res := ReconcileMultiCluster(ctx, tenant.Spec.ClusterRefs, r.ClientFactory, tenant.Status.ClusterStatuses,
+		func(ctx context.Context, apiClient *api.Client, ref wazuhv1.WazuhClusterRef) (string, error) {
+			securityAPI := api.NewSecurityAPI(apiClient)
+			existing, err := securityAPI.GetTenant(ctx, tenant.Name)
+			if err != nil {
+				return "", fmt.Errorf("failed to check tenant existence: %w", err)
+			}
+			if existing == nil {
+				log.Info("Creating tenant", "name", tenant.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+			} else {
+				log.Info("Updating tenant", "name", tenant.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+			}
+			if err := securityAPI.CreateTenant(ctx, tenant.Name, osTenant); err != nil {
+				return "", fmt.Errorf("failed to apply tenant: %w", err)
+			}
+			return specHash, nil
+		})
+	tenant.Status.ClusterStatuses = res.Statuses
 
-	// Compute spec hash for drift detection
-	specHash, hashErr := patch.ComputeSpecHash(tenant.Spec)
-	if hashErr == nil && tenant.Status.LastAppliedHash != "" && tenant.Status.LastAppliedHash != specHash {
+	if specHash != "" && tenant.Status.LastAppliedHash != "" && tenant.Status.LastAppliedHash != specHash {
 		tenant.Status.DriftDetected = true
 		now := metav1.Now()
 		tenant.Status.LastDriftTime = &now
@@ -147,19 +127,27 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, tenant *wazuhv1.OpenSe
 	} else {
 		tenant.Status.DriftDetected = false
 	}
-	if hashErr == nil {
+	if specHash != "" {
 		tenant.Status.LastAppliedHash = specHash
 	}
 
 	wasReady := tenant.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
 		tenant.Status.ObservedGeneration == tenant.Generation
-	if err := r.updateStatus(ctx, tenant, wazuhv1.OpenSearchResourcePhaseReady, "Tenant reconciled successfully", !wasReady); err != nil {
+	phase := res.AggregatePhase()
+	msg := res.AggregateMessage()
+	if res.AnyFailed {
+		r.recordEvent(tenant, corev1.EventTypeWarning, "SyncFailed", res.FirstError.Error())
+	}
+	if err := r.updateStatus(ctx, tenant, phase, msg, phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
-	if !wasReady {
-		r.recordEvent(tenant, corev1.EventTypeNormal, "Synced", "Tenant reconciled successfully")
+	if phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady {
+		r.recordEvent(tenant, corev1.EventTypeNormal, "Synced", "Tenant synced on all target clusters")
 	}
 
+	if res.FirstError != nil {
+		return res.FirstError
+	}
 	log.Info("Tenant reconciliation completed", "name", tenant.Name)
 	return nil
 }
@@ -238,20 +226,22 @@ func (r *TenantReconciler) Delete(ctx context.Context, tenant *wazuhv1.OpenSearc
 		log.Info("Skipping tenant deletion - no client factory available")
 		return nil
 	}
-
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, tenant.Spec.ClusterRef, tenant.Namespace)
-	if err != nil {
-		log.Info("Skipping tenant deletion - failed to get OpenSearch client", "error", err)
-		return nil
+	for _, ref := range tenant.Spec.ClusterRefs {
+		apiClient, err := r.ClientFactory.GetClientForClusterRef(ctx, ref)
+		if err != nil {
+			log.Info("Skipping tenant deletion on cluster - failed to get client",
+				"cluster", ref.Name, "clusterNamespace", ref.Namespace, "error", err)
+			continue
+		}
+		securityAPI := api.NewSecurityAPI(apiClient)
+		if err := securityAPI.DeleteTenant(ctx, tenant.Name); err != nil {
+			r.recordEvent(tenant, corev1.EventTypeWarning, "DeleteFailed",
+				fmt.Sprintf("Failed to delete tenant from %s/%s: %v", ref.Namespace, ref.Name, err))
+			continue
+		}
+		log.Info("Deleted OpenSearch tenant on cluster",
+			"name", tenant.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
 	}
-
-	securityAPI := api.NewSecurityAPI(apiClient)
-	if err := securityAPI.DeleteTenant(ctx, tenant.Name); err != nil {
-		r.recordEvent(tenant, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete tenant: %v", err))
-		return fmt.Errorf("failed to delete tenant: %w", err)
-	}
-
-	r.recordEvent(tenant, corev1.EventTypeNormal, "Deleted", "Tenant deleted from OpenSearch")
-	log.Info("Deleted OpenSearch tenant", "name", tenant.Name)
+	r.recordEvent(tenant, corev1.EventTypeNormal, "Deleted", "Tenant deletion processed on all target clusters")
 	return nil
 }

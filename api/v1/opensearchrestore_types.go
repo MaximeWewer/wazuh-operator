@@ -22,9 +22,15 @@ import (
 
 // OpenSearchRestoreSpec defines the desired state of OpenSearchRestore
 type OpenSearchRestoreSpec struct {
-	// ClusterRef references the WazuhCluster this restore belongs to
+	// ClusterRefs lists the WazuhCluster instances this resource targets.
+	// Each entry must specify both name and namespace.
 	// +kubebuilder:validation:Required
-	ClusterRef WazuhClusterReference `json:"clusterRef"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+	ClusterRefs []WazuhClusterRef `json:"clusterRefs"`
 
 	// Repository is the name of the snapshot repository
 	// +kubebuilder:validation:Required
@@ -111,6 +117,13 @@ type OpenSearchRestoreStatus struct {
 	// ObservedGeneration is the last observed generation
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// ClusterStatuses reports per-target-cluster reconciliation state.
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+	// +optional
+	ClusterStatuses []OpenSearchClusterStatus `json:"clusterStatuses,omitempty"`
 }
 
 // +kubebuilder:object:root=true

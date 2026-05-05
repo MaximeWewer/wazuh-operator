@@ -174,6 +174,34 @@ func (f *OpenSearchClientFactory) buildServiceURL(cluster *wazuhv1.WazuhCluster)
 	)
 }
 
+// GetConnectionInfoForRef returns raw connection parameters for a cluster
+// addressed by a WazuhClusterRef (mandatory name and namespace). Cross-namespace safe.
+func (f *OpenSearchClientFactory) GetConnectionInfoForRef(ctx context.Context, ref wazuhv1.WazuhClusterRef) (baseURL, username, password string, caCert []byte, err error) {
+	var cluster wazuhv1.WazuhCluster
+	if err := f.k8sClient.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace}, &cluster); err != nil {
+		return "", "", "", nil, fmt.Errorf("failed to get WazuhCluster %s/%s: %w", ref.Namespace, ref.Name, err)
+	}
+
+	username, password, err = f.getCredentials(ctx, &cluster)
+	if err != nil {
+		return "", "", "", nil, fmt.Errorf("failed to get credentials: %w", err)
+	}
+
+	caCert, err = f.getCACertificate(ctx, &cluster)
+	if err != nil {
+		return "", "", "", nil, fmt.Errorf("failed to get CA certificate: %w", err)
+	}
+
+	baseURL = f.buildServiceURL(&cluster)
+	return baseURL, username, password, caCert, nil
+}
+
+// GetClientForClusterRef returns an authenticated OpenSearch client for a cluster
+// addressed by a WazuhClusterRef. Cross-namespace safe.
+func (f *OpenSearchClientFactory) GetClientForClusterRef(ctx context.Context, ref wazuhv1.WazuhClusterRef) (*api.Client, error) {
+	return f.GetClient(ctx, types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace})
+}
+
 // GetConnectionInfo returns raw connection parameters for a cluster.
 // This is used by old-pattern reconcilers that create their own HTTP adapters.
 func (f *OpenSearchClientFactory) GetConnectionInfo(ctx context.Context, clusterRef wazuhv1.WazuhClusterReference, resourceNamespace string) (baseURL, username, password string, caCert []byte, err error) {

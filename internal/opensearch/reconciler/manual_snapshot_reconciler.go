@@ -101,7 +101,12 @@ func (r *ManualSnapshotReconciler) Reconcile(ctx context.Context, snapshot *wazu
 		return r.updateStatus(ctx, snapshot, wazuhv1.SnapshotPhasePending, "", "Waiting for OpenSearch client factory")
 	}
 
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, snapshot.Spec.ClusterRef, snapshot.Namespace)
+	if len(snapshot.Spec.ClusterRefs) == 0 {
+		return r.updateStatus(ctx, snapshot, wazuhv1.SnapshotPhaseFailed, "", "no cluster references configured")
+	}
+	// One-shot snapshot operation: target the first cluster ref. Multi-cluster
+	// snapshots run as a separate CR per cluster.
+	apiClient, err := r.ClientFactory.GetClientForClusterRef(ctx, snapshot.Spec.ClusterRefs[0])
 	if err != nil {
 		r.recordEvent(snapshot, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)

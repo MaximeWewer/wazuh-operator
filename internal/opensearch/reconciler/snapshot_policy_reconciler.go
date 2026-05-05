@@ -97,92 +97,53 @@ func (r *SnapshotPolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv
 		return r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
 	}
 
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, policy.Spec.ClusterRef, policy.Namespace)
-	if err != nil {
-		r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
-		return fmt.Errorf("failed to get OpenSearch client: %w", err)
-	}
-
-	// Create Snapshot API clients
-	snapshotAPI := api.NewSnapshotAPI(apiClient)
-	snapshotsAPI := api.NewSnapshotsAPI(apiClient)
-
-	// Validate repository exists before creating/updating policy
 	repoName := policy.Spec.Repository.Name
-	if repoName != "" {
-		repo, err := snapshotsAPI.GetRepository(ctx, repoName)
-		if err != nil {
-			log.Error(err, "Failed to check repository", "repository", repoName)
-			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check repository '%s': %v", repoName, err)); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check repository '%s': %v", repoName, err))
-			return fmt.Errorf("failed to check repository '%s': %w", repoName, err)
-		}
-		if repo == nil {
-			log.Info("Repository not found, waiting for repository to be created", "repository", repoName)
-			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhasePending, fmt.Sprintf("Repository '%s' not found - waiting for repository creation", repoName)); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			return fmt.Errorf("repository '%s' not found, will retry", repoName)
-		}
-		log.V(1).Info("Repository validated", "repository", repoName)
-	}
-
-	// Get policy (includes seq_no/primary_term when it exists)
-	policyInfo, err := snapshotAPI.GetPolicyInfo(ctx, policy.Name)
-	if err != nil {
-		if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to get snapshot policy: %v", err)); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get snapshot policy: %v", err))
-		return fmt.Errorf("failed to get snapshot policy: %w", err)
-	}
-
-	// Build snapshot policy from spec
 	snapshotPolicy := r.buildSnapshotPolicy(policy)
+	specHash, _ := patch.ComputeSpecHash(policy.Spec)
 
-	if policyInfo == nil {
-		log.Info("Creating snapshot policy", "name", policy.Name, "repository", repoName)
-		if err := snapshotAPI.CreatePolicy(ctx, policy.Name, snapshotPolicy); err != nil {
-			// OpenSearch may return 400 "Sequence number and primary term must be provided"
-			// if the policy already exists (e.g. brief race/eventual consistency window).
-			if isSnapshotPolicyVersionRequiredError(err) {
-				log.Info("Snapshot policy already exists, retrying as update", "name", policy.Name, "repository", repoName)
-				latestPolicyInfo, getErr := snapshotAPI.GetPolicyInfo(ctx, policy.Name)
-				if getErr == nil && latestPolicyInfo != nil {
-					if updateErr := r.updateSnapshotPolicyWithRetry(ctx, snapshotAPI, policy.Name, snapshotPolicy, latestPolicyInfo); updateErr == nil {
-						// Converted create race into successful update.
-						err = nil
-					} else {
-						err = updateErr
-					}
+	res := ReconcileMultiCluster(ctx, policy.Spec.ClusterRefs, r.ClientFactory, policy.Status.ClusterStatuses,
+		func(ctx context.Context, apiClient *api.Client, ref wazuhv1.WazuhClusterRef) (string, error) {
+			snapshotAPI := api.NewSnapshotAPI(apiClient)
+			snapshotsAPI := api.NewSnapshotsAPI(apiClient)
+			if repoName != "" {
+				repo, err := snapshotsAPI.GetRepository(ctx, repoName)
+				if err != nil {
+					return "", fmt.Errorf("failed to check repository '%s': %w", repoName, err)
+				}
+				if repo == nil {
+					return "", fmt.Errorf("repository '%s' not found", repoName)
 				}
 			}
-			if err == nil {
-				goto policyApplied
+			policyInfo, err := snapshotAPI.GetPolicyInfo(ctx, policy.Name)
+			if err != nil {
+				return "", fmt.Errorf("failed to get snapshot policy: %w", err)
 			}
-			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create snapshot policy: %v", err)); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
+			if policyInfo == nil {
+				log.Info("Creating snapshot policy", "name", policy.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+				createErr := snapshotAPI.CreatePolicy(ctx, policy.Name, snapshotPolicy)
+				if createErr != nil && isSnapshotPolicyVersionRequiredError(createErr) {
+					if latest, gErr := snapshotAPI.GetPolicyInfo(ctx, policy.Name); gErr == nil && latest != nil {
+						if uErr := r.updateSnapshotPolicyWithRetry(ctx, snapshotAPI, policy.Name, snapshotPolicy, latest); uErr == nil {
+							createErr = nil
+						} else {
+							createErr = uErr
+						}
+					}
+				}
+				if createErr != nil {
+					return "", fmt.Errorf("failed to create snapshot policy: %w", createErr)
+				}
+			} else {
+				log.Info("Updating snapshot policy", "name", policy.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+				if err := r.updateSnapshotPolicyWithRetry(ctx, snapshotAPI, policy.Name, snapshotPolicy, policyInfo); err != nil {
+					return "", fmt.Errorf("failed to update snapshot policy: %w", err)
+				}
 			}
-			r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to create snapshot policy: %v", err))
-			return fmt.Errorf("failed to create snapshot policy: %w", err)
-		}
-	} else {
-		log.Info("Updating snapshot policy", "name", policy.Name, "repository", repoName)
-		if err := r.updateSnapshotPolicyWithRetry(ctx, snapshotAPI, policy.Name, snapshotPolicy, policyInfo); err != nil {
-			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to update snapshot policy: %v", err)); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to update snapshot policy: %v", err))
-			return fmt.Errorf("failed to update snapshot policy: %w", err)
-		}
-	}
+			return specHash, nil
+		})
+	policy.Status.ClusterStatuses = res.Statuses
 
-policyApplied:
-	// Compute spec hash for drift detection
-	specHash, hashErr := patch.ComputeSpecHash(policy.Spec)
-	if hashErr == nil && policy.Status.LastAppliedHash != "" && policy.Status.LastAppliedHash != specHash {
+	if specHash != "" && policy.Status.LastAppliedHash != "" && policy.Status.LastAppliedHash != specHash {
 		policy.Status.DriftDetected = true
 		now := metav1.Now()
 		policy.Status.LastDriftTime = &now
@@ -191,19 +152,27 @@ policyApplied:
 	} else {
 		policy.Status.DriftDetected = false
 	}
-	if hashErr == nil {
+	if specHash != "" {
 		policy.Status.LastAppliedHash = specHash
 	}
 
 	wasReady := policy.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
 		policy.Status.ObservedGeneration == policy.Generation
-	if err := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseReady, "Snapshot policy reconciled successfully", !wasReady); err != nil {
+	phase := res.AggregatePhase()
+	msg := res.AggregateMessage()
+	if res.AnyFailed {
+		r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", res.FirstError.Error())
+	}
+	if err := r.updateStatus(ctx, policy, phase, msg, phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
-	if !wasReady {
-		r.recordEvent(policy, corev1.EventTypeNormal, "Synced", "Snapshot policy reconciled successfully")
+	if phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady {
+		r.recordEvent(policy, corev1.EventTypeNormal, "Synced", "Snapshot policy synced on all target clusters")
 	}
 
+	if res.FirstError != nil {
+		return res.FirstError
+	}
 	log.Info("Snapshot policy reconciliation completed", "name", policy.Name, "repository", repoName)
 	return nil
 }
@@ -393,19 +362,22 @@ func (r *SnapshotPolicyReconciler) Delete(ctx context.Context, policy *wazuhv1.O
 		return nil
 	}
 
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, policy.Spec.ClusterRef, policy.Namespace)
-	if err != nil {
-		log.Info("Skipping snapshot policy deletion - failed to get OpenSearch client", "error", err)
-		return nil
+	for _, ref := range policy.Spec.ClusterRefs {
+		apiClient, err := r.ClientFactory.GetClientForClusterRef(ctx, ref)
+		if err != nil {
+			log.Info("Skipping snapshot policy deletion on cluster - failed to get client",
+				"cluster", ref.Name, "clusterNamespace", ref.Namespace, "error", err)
+			continue
+		}
+		snapshotAPI := api.NewSnapshotAPI(apiClient)
+		if err := snapshotAPI.DeletePolicy(ctx, policy.Name); err != nil {
+			r.recordEvent(policy, corev1.EventTypeWarning, "DeleteFailed",
+				fmt.Sprintf("Failed to delete snapshot policy from %s/%s: %v", ref.Namespace, ref.Name, err))
+			continue
+		}
+		log.Info("Deleted OpenSearch snapshot policy on cluster",
+			"name", policy.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
 	}
-
-	snapshotAPI := api.NewSnapshotAPI(apiClient)
-	if err := snapshotAPI.DeletePolicy(ctx, policy.Name); err != nil {
-		r.recordEvent(policy, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete snapshot policy: %v", err))
-		return fmt.Errorf("failed to delete snapshot policy: %w", err)
-	}
-
-	r.recordEvent(policy, corev1.EventTypeNormal, "Deleted", "Snapshot policy deleted from OpenSearch")
-	log.Info("Deleted OpenSearch snapshot policy", "name", policy.Name)
+	r.recordEvent(policy, corev1.EventTypeNormal, "Deleted", "Snapshot policy deletion processed on all target clusters")
 	return nil
 }

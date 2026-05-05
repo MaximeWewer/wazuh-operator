@@ -16,6 +16,35 @@ limitations under the License.
 
 package v1
 
+import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+// OpenSearchClusterStatus reports the reconciliation state for one target
+// OpenSearch cluster of a multi-cluster CR (User, Role, Tenant, etc.).
+// The aggregate Status.Phase reflects the worst case across entries.
+type OpenSearchClusterStatus struct {
+	// Name of the target WazuhCluster
+	Name string `json:"name"`
+
+	// Namespace of the target WazuhCluster
+	Namespace string `json:"namespace"`
+
+	// Phase on this cluster (Pending, Ready, Failed, Conflict)
+	// +optional
+	Phase OpenSearchResourcePhase `json:"phase,omitempty"`
+
+	// LastSyncTime is the last time the resource was synced to this cluster
+	// +optional
+	LastSyncTime *metav1.Time `json:"lastSyncTime,omitempty"`
+
+	// LastAppliedHash is the hash of the last spec applied to this cluster
+	// +optional
+	LastAppliedHash string `json:"lastAppliedHash,omitempty"`
+
+	// Message provides additional information about this cluster's state
+	// +optional
+	Message string `json:"message,omitempty"`
+}
+
 // ClusterSettingsSpec defines cluster-level OpenSearch settings applied via the Cluster Settings API
 type ClusterSettingsSpec struct {
 	// Persistent settings survive cluster restarts

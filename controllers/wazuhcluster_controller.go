@@ -2147,28 +2147,21 @@ func (r *WazuhClusterReconciler) findClustersForAgentGroup(ctx context.Context, 
 	return requests
 }
 
-// findClustersForAuthConfig finds the WazuhCluster that an OpenSearchAuthConfig
-// references via clusterRef. Used to re-reconcile the cluster (and rebuild the
-// dashboard ConfigMap) when OIDC / SAML / LDAP settings change.
+// findClustersForAuthConfig emits one reconcile request per cluster targeted
+// by an OpenSearchAuthConfig so OIDC / SAML / LDAP changes propagate to every
+// cluster's dashboard and indexer.
 func (r *WazuhClusterReconciler) findClustersForAuthConfig(ctx context.Context, obj client.Object) []ctrl.Request {
 	authConfig, ok := obj.(*wazuhv1.OpenSearchAuthConfig)
 	if !ok {
 		return []ctrl.Request{}
 	}
-
-	namespace := authConfig.Spec.ClusterRef.Namespace
-	if namespace == "" {
-		namespace = authConfig.Namespace
+	requests := make([]ctrl.Request, 0, len(authConfig.Spec.ClusterRefs))
+	for _, ref := range authConfig.Spec.ClusterRefs {
+		requests = append(requests, ctrl.Request{
+			NamespacedName: types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace},
+		})
 	}
-
-	return []ctrl.Request{
-		{
-			NamespacedName: types.NamespacedName{
-				Name:      authConfig.Spec.ClusterRef.Name,
-				Namespace: namespace,
-			},
-		},
-	}
+	return requests
 }
 
 // findClustersForSecret finds WazuhClusters impacted by changes in watched secrets.

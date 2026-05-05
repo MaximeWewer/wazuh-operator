@@ -96,59 +96,36 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSe
 		return r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
 	}
 
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, policy.Spec.ClusterRef, policy.Namespace)
-	if err != nil {
-		r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
-		return fmt.Errorf("failed to get OpenSearch client: %w", err)
-	}
-
-	// Create ISM API client
-	ismAPI := api.NewISMAPI(apiClient)
-
-	// Check if policy exists
-	exists, err := ismAPI.Exists(ctx, policy.Name)
-	if err != nil {
-		if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check policy existence: %v", err)); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check ISM policy existence: %v", err))
-		return fmt.Errorf("failed to check policy existence: %w", err)
-	}
-
-	// Build ISM policy from spec
 	ismPolicy := r.buildISMPolicy(policy)
+	specHash, _ := patch.ComputeSpecHash(policy.Spec)
 
-	if !exists {
-		log.Info("Creating ISM policy", "name", policy.Name)
-		if err := ismAPI.Create(ctx, policy.Name, ismPolicy); err != nil {
-			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to create ISM policy: %v", err)); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
+	res := ReconcileMultiCluster(ctx, policy.Spec.ClusterRefs, r.ClientFactory, policy.Status.ClusterStatuses,
+		func(ctx context.Context, apiClient *api.Client, ref wazuhv1.WazuhClusterRef) (string, error) {
+			ismAPI := api.NewISMAPI(apiClient)
+			exists, err := ismAPI.Exists(ctx, policy.Name)
+			if err != nil {
+				return "", fmt.Errorf("failed to check ISM policy existence: %w", err)
 			}
-			r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to create ISM policy: %v", err))
-			return fmt.Errorf("failed to create ISM policy: %w", err)
-		}
-	} else {
-		log.Info("Updating ISM policy", "name", policy.Name)
-		existing, err := ismAPI.GetWithMeta(ctx, policy.Name)
-		if err != nil {
-			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to get ISM policy for update: %v", err)); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
+			if !exists {
+				log.Info("Creating ISM policy", "name", policy.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+				if err := ismAPI.Create(ctx, policy.Name, ismPolicy); err != nil {
+					return "", fmt.Errorf("failed to create ISM policy: %w", err)
+				}
+			} else {
+				log.Info("Updating ISM policy", "name", policy.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+				existing, err := ismAPI.GetWithMeta(ctx, policy.Name)
+				if err != nil {
+					return "", fmt.Errorf("failed to get ISM policy for update: %w", err)
+				}
+				if err := ismAPI.Update(ctx, policy.Name, ismPolicy, existing.SeqNo, existing.PrimaryTerm); err != nil {
+					return "", fmt.Errorf("failed to update ISM policy: %w", err)
+				}
 			}
-			r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get ISM policy for update: %v", err))
-			return fmt.Errorf("failed to get ISM policy for update: %w", err)
-		}
-		if err := ismAPI.Update(ctx, policy.Name, ismPolicy, existing.SeqNo, existing.PrimaryTerm); err != nil {
-			if updateErr := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to update ISM policy: %v", err)); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to update ISM policy: %v", err))
-			return fmt.Errorf("failed to update ISM policy: %w", err)
-		}
-	}
+			return specHash, nil
+		})
+	policy.Status.ClusterStatuses = res.Statuses
 
-	// Compute spec hash for drift detection
-	specHash, hashErr := patch.ComputeSpecHash(policy.Spec)
-	if hashErr == nil && policy.Status.LastAppliedHash != "" && policy.Status.LastAppliedHash != specHash {
+	if specHash != "" && policy.Status.LastAppliedHash != "" && policy.Status.LastAppliedHash != specHash {
 		policy.Status.DriftDetected = true
 		now := metav1.Now()
 		policy.Status.LastDriftTime = &now
@@ -157,19 +134,27 @@ func (r *PolicyReconciler) Reconcile(ctx context.Context, policy *wazuhv1.OpenSe
 	} else {
 		policy.Status.DriftDetected = false
 	}
-	if hashErr == nil {
+	if specHash != "" {
 		policy.Status.LastAppliedHash = specHash
 	}
 
 	wasReady := policy.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
 		policy.Status.ObservedGeneration == policy.Generation
-	if err := r.updateStatus(ctx, policy, wazuhv1.OpenSearchResourcePhaseReady, "ISM policy reconciled successfully", !wasReady); err != nil {
+	phase := res.AggregatePhase()
+	msg := res.AggregateMessage()
+	if res.AnyFailed {
+		r.recordEvent(policy, corev1.EventTypeWarning, "SyncFailed", res.FirstError.Error())
+	}
+	if err := r.updateStatus(ctx, policy, phase, msg, phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
-	if !wasReady {
-		r.recordEvent(policy, corev1.EventTypeNormal, "Synced", "ISM policy reconciled successfully")
+	if phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady {
+		r.recordEvent(policy, corev1.EventTypeNormal, "Synced", "ISM policy synced on all target clusters")
 	}
 
+	if res.FirstError != nil {
+		return res.FirstError
+	}
 	log.Info("ISM policy reconciliation completed", "name", policy.Name)
 	return nil
 }
@@ -297,20 +282,22 @@ func (r *PolicyReconciler) Delete(ctx context.Context, policy *wazuhv1.OpenSearc
 		log.Info("Skipping ISM policy deletion - no client factory available")
 		return nil
 	}
-
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, policy.Spec.ClusterRef, policy.Namespace)
-	if err != nil {
-		log.Info("Skipping ISM policy deletion - failed to get OpenSearch client", "error", err)
-		return nil
+	for _, ref := range policy.Spec.ClusterRefs {
+		apiClient, err := r.ClientFactory.GetClientForClusterRef(ctx, ref)
+		if err != nil {
+			log.Info("Skipping ISM policy deletion on cluster - failed to get client",
+				"cluster", ref.Name, "clusterNamespace", ref.Namespace, "error", err)
+			continue
+		}
+		ismAPI := api.NewISMAPI(apiClient)
+		if err := ismAPI.Delete(ctx, policy.Name); err != nil {
+			r.recordEvent(policy, corev1.EventTypeWarning, "DeleteFailed",
+				fmt.Sprintf("Failed to delete ISM policy from %s/%s: %v", ref.Namespace, ref.Name, err))
+			continue
+		}
+		log.Info("Deleted OpenSearch ISM policy on cluster",
+			"name", policy.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
 	}
-
-	ismAPI := api.NewISMAPI(apiClient)
-	if err := ismAPI.Delete(ctx, policy.Name); err != nil {
-		r.recordEvent(policy, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete ISM policy: %v", err))
-		return fmt.Errorf("failed to delete ISM policy: %w", err)
-	}
-
-	r.recordEvent(policy, corev1.EventTypeNormal, "Deleted", "ISM policy deleted from OpenSearch")
-	log.Info("Deleted OpenSearch ISM policy", "name", policy.Name)
+	r.recordEvent(policy, corev1.EventTypeNormal, "Deleted", "ISM policy deletion processed on all target clusters")
 	return nil
 }

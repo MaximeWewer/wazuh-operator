@@ -92,26 +92,65 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, role *wazuhv1.OpenSearch
 		return r.handleDeletion(ctx, role)
 	}
 
-	osClient, err := r.getOpenSearchClient(ctx, role)
-	if err != nil {
-		r.recordEvent(role, corev1.EventTypeWarning, "ConnectionError", fmt.Sprintf("Failed to connect to OpenSearch: %v", err))
-		return fmt.Errorf("failed to get OpenSearch client: %w", err)
-	}
-
-	// Build role from spec
 	osRole := r.buildRole(role)
-
-	// Create or update the role (using the CR name as role name)
 	roleName := role.Name
-	if err := osClient.CreateRole(ctx, roleName, osRole); err != nil {
-		r.recordEvent(role, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to sync role to OpenSearch: %v", err))
-		return fmt.Errorf("failed to create/update role: %w", err)
+	specHash, _ := patch.ComputeSpecHash(role.Spec)
+
+	newStatuses := make([]wazuhv1.OpenSearchClusterStatus, 0, len(role.Spec.ClusterRefs))
+	anyFailed := false
+	anyPending := false
+	allReady := len(role.Spec.ClusterRefs) > 0
+	var firstErr error
+	existingByKey := make(map[string]wazuhv1.OpenSearchClusterStatus, len(role.Status.ClusterStatuses))
+	for _, s := range role.Status.ClusterStatuses {
+		existingByKey[s.Namespace+"/"+s.Name] = s
 	}
 
-	// Compute spec hash for drift detection
-	specHash, hashErr := patch.ComputeSpecHash(role.Spec)
-	if hashErr == nil && role.Status.LastAppliedHash != "" && role.Status.LastAppliedHash != specHash {
-		// Spec changed since last sync - this is drift (external modification to CRD)
+	for _, ref := range role.Spec.ClusterRefs {
+		st := existingByKey[ref.Namespace+"/"+ref.Name]
+		st.Name = ref.Name
+		st.Namespace = ref.Namespace
+
+		osClient, err := r.getOpenSearchClientForRef(ctx, ref)
+		if err != nil {
+			st.Phase = wazuhv1.OpenSearchResourcePhasePending
+			st.Message = fmt.Sprintf("Failed to connect: %v", err)
+			anyPending = true
+			allReady = false
+			if firstErr == nil {
+				firstErr = err
+			}
+			r.recordEvent(role, corev1.EventTypeWarning, "ConnectionError",
+				fmt.Sprintf("Failed to connect to %s/%s: %v", ref.Namespace, ref.Name, err))
+			newStatuses = append(newStatuses, st)
+			continue
+		}
+		if err := osClient.CreateRole(ctx, roleName, osRole); err != nil {
+			st.Phase = wazuhv1.OpenSearchResourcePhaseFailed
+			st.Message = err.Error()
+			anyFailed = true
+			allReady = false
+			if firstErr == nil {
+				firstErr = err
+			}
+			r.recordEvent(role, corev1.EventTypeWarning, "SyncFailed",
+				fmt.Sprintf("Failed to sync role to %s/%s: %v", ref.Namespace, ref.Name, err))
+			newStatuses = append(newStatuses, st)
+			continue
+		}
+		wasClusterReady := st.Phase == wazuhv1.OpenSearchResourcePhaseReady
+		st.Phase = wazuhv1.OpenSearchResourcePhaseReady
+		st.Message = ""
+		st.LastAppliedHash = specHash
+		if !wasClusterReady {
+			now := metav1.Now()
+			st.LastSyncTime = &now
+		}
+		newStatuses = append(newStatuses, st)
+	}
+	role.Status.ClusterStatuses = newStatuses
+
+	if specHash != "" && role.Status.LastAppliedHash != "" && role.Status.LastAppliedHash != specHash {
 		role.Status.DriftDetected = true
 		now := metav1.Now()
 		role.Status.LastDriftTime = &now
@@ -120,20 +159,38 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, role *wazuhv1.OpenSearch
 	} else {
 		role.Status.DriftDetected = false
 	}
-	if hashErr == nil {
+	if specHash != "" {
 		role.Status.LastAppliedHash = specHash
 	}
 
-	// Update status — only update timestamp and emit event on transition
 	wasReady := role.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
 		role.Status.ObservedGeneration == role.Generation
-	if err := r.updateStatus(ctx, role, wazuhv1.OpenSearchResourcePhaseReady, "Role reconciled successfully", !wasReady); err != nil {
+
+	var phase wazuhv1.OpenSearchResourcePhase
+	var msg string
+	switch {
+	case anyFailed:
+		phase = wazuhv1.OpenSearchResourcePhaseFailed
+		msg = "One or more target clusters failed to sync"
+	case anyPending:
+		phase = wazuhv1.OpenSearchResourcePhasePending
+		msg = "Waiting on one or more target clusters"
+	case allReady:
+		phase = wazuhv1.OpenSearchResourcePhaseReady
+		msg = "Role reconciled on all target clusters"
+	default:
+		phase = wazuhv1.OpenSearchResourcePhasePending
+	}
+	if err := r.updateStatus(ctx, role, phase, msg, phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
-	if !wasReady {
-		r.recordEvent(role, corev1.EventTypeNormal, "Synced", "Role successfully synchronized to OpenSearch")
+	if phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady {
+		r.recordEvent(role, corev1.EventTypeNormal, "Synced", "Role synced on all target clusters")
 	}
 
+	if firstErr != nil {
+		return firstErr
+	}
 	log.Info("Role reconciliation completed", "name", role.Name)
 	return nil
 }
@@ -171,26 +228,30 @@ func (r *RoleReconciler) buildRole(role *wazuhv1.OpenSearchRole) adapters.Securi
 	return osRole
 }
 
-// getOpenSearchClient gets an OpenSearch HTTP adapter using dynamic client resolution
+// getOpenSearchClient (legacy) returns a client for the first cluster ref.
 func (r *RoleReconciler) getOpenSearchClient(ctx context.Context, role *wazuhv1.OpenSearchRole) (*adapters.OpenSearchHTTPAdapter, error) {
+	if len(role.Spec.ClusterRefs) == 0 {
+		return nil, fmt.Errorf("no cluster references configured")
+	}
+	return r.getOpenSearchClientForRef(ctx, role.Spec.ClusterRefs[0])
+}
+
+// getOpenSearchClientForRef builds an HTTP adapter for the given cluster ref.
+func (r *RoleReconciler) getOpenSearchClientForRef(ctx context.Context, ref wazuhv1.WazuhClusterRef) (*adapters.OpenSearchHTTPAdapter, error) {
 	if r.ClientFactory == nil {
 		return nil, fmt.Errorf("client factory not configured")
 	}
-
-	baseURL, username, password, caCert, err := r.ClientFactory.GetConnectionInfo(ctx, role.Spec.ClusterRef, role.Namespace)
+	baseURL, username, password, caCert, err := r.ClientFactory.GetConnectionInfoForRef(ctx, ref)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get connection info: %w", err)
 	}
-
-	config := adapters.OpenSearchConfig{
+	return adapters.NewOpenSearchHTTPAdapter(adapters.OpenSearchConfig{
 		BaseURL:  baseURL,
 		Username: username,
 		Password: password,
 		CACert:   caCert,
 		Insecure: false,
-	}
-
-	return adapters.NewOpenSearchHTTPAdapter(config)
+	})
 }
 
 // updateStatus updates the role status with retry on conflict
@@ -245,22 +306,24 @@ func (r *RoleReconciler) handleDeletion(ctx context.Context, role *wazuhv1.OpenS
 	})
 }
 
-// Delete handles cleanup when a role is deleted
+// Delete handles cleanup when a role is deleted (best-effort across every cluster ref).
 func (r *RoleReconciler) Delete(ctx context.Context, role *wazuhv1.OpenSearchRole) error {
 	log := logf.FromContext(ctx)
-
-	osClient, err := r.getOpenSearchClient(ctx, role)
-	if err != nil {
-		log.Info("Skipping role deletion - failed to get OpenSearch client", "error", err)
-		return nil
+	for _, ref := range role.Spec.ClusterRefs {
+		osClient, err := r.getOpenSearchClientForRef(ctx, ref)
+		if err != nil {
+			log.Info("Skipping role deletion on cluster - failed to get client",
+				"cluster", ref.Name, "clusterNamespace", ref.Namespace, "error", err)
+			continue
+		}
+		if err := osClient.DeleteRole(ctx, role.Name); err != nil {
+			r.recordEvent(role, corev1.EventTypeWarning, "DeleteFailed",
+				fmt.Sprintf("Failed to delete role from %s/%s: %v", ref.Namespace, ref.Name, err))
+			continue
+		}
+		log.Info("Deleted OpenSearch role on cluster",
+			"name", role.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
 	}
-
-	if err := osClient.DeleteRole(ctx, role.Name); err != nil {
-		r.recordEvent(role, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete role from OpenSearch: %v", err))
-		return fmt.Errorf("failed to delete role: %w", err)
-	}
-
-	r.recordEvent(role, corev1.EventTypeNormal, "Deleted", "Role deleted from OpenSearch")
-	log.Info("Deleted OpenSearch role", "name", role.Name)
+	r.recordEvent(role, corev1.EventTypeNormal, "Deleted", "Role deletion processed on all target clusters")
 	return nil
 }

@@ -81,22 +81,20 @@ func ResolveAuthSecrets(ctx context.Context, cli client.Client, authConfig *wazu
 	return secrets, nil
 }
 
-// FindAuthConfigForCluster returns the first OpenSearchAuthConfig in the cluster's
-// namespace whose spec.clusterRef points at the given cluster. Returns (nil, nil) when
-// none is found so callers can fall back to defaults without treating absence as an error.
+// FindAuthConfigForCluster returns the first OpenSearchAuthConfig (across all
+// namespaces) whose spec.clusterRefs targets the given cluster. Returns (nil, nil)
+// when none is found so callers can fall back to defaults.
 func FindAuthConfigForCluster(ctx context.Context, cli client.Client, clusterName, clusterNamespace string) (*wazuhv1.OpenSearchAuthConfig, error) {
 	list := &wazuhv1.OpenSearchAuthConfigList{}
-	if err := cli.List(ctx, list, client.InNamespace(clusterNamespace)); err != nil {
+	if err := cli.List(ctx, list); err != nil {
 		return nil, fmt.Errorf("failed to list OpenSearchAuthConfigs: %w", err)
 	}
 	for i := range list.Items {
 		ac := &list.Items[i]
-		refNs := ac.Spec.ClusterRef.Namespace
-		if refNs == "" {
-			refNs = ac.Namespace
-		}
-		if ac.Spec.ClusterRef.Name == clusterName && refNs == clusterNamespace {
-			return ac, nil
+		for _, ref := range ac.Spec.ClusterRefs {
+			if ref.Name == clusterName && ref.Namespace == clusterNamespace {
+				return ac, nil
+			}
 		}
 	}
 	return nil, nil

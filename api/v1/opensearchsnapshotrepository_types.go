@@ -22,9 +22,15 @@ import (
 
 // OpenSearchSnapshotRepositorySpec defines the desired state of OpenSearchSnapshotRepository
 type OpenSearchSnapshotRepositorySpec struct {
-	// ClusterRef references the WazuhCluster this repository belongs to
+	// ClusterRefs lists the WazuhCluster instances this resource targets.
+	// Each entry must specify both name and namespace.
 	// +kubebuilder:validation:Required
-	ClusterRef WazuhClusterReference `json:"clusterRef"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+	ClusterRefs []WazuhClusterRef `json:"clusterRefs"`
 
 	// Type is the repository type
 	// Note: s3/gcs/azure/hdfs types require the corresponding repository plugin to be installed
@@ -186,6 +192,13 @@ type OpenSearchSnapshotRepositoryStatus struct {
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
+	// ClusterStatuses reports per-target-cluster reconciliation state.
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+	// +optional
+	ClusterStatuses []OpenSearchClusterStatus `json:"clusterStatuses,omitempty"`
+
 	// LastSyncTime is when the resource was last synced to OpenSearch
 	// +optional
 	LastSyncTime *metav1.Time `json:"lastSyncTime,omitempty"`
@@ -195,7 +208,6 @@ type OpenSearchSnapshotRepositoryStatus struct {
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced,shortName=osrepo
-// +kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=`.spec.clusterRef.name`
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.type`
 // +kubebuilder:printcolumn:name="Bucket",type=string,JSONPath=`.spec.settings.bucket`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`

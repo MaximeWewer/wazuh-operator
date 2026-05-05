@@ -97,49 +97,29 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.Op
 		return r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
 	}
 
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, template.Spec.ClusterRef, template.Namespace)
-	if err != nil {
-		r.recordEvent(template, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
-		return fmt.Errorf("failed to get OpenSearch client: %w", err)
-	}
-
-	// Create Templates API client
-	templatesAPI := api.NewTemplatesAPI(apiClient)
-
-	// Check if template exists
-	exists, err := templatesAPI.IndexTemplateExists(ctx, template.Name)
-	if err != nil {
-		if updateErr := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check template existence: %v", err)); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		r.recordEvent(template, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check index template existence: %v", err))
-		return fmt.Errorf("failed to check template existence: %w", err)
-	}
-
-	// Build index template from spec
 	indexTemplate := r.buildIndexTemplate(template)
+	specHash, _ := patch.ComputeSpecHash(template.Spec)
 
-	// Create or update index template (PUT is idempotent in OpenSearch)
-	if exists {
-		log.Info("Updating index template", "name", template.Name)
-	} else {
-		log.Info("Creating index template", "name", template.Name)
-	}
-	if err := templatesAPI.CreateIndexTemplate(ctx, template.Name, indexTemplate); err != nil {
-		action := "create"
-		if exists {
-			action = "update"
-		}
-		if updateErr := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s template: %v", action, err)); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		r.recordEvent(template, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to %s index template: %v", action, err))
-		return fmt.Errorf("failed to %s index template: %w", action, err)
-	}
+	res := ReconcileMultiCluster(ctx, template.Spec.ClusterRefs, r.ClientFactory, template.Status.ClusterStatuses,
+		func(ctx context.Context, apiClient *api.Client, ref wazuhv1.WazuhClusterRef) (string, error) {
+			templatesAPI := api.NewTemplatesAPI(apiClient)
+			exists, err := templatesAPI.IndexTemplateExists(ctx, template.Name)
+			if err != nil {
+				return "", fmt.Errorf("failed to check index template existence: %w", err)
+			}
+			if exists {
+				log.Info("Updating index template", "name", template.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+			} else {
+				log.Info("Creating index template", "name", template.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+			}
+			if err := templatesAPI.CreateIndexTemplate(ctx, template.Name, indexTemplate); err != nil {
+				return "", fmt.Errorf("failed to apply index template: %w", err)
+			}
+			return specHash, nil
+		})
+	template.Status.ClusterStatuses = res.Statuses
 
-	// Compute spec hash for drift detection
-	specHash, hashErr := patch.ComputeSpecHash(template.Spec)
-	if hashErr == nil && template.Status.LastAppliedHash != "" && template.Status.LastAppliedHash != specHash {
+	if specHash != "" && template.Status.LastAppliedHash != "" && template.Status.LastAppliedHash != specHash {
 		template.Status.DriftDetected = true
 		now := metav1.Now()
 		template.Status.LastDriftTime = &now
@@ -148,19 +128,27 @@ func (r *TemplateReconciler) Reconcile(ctx context.Context, template *wazuhv1.Op
 	} else {
 		template.Status.DriftDetected = false
 	}
-	if hashErr == nil {
+	if specHash != "" {
 		template.Status.LastAppliedHash = specHash
 	}
 
 	wasReady := template.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
 		template.Status.ObservedGeneration == template.Generation
-	if err := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseReady, "Index template reconciled successfully", !wasReady); err != nil {
+	phase := res.AggregatePhase()
+	msg := res.AggregateMessage()
+	if res.AnyFailed {
+		r.recordEvent(template, corev1.EventTypeWarning, "SyncFailed", res.FirstError.Error())
+	}
+	if err := r.updateStatus(ctx, template, phase, msg, phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
-	if !wasReady {
-		r.recordEvent(template, corev1.EventTypeNormal, "Synced", "Index template reconciled successfully")
+	if phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady {
+		r.recordEvent(template, corev1.EventTypeNormal, "Synced", "Index template synced on all target clusters")
 	}
 
+	if res.FirstError != nil {
+		return res.FirstError
+	}
 	log.Info("Index template reconciliation completed", "name", template.Name)
 	return nil
 }
@@ -282,19 +270,22 @@ func (r *TemplateReconciler) Delete(ctx context.Context, template *wazuhv1.OpenS
 		return nil
 	}
 
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, template.Spec.ClusterRef, template.Namespace)
-	if err != nil {
-		log.Info("Skipping index template deletion - failed to get OpenSearch client", "error", err)
-		return nil
+	for _, ref := range template.Spec.ClusterRefs {
+		apiClient, err := r.ClientFactory.GetClientForClusterRef(ctx, ref)
+		if err != nil {
+			log.Info("Skipping index template deletion on cluster - failed to get client",
+				"cluster", ref.Name, "clusterNamespace", ref.Namespace, "error", err)
+			continue
+		}
+		templatesAPI := api.NewTemplatesAPI(apiClient)
+		if err := templatesAPI.DeleteIndexTemplate(ctx, template.Name); err != nil {
+			r.recordEvent(template, corev1.EventTypeWarning, "DeleteFailed",
+				fmt.Sprintf("Failed to delete index template from %s/%s: %v", ref.Namespace, ref.Name, err))
+			continue
+		}
+		log.Info("Deleted OpenSearch index template on cluster",
+			"name", template.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
 	}
-
-	templatesAPI := api.NewTemplatesAPI(apiClient)
-	if err := templatesAPI.DeleteIndexTemplate(ctx, template.Name); err != nil {
-		r.recordEvent(template, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete index template: %v", err))
-		return fmt.Errorf("failed to delete index template: %w", err)
-	}
-
-	r.recordEvent(template, corev1.EventTypeNormal, "Deleted", "Index template deleted from OpenSearch")
-	log.Info("Deleted OpenSearch index template", "name", template.Name)
+	r.recordEvent(template, corev1.EventTypeNormal, "Deleted", "Index template deletion processed on all target clusters")
 	return nil
 }

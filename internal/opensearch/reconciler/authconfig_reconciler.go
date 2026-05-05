@@ -89,35 +89,38 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 		return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Validation failed: %v", err))
 	}
 
-	// Get the referenced cluster name for ConfigMap naming
-	clusterName := authConfig.Spec.ClusterRef.Name
-	namespace := authConfig.Namespace
-
-	// The indexer security config and the dashboard opensearch_dashboards.yml are now
-	// produced by IndexerReconciler and DashboardReconciler respectively (they fetch the
-	// matching OpenSearchAuthConfig themselves). The WazuhCluster controller watches
-	// OpenSearchAuthConfig, so updates here trigger a cluster reconcile which rebuilds
-	// both. This reconciler only needs to validate the spec and hot-apply it via
-	// securityadmin.sh so running indexers pick up the change without a pod restart.
-
-	// Best-effort cleanup of ConfigMaps this reconciler used to create before that
-	// wiring existed. Keeping them would leave orphan objects in the namespace forever.
-	r.cleanupLegacyConfigMaps(ctx, clusterName, namespace)
-
-	// Apply security config via securityadmin.sh (non-fatal if exec fails)
-	if r.SecurityAdminExecutor != nil {
-		if err := r.SecurityAdminExecutor.ApplySecurityConfig(ctx, clusterName, namespace); err != nil {
-			log.Error(err, "Failed to apply security config via securityadmin.sh - config will apply on next indexer restart")
+	// Iterate over each target cluster: cleanup orphan ConfigMaps and apply
+	// the security config via securityadmin.sh per cluster. Errors are logged
+	// per cluster but do not abort the loop.
+	newStatuses := make([]wazuhv1.OpenSearchClusterStatus, 0, len(authConfig.Spec.ClusterRefs))
+	for _, ref := range authConfig.Spec.ClusterRefs {
+		st := wazuhv1.OpenSearchClusterStatus{Name: ref.Name, Namespace: ref.Namespace}
+		r.cleanupLegacyConfigMaps(ctx, ref.Name, ref.Namespace)
+		if r.SecurityAdminExecutor != nil {
+			if err := r.SecurityAdminExecutor.ApplySecurityConfig(ctx, ref.Name, ref.Namespace); err != nil {
+				log.Error(err, "Failed to apply security config via securityadmin.sh on cluster",
+					"cluster", ref.Name, "clusterNamespace", ref.Namespace)
+				st.Phase = wazuhv1.OpenSearchResourcePhasePending
+				st.Message = fmt.Sprintf("securityadmin.sh: %v", err)
+			} else {
+				now := metav1.Now()
+				st.Phase = wazuhv1.OpenSearchResourcePhaseReady
+				st.LastSyncTime = &now
+			}
 		} else {
-			log.Info("Security config applied via securityadmin.sh")
+			now := metav1.Now()
+			st.Phase = wazuhv1.OpenSearchResourcePhaseReady
+			st.LastSyncTime = &now
 		}
+		newStatuses = append(newStatuses, st)
 	}
+	authConfig.Status.ClusterStatuses = newStatuses
 
 	log.Info("Auth config reconciliation completed",
 		"name", authConfig.Name,
 		"activeAuthDomains", r.getActiveAuthDomains(authConfig))
 
-	r.recordEvent(authConfig, corev1.EventTypeNormal, "Synced", "Authentication configuration applied successfully")
+	r.recordEvent(authConfig, corev1.EventTypeNormal, "Synced", "Authentication configuration applied on all target clusters")
 	return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseReady, "Authentication configuration applied")
 }
 

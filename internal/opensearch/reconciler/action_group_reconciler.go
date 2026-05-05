@@ -92,53 +92,29 @@ func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenS
 		return r.handleDeletion(ctx, ag)
 	}
 
-	if r.ClientFactory == nil {
-		return r.updateStatus(ctx, ag, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
-	}
-
-	// Get OpenSearch client dynamically from cluster reference
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, ag.Spec.ClusterRef, ag.Namespace)
-	if err != nil {
-		r.recordEvent(ag, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
-		return fmt.Errorf("failed to get OpenSearch client: %w", err)
-	}
-
-	// Create Security API client
-	securityAPI := api.NewSecurityAPI(apiClient)
-
-	// Check if action group exists
-	existing, err := securityAPI.GetActionGroup(ctx, ag.Name)
-	if err != nil {
-		if updateErr := r.updateStatus(ctx, ag, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check action group existence: %v", err)); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		r.recordEvent(ag, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check action group existence: %v", err))
-		return fmt.Errorf("failed to check action group existence: %w", err)
-	}
-
-	// Build action group from spec
 	actionGroup := r.buildActionGroup(ag)
+	specHash, _ := patch.ComputeSpecHash(ag.Spec)
 
-	if existing == nil {
-		log.Info("Creating action group", "name", ag.Name)
-	} else {
-		log.Info("Updating action group", "name", ag.Name)
-	}
-	if err := securityAPI.CreateActionGroup(ctx, ag.Name, actionGroup); err != nil {
-		action := "create"
-		if existing != nil {
-			action = "update"
-		}
-		if updateErr := r.updateStatus(ctx, ag, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s action group: %v", action, err)); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		r.recordEvent(ag, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to %s action group: %v", action, err))
-		return fmt.Errorf("failed to %s action group: %w", action, err)
-	}
+	res := ReconcileMultiCluster(ctx, ag.Spec.ClusterRefs, r.ClientFactory, ag.Status.ClusterStatuses,
+		func(ctx context.Context, apiClient *api.Client, ref wazuhv1.WazuhClusterRef) (string, error) {
+			securityAPI := api.NewSecurityAPI(apiClient)
+			existing, err := securityAPI.GetActionGroup(ctx, ag.Name)
+			if err != nil {
+				return "", fmt.Errorf("failed to check action group existence: %w", err)
+			}
+			if existing == nil {
+				log.Info("Creating action group", "name", ag.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+			} else {
+				log.Info("Updating action group", "name", ag.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+			}
+			if err := securityAPI.CreateActionGroup(ctx, ag.Name, actionGroup); err != nil {
+				return "", fmt.Errorf("failed to apply action group: %w", err)
+			}
+			return specHash, nil
+		})
 
-	// Compute spec hash for drift detection
-	specHash, hashErr := patch.ComputeSpecHash(ag.Spec)
-	if hashErr == nil && ag.Status.LastAppliedHash != "" && ag.Status.LastAppliedHash != specHash {
+	ag.Status.ClusterStatuses = res.Statuses
+	if specHash != "" && ag.Status.LastAppliedHash != "" && ag.Status.LastAppliedHash != specHash {
 		ag.Status.DriftDetected = true
 		now := metav1.Now()
 		ag.Status.LastDriftTime = &now
@@ -147,19 +123,27 @@ func (r *ActionGroupReconciler) Reconcile(ctx context.Context, ag *wazuhv1.OpenS
 	} else {
 		ag.Status.DriftDetected = false
 	}
-	if hashErr == nil {
+	if specHash != "" {
 		ag.Status.LastAppliedHash = specHash
 	}
 
 	wasReady := ag.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
 		ag.Status.ObservedGeneration == ag.Generation
-	if err := r.updateStatus(ctx, ag, wazuhv1.OpenSearchResourcePhaseReady, "Action group reconciled successfully", !wasReady); err != nil {
+	phase := res.AggregatePhase()
+	msg := res.AggregateMessage()
+	if res.AnyFailed {
+		r.recordEvent(ag, corev1.EventTypeWarning, "SyncFailed", res.FirstError.Error())
+	}
+	if err := r.updateStatus(ctx, ag, phase, msg, phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
-	if !wasReady {
-		r.recordEvent(ag, corev1.EventTypeNormal, "Synced", "Action group reconciled successfully")
+	if phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady {
+		r.recordEvent(ag, corev1.EventTypeNormal, "Synced", "Action group reconciled on all target clusters")
 	}
 
+	if res.FirstError != nil {
+		return res.FirstError
+	}
 	log.Info("Action group reconciliation completed", "name", ag.Name)
 	return nil
 }
@@ -241,19 +225,24 @@ func (r *ActionGroupReconciler) Delete(ctx context.Context, ag *wazuhv1.OpenSear
 		return nil
 	}
 
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, ag.Spec.ClusterRef, ag.Namespace)
-	if err != nil {
-		log.Info("Skipping action group deletion - failed to get OpenSearch client", "error", err)
-		return nil
+	// Delete on every target cluster (best-effort).
+	for _, ref := range ag.Spec.ClusterRefs {
+		apiClient, err := r.ClientFactory.GetClientForClusterRef(ctx, ref)
+		if err != nil {
+			log.Info("Skipping action group deletion on cluster - failed to get OpenSearch client",
+				"cluster", ref.Name, "clusterNamespace", ref.Namespace, "error", err)
+			continue
+		}
+		securityAPI := api.NewSecurityAPI(apiClient)
+		if err := securityAPI.DeleteActionGroup(ctx, ag.Name); err != nil {
+			r.recordEvent(ag, corev1.EventTypeWarning, "DeleteFailed",
+				fmt.Sprintf("Failed to delete action group on %s/%s: %v", ref.Namespace, ref.Name, err))
+			log.Error(err, "Failed to delete action group", "cluster", ref.Name)
+			continue
+		}
+		log.Info("Deleted OpenSearch action group on cluster",
+			"name", ag.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
 	}
-
-	securityAPI := api.NewSecurityAPI(apiClient)
-	if err := securityAPI.DeleteActionGroup(ctx, ag.Name); err != nil {
-		r.recordEvent(ag, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete action group: %v", err))
-		return fmt.Errorf("failed to delete action group: %w", err)
-	}
-
-	r.recordEvent(ag, corev1.EventTypeNormal, "Deleted", "Action group deleted from OpenSearch")
-	log.Info("Deleted OpenSearch action group", "name", ag.Name)
+	r.recordEvent(ag, corev1.EventTypeNormal, "Deleted", "Action group deletion processed on all target clusters")
 	return nil
 }

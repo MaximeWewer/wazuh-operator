@@ -92,48 +92,101 @@ func (r *IndexReconciler) Reconcile(ctx context.Context, index *wazuhv1.OpenSear
 		return r.handleDeletion(ctx, index)
 	}
 
-	// Get OpenSearch client
-	osClient, err := r.getOpenSearchClient(ctx, index)
-	if err != nil {
-		r.recordEvent(index, corev1.EventTypeWarning, "ConnectionError", fmt.Sprintf("Failed to connect to OpenSearch: %v", err))
-		return fmt.Errorf("failed to get OpenSearch client: %w", err)
-	}
-
-	// Use the resource name as the index name
 	indexName := index.Name
+	specHash, _ := patch.ComputeSpecHash(index.Spec)
+	settings := r.buildIndexSettings(index)
+	dynamicSettings := r.buildDynamicSettings(index)
 
-	// Check if index exists
-	exists, err := osClient.IndexExists(ctx, indexName)
-	if err != nil {
-		r.recordEvent(index, corev1.EventTypeWarning, "CheckFailed", fmt.Sprintf("Failed to check if index exists: %v", err))
-		return fmt.Errorf("failed to check if index exists: %w", err)
+	newStatuses := make([]wazuhv1.OpenSearchClusterStatus, 0, len(index.Spec.ClusterRefs))
+	anyFailed := false
+	anyPending := false
+	allReady := len(index.Spec.ClusterRefs) > 0
+	var firstErr error
+	existingByKey := make(map[string]wazuhv1.OpenSearchClusterStatus, len(index.Status.ClusterStatuses))
+	for _, s := range index.Status.ClusterStatuses {
+		existingByKey[s.Namespace+"/"+s.Name] = s
 	}
 
-	if !exists {
-		// Create the index
-		settings := r.buildIndexSettings(index)
-		if err := osClient.CreateIndex(ctx, indexName, settings); err != nil {
-			r.recordEvent(index, corev1.EventTypeWarning, "CreateFailed", fmt.Sprintf("Failed to create index: %v", err))
-			return fmt.Errorf("failed to create index: %w", err)
-		}
-		r.recordEvent(index, corev1.EventTypeNormal, "Created", "Index successfully created in OpenSearch")
-		log.Info("Created OpenSearch index", "name", indexName)
-	} else {
-		// Update dynamic settings (number_of_replicas)
-		dynamicSettings := r.buildDynamicSettings(index)
-		if len(dynamicSettings) > 0 {
-			if err := osClient.UpdateIndexSettings(ctx, indexName, dynamicSettings); err != nil {
-				r.recordEvent(index, corev1.EventTypeWarning, "UpdateFailed", fmt.Sprintf("Failed to update index settings: %v", err))
-				return fmt.Errorf("failed to update index settings: %w", err)
+	for _, ref := range index.Spec.ClusterRefs {
+		st := existingByKey[ref.Namespace+"/"+ref.Name]
+		st.Name = ref.Name
+		st.Namespace = ref.Namespace
+
+		osClient, err := r.getOpenSearchClientForRef(ctx, ref)
+		if err != nil {
+			st.Phase = wazuhv1.OpenSearchResourcePhasePending
+			st.Message = fmt.Sprintf("Failed to connect: %v", err)
+			anyPending = true
+			allReady = false
+			if firstErr == nil {
+				firstErr = err
 			}
-			r.recordEvent(index, corev1.EventTypeNormal, "Updated", "Index settings updated in OpenSearch")
-			log.Info("Updated OpenSearch index settings", "name", indexName)
+			r.recordEvent(index, corev1.EventTypeWarning, "ConnectionError",
+				fmt.Sprintf("Failed to connect to %s/%s: %v", ref.Namespace, ref.Name, err))
+			newStatuses = append(newStatuses, st)
+			continue
 		}
+		exists, err := osClient.IndexExists(ctx, indexName)
+		if err != nil {
+			st.Phase = wazuhv1.OpenSearchResourcePhaseFailed
+			st.Message = fmt.Sprintf("Failed to check index: %v", err)
+			anyFailed = true
+			allReady = false
+			if firstErr == nil {
+				firstErr = err
+			}
+			r.recordEvent(index, corev1.EventTypeWarning, "CheckFailed",
+				fmt.Sprintf("Failed to check index on %s/%s: %v", ref.Namespace, ref.Name, err))
+			newStatuses = append(newStatuses, st)
+			continue
+		}
+		if !exists {
+			if err := osClient.CreateIndex(ctx, indexName, settings); err != nil {
+				st.Phase = wazuhv1.OpenSearchResourcePhaseFailed
+				st.Message = err.Error()
+				anyFailed = true
+				allReady = false
+				if firstErr == nil {
+					firstErr = err
+				}
+				r.recordEvent(index, corev1.EventTypeWarning, "CreateFailed",
+					fmt.Sprintf("Failed to create index on %s/%s: %v", ref.Namespace, ref.Name, err))
+				newStatuses = append(newStatuses, st)
+				continue
+			}
+			r.recordEvent(index, corev1.EventTypeNormal, "Created",
+				fmt.Sprintf("Index created on %s/%s", ref.Namespace, ref.Name))
+			log.Info("Created OpenSearch index", "name", indexName, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+		} else if len(dynamicSettings) > 0 {
+			if err := osClient.UpdateIndexSettings(ctx, indexName, dynamicSettings); err != nil {
+				st.Phase = wazuhv1.OpenSearchResourcePhaseFailed
+				st.Message = err.Error()
+				anyFailed = true
+				allReady = false
+				if firstErr == nil {
+					firstErr = err
+				}
+				r.recordEvent(index, corev1.EventTypeWarning, "UpdateFailed",
+					fmt.Sprintf("Failed to update index settings on %s/%s: %v", ref.Namespace, ref.Name, err))
+				newStatuses = append(newStatuses, st)
+				continue
+			}
+			r.recordEvent(index, corev1.EventTypeNormal, "Updated",
+				fmt.Sprintf("Index settings updated on %s/%s", ref.Namespace, ref.Name))
+		}
+		wasClusterReady := st.Phase == wazuhv1.OpenSearchResourcePhaseReady
+		st.Phase = wazuhv1.OpenSearchResourcePhaseReady
+		st.Message = ""
+		st.LastAppliedHash = specHash
+		if !wasClusterReady {
+			now := metav1.Now()
+			st.LastSyncTime = &now
+		}
+		newStatuses = append(newStatuses, st)
 	}
+	index.Status.ClusterStatuses = newStatuses
 
-	// Compute spec hash for drift detection
-	specHash, hashErr := patch.ComputeSpecHash(index.Spec)
-	if hashErr == nil && index.Status.LastAppliedHash != "" && index.Status.LastAppliedHash != specHash {
+	if specHash != "" && index.Status.LastAppliedHash != "" && index.Status.LastAppliedHash != specHash {
 		index.Status.DriftDetected = true
 		now := metav1.Now()
 		index.Status.LastDriftTime = &now
@@ -142,16 +195,34 @@ func (r *IndexReconciler) Reconcile(ctx context.Context, index *wazuhv1.OpenSear
 	} else {
 		index.Status.DriftDetected = false
 	}
-	if hashErr == nil {
+	if specHash != "" {
 		index.Status.LastAppliedHash = specHash
 	}
 
 	wasReady := index.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
 		index.Status.ObservedGeneration == index.Generation
-	if err := r.updateStatus(ctx, index, wazuhv1.OpenSearchResourcePhaseReady, "Index reconciled successfully", !wasReady); err != nil {
+	var phase wazuhv1.OpenSearchResourcePhase
+	var msg string
+	switch {
+	case anyFailed:
+		phase = wazuhv1.OpenSearchResourcePhaseFailed
+		msg = "One or more target clusters failed to sync"
+	case anyPending:
+		phase = wazuhv1.OpenSearchResourcePhasePending
+		msg = "Waiting on one or more target clusters"
+	case allReady:
+		phase = wazuhv1.OpenSearchResourcePhaseReady
+		msg = "Index reconciled on all target clusters"
+	default:
+		phase = wazuhv1.OpenSearchResourcePhasePending
+	}
+	if err := r.updateStatus(ctx, index, phase, msg, phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
+	if firstErr != nil {
+		return firstErr
+	}
 	log.Info("Index reconciliation completed", "name", index.Name)
 	return nil
 }
@@ -203,26 +274,30 @@ func (r *IndexReconciler) buildDynamicSettings(index *wazuhv1.OpenSearchIndex) m
 	}
 }
 
-// getOpenSearchClient gets an OpenSearch HTTP adapter using dynamic client resolution
+// getOpenSearchClient (legacy) returns a client for the first cluster ref.
 func (r *IndexReconciler) getOpenSearchClient(ctx context.Context, index *wazuhv1.OpenSearchIndex) (*adapters.OpenSearchHTTPAdapter, error) {
+	if len(index.Spec.ClusterRefs) == 0 {
+		return nil, fmt.Errorf("no cluster references configured")
+	}
+	return r.getOpenSearchClientForRef(ctx, index.Spec.ClusterRefs[0])
+}
+
+// getOpenSearchClientForRef builds an HTTP adapter for the given cluster ref.
+func (r *IndexReconciler) getOpenSearchClientForRef(ctx context.Context, ref wazuhv1.WazuhClusterRef) (*adapters.OpenSearchHTTPAdapter, error) {
 	if r.ClientFactory == nil {
 		return nil, fmt.Errorf("client factory not configured")
 	}
-
-	baseURL, username, password, caCert, err := r.ClientFactory.GetConnectionInfo(ctx, index.Spec.ClusterRef, index.Namespace)
+	baseURL, username, password, caCert, err := r.ClientFactory.GetConnectionInfoForRef(ctx, ref)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get connection info: %w", err)
 	}
-
-	config := adapters.OpenSearchConfig{
+	return adapters.NewOpenSearchHTTPAdapter(adapters.OpenSearchConfig{
 		BaseURL:  baseURL,
 		Username: username,
 		Password: password,
 		CACert:   caCert,
 		Insecure: false,
-	}
-
-	return adapters.NewOpenSearchHTTPAdapter(config)
+	})
 }
 
 // updateStatus updates the index status with retry on conflict
@@ -277,23 +352,25 @@ func (r *IndexReconciler) handleDeletion(ctx context.Context, index *wazuhv1.Ope
 	})
 }
 
-// Delete handles cleanup when an index is deleted
+// Delete handles cleanup when an index is deleted (across every target cluster).
 func (r *IndexReconciler) Delete(ctx context.Context, index *wazuhv1.OpenSearchIndex) error {
 	log := logf.FromContext(ctx)
-
-	osClient, err := r.getOpenSearchClient(ctx, index)
-	if err != nil {
-		r.recordEvent(index, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to connect to OpenSearch for deletion: %v", err))
-		return fmt.Errorf("failed to get OpenSearch client: %w", err)
-	}
-
 	indexName := index.Name
-	if err := osClient.DeleteIndex(ctx, indexName); err != nil {
-		r.recordEvent(index, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete index from OpenSearch: %v", err))
-		return fmt.Errorf("failed to delete index: %w", err)
+	for _, ref := range index.Spec.ClusterRefs {
+		osClient, err := r.getOpenSearchClientForRef(ctx, ref)
+		if err != nil {
+			r.recordEvent(index, corev1.EventTypeWarning, "DeleteFailed",
+				fmt.Sprintf("Failed to connect to %s/%s for deletion: %v", ref.Namespace, ref.Name, err))
+			continue
+		}
+		if err := osClient.DeleteIndex(ctx, indexName); err != nil {
+			r.recordEvent(index, corev1.EventTypeWarning, "DeleteFailed",
+				fmt.Sprintf("Failed to delete index from %s/%s: %v", ref.Namespace, ref.Name, err))
+			continue
+		}
+		log.Info("Deleted OpenSearch index on cluster",
+			"name", indexName, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
 	}
-
-	r.recordEvent(index, corev1.EventTypeNormal, "Deleted", "Index deleted from OpenSearch")
-	log.Info("Deleted OpenSearch index", "name", indexName)
+	r.recordEvent(index, corev1.EventTypeNormal, "Deleted", "Index deletion processed on all target clusters")
 	return nil
 }

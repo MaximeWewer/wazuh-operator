@@ -96,49 +96,29 @@ func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *w
 		return r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
 	}
 
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, template.Spec.ClusterRef, template.Namespace)
-	if err != nil {
-		r.recordEvent(template, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
-		return fmt.Errorf("failed to get OpenSearch client: %w", err)
-	}
-
-	// Create Templates API client
-	templatesAPI := api.NewTemplatesAPI(apiClient)
-
-	// Check if component template exists
-	exists, err := templatesAPI.ComponentTemplateExists(ctx, template.Name)
-	if err != nil {
-		if updateErr := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check template existence: %v", err)); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		r.recordEvent(template, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check component template existence: %v", err))
-		return fmt.Errorf("failed to check component template existence: %w", err)
-	}
-
-	// Build component template from spec
 	componentTemplate := r.buildComponentTemplate(template)
+	specHash, _ := patch.ComputeSpecHash(template.Spec)
 
-	// Create or update component template (PUT is idempotent in OpenSearch)
-	if exists {
-		log.Info("Updating component template", "name", template.Name)
-	} else {
-		log.Info("Creating component template", "name", template.Name)
-	}
-	if err := templatesAPI.CreateComponentTemplate(ctx, template.Name, componentTemplate); err != nil {
-		action := "create"
-		if exists {
-			action = "update"
-		}
-		if updateErr := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s template: %v", action, err)); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		r.recordEvent(template, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to %s component template: %v", action, err))
-		return fmt.Errorf("failed to %s component template: %w", action, err)
-	}
+	res := ReconcileMultiCluster(ctx, template.Spec.ClusterRefs, r.ClientFactory, template.Status.ClusterStatuses,
+		func(ctx context.Context, apiClient *api.Client, ref wazuhv1.WazuhClusterRef) (string, error) {
+			templatesAPI := api.NewTemplatesAPI(apiClient)
+			exists, err := templatesAPI.ComponentTemplateExists(ctx, template.Name)
+			if err != nil {
+				return "", fmt.Errorf("failed to check component template existence: %w", err)
+			}
+			if exists {
+				log.Info("Updating component template", "name", template.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+			} else {
+				log.Info("Creating component template", "name", template.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+			}
+			if err := templatesAPI.CreateComponentTemplate(ctx, template.Name, componentTemplate); err != nil {
+				return "", fmt.Errorf("failed to apply component template: %w", err)
+			}
+			return specHash, nil
+		})
+	template.Status.ClusterStatuses = res.Statuses
 
-	// Compute spec hash for drift detection
-	specHash, hashErr := patch.ComputeSpecHash(template.Spec)
-	if hashErr == nil && template.Status.LastAppliedHash != "" && template.Status.LastAppliedHash != specHash {
+	if specHash != "" && template.Status.LastAppliedHash != "" && template.Status.LastAppliedHash != specHash {
 		template.Status.DriftDetected = true
 		now := metav1.Now()
 		template.Status.LastDriftTime = &now
@@ -147,19 +127,27 @@ func (r *ComponentTemplateReconciler) Reconcile(ctx context.Context, template *w
 	} else {
 		template.Status.DriftDetected = false
 	}
-	if hashErr == nil {
+	if specHash != "" {
 		template.Status.LastAppliedHash = specHash
 	}
 
 	wasReady := template.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
 		template.Status.ObservedGeneration == template.Generation
-	if err := r.updateStatus(ctx, template, wazuhv1.OpenSearchResourcePhaseReady, "Component template reconciled successfully", !wasReady); err != nil {
+	phase := res.AggregatePhase()
+	msg := res.AggregateMessage()
+	if res.AnyFailed {
+		r.recordEvent(template, corev1.EventTypeWarning, "SyncFailed", res.FirstError.Error())
+	}
+	if err := r.updateStatus(ctx, template, phase, msg, phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
-	if !wasReady {
-		r.recordEvent(template, corev1.EventTypeNormal, "Synced", "Component template reconciled successfully")
+	if phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady {
+		r.recordEvent(template, corev1.EventTypeNormal, "Synced", "Component template synced on all target clusters")
 	}
 
+	if res.FirstError != nil {
+		return res.FirstError
+	}
 	log.Info("Component template reconciliation completed", "name", template.Name)
 	return nil
 }
@@ -250,19 +238,22 @@ func (r *ComponentTemplateReconciler) Delete(ctx context.Context, template *wazu
 		return nil
 	}
 
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, template.Spec.ClusterRef, template.Namespace)
-	if err != nil {
-		log.Info("Skipping component template deletion - failed to get OpenSearch client", "error", err)
-		return nil
+	for _, ref := range template.Spec.ClusterRefs {
+		apiClient, err := r.ClientFactory.GetClientForClusterRef(ctx, ref)
+		if err != nil {
+			log.Info("Skipping component template deletion on cluster - failed to get client",
+				"cluster", ref.Name, "clusterNamespace", ref.Namespace, "error", err)
+			continue
+		}
+		templatesAPI := api.NewTemplatesAPI(apiClient)
+		if err := templatesAPI.DeleteComponentTemplate(ctx, template.Name); err != nil {
+			r.recordEvent(template, corev1.EventTypeWarning, "DeleteFailed",
+				fmt.Sprintf("Failed to delete component template from %s/%s: %v", ref.Namespace, ref.Name, err))
+			continue
+		}
+		log.Info("Deleted OpenSearch component template on cluster",
+			"name", template.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
 	}
-
-	templatesAPI := api.NewTemplatesAPI(apiClient)
-	if err := templatesAPI.DeleteComponentTemplate(ctx, template.Name); err != nil {
-		r.recordEvent(template, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete component template: %v", err))
-		return fmt.Errorf("failed to delete component template: %w", err)
-	}
-
-	r.recordEvent(template, corev1.EventTypeNormal, "Deleted", "Component template deleted from OpenSearch")
-	log.Info("Deleted OpenSearch component template", "name", template.Name)
+	r.recordEvent(template, corev1.EventTypeNormal, "Deleted", "Component template deletion processed on all target clusters")
 	return nil
 }

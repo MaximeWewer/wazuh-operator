@@ -26,7 +26,7 @@ func TestOpenSearchAuthConfigValidator_NoAuthEnabled(t *testing.T) {
 
 	authConfig := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			// No auth methods enabled
 		},
 	}
@@ -42,7 +42,7 @@ func TestOpenSearchAuthConfigValidator_BasicAuthOnly(t *testing.T) {
 
 	authConfig := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			BasicAuth: &BasicAuthSpec{
 				Enabled: true,
 			},
@@ -60,7 +60,7 @@ func TestOpenSearchAuthConfigValidator_OIDCMissingConnectURL(t *testing.T) {
 
 	authConfig := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			OIDC: &OIDCAuthSpec{
 				Enabled:  true,
 				ClientID: "my-client",
@@ -80,7 +80,7 @@ func TestOpenSearchAuthConfigValidator_OIDCMissingClientID(t *testing.T) {
 
 	authConfig := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			OIDC: &OIDCAuthSpec{
 				Enabled:    true,
 				ConnectURL: "https://idp.example.com/.well-known/openid-configuration",
@@ -100,7 +100,7 @@ func TestOpenSearchAuthConfigValidator_OIDCValid(t *testing.T) {
 
 	authConfig := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			OIDC: &OIDCAuthSpec{
 				Enabled:    true,
 				ConnectURL: "https://idp.example.com/.well-known/openid-configuration",
@@ -120,7 +120,7 @@ func TestOpenSearchAuthConfigValidator_SAMLMissingFields(t *testing.T) {
 
 	authConfig := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			SAML: &SAMLAuthSpec{
 				Enabled: true,
 				// All required fields missing
@@ -139,7 +139,7 @@ func TestOpenSearchAuthConfigValidator_SAMLMissingMetadata(t *testing.T) {
 
 	authConfig := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			SAML: &SAMLAuthSpec{
 				Enabled:     true,
 				IdpEntityID: "https://idp.example.com",
@@ -161,7 +161,7 @@ func TestOpenSearchAuthConfigValidator_SAMLValidWithURL(t *testing.T) {
 
 	authConfig := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			SAML: &SAMLAuthSpec{
 				Enabled:        true,
 				IdpEntityID:    "https://idp.example.com",
@@ -183,7 +183,7 @@ func TestOpenSearchAuthConfigValidator_SAMLValidWithFile(t *testing.T) {
 
 	authConfig := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			SAML: &SAMLAuthSpec{
 				Enabled:         true,
 				IdpEntityID:     "https://idp.example.com",
@@ -205,7 +205,7 @@ func TestOpenSearchAuthConfigValidator_LDAPMissingHosts(t *testing.T) {
 
 	authConfig := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			LDAP: &LDAPAuthSpec{
 				Enabled: true,
 				// Hosts empty
@@ -227,7 +227,7 @@ func TestOpenSearchAuthConfigValidator_LDAPMissingUserBase(t *testing.T) {
 
 	authConfig := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			LDAP: &LDAPAuthSpec{
 				Enabled:        true,
 				Hosts:          []string{"ldap.example.com"},
@@ -249,7 +249,7 @@ func TestOpenSearchAuthConfigValidator_LDAPValid(t *testing.T) {
 
 	authConfig := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			LDAP: &LDAPAuthSpec{
 				Enabled: true,
 				Hosts:   []string{"ldap.example.com"},
@@ -271,7 +271,7 @@ func TestOpenSearchAuthConfigValidator_MultipleChallengeWarning(t *testing.T) {
 
 	authConfig := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			BasicAuth: &BasicAuthSpec{
 				Enabled:   true,
 				Challenge: true,
@@ -299,7 +299,7 @@ func TestOpenSearchAuthConfigValidator_SingleChallengeNoWarning(t *testing.T) {
 
 	authConfig := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			BasicAuth: &BasicAuthSpec{
 				Enabled:   true,
 				Challenge: true,
@@ -328,7 +328,7 @@ func TestOpenSearchAuthConfigValidator_DisabledAuthNotCounted(t *testing.T) {
 	// Only BasicAuth enabled with challenge=true, OIDC disabled but with challenge=true
 	authConfig := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			BasicAuth: &BasicAuthSpec{
 				Enabled:   true,
 				Challenge: true,
@@ -354,13 +354,13 @@ func TestOpenSearchAuthConfigValidator_ValidateUpdate(t *testing.T) {
 
 	old := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			BasicAuth:  &BasicAuthSpec{Enabled: true},
 		},
 	}
 	new := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			BasicAuth:  &BasicAuthSpec{Enabled: true},
 			OIDC: &OIDCAuthSpec{
 				Enabled:    true,
@@ -381,7 +381,7 @@ func TestOpenSearchAuthConfigValidator_ValidateDelete(t *testing.T) {
 
 	authConfig := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
-			ClusterRef: WazuhClusterReference{Name: "test-cluster"},
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 		},
 	}
 

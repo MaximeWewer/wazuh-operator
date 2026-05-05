@@ -90,19 +90,24 @@ func (c *CredentialManager) GetAdminCredentials(ctx context.Context, cluster *wa
 	}, nil
 }
 
-// FindDefaultAdminCRDs finds all OpenSearchUser CRDs marked as defaultAdmin for a cluster
+// FindDefaultAdminCRDs finds all OpenSearchUser CRDs marked as defaultAdmin for a cluster.
+// Lists across all namespaces — OpenSearchUser CRs can target clusters cross-NS.
 func (c *CredentialManager) FindDefaultAdminCRDs(ctx context.Context, clusterRef types.NamespacedName) ([]wazuhv1.OpenSearchUser, error) {
-	// List all OpenSearchUser CRDs in the namespace
 	var userList wazuhv1.OpenSearchUserList
-	if err := c.k8sClient.List(ctx, &userList, client.InNamespace(clusterRef.Namespace)); err != nil {
+	if err := c.k8sClient.List(ctx, &userList); err != nil {
 		return nil, fmt.Errorf("failed to list OpenSearchUser CRDs: %w", err)
 	}
 
-	// Filter for defaultAdmin users that reference this cluster
 	var defaultAdmins []wazuhv1.OpenSearchUser
 	for _, user := range userList.Items {
-		if user.Spec.DefaultAdmin && user.Spec.ClusterRef.Name == clusterRef.Name {
-			defaultAdmins = append(defaultAdmins, user)
+		if !user.Spec.DefaultAdmin {
+			continue
+		}
+		for _, ref := range user.Spec.ClusterRefs {
+			if ref.Name == clusterRef.Name && ref.Namespace == clusterRef.Namespace {
+				defaultAdmins = append(defaultAdmins, user)
+				break
+			}
 		}
 	}
 

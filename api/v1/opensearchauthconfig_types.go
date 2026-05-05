@@ -26,9 +26,15 @@ import (
 
 // OpenSearchAuthConfigSpec defines the desired state of OpenSearchAuthConfig
 type OpenSearchAuthConfigSpec struct {
-	// ClusterRef references the WazuhCluster this auth config belongs to
+	// ClusterRefs lists the WazuhCluster instances this resource targets.
+	// Each entry must specify both name and namespace.
 	// +kubebuilder:validation:Required
-	ClusterRef WazuhClusterReference `json:"clusterRef"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+	ClusterRefs []WazuhClusterRef `json:"clusterRefs"`
 
 	// BasicAuth configures HTTP Basic authentication against internal users database
 	// +optional
@@ -418,6 +424,13 @@ type OpenSearchAuthConfigStatus struct {
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
+	// ClusterStatuses reports per-target-cluster reconciliation state.
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+	// +optional
+	ClusterStatuses []OpenSearchClusterStatus `json:"clusterStatuses,omitempty"`
+
 	// ActiveAuthDomains lists the currently active authentication domains
 	// +optional
 	ActiveAuthDomains []string `json:"activeAuthDomains,omitempty"`
@@ -439,7 +452,6 @@ type OpenSearchAuthConfigStatus struct {
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced,shortName=osauthconfig;osauth
-// +kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=`.spec.clusterRef.name`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Basic",type=boolean,JSONPath=`.spec.basicAuth.enabled`
 // +kubebuilder:printcolumn:name="OIDC",type=boolean,JSONPath=`.spec.oidc.enabled`

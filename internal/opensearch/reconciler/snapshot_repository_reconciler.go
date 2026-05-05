@@ -100,26 +100,6 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 		return r.updateStatus(ctx, repo, wazuhv1.RepositoryPhasePending, "Waiting for OpenSearch client factory", false)
 	}
 
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, repo.Spec.ClusterRef, repo.Namespace)
-	if err != nil {
-		r.recordEvent(repo, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
-		return fmt.Errorf("failed to get OpenSearch client: %w", err)
-	}
-
-	// Create Snapshots API client
-	snapshotsAPI := api.NewSnapshotsAPI(apiClient)
-
-	// Check if repository exists
-	existingRepo, err := snapshotsAPI.GetRepository(ctx, repo.Name)
-	if err != nil {
-		if updateErr := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseFailed, fmt.Sprintf("Failed to check repository: %v", err), false); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		r.recordEvent(repo, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check repository existence: %v", err))
-		return fmt.Errorf("failed to check repository existence: %w", err)
-	}
-
-	// Build repository settings
 	repoSettings, err := r.buildRepositorySettings(ctx, repo)
 	if err != nil {
 		if updateErr := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseFailed, fmt.Sprintf("Failed to build settings: %v", err), false); updateErr != nil {
@@ -128,105 +108,166 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 		r.recordEvent(repo, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to build repository settings: %v", err))
 		return fmt.Errorf("failed to build repository settings: %w", err)
 	}
-
 	osRepo := api.Repository{
 		Type:     repo.Spec.Type,
 		Settings: repoSettings,
 	}
 
-	if existingRepo == nil {
-		// Create new repository
-		log.Info("Creating snapshot repository", "name", repo.Name, "type", repo.Spec.Type)
-		if err := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseCreating, "Creating repository", false); err != nil {
-			log.Error(err, "Failed to update status")
-		}
-
-		if err := snapshotsAPI.CreateRepository(ctx, repo.Name, osRepo); err != nil {
-			if updateErr := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseFailed, fmt.Sprintf("Failed to create repository: %v", err), false); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			r.recordEvent(repo, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to create repository: %v", err))
-			return fmt.Errorf("failed to create repository: %w", err)
-		}
-	} else {
-		// Update existing repository
-		log.Info("Updating snapshot repository", "name", repo.Name)
-		if err := snapshotsAPI.UpdateRepository(ctx, repo.Name, osRepo); err != nil {
-			if updateErr := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseFailed, fmt.Sprintf("Failed to update repository: %v", err), false); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
-			}
-			r.recordEvent(repo, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to update repository: %v", err))
-			return fmt.Errorf("failed to update repository: %w", err)
-		}
+	totalSnapshots := int32(0)
+	allVerified := repo.Spec.Verify
+	newStatuses := make([]wazuhv1.OpenSearchClusterStatus, 0, len(repo.Spec.ClusterRefs))
+	anyFailed := false
+	anyPending := false
+	allReady := len(repo.Spec.ClusterRefs) > 0
+	var firstErr error
+	existingByKey := make(map[string]wazuhv1.OpenSearchClusterStatus, len(repo.Status.ClusterStatuses))
+	for _, s := range repo.Status.ClusterStatuses {
+		existingByKey[s.Namespace+"/"+s.Name] = s
 	}
 
-	// Reload secure settings if using keystore-backed credentials
-	if repo.Spec.Settings.UseKeystore {
-		log.Info("Reloading secure settings for keystore-backed repository", "name", repo.Name)
-		if err := snapshotsAPI.ReloadSecureSettings(ctx); err != nil {
-			log.Error(err, "Failed to reload secure settings, repository may not have access to credentials")
-		}
-	}
+	for _, ref := range repo.Spec.ClusterRefs {
+		st := existingByKey[ref.Namespace+"/"+ref.Name]
+		st.Name = ref.Name
+		st.Namespace = ref.Namespace
 
-	// Verify repository if enabled
-	verified := false
-	if repo.Spec.Verify {
-		if err := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseVerifying, "Verifying repository", false); err != nil {
-			log.Error(err, "Failed to update status")
-		}
-
-		_, err := snapshotsAPI.VerifyRepository(ctx, repo.Name)
+		apiClient, err := r.ClientFactory.GetClientForClusterRef(ctx, ref)
 		if err != nil {
-			if updateErr := r.updateStatus(ctx, repo, wazuhv1.RepositoryPhaseFailed, fmt.Sprintf("Repository verification failed: %v", err), false); updateErr != nil {
-				log.Error(updateErr, "Failed to update status")
+			st.Phase = wazuhv1.OpenSearchResourcePhasePending
+			st.Message = fmt.Sprintf("Failed to connect: %v", err)
+			anyPending = true
+			allReady = false
+			if firstErr == nil {
+				firstErr = err
 			}
-			r.recordEvent(repo, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Repository verification failed: %v", err))
-			return fmt.Errorf("repository verification failed: %w", err)
+			r.recordEvent(repo, corev1.EventTypeWarning, "SyncFailed",
+				fmt.Sprintf("Failed to connect to %s/%s: %v", ref.Namespace, ref.Name, err))
+			newStatuses = append(newStatuses, st)
+			continue
 		}
-		verified = true
-		log.Info("Repository verification succeeded", "name", repo.Name)
-	}
+		snapshotsAPI := api.NewSnapshotsAPI(apiClient)
 
-	// Get snapshot count
-	snapshotCount := int32(0)
-	if snapshots, err := snapshotsAPI.ListSnapshots(ctx, repo.Name); err == nil && snapshots != nil {
-		snapshotCount = int32(len(snapshots.Snapshots))
+		existingRepo, err := snapshotsAPI.GetRepository(ctx, repo.Name)
+		if err != nil {
+			st.Phase = wazuhv1.OpenSearchResourcePhaseFailed
+			st.Message = fmt.Sprintf("Failed to check repository: %v", err)
+			anyFailed = true
+			allReady = false
+			if firstErr == nil {
+				firstErr = err
+			}
+			newStatuses = append(newStatuses, st)
+			continue
+		}
+		if existingRepo == nil {
+			log.Info("Creating snapshot repository", "name", repo.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+			if err := snapshotsAPI.CreateRepository(ctx, repo.Name, osRepo); err != nil {
+				st.Phase = wazuhv1.OpenSearchResourcePhaseFailed
+				st.Message = err.Error()
+				anyFailed = true
+				allReady = false
+				if firstErr == nil {
+					firstErr = err
+				}
+				newStatuses = append(newStatuses, st)
+				continue
+			}
+		} else {
+			log.Info("Updating snapshot repository", "name", repo.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+			if err := snapshotsAPI.UpdateRepository(ctx, repo.Name, osRepo); err != nil {
+				st.Phase = wazuhv1.OpenSearchResourcePhaseFailed
+				st.Message = err.Error()
+				anyFailed = true
+				allReady = false
+				if firstErr == nil {
+					firstErr = err
+				}
+				newStatuses = append(newStatuses, st)
+				continue
+			}
+		}
+		if repo.Spec.Settings.UseKeystore {
+			if err := snapshotsAPI.ReloadSecureSettings(ctx); err != nil {
+				log.Error(err, "Failed to reload secure settings", "cluster", ref.Name)
+			}
+		}
+		if repo.Spec.Verify {
+			if _, err := snapshotsAPI.VerifyRepository(ctx, repo.Name); err != nil {
+				st.Phase = wazuhv1.OpenSearchResourcePhaseFailed
+				st.Message = fmt.Sprintf("Repository verification failed: %v", err)
+				anyFailed = true
+				allReady = false
+				allVerified = false
+				if firstErr == nil {
+					firstErr = err
+				}
+				newStatuses = append(newStatuses, st)
+				continue
+			}
+		}
+		if snapshots, err := snapshotsAPI.ListSnapshots(ctx, repo.Name); err == nil && snapshots != nil {
+			totalSnapshots += int32(len(snapshots.Snapshots))
+		}
+		wasClusterReady := st.Phase == wazuhv1.OpenSearchResourcePhaseReady
+		st.Phase = wazuhv1.OpenSearchResourcePhaseReady
+		st.Message = ""
+		if !wasClusterReady {
+			now := metav1.Now()
+			st.LastSyncTime = &now
+		}
+		newStatuses = append(newStatuses, st)
 	}
+	repo.Status.ClusterStatuses = newStatuses
 
-	// Update status to Ready — only update timestamps on transition
 	wasReady := repo.Status.Phase == wazuhv1.RepositoryPhaseReady &&
 		repo.Status.ObservedGeneration == repo.Generation
-	repo.Status.Phase = wazuhv1.RepositoryPhaseReady
-	repo.Status.Message = "Repository is ready"
-	repo.Status.Verified = verified
-	repo.Status.SnapshotCount = snapshotCount
+	switch {
+	case anyFailed:
+		repo.Status.Phase = wazuhv1.RepositoryPhaseFailed
+		repo.Status.Message = "One or more target clusters failed to sync"
+	case anyPending:
+		repo.Status.Phase = wazuhv1.RepositoryPhasePending
+		repo.Status.Message = "Waiting on one or more target clusters"
+	case allReady:
+		repo.Status.Phase = wazuhv1.RepositoryPhaseReady
+		repo.Status.Message = "Repository is ready on all target clusters"
+		repo.Status.Verified = allVerified
+	default:
+		repo.Status.Phase = wazuhv1.RepositoryPhasePending
+	}
+	repo.Status.SnapshotCount = totalSnapshots
 	repo.Status.ObservedGeneration = repo.Generation
-	if !wasReady {
+	if repo.Status.Phase == wazuhv1.RepositoryPhaseReady && !wasReady {
 		now := metav1.Now()
 		repo.Status.LastSyncTime = &now
-		if verified {
+		if allVerified {
 			repo.Status.LastVerifiedTime = &now
 		}
 	}
-
-	// Set condition
+	condStatus := metav1.ConditionTrue
+	condReason := "RepositoryReady"
+	condMsg := "Repository is ready"
+	if anyFailed {
+		condStatus = metav1.ConditionFalse
+		condReason = "RepositoryFailed"
+		condMsg = "Repository failed on one or more target clusters"
+	}
 	meta.SetStatusCondition(&repo.Status.Conditions, metav1.Condition{
 		Type:               constants.ConditionTypeRepositoryReady,
-		Status:             metav1.ConditionTrue,
-		Reason:             "RepositoryReady",
-		Message:            "Repository is ready and verified",
+		Status:             condStatus,
+		Reason:             condReason,
+		Message:            condMsg,
 		ObservedGeneration: repo.Generation,
 	})
-
 	if err := r.updateRepositoryStatusWithRetry(ctx, repo); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
-
-	if !wasReady {
-		r.recordEvent(repo, corev1.EventTypeNormal, "Synced", "Snapshot repository reconciled successfully")
+	if repo.Status.Phase == wazuhv1.RepositoryPhaseReady && !wasReady {
+		r.recordEvent(repo, corev1.EventTypeNormal, "Synced", "Snapshot repository synced on all target clusters")
 	}
-
-	log.Info("Snapshot repository reconciliation completed", "name", repo.Name, "verified", verified, "snapshots", snapshotCount)
+	if firstErr != nil {
+		return firstErr
+	}
+	log.Info("Snapshot repository reconciliation completed", "name", repo.Name, "snapshots", totalSnapshots)
 	return nil
 }
 
@@ -235,22 +276,22 @@ func (r *SnapshotRepositoryReconciler) handleDeletion(ctx context.Context, repo 
 	log := logf.FromContext(ctx)
 
 	if r.ClientFactory != nil {
-		apiClient, err := r.ClientFactory.GetClientForRef(ctx, repo.Spec.ClusterRef, repo.Namespace)
-		if err != nil {
-			log.Error(err, "Failed to get OpenSearch client for deletion, proceeding with finalizer removal", "name", repo.Name)
-		} else {
-			snapshotsAPI := api.NewSnapshotsAPI(apiClient)
-
-			// Check if repository has snapshots
-			if snapshots, err := snapshotsAPI.ListSnapshots(ctx, repo.Name); err == nil && snapshots != nil && len(snapshots.Snapshots) > 0 {
-				log.Info("Repository has snapshots, they will remain in storage", "name", repo.Name, "count", len(snapshots.Snapshots))
+		for _, ref := range repo.Spec.ClusterRefs {
+			apiClient, err := r.ClientFactory.GetClientForClusterRef(ctx, ref)
+			if err != nil {
+				log.Error(err, "Failed to get OpenSearch client for deletion on cluster",
+					"name", repo.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+				continue
 			}
-
-			// Delete the repository from OpenSearch
+			snapshotsAPI := api.NewSnapshotsAPI(apiClient)
+			if snapshots, err := snapshotsAPI.ListSnapshots(ctx, repo.Name); err == nil && snapshots != nil && len(snapshots.Snapshots) > 0 {
+				log.Info("Repository has snapshots, they will remain in storage",
+					"name", repo.Name, "cluster", ref.Name, "count", len(snapshots.Snapshots))
+			}
 			if err := snapshotsAPI.DeleteRepository(ctx, repo.Name); err != nil {
-				r.recordEvent(repo, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete repository: %v", err))
+				r.recordEvent(repo, corev1.EventTypeWarning, "DeleteFailed",
+					fmt.Sprintf("Failed to delete repository on %s/%s: %v", ref.Namespace, ref.Name, err))
 				log.Error(err, "Failed to delete repository from OpenSearch", "name", repo.Name)
-				// Continue with finalizer removal even if deletion fails
 			} else {
 				r.recordEvent(repo, corev1.EventTypeNormal, "Deleted", "Snapshot repository deleted from OpenSearch")
 				log.Info("Deleted repository from OpenSearch", "name", repo.Name)

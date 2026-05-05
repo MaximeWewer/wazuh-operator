@@ -105,7 +105,12 @@ func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1.Open
 		return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhasePending, "Waiting for OpenSearch client factory")
 	}
 
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, restore.Spec.ClusterRef, restore.Namespace)
+	if len(restore.Spec.ClusterRefs) == 0 {
+		return r.updateStatus(ctx, restore, wazuhv1.OpenSearchRestorePhaseFailed, "no cluster references configured")
+	}
+	// One-shot restore: target the first cluster ref. Restore on multiple
+	// clusters runs as a separate CR per cluster.
+	apiClient, err := r.ClientFactory.GetClientForClusterRef(ctx, restore.Spec.ClusterRefs[0])
 	if err != nil {
 		r.recordEvent(restore, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
 		return fmt.Errorf("failed to get OpenSearch client: %w", err)

@@ -18,9 +18,6 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.clusterRef.name
-      name: Cluster
-      type: string
     - jsonPath: .spec.indexPatterns
       name: Patterns
       type: string
@@ -67,20 +64,33 @@ spec:
                 description: Metadata about the index template
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
-              clusterRef:
+              clusterRefs:
                 description: WazuhCluster reference
-                properties:
-                  name:
-                    description: Name of the WazuhCluster resource
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the WazuhCluster resource
-                      If empty, assumes the same namespace as the referencing resource
-                    type: string
-                required:
+                items:
+                  description: |-
+                    WazuhClusterRef references a WazuhCluster by name and namespace.
+                    Both fields are mandatory; cross-namespace references are supported and
+                    require the consuming CR to opt into multi-cluster propagation via
+                    ClusterRefs lists.
+                  properties:
+                    name:
+                      description: Name of the WazuhCluster resource
+                      minLength: 1
+                      type: string
+                    namespace:
+                      description: Namespace of the WazuhCluster resource
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
                 - name
-                type: object
+                - namespace
+                x-kubernetes-list-type: map
               composedOf:
                 description: Component templates to be applied
                 items:
@@ -150,13 +160,58 @@ spec:
                 format: int64
                 type: integer
             required:
-            - clusterRef
+            - clusterRefs
             - indexPatterns
             type: object
           status:
             description: OpenSearchIndexTemplateStatus defines the observed state
               of OpenSearchIndexTemplate
             properties:
+              clusterStatuses:
+                description: ClusterStatuses reports per-target-cluster reconciliation
+                  state.
+                items:
+                  description: |-
+                    OpenSearchClusterStatus reports the reconciliation state for one target
+                    OpenSearch cluster of a multi-cluster CR (User, Role, Tenant, etc.).
+                    The aggregate Status.Phase reflects the worst case across entries.
+                  properties:
+                    lastAppliedHash:
+                      description: LastAppliedHash is the hash of the last spec applied
+                        to this cluster
+                      type: string
+                    lastSyncTime:
+                      description: LastSyncTime is the last time the resource was
+                        synced to this cluster
+                      format: date-time
+                      type: string
+                    message:
+                      description: Message provides additional information about this
+                        cluster's state
+                      type: string
+                    name:
+                      description: Name of the target WazuhCluster
+                      type: string
+                    namespace:
+                      description: Namespace of the target WazuhCluster
+                      type: string
+                    phase:
+                      description: Phase on this cluster (Pending, Ready, Failed,
+                        Conflict)
+                      enum:
+                      - Pending
+                      - Ready
+                      - Failed
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                - namespace
+                x-kubernetes-list-type: map
               conditions:
                 description: Conditions represent the latest available observations
                   of the index template's state

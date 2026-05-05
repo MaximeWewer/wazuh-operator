@@ -25,7 +25,12 @@ import (
 type OpenSearchIndexTemplateSpec struct {
 	// WazuhCluster reference
 	// +kubebuilder:validation:Required
-	ClusterRef WazuhClusterReference `json:"clusterRef"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+	ClusterRefs []WazuhClusterRef `json:"clusterRefs"`
 
 	// Index patterns that the template applies to
 	// +kubebuilder:validation:Required
@@ -130,6 +135,13 @@ type OpenSearchIndexTemplateStatus struct {
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
+	// ClusterStatuses reports per-target-cluster reconciliation state.
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+	// +optional
+	ClusterStatuses []OpenSearchClusterStatus `json:"clusterStatuses,omitempty"`
+
 	// LastAppliedHash is the hash of the last applied spec for drift detection
 	// +optional
 	LastAppliedHash string `json:"lastAppliedHash,omitempty"`
@@ -159,7 +171,6 @@ type OpenSearchIndexTemplateStatus struct {
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced,shortName=osidxt
-// +kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=`.spec.clusterRef.name`
 // +kubebuilder:printcolumn:name="Patterns",type=string,JSONPath=`.spec.indexPatterns`
 // +kubebuilder:printcolumn:name="Priority",type=integer,JSONPath=`.spec.priority`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`

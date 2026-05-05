@@ -99,13 +99,6 @@ func (r *UserReconciler) Reconcile(ctx context.Context, user *wazuhv1.OpenSearch
 		return fmt.Errorf("failed to get password: %w", err)
 	}
 
-	osClient, err := r.getOpenSearchClient(ctx, user)
-	if err != nil {
-		r.recordEvent(user, corev1.EventTypeWarning, "ConnectionError", fmt.Sprintf("Failed to connect to OpenSearch: %v", err))
-		return fmt.Errorf("failed to get OpenSearch client: %w", err)
-	}
-
-	// Create or update user - use CR name as username
 	username := user.Name
 	osUser := adapters.SecurityUser{
 		Password:                password,
@@ -114,15 +107,63 @@ func (r *UserReconciler) Reconcile(ctx context.Context, user *wazuhv1.OpenSearch
 		Description:             user.Spec.Description,
 		OpendistroSecurityRoles: user.Spec.OpenSearchRoles,
 	}
+	specHash, _ := patch.ComputeSpecHash(user.Spec)
 
-	if err := osClient.CreateUser(ctx, username, osUser); err != nil {
-		r.recordEvent(user, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to sync user to OpenSearch: %v", err))
-		return fmt.Errorf("failed to create/update user: %w", err)
+	newStatuses := make([]wazuhv1.OpenSearchClusterStatus, 0, len(user.Spec.ClusterRefs))
+	anyFailed := false
+	anyPending := false
+	allReady := len(user.Spec.ClusterRefs) > 0
+	var firstErr error
+	existingByKey := make(map[string]wazuhv1.OpenSearchClusterStatus, len(user.Status.ClusterStatuses))
+	for _, s := range user.Status.ClusterStatuses {
+		existingByKey[s.Namespace+"/"+s.Name] = s
 	}
 
-	// Compute spec hash for drift detection
-	specHash, hashErr := patch.ComputeSpecHash(user.Spec)
-	if hashErr == nil && user.Status.LastAppliedHash != "" && user.Status.LastAppliedHash != specHash {
+	for _, ref := range user.Spec.ClusterRefs {
+		st := existingByKey[ref.Namespace+"/"+ref.Name]
+		st.Name = ref.Name
+		st.Namespace = ref.Namespace
+
+		osClient, err := r.getOpenSearchClientForRef(ctx, ref)
+		if err != nil {
+			st.Phase = wazuhv1.OpenSearchResourcePhasePending
+			st.Message = fmt.Sprintf("Failed to connect: %v", err)
+			anyPending = true
+			allReady = false
+			if firstErr == nil {
+				firstErr = err
+			}
+			r.recordEvent(user, corev1.EventTypeWarning, "ConnectionError",
+				fmt.Sprintf("Failed to connect to OpenSearch %s/%s: %v", ref.Namespace, ref.Name, err))
+			newStatuses = append(newStatuses, st)
+			continue
+		}
+		if err := osClient.CreateUser(ctx, username, osUser); err != nil {
+			st.Phase = wazuhv1.OpenSearchResourcePhaseFailed
+			st.Message = err.Error()
+			anyFailed = true
+			allReady = false
+			if firstErr == nil {
+				firstErr = err
+			}
+			r.recordEvent(user, corev1.EventTypeWarning, "SyncFailed",
+				fmt.Sprintf("Failed to sync user to %s/%s: %v", ref.Namespace, ref.Name, err))
+			newStatuses = append(newStatuses, st)
+			continue
+		}
+		wasClusterReady := st.Phase == wazuhv1.OpenSearchResourcePhaseReady
+		st.Phase = wazuhv1.OpenSearchResourcePhaseReady
+		st.Message = ""
+		st.LastAppliedHash = specHash
+		if !wasClusterReady {
+			now := metav1.Now()
+			st.LastSyncTime = &now
+		}
+		newStatuses = append(newStatuses, st)
+	}
+	user.Status.ClusterStatuses = newStatuses
+
+	if specHash != "" && user.Status.LastAppliedHash != "" && user.Status.LastAppliedHash != specHash {
 		user.Status.DriftDetected = true
 		now := metav1.Now()
 		user.Status.LastDriftTime = &now
@@ -131,22 +172,59 @@ func (r *UserReconciler) Reconcile(ctx context.Context, user *wazuhv1.OpenSearch
 	} else {
 		user.Status.DriftDetected = false
 	}
-	if hashErr == nil {
+	if specHash != "" {
 		user.Status.LastAppliedHash = specHash
 	}
 
-	// Update status — only update timestamp and emit event on transition
 	wasReady := user.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
 		user.Status.ObservedGeneration == user.Generation
-	if err := r.updateStatus(ctx, user, wazuhv1.OpenSearchResourcePhaseReady, "User reconciled successfully", !wasReady); err != nil {
+
+	var phase wazuhv1.OpenSearchResourcePhase
+	var msg string
+	switch {
+	case anyFailed:
+		phase = wazuhv1.OpenSearchResourcePhaseFailed
+		msg = "One or more target clusters failed to sync"
+	case anyPending:
+		phase = wazuhv1.OpenSearchResourcePhasePending
+		msg = "Waiting on one or more target clusters"
+	case allReady:
+		phase = wazuhv1.OpenSearchResourcePhaseReady
+		msg = "User reconciled on all target clusters"
+	default:
+		phase = wazuhv1.OpenSearchResourcePhasePending
+		msg = ""
+	}
+	if err := r.updateStatus(ctx, user, phase, msg, phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
-	if !wasReady {
-		r.recordEvent(user, corev1.EventTypeNormal, "Synced", "User successfully synchronized to OpenSearch")
+	if phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady {
+		r.recordEvent(user, corev1.EventTypeNormal, "Synced", "User synced on all target clusters")
 	}
 
+	if firstErr != nil {
+		return firstErr
+	}
 	log.Info("User reconciliation completed", "name", user.Name)
 	return nil
+}
+
+// getOpenSearchClientForRef builds an HTTP adapter for the given cluster ref.
+func (r *UserReconciler) getOpenSearchClientForRef(ctx context.Context, ref wazuhv1.WazuhClusterRef) (*adapters.OpenSearchHTTPAdapter, error) {
+	if r.ClientFactory == nil {
+		return nil, fmt.Errorf("client factory not configured")
+	}
+	baseURL, username, password, caCert, err := r.ClientFactory.GetConnectionInfoForRef(ctx, ref)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get connection info: %w", err)
+	}
+	return adapters.NewOpenSearchHTTPAdapter(adapters.OpenSearchConfig{
+		BaseURL:  baseURL,
+		Username: username,
+		Password: password,
+		CACert:   caCert,
+		Insecure: false,
+	})
 }
 
 // recordEvent emits an event if the recorder is available
@@ -190,26 +268,13 @@ func (r *UserReconciler) getPassword(ctx context.Context, user *wazuhv1.OpenSear
 	return string(password), nil
 }
 
-// getOpenSearchClient gets an OpenSearch HTTP adapter using dynamic client resolution
+// getOpenSearchClient (legacy) returns a client for the first cluster ref.
+// Used by Delete which currently iterates manually.
 func (r *UserReconciler) getOpenSearchClient(ctx context.Context, user *wazuhv1.OpenSearchUser) (*adapters.OpenSearchHTTPAdapter, error) {
-	if r.ClientFactory == nil {
-		return nil, fmt.Errorf("client factory not configured")
+	if len(user.Spec.ClusterRefs) == 0 {
+		return nil, fmt.Errorf("no cluster references configured")
 	}
-
-	baseURL, username, password, caCert, err := r.ClientFactory.GetConnectionInfo(ctx, user.Spec.ClusterRef, user.Namespace)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get connection info: %w", err)
-	}
-
-	config := adapters.OpenSearchConfig{
-		BaseURL:  baseURL,
-		Username: username,
-		Password: password,
-		CACert:   caCert,
-		Insecure: false,
-	}
-
-	return adapters.NewOpenSearchHTTPAdapter(config)
+	return r.getOpenSearchClientForRef(ctx, user.Spec.ClusterRefs[0])
 }
 
 // updateStatus updates the user status with retry on conflict.
@@ -269,21 +334,22 @@ func (r *UserReconciler) handleDeletion(ctx context.Context, user *wazuhv1.OpenS
 // Delete handles cleanup when a user is deleted
 func (r *UserReconciler) Delete(ctx context.Context, user *wazuhv1.OpenSearchUser) error {
 	log := logf.FromContext(ctx)
-
-	osClient, err := r.getOpenSearchClient(ctx, user)
-	if err != nil {
-		r.recordEvent(user, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to connect to OpenSearch for deletion: %v", err))
-		return fmt.Errorf("failed to get OpenSearch client: %w", err)
-	}
-
-	// Use CR name as username
 	username := user.Name
-	if err := osClient.DeleteUser(ctx, username); err != nil {
-		r.recordEvent(user, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete user from OpenSearch: %v", err))
-		return fmt.Errorf("failed to delete user: %w", err)
-	}
 
-	r.recordEvent(user, corev1.EventTypeNormal, "Deleted", "User deleted from OpenSearch")
-	log.Info("Deleted OpenSearch user", "username", username)
+	for _, ref := range user.Spec.ClusterRefs {
+		osClient, err := r.getOpenSearchClientForRef(ctx, ref)
+		if err != nil {
+			r.recordEvent(user, corev1.EventTypeWarning, "DeleteFailed",
+				fmt.Sprintf("Failed to connect to %s/%s for deletion: %v", ref.Namespace, ref.Name, err))
+			continue
+		}
+		if err := osClient.DeleteUser(ctx, username); err != nil {
+			r.recordEvent(user, corev1.EventTypeWarning, "DeleteFailed",
+				fmt.Sprintf("Failed to delete user from %s/%s: %v", ref.Namespace, ref.Name, err))
+			continue
+		}
+		log.Info("Deleted OpenSearch user", "username", username, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+	}
+	r.recordEvent(user, corev1.EventTypeNormal, "Deleted", "User deletion processed on all target clusters")
 	return nil
 }

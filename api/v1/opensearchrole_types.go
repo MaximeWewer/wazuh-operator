@@ -22,9 +22,15 @@ import (
 
 // OpenSearchRoleSpec defines the desired state of OpenSearchRole
 type OpenSearchRoleSpec struct {
-	// ClusterRef references the WazuhCluster this resource belongs to
+	// ClusterRefs lists the WazuhCluster instances this resource targets.
+	// Each entry must specify both name and namespace.
 	// +kubebuilder:validation:Required
-	ClusterRef WazuhClusterReference `json:"clusterRef"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+	ClusterRefs []WazuhClusterRef `json:"clusterRefs"`
 
 	// ClusterPermissions are cluster-level permissions
 	// +optional
@@ -106,6 +112,13 @@ type OpenSearchRoleStatus struct {
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
+	// ClusterStatuses reports per-target-cluster reconciliation state.
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+	// +optional
+	ClusterStatuses []OpenSearchClusterStatus `json:"clusterStatuses,omitempty"`
+
 	// LastAppliedHash is the hash of the last applied spec for drift detection
 	// +optional
 	LastAppliedHash string `json:"lastAppliedHash,omitempty"`
@@ -131,7 +144,6 @@ type OpenSearchRoleStatus struct {
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced,shortName=osrole
-// +kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=`.spec.clusterRef.name`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Drift",type=boolean,JSONPath=`.status.driftDetected`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`

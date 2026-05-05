@@ -96,47 +96,29 @@ func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.
 		return r.updateStatus(ctx, mapping, wazuhv1.OpenSearchResourcePhasePending, "Waiting for OpenSearch client factory")
 	}
 
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, mapping.Spec.ClusterRef, mapping.Namespace)
-	if err != nil {
-		r.recordEvent(mapping, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to get OpenSearch client: %v", err))
-		return fmt.Errorf("failed to get OpenSearch client: %w", err)
-	}
-
-	securityAPI := api.NewSecurityAPI(apiClient)
-
-	// Check if role mapping exists
-	existing, err := securityAPI.GetRoleMapping(ctx, mapping.Name)
-	if err != nil {
-		if updateErr := r.updateStatus(ctx, mapping, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to check role mapping existence: %v", err)); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		r.recordEvent(mapping, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to check role mapping existence: %v", err))
-		return fmt.Errorf("failed to check role mapping existence: %w", err)
-	}
-
-	// Build role mapping from spec
 	roleMapping := r.buildRoleMapping(mapping)
+	specHash, _ := patch.ComputeSpecHash(mapping.Spec)
 
-	if existing == nil {
-		log.Info("Creating role mapping", "name", mapping.Name)
-	} else {
-		log.Info("Updating role mapping", "name", mapping.Name)
-	}
-	if err := securityAPI.CreateRoleMapping(ctx, mapping.Name, roleMapping); err != nil {
-		action := "create"
-		if existing != nil {
-			action = "update"
-		}
-		if updateErr := r.updateStatus(ctx, mapping, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to %s role mapping: %v", action, err)); updateErr != nil {
-			log.Error(updateErr, "Failed to update status")
-		}
-		r.recordEvent(mapping, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Failed to %s role mapping: %v", action, err))
-		return fmt.Errorf("failed to %s role mapping: %w", action, err)
-	}
+	res := ReconcileMultiCluster(ctx, mapping.Spec.ClusterRefs, r.ClientFactory, mapping.Status.ClusterStatuses,
+		func(ctx context.Context, apiClient *api.Client, ref wazuhv1.WazuhClusterRef) (string, error) {
+			securityAPI := api.NewSecurityAPI(apiClient)
+			existing, err := securityAPI.GetRoleMapping(ctx, mapping.Name)
+			if err != nil {
+				return "", fmt.Errorf("failed to check role mapping existence: %w", err)
+			}
+			if existing == nil {
+				log.Info("Creating role mapping", "name", mapping.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+			} else {
+				log.Info("Updating role mapping", "name", mapping.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+			}
+			if err := securityAPI.CreateRoleMapping(ctx, mapping.Name, roleMapping); err != nil {
+				return "", fmt.Errorf("failed to apply role mapping: %w", err)
+			}
+			return specHash, nil
+		})
+	mapping.Status.ClusterStatuses = res.Statuses
 
-	// Compute spec hash for drift detection
-	specHash, hashErr := patch.ComputeSpecHash(mapping.Spec)
-	if hashErr == nil && mapping.Status.LastAppliedHash != "" && mapping.Status.LastAppliedHash != specHash {
+	if specHash != "" && mapping.Status.LastAppliedHash != "" && mapping.Status.LastAppliedHash != specHash {
 		mapping.Status.DriftDetected = true
 		now := metav1.Now()
 		mapping.Status.LastDriftTime = &now
@@ -145,19 +127,27 @@ func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.
 	} else {
 		mapping.Status.DriftDetected = false
 	}
-	if hashErr == nil {
+	if specHash != "" {
 		mapping.Status.LastAppliedHash = specHash
 	}
 
 	wasReady := mapping.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
 		mapping.Status.ObservedGeneration == mapping.Generation
-	if err := r.updateStatus(ctx, mapping, wazuhv1.OpenSearchResourcePhaseReady, "Role mapping reconciled successfully", !wasReady); err != nil {
+	phase := res.AggregatePhase()
+	msg := res.AggregateMessage()
+	if res.AnyFailed {
+		r.recordEvent(mapping, corev1.EventTypeWarning, "SyncFailed", res.FirstError.Error())
+	}
+	if err := r.updateStatus(ctx, mapping, phase, msg, phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
-	if !wasReady {
-		r.recordEvent(mapping, corev1.EventTypeNormal, "Synced", "Role mapping reconciled successfully")
+	if phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady {
+		r.recordEvent(mapping, corev1.EventTypeNormal, "Synced", "Role mapping synced on all target clusters")
 	}
 
+	if res.FirstError != nil {
+		return res.FirstError
+	}
 	log.Info("Role mapping reconciliation completed", "name", mapping.Name)
 	return nil
 }
@@ -240,20 +230,22 @@ func (r *RoleMappingReconciler) Delete(ctx context.Context, mapping *wazuhv1.Ope
 		log.Info("Skipping role mapping deletion - no client factory available")
 		return nil
 	}
-
-	apiClient, err := r.ClientFactory.GetClientForRef(ctx, mapping.Spec.ClusterRef, mapping.Namespace)
-	if err != nil {
-		log.Info("Skipping role mapping deletion - failed to get OpenSearch client", "error", err)
-		return nil
+	for _, ref := range mapping.Spec.ClusterRefs {
+		apiClient, err := r.ClientFactory.GetClientForClusterRef(ctx, ref)
+		if err != nil {
+			log.Info("Skipping role mapping deletion on cluster - failed to get client",
+				"cluster", ref.Name, "clusterNamespace", ref.Namespace, "error", err)
+			continue
+		}
+		securityAPI := api.NewSecurityAPI(apiClient)
+		if err := securityAPI.DeleteRoleMapping(ctx, mapping.Name); err != nil {
+			r.recordEvent(mapping, corev1.EventTypeWarning, "DeleteFailed",
+				fmt.Sprintf("Failed to delete role mapping from %s/%s: %v", ref.Namespace, ref.Name, err))
+			continue
+		}
+		log.Info("Deleted OpenSearch role mapping on cluster",
+			"name", mapping.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
 	}
-
-	securityAPI := api.NewSecurityAPI(apiClient)
-	if err := securityAPI.DeleteRoleMapping(ctx, mapping.Name); err != nil {
-		r.recordEvent(mapping, corev1.EventTypeWarning, "DeleteFailed", fmt.Sprintf("Failed to delete role mapping: %v", err))
-		return fmt.Errorf("failed to delete role mapping: %w", err)
-	}
-
-	r.recordEvent(mapping, corev1.EventTypeNormal, "Deleted", "Role mapping deleted from OpenSearch")
-	log.Info("Deleted OpenSearch role mapping", "name", mapping.Name)
+	r.recordEvent(mapping, corev1.EventTypeNormal, "Deleted", "Role mapping deletion processed on all target clusters")
 	return nil
 }
