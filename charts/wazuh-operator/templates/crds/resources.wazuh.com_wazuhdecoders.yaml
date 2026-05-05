@@ -18,9 +18,6 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.clusterRef.name
-      name: Cluster
-      type: string
     - jsonPath: .spec.decoderName
       name: Decoder
       type: string
@@ -58,21 +55,36 @@ spec:
           spec:
             description: WazuhDecoderSpec defines the desired state of WazuhDecoder
             properties:
-              clusterRef:
-                description: ClusterRef references the WazuhCluster this decoder belongs
-                  to
-                properties:
-                  name:
-                    description: Name of the WazuhCluster resource
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the WazuhCluster resource
-                      If empty, assumes the same namespace as the referencing resource
-                    type: string
-                required:
+              clusterRefs:
+                description: |-
+                  ClusterRefs lists the WazuhCluster instances the decoder must be applied to.
+                  Each entry must specify both name and namespace. The CR can live in any
+                  namespace; decoder ConfigMaps are created in each target cluster's namespace.
+                items:
+                  description: |-
+                    WazuhClusterRef references a WazuhCluster by name and namespace.
+                    Both fields are mandatory; cross-namespace references are supported and
+                    require the consuming CR to opt into multi-cluster propagation via
+                    ClusterRefs lists.
+                  properties:
+                    name:
+                      description: Name of the WazuhCluster resource
+                      minLength: 1
+                      type: string
+                    namespace:
+                      description: Namespace of the WazuhCluster resource
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
                 - name
-                type: object
+                - namespace
+                x-kubernetes-list-type: map
               decoderName:
                 description: Name of the decoder
                 type: string
@@ -109,21 +121,76 @@ spec:
                 - all
                 type: string
             required:
-            - clusterRef
+            - clusterRefs
             - decoderName
             - decoders
             type: object
           status:
             description: WazuhDecoderStatus defines the observed state of WazuhDecoder
             properties:
-              appliedToNodes:
-                description: AppliedToNodes lists the nodes where this decoder has
-                  been applied
+              clusterStatuses:
+                description: ClusterStatuses reports per-target-cluster reconciliation
+                  state.
                 items:
-                  type: string
+                  description: DecoderClusterStatus reports the reconciliation state
+                    for a single target cluster.
+                  properties:
+                    appliedToNodes:
+                      description: AppliedToNodes lists the nodes where this decoder
+                        has been applied on this cluster
+                      items:
+                        type: string
+                      type: array
+                    configMapRef:
+                      description: ConfigMapRef references the ConfigMap created in
+                        this cluster's namespace
+                      properties:
+                        key:
+                          description: Key in the ConfigMap
+                          type: string
+                        name:
+                          description: Name of the ConfigMap
+                          type: string
+                        namespace:
+                          description: Namespace of the ConfigMap
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    lastAppliedTime:
+                      description: LastAppliedTime is the last time the decoder was
+                        applied to this cluster
+                      format: date-time
+                      type: string
+                    message:
+                      description: Message provides additional information about this
+                        cluster's state
+                      type: string
+                    name:
+                      description: Name of the target WazuhCluster
+                      type: string
+                    namespace:
+                      description: Namespace of the target WazuhCluster
+                      type: string
+                    phase:
+                      description: Phase on this cluster
+                      enum:
+                      - Pending
+                      - Applied
+                      - Failed
+                      - Updating
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - name
+                - namespace
+                x-kubernetes-list-type: map
               conditions:
-                description: Conditions represent the latest available observations
+                description: Conditions represent the latest aggregate observations
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -182,29 +249,9 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              configMapRef:
-                description: ConfigMapRef references the ConfigMap containing the
-                  decoder
-                properties:
-                  key:
-                    description: Key in the ConfigMap
-                    type: string
-                  name:
-                    description: Name of the ConfigMap
-                    type: string
-                  namespace:
-                    description: Namespace of the ConfigMap
-                    type: string
-                required:
-                - name
-                type: object
-              lastAppliedTime:
-                description: LastAppliedTime is the last time the decoder was applied
-                format: date-time
-                type: string
               message:
-                description: Message provides additional information about the current
-                  state
+                description: Message provides additional aggregate information about
+                  the current state
                 type: string
               observedGeneration:
                 description: ObservedGeneration reflects the generation of the most
@@ -212,7 +259,7 @@ spec:
                 format: int64
                 type: integer
               phase:
-                description: Phase of the decoder (Pending, Applied, Failed)
+                description: Phase is the aggregate phase across all target clusters.
                 enum:
                 - Pending
                 - Applied

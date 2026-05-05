@@ -180,27 +180,25 @@ func (r *WazuhDecoderReconciler) findDecodersForCluster(ctx context.Context, obj
 		return nil
 	}
 
-	// List all WazuhDecoders in the cluster's namespace
+	// List WazuhDecoders across all namespaces — they can target any cluster.
 	decoderList := &wazuhv1.WazuhDecoderList{}
-	if err := r.List(ctx, decoderList, client.InNamespace(cluster.Namespace)); err != nil {
+	if err := r.List(ctx, decoderList); err != nil {
 		log.Error(err, "Failed to list WazuhDecoders for cluster", "cluster", cluster.Name)
 		return nil
 	}
 
 	var requests []reconcile.Request
 	for _, decoder := range decoderList.Items {
-		// Check if this decoder references the changed cluster
-		clusterNamespace := decoder.Spec.ClusterRef.Namespace
-		if clusterNamespace == "" {
-			clusterNamespace = decoder.Namespace
-		}
-		if decoder.Spec.ClusterRef.Name == cluster.Name && clusterNamespace == cluster.Namespace {
-			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      decoder.Name,
-					Namespace: decoder.Namespace,
-				},
-			})
+		for _, ref := range decoder.Spec.ClusterRefs {
+			if ref.Name == cluster.Name && ref.Namespace == cluster.Namespace {
+				requests = append(requests, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      decoder.Name,
+						Namespace: decoder.Namespace,
+					},
+				})
+				break
+			}
 		}
 	}
 

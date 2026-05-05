@@ -22,9 +22,15 @@ import (
 
 // WazuhRuleSpec defines the desired state of WazuhRule
 type WazuhRuleSpec struct {
-	// ClusterRef references the WazuhCluster this rule belongs to
+	// ClusterRefs lists the WazuhCluster instances the rule must be applied to.
+	// Each entry must specify both name and namespace. The CR can live in any
+	// namespace; rule ConfigMaps are created in each target cluster's namespace.
 	// +kubebuilder:validation:Required
-	ClusterRef WazuhClusterReference `json:"clusterRef"`
+	// +kubebuilder:validation:MinItems=1
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+	ClusterRefs []WazuhClusterRef `json:"clusterRefs"`
 
 	// RuleName is the name of the rule
 	// +kubebuilder:validation:Required
@@ -82,39 +88,63 @@ type WazuhRuleSpec struct {
 
 // WazuhRuleStatus defines the observed state of WazuhRule.
 type WazuhRuleStatus struct {
-	// Phase of the rule (Pending, Applied, Failed)
+	// Phase is the aggregate phase across all target clusters.
 	// +optional
 	Phase RulePhase `json:"phase,omitempty"`
 
-	// Conditions represent the latest available observations
+	// Conditions represent the latest aggregate observations
 	// +listType=map
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// AppliedToNodes lists the nodes where this rule has been applied
-	// +optional
-	AppliedToNodes []string `json:"appliedToNodes,omitempty"`
-
-	// ConfigMapRef references the ConfigMap containing the rule
-	// +optional
-	ConfigMapRef *ConfigMapReference `json:"configMapRef,omitempty"`
-
-	// LastAppliedTime is the last time the rule was applied
-	// +optional
-	LastAppliedTime *metav1.Time `json:"lastAppliedTime,omitempty"`
-
 	// ObservedGeneration reflects the generation of the most recently observed rule
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	// Message provides additional information about the current state
+	// Message provides additional aggregate information about the current state
 	// +optional
 	Message string `json:"message,omitempty"`
 
 	// ValidationErrors contains any validation errors encountered
 	// +optional
 	ValidationErrors []string `json:"validationErrors,omitempty"`
+
+	// ClusterStatuses reports per-target-cluster reconciliation state.
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+	// +optional
+	ClusterStatuses []RuleClusterStatus `json:"clusterStatuses,omitempty"`
+}
+
+// RuleClusterStatus reports the reconciliation state for a single target cluster.
+type RuleClusterStatus struct {
+	// Name of the target WazuhCluster
+	Name string `json:"name"`
+
+	// Namespace of the target WazuhCluster
+	Namespace string `json:"namespace"`
+
+	// Phase on this cluster
+	// +optional
+	Phase RulePhase `json:"phase,omitempty"`
+
+	// AppliedToNodes lists the nodes where this rule has been applied on this cluster
+	// +optional
+	AppliedToNodes []string `json:"appliedToNodes,omitempty"`
+
+	// ConfigMapRef references the ConfigMap created in this cluster's namespace
+	// +optional
+	ConfigMapRef *ConfigMapReference `json:"configMapRef,omitempty"`
+
+	// LastAppliedTime is the last time the rule was applied to this cluster
+	// +optional
+	LastAppliedTime *metav1.Time `json:"lastAppliedTime,omitempty"`
+
+	// Message provides additional information about this cluster's state
+	// +optional
+	Message string `json:"message,omitempty"`
 }
 
 // RulePhase represents the phase of the rule
@@ -132,7 +162,6 @@ const (
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced,shortName=wrule
-// +kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=`.spec.clusterRef.name`
 // +kubebuilder:printcolumn:name="Rule",type=string,JSONPath=`.spec.ruleName`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Target",type=string,JSONPath=`.spec.targetNodes`

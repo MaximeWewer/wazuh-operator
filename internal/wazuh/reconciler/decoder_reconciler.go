@@ -32,7 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -53,6 +52,10 @@ const (
 	DecoderConditionTypeReady            = "Ready"
 	DecoderConditionTypeConfigMapCreated = "ConfigMapCreated"
 	DecoderConditionTypeValidated        = "Validated"
+
+	// Labels used to identify decoder ConfigMaps owned by a WazuhDecoder CR.
+	labelDecoderCROwnerName      = "resources.wazuh.com/decoder-cr"
+	labelDecoderCROwnerNamespace = "resources.wazuh.com/decoder-cr-namespace"
 )
 
 // DecoderReconciler handles reconciliation of Wazuh Decoders
@@ -73,12 +76,13 @@ func NewDecoderReconciler(c client.Client, scheme *runtime.Scheme, recorder reco
 	}
 }
 
-// Reconcile reconciles the Wazuh Decoder
+// Reconcile reconciles the Wazuh Decoder across all target clusters.
 func (r *DecoderReconciler) Reconcile(ctx context.Context, decoder *wazuhv1.WazuhDecoder) (err error) {
 	ctx, span := telemetry.Tracer().Start(ctx, "DecoderReconciler.Reconcile",
 		telemetry.WithAttributes(
 			attribute.String("resource.name", decoder.Name),
 			attribute.String("resource.namespace", decoder.Namespace),
+			attribute.Int("resource.clusterRefs", len(decoder.Spec.ClusterRefs)),
 		))
 	defer span.End()
 	defer func() {
@@ -89,12 +93,10 @@ func (r *DecoderReconciler) Reconcile(ctx context.Context, decoder *wazuhv1.Wazu
 
 	log := logf.FromContext(ctx)
 
-	// Initialize status if needed
 	if decoder.Status.Phase == "" {
 		decoder.Status.Phase = wazuhv1.DecoderPhasePending
 	}
 
-	// Validate the decoder
 	validationResult := r.Validator.Validate(ctx, decoder)
 	if !validationResult.Valid {
 		log.Info("Decoder validation failed", "errors", validationResult.Errors)
@@ -110,112 +112,161 @@ func (r *DecoderReconciler) Reconcile(ctx context.Context, decoder *wazuhv1.Wazu
 		}
 		return r.updateStatus(ctx, decoder)
 	}
-
-	// Clear validation errors and set validated condition
 	decoder.Status.ValidationErrors = nil
 	r.setCondition(decoder, DecoderConditionTypeValidated, metav1.ConditionTrue, "ValidationPassed",
 		"Decoder content is valid")
 
-	// Verify referenced cluster exists
-	cluster := &wazuhv1.WazuhCluster{}
-	clusterNamespace := decoder.Spec.ClusterRef.Namespace
-	if clusterNamespace == "" {
-		clusterNamespace = decoder.Namespace
-	}
-	clusterKey := types.NamespacedName{Name: decoder.Spec.ClusterRef.Name, Namespace: clusterNamespace}
-	if err := r.Get(ctx, clusterKey, cluster); err != nil {
-		if errors.IsNotFound(err) {
-			log.Info("Referenced WazuhCluster not found", "cluster", clusterKey)
-			r.setCondition(decoder, DecoderConditionTypeReady, metav1.ConditionFalse, "ClusterNotFound",
-				fmt.Sprintf("Referenced WazuhCluster %s not found", clusterKey))
-			decoder.Status.Phase = wazuhv1.DecoderPhasePending
-			if r.Recorder != nil {
-				r.Recorder.Event(decoder, corev1.EventTypeWarning, "ClusterNotFound",
-					fmt.Sprintf("Referenced WazuhCluster %s not found", clusterKey))
-			}
-			return r.updateStatus(ctx, decoder)
-		}
-		return fmt.Errorf("failed to get referenced WazuhCluster %s: %w", clusterKey, err)
+	existingByKey := make(map[string]wazuhv1.DecoderClusterStatus, len(decoder.Status.ClusterStatuses))
+	for _, s := range decoder.Status.ClusterStatuses {
+		existingByKey[clusterKey(s.Name, s.Namespace)] = s
 	}
 
-	// Create ConfigMap for the decoder
-	configMapName, err := r.reconcileConfigMap(ctx, decoder)
-	if err != nil {
+	newStatuses := make([]wazuhv1.DecoderClusterStatus, 0, len(decoder.Spec.ClusterRefs))
+	anyFailed := false
+	allApplied := true
+
+	for _, ref := range decoder.Spec.ClusterRefs {
+		st := existingByKey[clusterKey(ref.Name, ref.Namespace)]
+		st.Name = ref.Name
+		st.Namespace = ref.Namespace
+
+		if err := r.reconcileDecoderForCluster(ctx, decoder, ref, &st); err != nil {
+			anyFailed = true
+			log.Error(err, "Failed to reconcile decoder on cluster",
+				"cluster", ref.Name, "clusterNamespace", ref.Namespace)
+		}
+		if st.Phase != wazuhv1.DecoderPhaseApplied {
+			allApplied = false
+		}
+		newStatuses = append(newStatuses, st)
+
+		decodersCount, mErr := r.countDecodersForCluster(ctx, ref.Namespace, ref.Name)
+		if mErr == nil {
+			metrics.SetWazuhDecodersTotal(ref.Name, ref.Namespace, decodersCount)
+		}
+	}
+
+	sort.Slice(newStatuses, func(i, j int) bool {
+		if newStatuses[i].Namespace != newStatuses[j].Namespace {
+			return newStatuses[i].Namespace < newStatuses[j].Namespace
+		}
+		return newStatuses[i].Name < newStatuses[j].Name
+	})
+	decoder.Status.ClusterStatuses = newStatuses
+
+	switch {
+	case anyFailed:
 		decoder.Status.Phase = wazuhv1.DecoderPhaseFailed
-		r.setCondition(decoder, DecoderConditionTypeConfigMapCreated, metav1.ConditionFalse, "ConfigMapFailed",
-			fmt.Sprintf("Failed to create ConfigMap: %v", err))
-		r.setCondition(decoder, DecoderConditionTypeReady, metav1.ConditionFalse, "ConfigMapFailed",
-			"Failed to create decoder ConfigMap")
-		if r.Recorder != nil {
-			r.Recorder.Event(decoder, corev1.EventTypeWarning, "ConfigMapFailed", err.Error())
-		}
-		return fmt.Errorf("failed to reconcile decoder configmap: %w", err)
+		r.setCondition(decoder, DecoderConditionTypeReady, metav1.ConditionFalse, "ClusterFailures",
+			"One or more target clusters failed to apply the decoder")
+		decoder.Status.Message = "One or more target clusters failed to apply the decoder"
+	case allApplied:
+		decoder.Status.Phase = wazuhv1.DecoderPhaseApplied
+		r.setCondition(decoder, DecoderConditionTypeReady, metav1.ConditionTrue, "DecoderApplied",
+			"Decoder applied to all target clusters")
+		r.setCondition(decoder, DecoderConditionTypeConfigMapCreated, metav1.ConditionTrue, "ConfigMapCreated",
+			"All cluster ConfigMaps reconciled")
+		decoder.Status.Message = ""
+	default:
+		decoder.Status.Phase = wazuhv1.DecoderPhasePending
 	}
 
-	// Update status with ConfigMap reference
-	decoder.Status.ConfigMapRef = &wazuhv1.ConfigMapReference{
-		Name:      configMapName,
-		Namespace: decoder.Namespace,
-	}
-	r.setCondition(decoder, DecoderConditionTypeConfigMapCreated, metav1.ConditionTrue, "ConfigMapCreated",
-		fmt.Sprintf("ConfigMap %s created successfully", configMapName))
-
-	// Determine which nodes the decoder is applied to based on targetNodes
-	appliedNodes := r.determineAppliedNodes(decoder, cluster)
-	decoder.Status.AppliedToNodes = appliedNodes
-
-	// Set ready condition and phase — only update timestamp and emit event on transition
-	wasApplied := decoder.Status.Phase == wazuhv1.DecoderPhaseApplied &&
-		decoder.Status.ObservedGeneration == decoder.Generation
-	decoder.Status.Phase = wazuhv1.DecoderPhaseApplied
-	r.setCondition(decoder, DecoderConditionTypeReady, metav1.ConditionTrue, "DecoderApplied",
-		fmt.Sprintf("Decoder applied to %d node(s)", len(appliedNodes)))
-
-	// Update observed generation
 	decoder.Status.ObservedGeneration = decoder.Generation
 
-	if !wasApplied {
-		now := metav1.Now()
-		decoder.Status.LastAppliedTime = &now
-		if r.Recorder != nil {
-			r.Recorder.Event(decoder, corev1.EventTypeNormal, "DecoderApplied",
-				fmt.Sprintf("Decoder %s applied successfully", decoder.Name))
-		}
-	}
-
-	// Update status
 	if err := r.updateStatus(ctx, decoder); err != nil {
 		return fmt.Errorf("failed to update decoder status: %w", err)
 	}
 
-	// Record decoders metric for the cluster
-	decodersCount, err := r.countDecodersForCluster(ctx, clusterNamespace, decoder.Spec.ClusterRef.Name)
-	if err == nil {
-		metrics.SetWazuhDecodersTotal(decoder.Spec.ClusterRef.Name, clusterNamespace, decodersCount)
+	if anyFailed {
+		return fmt.Errorf("one or more target clusters failed to apply the decoder")
 	}
-
-	log.Info("Decoder reconciliation completed", "name", decoder.Name, "configMap", configMapName)
+	log.Info("Decoder reconciliation completed", "name", decoder.Name)
 	return nil
 }
 
-// reconcileConfigMap reconciles the ConfigMap for the decoder
-func (r *DecoderReconciler) reconcileConfigMap(ctx context.Context, decoder *wazuhv1.WazuhDecoder) (string, error) {
-	log := logf.FromContext(ctx)
+// reconcileDecoderForCluster reconciles the decoder on a single target cluster.
+func (r *DecoderReconciler) reconcileDecoderForCluster(
+	ctx context.Context,
+	decoder *wazuhv1.WazuhDecoder,
+	ref wazuhv1.WazuhClusterRef,
+	st *wazuhv1.DecoderClusterStatus,
+) error {
+	log := logf.FromContext(ctx).WithValues("cluster", ref.Name, "clusterNamespace", ref.Namespace)
 
-	configMapName := fmt.Sprintf("%s-decoder", decoder.Name)
+	cluster := &wazuhv1.WazuhCluster{}
+	clusterKeyNN := types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace}
+	if err := r.Get(ctx, clusterKeyNN, cluster); err != nil {
+		if errors.IsNotFound(err) {
+			st.Phase = wazuhv1.DecoderPhasePending
+			st.Message = fmt.Sprintf("WazuhCluster %s not found", clusterKeyNN)
+			if r.Recorder != nil {
+				r.Recorder.Event(decoder, corev1.EventTypeWarning, "ClusterNotFound", st.Message)
+			}
+			return nil
+		}
+		st.Phase = wazuhv1.DecoderPhaseFailed
+		st.Message = fmt.Sprintf("failed to get WazuhCluster: %v", err)
+		return err
+	}
+
+	cmName, err := r.reconcileConfigMap(ctx, decoder, ref)
+	if err != nil {
+		st.Phase = wazuhv1.DecoderPhaseFailed
+		st.Message = fmt.Sprintf("Failed to reconcile ConfigMap: %v", err)
+		if r.Recorder != nil {
+			r.Recorder.Event(decoder, corev1.EventTypeWarning, "ConfigMapFailed", err.Error())
+		}
+		return err
+	}
+
+	st.ConfigMapRef = &wazuhv1.ConfigMapReference{
+		Name:      cmName,
+		Namespace: ref.Namespace,
+	}
+	st.AppliedToNodes = r.determineAppliedNodes(decoder, cluster)
+
+	wasApplied := st.Phase == wazuhv1.DecoderPhaseApplied
+	st.Phase = wazuhv1.DecoderPhaseApplied
+	st.Message = ""
+	if !wasApplied {
+		now := metav1.Now()
+		st.LastAppliedTime = &now
+		if r.Recorder != nil {
+			r.Recorder.Event(decoder, corev1.EventTypeNormal, "DecoderApplied",
+				fmt.Sprintf("Decoder %s applied to %s/%s", decoder.Name, ref.Namespace, ref.Name))
+		}
+	}
+	log.V(1).Info("Decoder applied", "configMap", cmName)
+	return nil
+}
+
+// decoderConfigMapName returns the cross-namespace-safe ConfigMap name.
+func decoderConfigMapName(crNamespace, crName string) string {
+	return fmt.Sprintf("%s-%s-decoder", crNamespace, crName)
+}
+
+// reconcileConfigMap creates/updates the decoder ConfigMap in the target cluster's namespace.
+func (r *DecoderReconciler) reconcileConfigMap(
+	ctx context.Context,
+	decoder *wazuhv1.WazuhDecoder,
+	ref wazuhv1.WazuhClusterRef,
+) (string, error) {
+	log := logf.FromContext(ctx)
+	cmName := decoderConfigMapName(decoder.Namespace, decoder.Name)
 	fileName := fmt.Sprintf("%s.xml", decoder.Spec.DecoderName)
 
-	cm := &corev1.ConfigMap{
+	desired := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      configMapName,
-			Namespace: decoder.Namespace,
+			Name:      cmName,
+			Namespace: ref.Namespace,
 			Labels: map[string]string{
-				constants.LabelName:      "wazuh-decoder",
-				constants.LabelInstance:  decoder.Name,
-				constants.LabelManagedBy: constants.OperatorName,
-				constants.LabelComponent: "decoder",
-				// Add cluster reference label for easy filtering
-				"wazuh.com/cluster": decoder.Spec.ClusterRef.Name,
+				constants.LabelName:          "wazuh-decoder",
+				constants.LabelInstance:      decoder.Name,
+				constants.LabelManagedBy:     constants.OperatorName,
+				constants.LabelComponent:     "decoder",
+				"wazuh.com/cluster":          ref.Name,
+				labelDecoderCROwnerName:      decoder.Name,
+				labelDecoderCROwnerNamespace: decoder.Namespace,
 			},
 		},
 		Data: map[string]string{
@@ -223,37 +274,30 @@ func (r *DecoderReconciler) reconcileConfigMap(ctx context.Context, decoder *waz
 		},
 	}
 
-	if err := controllerutil.SetControllerReference(decoder, cm, r.Scheme); err != nil {
-		return "", fmt.Errorf("failed to set controller reference: %w", err)
-	}
-
 	existing := &corev1.ConfigMap{}
-	err := r.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}, existing)
+	err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: ref.Namespace}, existing)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating decoder ConfigMap", "name", cm.Name)
-		if err := r.Create(ctx, cm); err != nil {
+		log.Info("Creating decoder ConfigMap", "name", cmName, "namespace", ref.Namespace)
+		if err := r.Create(ctx, desired); err != nil {
 			return "", err
 		}
-		return configMapName, nil
+		return cmName, nil
 	} else if err != nil {
 		return "", err
 	}
 
-	// Update only if data or labels changed
-	if !mapsEqual(existing.Data, cm.Data) || !mapsEqual(existing.Labels, cm.Labels) {
-		existing.Data = cm.Data
-		existing.Labels = cm.Labels
-		log.V(1).Info("Updating decoder ConfigMap", "name", cm.Name)
+	if !mapsEqual(existing.Data, desired.Data) || !mapsEqual(existing.Labels, desired.Labels) {
+		existing.Data = desired.Data
+		existing.Labels = desired.Labels
+		log.V(1).Info("Updating decoder ConfigMap", "name", cmName, "namespace", ref.Namespace)
 		if err := r.Update(ctx, existing); err != nil {
 			return "", err
 		}
 	}
-
-	return configMapName, nil
+	return cmName, nil
 }
 
 // setCondition sets a status condition on the decoder.
-// meta.SetStatusCondition preserves LastTransitionTime when status is unchanged.
 func (r *DecoderReconciler) setCondition(decoder *wazuhv1.WazuhDecoder, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&decoder.Status.Conditions, metav1.Condition{
 		Type:               conditionType,
@@ -264,8 +308,7 @@ func (r *DecoderReconciler) setCondition(decoder *wazuhv1.WazuhDecoder, conditio
 	})
 }
 
-// updateStatus updates the decoder status.
-// Skips the write when the status is unchanged.
+// updateStatus updates the decoder status with retry on conflict.
 func (r *DecoderReconciler) updateStatus(ctx context.Context, decoder *wazuhv1.WazuhDecoder) error {
 	desiredStatus := decoder.Status
 	return utils.RetryOnConflict(ctx, func() error {
@@ -292,15 +335,12 @@ func (r *DecoderReconciler) determineAppliedNodes(decoder *wazuhv1.WazuhDecoder,
 	if targetNodes == "" {
 		targetNodes = "all"
 	}
-
-	// Build node names based on cluster configuration
 	clusterName := cluster.Name
 
 	switch targetNodes {
 	case "master":
 		nodes = append(nodes, fmt.Sprintf("%s-manager-master-0", clusterName))
 	case "workers":
-		// Get worker count from cluster spec
 		workerCount := int32(0)
 		if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Replicas != nil {
 			workerCount = *cluster.Spec.Manager.Workers.Replicas
@@ -318,44 +358,55 @@ func (r *DecoderReconciler) determineAppliedNodes(decoder *wazuhv1.WazuhDecoder,
 			nodes = append(nodes, fmt.Sprintf("%s-manager-worker-%d", clusterName, i))
 		}
 	}
-
 	return nodes
 }
 
-// Delete handles cleanup when a decoder is deleted
+// Delete handles cleanup when a decoder is deleted.
 func (r *DecoderReconciler) Delete(ctx context.Context, decoder *wazuhv1.WazuhDecoder) error {
 	log := logf.FromContext(ctx)
+	cmName := decoderConfigMapName(decoder.Namespace, decoder.Name)
 
-	// Record deletion event
-	if r.Recorder != nil {
-		r.Recorder.Event(decoder, corev1.EventTypeNormal, "DecoderDeleted",
-			fmt.Sprintf("Decoder %s deleted, ConfigMap will be garbage collected", decoder.Name))
-	}
-
-	// The ConfigMap will be garbage collected due to owner reference
-	log.Info("Decoder deletion handled", "name", decoder.Name)
-	return nil
-}
-
-// ListDecodersForCluster lists all WazuhDecoders referencing a specific cluster
-func (r *DecoderReconciler) ListDecodersForCluster(ctx context.Context, clusterName, namespace string) ([]wazuhv1.WazuhDecoder, error) {
-	decoderList := &wazuhv1.WazuhDecoderList{}
-	if err := r.List(ctx, decoderList, client.InNamespace(namespace)); err != nil {
-		return nil, fmt.Errorf("failed to list WazuhDecoders: %w", err)
-	}
-
-	var matchingDecoders []wazuhv1.WazuhDecoder
-	for _, decoder := range decoderList.Items {
-		if decoder.Spec.ClusterRef.Name == clusterName {
-			matchingDecoders = append(matchingDecoders, decoder)
+	for _, ref := range decoder.Spec.ClusterRefs {
+		cm := &corev1.ConfigMap{}
+		err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: ref.Namespace}, cm)
+		if err == nil {
+			if err := r.Client.Delete(ctx, cm); err != nil && !errors.IsNotFound(err) {
+				log.Error(err, "Failed to delete decoder ConfigMap",
+					"configMap", cmName, "namespace", ref.Namespace)
+			}
+		} else if !errors.IsNotFound(err) {
+			log.Error(err, "Failed to lookup decoder ConfigMap",
+				"configMap", cmName, "namespace", ref.Namespace)
 		}
 	}
 
-	return matchingDecoders, nil
+	if r.Recorder != nil {
+		r.Recorder.Event(decoder, corev1.EventTypeNormal, "DecoderDeleted",
+			fmt.Sprintf("Decoder %s deleted on all target clusters", decoder.Name))
+	}
+	return nil
 }
 
-// GetDecoderConfigMapsForCluster returns ConfigMap references for all decoders in a cluster
-// This is used by the WazuhCluster reconciler to mount decoder ConfigMaps to manager pods
+// ListDecodersForCluster lists all WazuhDecoders targeting a specific cluster (cross-NS).
+func (r *DecoderReconciler) ListDecodersForCluster(ctx context.Context, clusterName, namespace string) ([]wazuhv1.WazuhDecoder, error) {
+	decoderList := &wazuhv1.WazuhDecoderList{}
+	if err := r.List(ctx, decoderList); err != nil {
+		return nil, fmt.Errorf("failed to list WazuhDecoders: %w", err)
+	}
+
+	var matching []wazuhv1.WazuhDecoder
+	for _, decoder := range decoderList.Items {
+		for _, ref := range decoder.Spec.ClusterRefs {
+			if ref.Name == clusterName && ref.Namespace == namespace {
+				matching = append(matching, decoder)
+				break
+			}
+		}
+	}
+	return matching, nil
+}
+
+// GetDecoderConfigMapsForCluster returns ConfigMap references for all decoders on a cluster.
 func (r *DecoderReconciler) GetDecoderConfigMapsForCluster(ctx context.Context, clusterName, namespace string) ([]DecoderConfigMapInfo, string, error) {
 	decoders, err := r.ListDecodersForCluster(ctx, clusterName, namespace)
 	if err != nil {
@@ -366,31 +417,31 @@ func (r *DecoderReconciler) GetDecoderConfigMapsForCluster(ctx context.Context, 
 	decoderContents := make([]string, 0, len(decoders))
 
 	for _, decoder := range decoders {
-		// Only include decoders that are successfully applied
-		if decoder.Status.Phase != wazuhv1.DecoderPhaseApplied {
-			continue
+		applied := false
+		for _, st := range decoder.Status.ClusterStatuses {
+			if st.Name == clusterName && st.Namespace == namespace && st.Phase == wazuhv1.DecoderPhaseApplied && st.ConfigMapRef != nil {
+				applied = true
+				break
+			}
 		}
-		if decoder.Status.ConfigMapRef == nil {
+		if !applied {
 			continue
 		}
 
 		configMaps = append(configMaps, DecoderConfigMapInfo{
-			ConfigMapName: decoder.Status.ConfigMapRef.Name,
+			ConfigMapName: decoderConfigMapName(decoder.Namespace, decoder.Name),
 			FileName:      fmt.Sprintf("%s.xml", decoder.Spec.DecoderName),
 			DecoderName:   decoder.Name,
 		})
 		decoderContents = append(decoderContents, decoder.Spec.Decoders)
 	}
 
-	// Sort for consistent ordering
 	sort.Slice(configMaps, func(i, j int) bool {
 		return configMaps[i].DecoderName < configMaps[j].DecoderName
 	})
 	sort.Strings(decoderContents)
 
-	// Compute hash of all decoder contents for change detection
 	hash := computeDecodersHash(decoderContents)
-
 	return configMaps, hash, nil
 }
 

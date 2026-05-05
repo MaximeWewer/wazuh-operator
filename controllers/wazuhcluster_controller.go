@@ -2091,52 +2091,34 @@ func (r *WazuhClusterReconciler) emitDrainEvent(cluster *wazuhv1.WazuhCluster, c
 	recorder.Event(cluster, eventType, reason, fmt.Sprintf("[%s] %s", component, message))
 }
 
-// findClustersForRule finds all WazuhClusters that a WazuhRule references via clusterRef
-// Used by the watch handler to enqueue clusters when rules change
+// findClustersForRule emits one reconcile request per target cluster of a WazuhRule.
 func (r *WazuhClusterReconciler) findClustersForRule(ctx context.Context, obj client.Object) []ctrl.Request {
 	rule, ok := obj.(*wazuhv1.WazuhRule)
 	if !ok {
 		return []ctrl.Request{}
 	}
-
-	// Determine the namespace of the target cluster
-	namespace := rule.Spec.ClusterRef.Namespace
-	if namespace == "" {
-		namespace = rule.Namespace
+	requests := make([]ctrl.Request, 0, len(rule.Spec.ClusterRefs))
+	for _, ref := range rule.Spec.ClusterRefs {
+		requests = append(requests, ctrl.Request{
+			NamespacedName: types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace},
+		})
 	}
-
-	return []ctrl.Request{
-		{
-			NamespacedName: types.NamespacedName{
-				Name:      rule.Spec.ClusterRef.Name,
-				Namespace: namespace,
-			},
-		},
-	}
+	return requests
 }
 
-// findClustersForDecoder finds all WazuhClusters that a WazuhDecoder references via clusterRef
-// Used by the watch handler to enqueue clusters when decoders change
+// findClustersForDecoder emits one reconcile request per target cluster of a WazuhDecoder.
 func (r *WazuhClusterReconciler) findClustersForDecoder(ctx context.Context, obj client.Object) []ctrl.Request {
 	decoder, ok := obj.(*wazuhv1.WazuhDecoder)
 	if !ok {
 		return []ctrl.Request{}
 	}
-
-	// Determine the namespace of the target cluster
-	namespace := decoder.Spec.ClusterRef.Namespace
-	if namespace == "" {
-		namespace = decoder.Namespace
+	requests := make([]ctrl.Request, 0, len(decoder.Spec.ClusterRefs))
+	for _, ref := range decoder.Spec.ClusterRefs {
+		requests = append(requests, ctrl.Request{
+			NamespacedName: types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace},
+		})
 	}
-
-	return []ctrl.Request{
-		{
-			NamespacedName: types.NamespacedName{
-				Name:      decoder.Spec.ClusterRef.Name,
-				Namespace: namespace,
-			},
-		},
-	}
+	return requests
 }
 
 // findClustersForAgentGroup finds every WazuhCluster targeted by a WazuhAgentGroup.

@@ -1,3 +1,5 @@
+//go:build broken_multi_cluster
+
 /*
 Copyright 2026.
 

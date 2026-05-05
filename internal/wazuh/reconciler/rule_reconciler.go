@@ -32,7 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -53,6 +52,11 @@ const (
 	ConditionTypeReady            = "Ready"
 	ConditionTypeConfigMapCreated = "ConfigMapCreated"
 	ConditionTypeValidated        = "Validated"
+
+	// Labels used to identify rule ConfigMaps owned by a WazuhRule CR.
+	// Cross-namespace owner references are forbidden, so cleanup is finalizer-driven.
+	labelRuleCROwnerName      = "resources.wazuh.com/rule-cr"
+	labelRuleCROwnerNamespace = "resources.wazuh.com/rule-cr-namespace"
 )
 
 // RuleReconciler handles reconciliation of Wazuh Rules
@@ -73,12 +77,13 @@ func NewRuleReconciler(c client.Client, scheme *runtime.Scheme, recorder record.
 	}
 }
 
-// Reconcile reconciles the Wazuh Rule
+// Reconcile reconciles the Wazuh Rule across all target clusters.
 func (r *RuleReconciler) Reconcile(ctx context.Context, rule *wazuhv1.WazuhRule) (err error) {
 	ctx, span := telemetry.Tracer().Start(ctx, "RuleReconciler.Reconcile",
 		telemetry.WithAttributes(
 			attribute.String("resource.name", rule.Name),
 			attribute.String("resource.namespace", rule.Namespace),
+			attribute.Int("resource.clusterRefs", len(rule.Spec.ClusterRefs)),
 		))
 	defer span.End()
 	defer func() {
@@ -89,12 +94,11 @@ func (r *RuleReconciler) Reconcile(ctx context.Context, rule *wazuhv1.WazuhRule)
 
 	log := logf.FromContext(ctx)
 
-	// Initialize status if needed
 	if rule.Status.Phase == "" {
 		rule.Status.Phase = wazuhv1.RulePhasePending
 	}
 
-	// Validate the rule
+	// Content validation is cluster-independent
 	validationResult := r.Validator.Validate(ctx, rule)
 	if !validationResult.Valid {
 		log.Info("Rule validation failed", "errors", validationResult.Errors)
@@ -110,112 +114,162 @@ func (r *RuleReconciler) Reconcile(ctx context.Context, rule *wazuhv1.WazuhRule)
 		}
 		return r.updateStatus(ctx, rule)
 	}
-
-	// Clear validation errors and set validated condition
 	rule.Status.ValidationErrors = nil
 	r.setCondition(rule, ConditionTypeValidated, metav1.ConditionTrue, "ValidationPassed",
 		"Rule content is valid")
 
-	// Verify referenced cluster exists
-	cluster := &wazuhv1.WazuhCluster{}
-	clusterNamespace := rule.Spec.ClusterRef.Namespace
-	if clusterNamespace == "" {
-		clusterNamespace = rule.Namespace
-	}
-	clusterKey := types.NamespacedName{Name: rule.Spec.ClusterRef.Name, Namespace: clusterNamespace}
-	if err := r.Get(ctx, clusterKey, cluster); err != nil {
-		if errors.IsNotFound(err) {
-			log.Info("Referenced WazuhCluster not found", "cluster", clusterKey)
-			r.setCondition(rule, ConditionTypeReady, metav1.ConditionFalse, "ClusterNotFound",
-				fmt.Sprintf("Referenced WazuhCluster %s not found", clusterKey))
-			rule.Status.Phase = wazuhv1.RulePhasePending
-			if r.Recorder != nil {
-				r.Recorder.Event(rule, corev1.EventTypeWarning, "ClusterNotFound",
-					fmt.Sprintf("Referenced WazuhCluster %s not found", clusterKey))
-			}
-			return r.updateStatus(ctx, rule)
-		}
-		return fmt.Errorf("failed to get referenced WazuhCluster %s: %w", clusterKey, err)
+	existingByKey := make(map[string]wazuhv1.RuleClusterStatus, len(rule.Status.ClusterStatuses))
+	for _, s := range rule.Status.ClusterStatuses {
+		existingByKey[clusterKey(s.Name, s.Namespace)] = s
 	}
 
-	// Create ConfigMap for the rule
-	configMapName, err := r.reconcileConfigMap(ctx, rule)
-	if err != nil {
+	newStatuses := make([]wazuhv1.RuleClusterStatus, 0, len(rule.Spec.ClusterRefs))
+	anyFailed := false
+	allApplied := true
+
+	for _, ref := range rule.Spec.ClusterRefs {
+		st := existingByKey[clusterKey(ref.Name, ref.Namespace)]
+		st.Name = ref.Name
+		st.Namespace = ref.Namespace
+
+		if err := r.reconcileRuleForCluster(ctx, rule, ref, &st); err != nil {
+			anyFailed = true
+			log.Error(err, "Failed to reconcile rule on cluster",
+				"cluster", ref.Name, "clusterNamespace", ref.Namespace)
+		}
+		if st.Phase != wazuhv1.RulePhaseApplied {
+			allApplied = false
+		}
+		newStatuses = append(newStatuses, st)
+
+		// metrics per cluster
+		rulesCount, mErr := r.countRulesForCluster(ctx, ref.Namespace, ref.Name)
+		if mErr == nil {
+			metrics.SetWazuhRulesTotal(ref.Name, ref.Namespace, rulesCount)
+		}
+	}
+
+	sort.Slice(newStatuses, func(i, j int) bool {
+		if newStatuses[i].Namespace != newStatuses[j].Namespace {
+			return newStatuses[i].Namespace < newStatuses[j].Namespace
+		}
+		return newStatuses[i].Name < newStatuses[j].Name
+	})
+	rule.Status.ClusterStatuses = newStatuses
+
+	switch {
+	case anyFailed:
 		rule.Status.Phase = wazuhv1.RulePhaseFailed
-		r.setCondition(rule, ConditionTypeConfigMapCreated, metav1.ConditionFalse, "ConfigMapFailed",
-			fmt.Sprintf("Failed to create ConfigMap: %v", err))
-		r.setCondition(rule, ConditionTypeReady, metav1.ConditionFalse, "ConfigMapFailed",
-			"Failed to create rule ConfigMap")
-		if r.Recorder != nil {
-			r.Recorder.Event(rule, corev1.EventTypeWarning, "ConfigMapFailed", err.Error())
-		}
-		return fmt.Errorf("failed to reconcile rule configmap: %w", err)
+		r.setCondition(rule, ConditionTypeReady, metav1.ConditionFalse, "ClusterFailures",
+			"One or more target clusters failed to apply the rule")
+		rule.Status.Message = "One or more target clusters failed to apply the rule"
+	case allApplied:
+		rule.Status.Phase = wazuhv1.RulePhaseApplied
+		r.setCondition(rule, ConditionTypeReady, metav1.ConditionTrue, "RuleApplied",
+			"Rule applied to all target clusters")
+		r.setCondition(rule, ConditionTypeConfigMapCreated, metav1.ConditionTrue, "ConfigMapCreated",
+			"All cluster ConfigMaps reconciled")
+		rule.Status.Message = ""
+	default:
+		rule.Status.Phase = wazuhv1.RulePhasePending
 	}
 
-	// Update status with ConfigMap reference
-	rule.Status.ConfigMapRef = &wazuhv1.ConfigMapReference{
-		Name:      configMapName,
-		Namespace: rule.Namespace,
-	}
-	r.setCondition(rule, ConditionTypeConfigMapCreated, metav1.ConditionTrue, "ConfigMapCreated",
-		fmt.Sprintf("ConfigMap %s created successfully", configMapName))
-
-	// Determine which nodes the rule is applied to based on targetNodes
-	appliedNodes := r.determineAppliedNodes(rule, cluster)
-	rule.Status.AppliedToNodes = appliedNodes
-
-	// Set ready condition and phase — only update timestamp and emit event on transition
-	wasApplied := rule.Status.Phase == wazuhv1.RulePhaseApplied &&
-		rule.Status.ObservedGeneration == rule.Generation
-	rule.Status.Phase = wazuhv1.RulePhaseApplied
-	r.setCondition(rule, ConditionTypeReady, metav1.ConditionTrue, "RuleApplied",
-		fmt.Sprintf("Rule applied to %d node(s)", len(appliedNodes)))
-
-	// Update observed generation
 	rule.Status.ObservedGeneration = rule.Generation
 
-	if !wasApplied {
-		now := metav1.Now()
-		rule.Status.LastAppliedTime = &now
-		if r.Recorder != nil {
-			r.Recorder.Event(rule, corev1.EventTypeNormal, "RuleApplied",
-				fmt.Sprintf("Rule %s applied successfully", rule.Name))
-		}
-	}
-
-	// Update status
 	if err := r.updateStatus(ctx, rule); err != nil {
 		return fmt.Errorf("failed to update rule status: %w", err)
 	}
 
-	// Record rules metric for the cluster
-	rulesCount, err := r.countRulesForCluster(ctx, clusterNamespace, rule.Spec.ClusterRef.Name)
-	if err == nil {
-		metrics.SetWazuhRulesTotal(rule.Spec.ClusterRef.Name, clusterNamespace, rulesCount)
+	if anyFailed {
+		return fmt.Errorf("one or more target clusters failed to apply the rule")
 	}
-
-	log.Info("Rule reconciliation completed", "name", rule.Name, "configMap", configMapName)
+	log.Info("Rule reconciliation completed", "name", rule.Name)
 	return nil
 }
 
-// reconcileConfigMap reconciles the ConfigMap for the rule
-func (r *RuleReconciler) reconcileConfigMap(ctx context.Context, rule *wazuhv1.WazuhRule) (string, error) {
-	log := logf.FromContext(ctx)
+// reconcileRuleForCluster reconciles the rule on a single target cluster.
+func (r *RuleReconciler) reconcileRuleForCluster(
+	ctx context.Context,
+	rule *wazuhv1.WazuhRule,
+	ref wazuhv1.WazuhClusterRef,
+	st *wazuhv1.RuleClusterStatus,
+) error {
+	log := logf.FromContext(ctx).WithValues("cluster", ref.Name, "clusterNamespace", ref.Namespace)
 
-	configMapName := fmt.Sprintf("%s-rule", rule.Name)
+	cluster := &wazuhv1.WazuhCluster{}
+	clusterKeyNN := types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace}
+	if err := r.Get(ctx, clusterKeyNN, cluster); err != nil {
+		if errors.IsNotFound(err) {
+			st.Phase = wazuhv1.RulePhasePending
+			st.Message = fmt.Sprintf("WazuhCluster %s not found", clusterKeyNN)
+			if r.Recorder != nil {
+				r.Recorder.Event(rule, corev1.EventTypeWarning, "ClusterNotFound", st.Message)
+			}
+			return nil
+		}
+		st.Phase = wazuhv1.RulePhaseFailed
+		st.Message = fmt.Sprintf("failed to get WazuhCluster: %v", err)
+		return err
+	}
+
+	cmName, err := r.reconcileConfigMap(ctx, rule, ref)
+	if err != nil {
+		st.Phase = wazuhv1.RulePhaseFailed
+		st.Message = fmt.Sprintf("Failed to reconcile ConfigMap: %v", err)
+		if r.Recorder != nil {
+			r.Recorder.Event(rule, corev1.EventTypeWarning, "ConfigMapFailed", err.Error())
+		}
+		return err
+	}
+
+	st.ConfigMapRef = &wazuhv1.ConfigMapReference{
+		Name:      cmName,
+		Namespace: ref.Namespace,
+	}
+	st.AppliedToNodes = r.determineAppliedNodes(rule, cluster)
+
+	wasApplied := st.Phase == wazuhv1.RulePhaseApplied
+	st.Phase = wazuhv1.RulePhaseApplied
+	st.Message = ""
+	if !wasApplied {
+		now := metav1.Now()
+		st.LastAppliedTime = &now
+		if r.Recorder != nil {
+			r.Recorder.Event(rule, corev1.EventTypeNormal, "RuleApplied",
+				fmt.Sprintf("Rule %s applied to %s/%s", rule.Name, ref.Namespace, ref.Name))
+		}
+	}
+	log.V(1).Info("Rule applied", "configMap", cmName)
+	return nil
+}
+
+// ruleConfigMapName returns the cross-namespace-safe ConfigMap name for the rule on a given cluster.
+func ruleConfigMapName(crNamespace, crName string) string {
+	return fmt.Sprintf("%s-%s-rule", crNamespace, crName)
+}
+
+// reconcileConfigMap creates/updates the rule ConfigMap in the target cluster's namespace.
+func (r *RuleReconciler) reconcileConfigMap(
+	ctx context.Context,
+	rule *wazuhv1.WazuhRule,
+	ref wazuhv1.WazuhClusterRef,
+) (string, error) {
+	log := logf.FromContext(ctx)
+	cmName := ruleConfigMapName(rule.Namespace, rule.Name)
 	fileName := fmt.Sprintf("%s.xml", rule.Spec.RuleName)
 
-	cm := &corev1.ConfigMap{
+	desired := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      configMapName,
-			Namespace: rule.Namespace,
+			Name:      cmName,
+			Namespace: ref.Namespace,
 			Labels: map[string]string{
-				constants.LabelName:      "wazuh-rule",
-				constants.LabelInstance:  rule.Name,
-				constants.LabelManagedBy: constants.OperatorName,
-				constants.LabelComponent: "rule",
-				// Add cluster reference label for easy filtering
-				"wazuh.com/cluster": rule.Spec.ClusterRef.Name,
+				constants.LabelName:       "wazuh-rule",
+				constants.LabelInstance:   rule.Name,
+				constants.LabelManagedBy:  constants.OperatorName,
+				constants.LabelComponent:  "rule",
+				"wazuh.com/cluster":       ref.Name,
+				labelRuleCROwnerName:      rule.Name,
+				labelRuleCROwnerNamespace: rule.Namespace,
 			},
 		},
 		Data: map[string]string{
@@ -223,37 +277,30 @@ func (r *RuleReconciler) reconcileConfigMap(ctx context.Context, rule *wazuhv1.W
 		},
 	}
 
-	if err := controllerutil.SetControllerReference(rule, cm, r.Scheme); err != nil {
-		return "", fmt.Errorf("failed to set controller reference: %w", err)
-	}
-
 	existing := &corev1.ConfigMap{}
-	err := r.Get(ctx, types.NamespacedName{Name: cm.Name, Namespace: cm.Namespace}, existing)
+	err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: ref.Namespace}, existing)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating rule ConfigMap", "name", cm.Name)
-		if err := r.Create(ctx, cm); err != nil {
+		log.Info("Creating rule ConfigMap", "name", cmName, "namespace", ref.Namespace)
+		if err := r.Create(ctx, desired); err != nil {
 			return "", err
 		}
-		return configMapName, nil
+		return cmName, nil
 	} else if err != nil {
 		return "", err
 	}
 
-	// Update only if data or labels changed
-	if !mapsEqual(existing.Data, cm.Data) || !mapsEqual(existing.Labels, cm.Labels) {
-		existing.Data = cm.Data
-		existing.Labels = cm.Labels
-		log.V(1).Info("Updating rule ConfigMap", "name", cm.Name)
+	if !mapsEqual(existing.Data, desired.Data) || !mapsEqual(existing.Labels, desired.Labels) {
+		existing.Data = desired.Data
+		existing.Labels = desired.Labels
+		log.V(1).Info("Updating rule ConfigMap", "name", cmName, "namespace", ref.Namespace)
 		if err := r.Update(ctx, existing); err != nil {
 			return "", err
 		}
 	}
-
-	return configMapName, nil
+	return cmName, nil
 }
 
 // setCondition sets a status condition on the rule.
-// meta.SetStatusCondition preserves LastTransitionTime when status is unchanged.
 func (r *RuleReconciler) setCondition(rule *wazuhv1.WazuhRule, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	meta.SetStatusCondition(&rule.Status.Conditions, metav1.Condition{
 		Type:               conditionType,
@@ -265,7 +312,6 @@ func (r *RuleReconciler) setCondition(rule *wazuhv1.WazuhRule, conditionType str
 }
 
 // updateStatus updates the rule status with retry on conflict.
-// Skips the write when the status is unchanged.
 func (r *RuleReconciler) updateStatus(ctx context.Context, rule *wazuhv1.WazuhRule) error {
 	desiredStatus := rule.Status
 	return utils.RetryOnConflict(ctx, func() error {
@@ -293,14 +339,12 @@ func (r *RuleReconciler) determineAppliedNodes(rule *wazuhv1.WazuhRule, cluster 
 		targetNodes = "all"
 	}
 
-	// Build node names based on cluster configuration
 	clusterName := cluster.Name
 
 	switch targetNodes {
 	case "master":
 		nodes = append(nodes, fmt.Sprintf("%s-manager-master-0", clusterName))
 	case "workers":
-		// Get worker count from cluster spec
 		workerCount := int32(0)
 		if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Replicas != nil {
 			workerCount = *cluster.Spec.Manager.Workers.Replicas
@@ -322,40 +366,53 @@ func (r *RuleReconciler) determineAppliedNodes(rule *wazuhv1.WazuhRule, cluster 
 	return nodes
 }
 
-// Delete handles cleanup when a rule is deleted
+// Delete handles cleanup when a rule is deleted.
+// Deletes the rule ConfigMap from each target cluster's namespace (cross-NS, no ownerRef).
 func (r *RuleReconciler) Delete(ctx context.Context, rule *wazuhv1.WazuhRule) error {
 	log := logf.FromContext(ctx)
+	cmName := ruleConfigMapName(rule.Namespace, rule.Name)
 
-	// Record deletion event
-	if r.Recorder != nil {
-		r.Recorder.Event(rule, corev1.EventTypeNormal, "RuleDeleted",
-			fmt.Sprintf("Rule %s deleted, ConfigMap will be garbage collected", rule.Name))
-	}
-
-	// The ConfigMap will be garbage collected due to owner reference
-	log.Info("Rule deletion handled", "name", rule.Name)
-	return nil
-}
-
-// ListRulesForCluster lists all WazuhRules referencing a specific cluster
-func (r *RuleReconciler) ListRulesForCluster(ctx context.Context, clusterName, namespace string) ([]wazuhv1.WazuhRule, error) {
-	ruleList := &wazuhv1.WazuhRuleList{}
-	if err := r.List(ctx, ruleList, client.InNamespace(namespace)); err != nil {
-		return nil, fmt.Errorf("failed to list WazuhRules: %w", err)
-	}
-
-	var matchingRules []wazuhv1.WazuhRule
-	for _, rule := range ruleList.Items {
-		if rule.Spec.ClusterRef.Name == clusterName {
-			matchingRules = append(matchingRules, rule)
+	for _, ref := range rule.Spec.ClusterRefs {
+		cm := &corev1.ConfigMap{}
+		err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: ref.Namespace}, cm)
+		if err == nil {
+			if err := r.Client.Delete(ctx, cm); err != nil && !errors.IsNotFound(err) {
+				log.Error(err, "Failed to delete rule ConfigMap",
+					"configMap", cmName, "namespace", ref.Namespace)
+			}
+		} else if !errors.IsNotFound(err) {
+			log.Error(err, "Failed to lookup rule ConfigMap",
+				"configMap", cmName, "namespace", ref.Namespace)
 		}
 	}
 
-	return matchingRules, nil
+	if r.Recorder != nil {
+		r.Recorder.Event(rule, corev1.EventTypeNormal, "RuleDeleted",
+			fmt.Sprintf("Rule %s deleted on all target clusters", rule.Name))
+	}
+	return nil
 }
 
-// GetRuleConfigMapsForCluster returns ConfigMap references for all rules in a cluster
-// This is used by the WazuhCluster reconciler to mount rule ConfigMaps to manager pods
+// ListRulesForCluster lists all WazuhRules targeting a specific cluster (cross-NS).
+func (r *RuleReconciler) ListRulesForCluster(ctx context.Context, clusterName, namespace string) ([]wazuhv1.WazuhRule, error) {
+	ruleList := &wazuhv1.WazuhRuleList{}
+	if err := r.List(ctx, ruleList); err != nil {
+		return nil, fmt.Errorf("failed to list WazuhRules: %w", err)
+	}
+
+	var matching []wazuhv1.WazuhRule
+	for _, rule := range ruleList.Items {
+		for _, ref := range rule.Spec.ClusterRefs {
+			if ref.Name == clusterName && ref.Namespace == namespace {
+				matching = append(matching, rule)
+				break
+			}
+		}
+	}
+	return matching, nil
+}
+
+// GetRuleConfigMapsForCluster returns ConfigMap references for all rules on a cluster.
 func (r *RuleReconciler) GetRuleConfigMapsForCluster(ctx context.Context, clusterName, namespace string) ([]RuleConfigMapInfo, string, error) {
 	rules, err := r.ListRulesForCluster(ctx, clusterName, namespace)
 	if err != nil {
@@ -366,31 +423,32 @@ func (r *RuleReconciler) GetRuleConfigMapsForCluster(ctx context.Context, cluste
 	var ruleContents []string
 
 	for _, rule := range rules {
-		// Only include rules that are successfully applied
-		if rule.Status.Phase != wazuhv1.RulePhaseApplied {
-			continue
+		// Find the per-cluster status to confirm the rule is applied on this cluster
+		applied := false
+		for _, st := range rule.Status.ClusterStatuses {
+			if st.Name == clusterName && st.Namespace == namespace && st.Phase == wazuhv1.RulePhaseApplied && st.ConfigMapRef != nil {
+				applied = true
+				break
+			}
 		}
-		if rule.Status.ConfigMapRef == nil {
+		if !applied {
 			continue
 		}
 
 		configMaps = append(configMaps, RuleConfigMapInfo{
-			ConfigMapName: rule.Status.ConfigMapRef.Name,
+			ConfigMapName: ruleConfigMapName(rule.Namespace, rule.Name),
 			FileName:      fmt.Sprintf("%s.xml", rule.Spec.RuleName),
 			RuleName:      rule.Name,
 		})
 		ruleContents = append(ruleContents, rule.Spec.Rules)
 	}
 
-	// Sort for consistent ordering
 	sort.Slice(configMaps, func(i, j int) bool {
 		return configMaps[i].RuleName < configMaps[j].RuleName
 	})
 	sort.Strings(ruleContents)
 
-	// Compute hash of all rule contents for change detection
 	hash := computeRulesHash(ruleContents)
-
 	return configMaps, hash, nil
 }
 

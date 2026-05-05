@@ -181,8 +181,8 @@ func (v *DecoderValidator) checkDuplicateDecoderNames(ctx context.Context, decod
 			continue
 		}
 
-		// Skip decoders for different clusters
-		if existingDecoder.Spec.ClusterRef.Name != decoder.Spec.ClusterRef.Name {
+		// Skip decoders whose target clusters don't overlap.
+		if !overlapsClusterRefs(existingDecoder.Spec.ClusterRefs, decoder.Spec.ClusterRefs) {
 			continue
 		}
 

@@ -205,8 +205,8 @@ func (v *RuleValidator) checkDuplicateRuleIDs(ctx context.Context, rule *wazuhv1
 			continue
 		}
 
-		// Skip rules for different clusters
-		if existingRule.Spec.ClusterRef.Name != rule.Spec.ClusterRef.Name {
+		// Skip rules whose target clusters don't overlap.
+		if !overlapsClusterRefs(existingRule.Spec.ClusterRefs, rule.Spec.ClusterRefs) {
 			continue
 		}
 

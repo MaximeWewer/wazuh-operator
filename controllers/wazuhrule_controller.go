@@ -180,27 +180,25 @@ func (r *WazuhRuleReconciler) findRulesForCluster(ctx context.Context, obj clien
 		return nil
 	}
 
-	// List all WazuhRules in the cluster's namespace
+	// List WazuhRules across all namespaces — they can target any cluster.
 	ruleList := &wazuhv1.WazuhRuleList{}
-	if err := r.List(ctx, ruleList, client.InNamespace(cluster.Namespace)); err != nil {
+	if err := r.List(ctx, ruleList); err != nil {
 		log.Error(err, "Failed to list WazuhRules for cluster", "cluster", cluster.Name)
 		return nil
 	}
 
 	var requests []reconcile.Request
 	for _, rule := range ruleList.Items {
-		// Check if this rule references the changed cluster
-		clusterNamespace := rule.Spec.ClusterRef.Namespace
-		if clusterNamespace == "" {
-			clusterNamespace = rule.Namespace
-		}
-		if rule.Spec.ClusterRef.Name == cluster.Name && clusterNamespace == cluster.Namespace {
-			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      rule.Name,
-					Namespace: rule.Namespace,
-				},
-			})
+		for _, ref := range rule.Spec.ClusterRefs {
+			if ref.Name == cluster.Name && ref.Namespace == cluster.Namespace {
+				requests = append(requests, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      rule.Name,
+						Namespace: rule.Namespace,
+					},
+				})
+				break
+			}
 		}
 	}
 
