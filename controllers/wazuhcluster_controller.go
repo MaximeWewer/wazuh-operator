@@ -2139,33 +2139,30 @@ func (r *WazuhClusterReconciler) findClustersForDecoder(ctx context.Context, obj
 	}
 }
 
-// findClustersForAgentGroup finds all WazuhClusters that a WazuhAgentGroup references via clusterRef
-// Used by the watch handler to enqueue clusters when agent group files change
+// findClustersForAgentGroup finds every WazuhCluster targeted by a WazuhAgentGroup.
+// Returns one reconcile request per cluster ref so each target STS picks up the
+// new file ConfigMap.
 func (r *WazuhClusterReconciler) findClustersForAgentGroup(ctx context.Context, obj client.Object) []ctrl.Request {
 	group, ok := obj.(*wazuhv1.WazuhAgentGroup)
 	if !ok {
 		return []ctrl.Request{}
 	}
 
-	// Only trigger cluster reconcile when files are present (otherwise no volume changes needed)
+	// Skip when no files are defined: agent.conf-only changes don't require an STS rollout.
 	if len(group.Spec.Files) == 0 {
 		return []ctrl.Request{}
 	}
 
-	// Determine the namespace of the target cluster
-	namespace := group.Spec.ClusterRef.Namespace
-	if namespace == "" {
-		namespace = group.Namespace
-	}
-
-	return []ctrl.Request{
-		{
+	requests := make([]ctrl.Request, 0, len(group.Spec.ClusterRefs))
+	for _, ref := range group.Spec.ClusterRefs {
+		requests = append(requests, ctrl.Request{
 			NamespacedName: types.NamespacedName{
-				Name:      group.Spec.ClusterRef.Name,
-				Namespace: namespace,
+				Name:      ref.Name,
+				Namespace: ref.Namespace,
 			},
-		},
+		})
 	}
+	return requests
 }
 
 // findClustersForAuthConfig finds the WazuhCluster that an OpenSearchAuthConfig

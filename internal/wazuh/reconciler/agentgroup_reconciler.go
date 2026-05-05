@@ -32,7 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -52,6 +51,13 @@ const (
 
 	// Condition types for agent groups
 	ConditionTypeGroupSynced = "GroupSynced"
+
+	// Labels used to identify ConfigMaps owned by a WazuhAgentGroup CR.
+	// Cross-namespace owner references are forbidden by Kubernetes, so
+	// cleanup is handled via finalizer + label selector instead.
+	labelAgentGroupCROwnerName      = "resources.wazuh.com/agentgroup-cr"
+	labelAgentGroupCROwnerNamespace = "resources.wazuh.com/agentgroup-cr-namespace"
+	labelAgentGroupCluster          = "resources.wazuh.com/cluster"
 )
 
 // AgentGroupReconciler handles reconciliation of Wazuh Agent Groups
@@ -70,12 +76,15 @@ func NewAgentGroupReconciler(c client.Client, scheme *runtime.Scheme, recorder r
 	}
 }
 
-// Reconcile reconciles the WazuhAgentGroup
+// Reconcile reconciles the WazuhAgentGroup across all target clusters.
+// Each ClusterRef is processed independently; failure on one cluster does
+// not block others. The aggregate Status.Phase reflects the worst case.
 func (r *AgentGroupReconciler) Reconcile(ctx context.Context, group *wazuhv1.WazuhAgentGroup) (err error) {
 	ctx, span := telemetry.Tracer().Start(ctx, "AgentGroupReconciler.Reconcile",
 		telemetry.WithAttributes(
 			attribute.String("resource.name", group.Name),
 			attribute.String("resource.namespace", group.Namespace),
+			attribute.Int("resource.clusterRefs", len(group.Spec.ClusterRefs)),
 		))
 	defer span.End()
 	defer func() {
@@ -85,206 +94,249 @@ func (r *AgentGroupReconciler) Reconcile(ctx context.Context, group *wazuhv1.Waz
 	}()
 
 	log := logf.FromContext(ctx)
+	groupName := group.ResolveGroupName()
 
-	// Initialize status if needed
 	if group.Status.Phase == "" {
 		group.Status.Phase = wazuhv1.AgentGroupPhasePending
 	}
 
-	groupName := group.ResolveGroupName()
-
-	// Verify referenced cluster exists
-	cluster := &wazuhv1.WazuhCluster{}
-	clusterNamespace := group.Spec.ClusterRef.Namespace
-	if clusterNamespace == "" {
-		clusterNamespace = group.Namespace
+	// Index existing per-cluster statuses by (name,namespace) for in-place updates.
+	existingByKey := make(map[string]wazuhv1.AgentGroupClusterStatus, len(group.Status.ClusterStatuses))
+	for _, s := range group.Status.ClusterStatuses {
+		existingByKey[clusterKey(s.Name, s.Namespace)] = s
 	}
-	clusterKey := types.NamespacedName{Name: group.Spec.ClusterRef.Name, Namespace: clusterNamespace}
-	if err := r.Get(ctx, clusterKey, cluster); err != nil {
-		if errors.IsNotFound(err) {
-			log.Info("Referenced WazuhCluster not found", "cluster", clusterKey)
-			r.setCondition(group, ConditionTypeReady, metav1.ConditionFalse, "ClusterNotFound",
-				fmt.Sprintf("Referenced WazuhCluster %s not found", clusterKey))
-			group.Status.Phase = wazuhv1.AgentGroupPhasePending
-			if r.Recorder != nil {
-				r.Recorder.Event(group, corev1.EventTypeWarning, "ClusterNotFound",
-					fmt.Sprintf("Referenced WazuhCluster %s not found", clusterKey))
+
+	newStatuses := make([]wazuhv1.AgentGroupClusterStatus, 0, len(group.Spec.ClusterRefs))
+	anyAPIUnavailable := false
+	anyFailed := false
+	allReady := true
+
+	for _, ref := range group.Spec.ClusterRefs {
+		st := existingByKey[clusterKey(ref.Name, ref.Namespace)]
+		st.Name = ref.Name
+		st.Namespace = ref.Namespace
+
+		clusterErr := r.reconcileForCluster(ctx, group, groupName, ref, &st)
+		if clusterErr != nil {
+			if IsAPIUnavailable(clusterErr) {
+				anyAPIUnavailable = true
+			} else {
+				anyFailed = true
 			}
-			return r.updateStatus(ctx, group)
+			log.Error(clusterErr, "Failed to reconcile agent group on cluster",
+				"cluster", ref.Name, "clusterNamespace", ref.Namespace)
 		}
-		return fmt.Errorf("failed to get referenced WazuhCluster %s: %w", clusterKey, err)
-	}
-
-	// Build Wazuh API client
-	apiClient, err := r.buildAPIClient(ctx, cluster)
-	if err != nil {
-		group.Status.Phase = wazuhv1.AgentGroupPhasePending
-		r.setCondition(group, ConditionTypeReady, metav1.ConditionFalse, "APIUnavailable",
-			fmt.Sprintf("Wazuh API unavailable: %v", err))
-		group.Status.Message = fmt.Sprintf("Wazuh API unavailable: %v", err)
-		_ = r.updateStatus(ctx, group)
-		return &WazuhAPIUnavailableError{Err: err}
-	}
-
-	// Check API health
-	if !apiClient.IsHealthy(ctx) {
-		group.Status.Phase = wazuhv1.AgentGroupPhasePending
-		r.setCondition(group, ConditionTypeReady, metav1.ConditionFalse, "APIUnavailable",
-			"Wazuh API is not healthy")
-		group.Status.Message = "Wazuh API is not healthy"
-		_ = r.updateStatus(ctx, group)
-		return &WazuhAPIUnavailableError{Err: fmt.Errorf("wazuh API health check failed")}
-	}
-
-	// Check if group exists
-	groupInfo, err := apiClient.GetGroup(ctx, groupName)
-	if err != nil {
-		// Treat errors as API unavailable
-		group.Status.Phase = wazuhv1.AgentGroupPhasePending
-		r.setCondition(group, ConditionTypeReady, metav1.ConditionFalse, "APIError",
-			fmt.Sprintf("Failed to query group: %v", err))
-		group.Status.Message = fmt.Sprintf("Failed to query group: %v", err)
-		_ = r.updateStatus(ctx, group)
-		return &WazuhAPIUnavailableError{Err: err}
-	}
-
-	// Create group if it doesn't exist
-	if groupInfo == nil {
-		log.Info("Creating agent group", "group", groupName)
-		if err := apiClient.CreateGroup(ctx, groupName); err != nil {
-			group.Status.Phase = wazuhv1.AgentGroupPhaseFailed
-			r.setCondition(group, ConditionTypeGroupSynced, metav1.ConditionFalse, "CreateFailed",
-				fmt.Sprintf("Failed to create group: %v", err))
-			r.setCondition(group, ConditionTypeReady, metav1.ConditionFalse, "CreateFailed",
-				"Failed to create agent group")
-			group.Status.Message = fmt.Sprintf("Failed to create group: %v", err)
-			if r.Recorder != nil {
-				r.Recorder.Event(group, corev1.EventTypeWarning, "CreateFailed", err.Error())
-			}
-			return r.updateStatus(ctx, group)
+		if st.Phase != wazuhv1.AgentGroupPhaseReady {
+			allReady = false
 		}
-		if r.Recorder != nil {
-			r.Recorder.Event(group, corev1.EventTypeNormal, "GroupCreated",
-				fmt.Sprintf("Agent group %s created", groupName))
-		}
+		newStatuses = append(newStatuses, st)
 	}
 
-	// Push agent.conf if specified
-	if group.Spec.AgentConf != "" {
-		specHash := computeSpecHash(group)
-		if specHash != group.Status.LastAppliedHash {
-			log.Info("Updating agent group configuration", "group", groupName)
-			if err := apiClient.UpdateGroupConfiguration(ctx, groupName, group.Spec.AgentConf); err != nil {
-				group.Status.Phase = wazuhv1.AgentGroupPhaseFailed
-				r.setCondition(group, ConditionTypeGroupSynced, metav1.ConditionFalse, "ConfigUpdateFailed",
-					fmt.Sprintf("Failed to update group configuration: %v", err))
-				r.setCondition(group, ConditionTypeReady, metav1.ConditionFalse, "ConfigUpdateFailed",
-					"Failed to update agent.conf")
-				group.Status.Message = fmt.Sprintf("Failed to update configuration: %v", err)
-				if r.Recorder != nil {
-					r.Recorder.Event(group, corev1.EventTypeWarning, "ConfigUpdateFailed", err.Error())
-				}
-				return r.updateStatus(ctx, group)
-			}
-			group.Status.LastAppliedHash = specHash
-			if r.Recorder != nil {
-				r.Recorder.Event(group, corev1.EventTypeNormal, "ConfigUpdated",
-					fmt.Sprintf("Agent group %s configuration updated", groupName))
-			}
+	sort.Slice(newStatuses, func(i, j int) bool {
+		if newStatuses[i].Namespace != newStatuses[j].Namespace {
+			return newStatuses[i].Namespace < newStatuses[j].Namespace
 		}
-	}
+		return newStatuses[i].Name < newStatuses[j].Name
+	})
+	group.Status.ClusterStatuses = newStatuses
 
-	// Reconcile files ConfigMap
-	if err := r.reconcileFilesConfigMap(ctx, group); err != nil {
-		log.Error(err, "Failed to reconcile agent group files ConfigMap")
+	switch {
+	case anyFailed:
 		group.Status.Phase = wazuhv1.AgentGroupPhaseFailed
-		r.setCondition(group, ConditionTypeReady, metav1.ConditionFalse, "FilesConfigMapFailed",
-			fmt.Sprintf("Failed to reconcile files ConfigMap: %v", err))
-		group.Status.Message = fmt.Sprintf("Failed to reconcile files ConfigMap: %v", err)
-		return r.updateStatus(ctx, group)
+		r.setCondition(group, ConditionTypeReady, metav1.ConditionFalse, "ClusterFailures",
+			"One or more target clusters failed to sync")
+		group.Status.Message = "One or more target clusters failed to sync"
+	case anyAPIUnavailable:
+		group.Status.Phase = wazuhv1.AgentGroupPhasePending
+		r.setCondition(group, ConditionTypeReady, metav1.ConditionFalse, "APIUnavailable",
+			"One or more Wazuh APIs are unavailable")
+		group.Status.Message = "Waiting for Wazuh API availability on one or more clusters"
+	case allReady:
+		group.Status.Phase = wazuhv1.AgentGroupPhaseReady
+		r.setCondition(group, ConditionTypeGroupSynced, metav1.ConditionTrue, "Synced",
+			fmt.Sprintf("Agent group %s synced on all target clusters", groupName))
+		r.setCondition(group, ConditionTypeReady, metav1.ConditionTrue, "Ready",
+			fmt.Sprintf("Agent group %s is ready on all target clusters", groupName))
+		group.Status.Message = ""
+	default:
+		group.Status.Phase = wazuhv1.AgentGroupPhasePending
 	}
 
-	// Refresh group info to get agent count (best-effort)
-	groupInfo, err = apiClient.GetGroup(ctx, groupName)
-	if err == nil && groupInfo != nil {
-		group.Status.AgentCount = groupInfo.Count
-	}
-
-	// Set ready — only update LastSyncTime and emit event when transitioning to ready
-	wasReady := group.Status.Phase == wazuhv1.AgentGroupPhaseReady &&
-		group.Status.ObservedGeneration == group.Generation
-	group.Status.Phase = wazuhv1.AgentGroupPhaseReady
-	r.setCondition(group, ConditionTypeGroupSynced, metav1.ConditionTrue, "Synced",
-		fmt.Sprintf("Agent group %s is synced", groupName))
-	r.setCondition(group, ConditionTypeReady, metav1.ConditionTrue, "Ready",
-		fmt.Sprintf("Agent group %s is ready", groupName))
 	group.Status.ObservedGeneration = group.Generation
-	group.Status.Message = ""
-
-	if !wasReady {
-		now := metav1.Now()
-		group.Status.LastSyncTime = &now
-		if r.Recorder != nil {
-			r.Recorder.Event(group, corev1.EventTypeNormal, "Synced",
-				fmt.Sprintf("Agent group %s synced successfully", groupName))
-		}
-	}
 
 	if err := r.updateStatus(ctx, group); err != nil {
 		return fmt.Errorf("failed to update agent group status: %w", err)
 	}
 
-	// Record metrics
 	metrics.RecordReconciliation("WazuhAgentGroup", group.Namespace, "success", 0)
 
+	if anyAPIUnavailable && !anyFailed {
+		// Surface API-unavailability so the controller requeues with backoff
+		return &WazuhAPIUnavailableError{Err: fmt.Errorf("one or more wazuh APIs unavailable")}
+	}
+	if anyFailed {
+		return fmt.Errorf("one or more target clusters failed to sync")
+	}
 	log.Info("Agent group reconciliation completed", "name", group.Name, "group", groupName)
 	return nil
 }
 
-// Delete handles cleanup when an agent group is deleted
-func (r *AgentGroupReconciler) Delete(ctx context.Context, group *wazuhv1.WazuhAgentGroup) error {
-	log := logf.FromContext(ctx)
-	groupName := group.ResolveGroupName()
+// reconcileForCluster reconciles the agent group on a single target cluster.
+// Per-cluster status is mutated in place. Returns an error so the caller can
+// classify it (API-unavailable vs. failure) for aggregate status.
+func (r *AgentGroupReconciler) reconcileForCluster(
+	ctx context.Context,
+	group *wazuhv1.WazuhAgentGroup,
+	groupName string,
+	ref wazuhv1.WazuhClusterRef,
+	st *wazuhv1.AgentGroupClusterStatus,
+) error {
+	log := logf.FromContext(ctx).WithValues("cluster", ref.Name, "clusterNamespace", ref.Namespace)
 
-	// The "default" group cannot be deleted from Wazuh
-	if groupName == "default" {
-		log.Info("Skipping deletion of default agent group")
-		if r.Recorder != nil {
-			r.Recorder.Event(group, corev1.EventTypeNormal, "DeleteSkipped",
-				"Default agent group cannot be deleted from Wazuh")
-		}
-		return nil
-	}
-
-	// Resolve cluster and build API client (best-effort)
 	cluster := &wazuhv1.WazuhCluster{}
-	clusterNamespace := group.Spec.ClusterRef.Namespace
-	if clusterNamespace == "" {
-		clusterNamespace = group.Namespace
-	}
-	clusterKey := types.NamespacedName{Name: group.Spec.ClusterRef.Name, Namespace: clusterNamespace}
-	if err := r.Get(ctx, clusterKey, cluster); err != nil {
-		log.Info("Referenced WazuhCluster not found during deletion, skipping API cleanup", "cluster", clusterKey)
-		return nil
+	clusterKeyNN := types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace}
+	if err := r.Get(ctx, clusterKeyNN, cluster); err != nil {
+		if errors.IsNotFound(err) {
+			st.Phase = wazuhv1.AgentGroupPhasePending
+			st.Message = fmt.Sprintf("WazuhCluster %s not found", clusterKeyNN)
+			if r.Recorder != nil {
+				r.Recorder.Event(group, corev1.EventTypeWarning, "ClusterNotFound", st.Message)
+			}
+			return nil
+		}
+		st.Phase = wazuhv1.AgentGroupPhaseFailed
+		st.Message = fmt.Sprintf("failed to get WazuhCluster: %v", err)
+		return err
 	}
 
 	apiClient, err := r.buildAPIClient(ctx, cluster)
 	if err != nil {
-		log.Info("Wazuh API unavailable during deletion, skipping API cleanup", "error", err)
-		return nil
+		st.Phase = wazuhv1.AgentGroupPhasePending
+		st.Message = fmt.Sprintf("Wazuh API unavailable: %v", err)
+		return &WazuhAPIUnavailableError{Err: err}
 	}
 
-	if err := apiClient.DeleteGroup(ctx, groupName); err != nil {
-		log.Error(err, "Failed to delete agent group from Wazuh API, proceeding with finalizer removal", "group", groupName)
-	} else {
-		log.Info("Agent group deleted from Wazuh API", "group", groupName)
+	if !apiClient.IsHealthy(ctx) {
+		st.Phase = wazuhv1.AgentGroupPhasePending
+		st.Message = "Wazuh API is not healthy"
+		return &WazuhAPIUnavailableError{Err: fmt.Errorf("wazuh API health check failed")}
+	}
+
+	groupInfo, err := apiClient.GetGroup(ctx, groupName)
+	if err != nil {
+		st.Phase = wazuhv1.AgentGroupPhasePending
+		st.Message = fmt.Sprintf("Failed to query group: %v", err)
+		return &WazuhAPIUnavailableError{Err: err}
+	}
+
+	if groupInfo == nil {
+		log.Info("Creating agent group", "group", groupName)
+		if err := apiClient.CreateGroup(ctx, groupName); err != nil {
+			st.Phase = wazuhv1.AgentGroupPhaseFailed
+			st.Message = fmt.Sprintf("Failed to create group: %v", err)
+			if r.Recorder != nil {
+				r.Recorder.Event(group, corev1.EventTypeWarning, "CreateFailed", err.Error())
+			}
+			return err
+		}
+		if r.Recorder != nil {
+			r.Recorder.Event(group, corev1.EventTypeNormal, "GroupCreated",
+				fmt.Sprintf("Agent group %s created on %s/%s", groupName, ref.Namespace, ref.Name))
+		}
+	}
+
+	if group.Spec.AgentConf != "" {
+		specHash := computeSpecHash(group)
+		if specHash != st.LastAppliedHash {
+			log.Info("Updating agent group configuration", "group", groupName)
+			if err := apiClient.UpdateGroupConfiguration(ctx, groupName, group.Spec.AgentConf); err != nil {
+				st.Phase = wazuhv1.AgentGroupPhaseFailed
+				st.Message = fmt.Sprintf("Failed to update configuration: %v", err)
+				if r.Recorder != nil {
+					r.Recorder.Event(group, corev1.EventTypeWarning, "ConfigUpdateFailed", err.Error())
+				}
+				return err
+			}
+			st.LastAppliedHash = specHash
+			if r.Recorder != nil {
+				r.Recorder.Event(group, corev1.EventTypeNormal, "ConfigUpdated",
+					fmt.Sprintf("Agent group %s configuration updated on %s/%s", groupName, ref.Namespace, ref.Name))
+			}
+		}
+	}
+
+	if err := r.reconcileFilesConfigMap(ctx, group, ref); err != nil {
+		st.Phase = wazuhv1.AgentGroupPhaseFailed
+		st.Message = fmt.Sprintf("Failed to reconcile files ConfigMap: %v", err)
+		return err
+	}
+
+	groupInfo, err = apiClient.GetGroup(ctx, groupName)
+	if err == nil && groupInfo != nil {
+		st.AgentCount = groupInfo.Count
+	}
+
+	wasReady := st.Phase == wazuhv1.AgentGroupPhaseReady
+	st.Phase = wazuhv1.AgentGroupPhaseReady
+	st.Message = ""
+	if !wasReady {
+		now := metav1.Now()
+		st.LastSyncTime = &now
+		if r.Recorder != nil {
+			r.Recorder.Event(group, corev1.EventTypeNormal, "Synced",
+				fmt.Sprintf("Agent group %s synced on %s/%s", groupName, ref.Namespace, ref.Name))
+		}
+	}
+	return nil
+}
+
+// Delete handles cleanup when an agent group is deleted.
+// Iterates every target cluster: deletes the group via API (best-effort) and
+// removes the file ConfigMap in the cluster's namespace.
+func (r *AgentGroupReconciler) Delete(ctx context.Context, group *wazuhv1.WazuhAgentGroup) error {
+	log := logf.FromContext(ctx)
+	groupName := group.ResolveGroupName()
+
+	for _, ref := range group.Spec.ClusterRefs {
+		// Best-effort API DeleteGroup
+		if groupName != "default" {
+			cluster := &wazuhv1.WazuhCluster{}
+			clusterKeyNN := types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace}
+			if err := r.Get(ctx, clusterKeyNN, cluster); err != nil {
+				log.Info("Cluster not found during delete, skipping API cleanup", "cluster", clusterKeyNN)
+			} else if apiClient, err := r.buildAPIClient(ctx, cluster); err != nil {
+				log.Info("Wazuh API unavailable during delete, skipping API cleanup",
+					"cluster", clusterKeyNN, "error", err)
+			} else if err := apiClient.DeleteGroup(ctx, groupName); err != nil {
+				log.Error(err, "Failed to delete agent group from Wazuh API, continuing",
+					"cluster", clusterKeyNN, "group", groupName)
+			} else {
+				log.Info("Agent group deleted from Wazuh API",
+					"cluster", clusterKeyNN, "group", groupName)
+			}
+		} else {
+			log.Info("Skipping deletion of default agent group from Wazuh API")
+		}
+
+		// Delete file ConfigMap in cluster's namespace (cross-NS, no ownerRef).
+		cmName := agentGroupFilesConfigMapName(group.Namespace, group.Name)
+		cm := &corev1.ConfigMap{}
+		err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: ref.Namespace}, cm)
+		if err == nil {
+			if err := r.Client.Delete(ctx, cm); err != nil && !errors.IsNotFound(err) {
+				log.Error(err, "Failed to delete agent group files ConfigMap",
+					"configMap", cmName, "namespace", ref.Namespace)
+			}
+		} else if !errors.IsNotFound(err) {
+			log.Error(err, "Failed to lookup agent group files ConfigMap",
+				"configMap", cmName, "namespace", ref.Namespace)
+		}
 	}
 
 	if r.Recorder != nil {
 		r.Recorder.Event(group, corev1.EventTypeNormal, "GroupDeleted",
-			fmt.Sprintf("Agent group %s deleted", groupName))
+			fmt.Sprintf("Agent group %s deleted on all target clusters", groupName))
 	}
-
 	return nil
 }
 
@@ -379,7 +431,6 @@ func computeSpecHash(group *wazuhv1.WazuhAgentGroup) string {
 	h.Write([]byte(group.ResolveGroupName()))
 	h.Write([]byte(group.Spec.AgentConf))
 	h.Write([]byte(group.Spec.Description))
-	// Include files in hash for drift detection
 	if len(group.Spec.Files) > 0 {
 		keys := make([]string, 0, len(group.Spec.Files))
 		for k := range group.Spec.Files {
@@ -394,18 +445,29 @@ func computeSpecHash(group *wazuhv1.WazuhAgentGroup) string {
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
-// agentGroupFilesConfigMapName returns the ConfigMap name for agent group files
-func agentGroupFilesConfigMapName(crName string) string {
-	return crName + "-agentgroup-files"
+// agentGroupFilesConfigMapName returns the ConfigMap name for an agent group's files.
+// The CR namespace is included so two groups with the same name in different
+// namespaces don't collide when projecting onto the same target cluster.
+func agentGroupFilesConfigMapName(crNamespace, crName string) string {
+	return fmt.Sprintf("%s-%s-agentgroup-files", crNamespace, crName)
 }
 
-// reconcileFilesConfigMap creates/updates a ConfigMap for agent group files
-func (r *AgentGroupReconciler) reconcileFilesConfigMap(ctx context.Context, group *wazuhv1.WazuhAgentGroup) error {
-	log := logf.FromContext(ctx)
-	cmName := agentGroupFilesConfigMapName(group.Name)
-	cmKey := types.NamespacedName{Name: cmName, Namespace: group.Namespace}
+func clusterKey(name, namespace string) string {
+	return namespace + "/" + name
+}
 
-	// If files is empty, delete ConfigMap if it exists
+// reconcileFilesConfigMap creates/updates the file ConfigMap for one target cluster.
+// The ConfigMap lives in the target cluster's namespace; cleanup is finalizer-driven
+// because cross-namespace owner references are forbidden.
+func (r *AgentGroupReconciler) reconcileFilesConfigMap(
+	ctx context.Context,
+	group *wazuhv1.WazuhAgentGroup,
+	ref wazuhv1.WazuhClusterRef,
+) error {
+	log := logf.FromContext(ctx)
+	cmName := agentGroupFilesConfigMapName(group.Namespace, group.Name)
+	cmKey := types.NamespacedName{Name: cmName, Namespace: ref.Namespace}
+
 	if len(group.Spec.Files) == 0 {
 		existing := &corev1.ConfigMap{}
 		if err := r.Get(ctx, cmKey, existing); err != nil {
@@ -414,42 +476,38 @@ func (r *AgentGroupReconciler) reconcileFilesConfigMap(ctx context.Context, grou
 			}
 			return fmt.Errorf("failed to check for existing files ConfigMap: %w", err)
 		}
-		log.Info("Deleting agent group files ConfigMap (files removed from spec)", "configMap", cmName)
+		log.Info("Deleting agent group files ConfigMap (files removed from spec)",
+			"configMap", cmName, "namespace", ref.Namespace)
 		return r.Client.Delete(ctx, existing)
 	}
-
-	clusterName := group.Spec.ClusterRef.Name
 
 	desired := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cmName,
-			Namespace: group.Namespace,
+			Namespace: ref.Namespace,
 			Labels: map[string]string{
-				constants.LabelManagedBy:                   constants.OperatorName,
-				"resources.wazuh.com/agentgroup":           group.Name,
-				"resources.wazuh.com/cluster":              clusterName,
+				constants.LabelManagedBy:          constants.OperatorName,
+				labelAgentGroupCROwnerName:        group.Name,
+				labelAgentGroupCROwnerNamespace:   group.Namespace,
+				labelAgentGroupCluster:            ref.Name,
 			},
 		},
 		Data: group.Spec.Files,
 	}
 
-	// Set owner reference for garbage collection
-	if err := controllerutil.SetControllerReference(group, desired, r.Scheme); err != nil {
-		return fmt.Errorf("failed to set owner reference on files ConfigMap: %w", err)
-	}
-
 	existing := &corev1.ConfigMap{}
 	if err := r.Get(ctx, cmKey, existing); err != nil {
 		if errors.IsNotFound(err) {
-			log.Info("Creating agent group files ConfigMap", "configMap", cmName)
+			log.Info("Creating agent group files ConfigMap",
+				"configMap", cmName, "namespace", ref.Namespace)
 			return r.Create(ctx, desired)
 		}
 		return fmt.Errorf("failed to get files ConfigMap: %w", err)
 	}
 
-	// Update only if data or labels changed
 	if !mapsEqual(existing.Data, desired.Data) || !mapsEqual(existing.Labels, desired.Labels) {
-		log.Info("Updating agent group files ConfigMap", "configMap", cmName)
+		log.Info("Updating agent group files ConfigMap",
+			"configMap", cmName, "namespace", ref.Namespace)
 		existing.Data = desired.Data
 		existing.Labels = desired.Labels
 		return r.Update(ctx, existing)
@@ -487,11 +545,9 @@ func mapsEqualBytes(a, b map[string][]byte) bool {
 // fields from the existing Service into the desired Service so that
 // apiequality.Semantic.DeepEqual does not report false diffs.
 func preserveServiceDefaults(desired, existing *corev1.Service) {
-	// Immutable fields assigned by the API server
 	desired.Spec.ClusterIP = existing.Spec.ClusterIP
 	desired.Spec.ClusterIPs = existing.Spec.ClusterIPs
 
-	// Fields defaulted by the API server when not explicitly set
 	if desired.Spec.IPFamilyPolicy == nil {
 		desired.Spec.IPFamilyPolicy = existing.Spec.IPFamilyPolicy
 	}
@@ -514,7 +570,6 @@ func preserveServiceDefaults(desired, existing *corev1.Service) {
 		desired.Spec.AllocateLoadBalancerNodePorts = existing.Spec.AllocateLoadBalancerNodePorts
 	}
 
-	// Server-assigned NodePort values
 	for i := range desired.Spec.Ports {
 		if desired.Spec.Ports[i].NodePort == 0 {
 			for _, ep := range existing.Spec.Ports {
@@ -534,11 +589,11 @@ type AgentGroupFileInfo struct {
 	FileNames     []string
 }
 
-// GetAgentGroupFilesForCluster returns file ConfigMap references for all agent groups in a cluster
-// This is used by the WazuhCluster reconciler to mount agent group file ConfigMaps to manager pods
+// GetAgentGroupFilesForCluster returns file ConfigMap references for all agent groups
+// targeting a given cluster. Lists across all namespaces (cross-NS support).
 func (r *AgentGroupReconciler) GetAgentGroupFilesForCluster(ctx context.Context, clusterName, namespace string) ([]AgentGroupFileInfo, string, error) {
 	groupList := &wazuhv1.WazuhAgentGroupList{}
-	if err := r.List(ctx, groupList, client.InNamespace(namespace)); err != nil {
+	if err := r.List(ctx, groupList); err != nil {
 		return nil, "", fmt.Errorf("failed to list agent groups: %w", err)
 	}
 
@@ -546,15 +601,17 @@ func (r *AgentGroupReconciler) GetAgentGroupFilesForCluster(ctx context.Context,
 	var allContents []string
 
 	for _, group := range groupList.Items {
-		// Match cluster reference
-		clusterNamespace := group.Spec.ClusterRef.Namespace
-		if clusterNamespace == "" {
-			clusterNamespace = group.Namespace
+		// Match if any clusterRef points to this cluster
+		matched := false
+		for _, ref := range group.Spec.ClusterRefs {
+			if ref.Name == clusterName && ref.Namespace == namespace {
+				matched = true
+				break
+			}
 		}
-		if group.Spec.ClusterRef.Name != clusterName || clusterNamespace != namespace {
+		if !matched {
 			continue
 		}
-		// Skip groups without files
 		if len(group.Spec.Files) == 0 {
 			continue
 		}
@@ -566,24 +623,21 @@ func (r *AgentGroupReconciler) GetAgentGroupFilesForCluster(ctx context.Context,
 		sort.Strings(fileNames)
 
 		fileInfos = append(fileInfos, AgentGroupFileInfo{
-			ConfigMapName: agentGroupFilesConfigMapName(group.Name),
+			ConfigMapName: agentGroupFilesConfigMapName(group.Namespace, group.Name),
 			GroupName:     group.ResolveGroupName(),
 			FileNames:     fileNames,
 		})
 
-		// Collect file contents for hash computation
 		for _, fn := range fileNames {
 			allContents = append(allContents, group.Spec.Files[fn])
 		}
 	}
 
-	// Sort for consistent ordering
 	sort.Slice(fileInfos, func(i, j int) bool {
 		return fileInfos[i].GroupName < fileInfos[j].GroupName
 	})
 	sort.Strings(allContents)
 
-	// Compute combined hash
 	h := sha256.New()
 	for _, content := range allContents {
 		h.Write([]byte(content))

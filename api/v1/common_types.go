@@ -28,6 +28,22 @@ type WazuhClusterReference struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
+// WazuhClusterRef references a WazuhCluster by name and namespace.
+// Both fields are mandatory; cross-namespace references are supported and
+// require the consuming CR to opt into multi-cluster propagation via
+// ClusterRefs lists.
+type WazuhClusterRef struct {
+	// Name of the WazuhCluster resource
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Namespace of the WazuhCluster resource
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Namespace string `json:"namespace"`
+}
+
 // ConfigMapReference references a ConfigMap
 type ConfigMapReference struct {
 	// Name of the ConfigMap

@@ -22,9 +22,16 @@ import (
 
 // WazuhAgentGroupSpec defines the desired state of WazuhAgentGroup
 type WazuhAgentGroupSpec struct {
-	// ClusterRef references the WazuhCluster this agent group belongs to
+	// ClusterRefs lists the WazuhCluster instances the agent group must be
+	// propagated to. Each entry must specify both name and namespace.
+	// The CR itself can live in any namespace; ConfigMaps for files are
+	// created in each target cluster's namespace.
 	// +kubebuilder:validation:Required
-	ClusterRef WazuhClusterReference `json:"clusterRef"`
+	// +kubebuilder:validation:MinItems=1
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+	ClusterRefs []WazuhClusterRef `json:"clusterRefs"`
 
 	// GroupName is the name of the Wazuh agent group.
 	// If empty, defaults to metadata.name.
@@ -48,35 +55,60 @@ type WazuhAgentGroupSpec struct {
 
 // WazuhAgentGroupStatus defines the observed state of WazuhAgentGroup
 type WazuhAgentGroupStatus struct {
-	// Phase of the agent group (Pending, Ready, Failed)
+	// Phase is the aggregate phase across all target clusters.
+	// Ready when every cluster is Ready; Failed if any is Failed; Pending otherwise.
 	// +optional
 	Phase AgentGroupPhase `json:"phase,omitempty"`
 
-	// Conditions represent the latest available observations
+	// Conditions represent the latest aggregate observations
 	// +listType=map
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// LastSyncTime is the last time the group was synced with the Wazuh API
-	// +optional
-	LastSyncTime *metav1.Time `json:"lastSyncTime,omitempty"`
-
 	// ObservedGeneration reflects the generation of the most recently observed spec
 	// +optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 
-	// LastAppliedHash is the hash of the last applied spec for drift detection
-	// +optional
-	LastAppliedHash string `json:"lastAppliedHash,omitempty"`
-
-	// Message provides additional information about the current state
+	// Message provides additional aggregate information about the current state
 	// +optional
 	Message string `json:"message,omitempty"`
 
-	// AgentCount is the number of agents currently in this group
+	// ClusterStatuses reports per-target-cluster reconciliation state.
+	// +listType=map
+	// +listMapKey=name
+	// +listMapKey=namespace
+	// +optional
+	ClusterStatuses []AgentGroupClusterStatus `json:"clusterStatuses,omitempty"`
+}
+
+// AgentGroupClusterStatus reports the reconciliation state for a single target cluster.
+type AgentGroupClusterStatus struct {
+	// Name of the target WazuhCluster
+	Name string `json:"name"`
+
+	// Namespace of the target WazuhCluster
+	Namespace string `json:"namespace"`
+
+	// Phase of this cluster's reconciliation (Pending, Ready, Failed)
+	// +optional
+	Phase AgentGroupPhase `json:"phase,omitempty"`
+
+	// LastSyncTime is the last time this cluster was synced with its Wazuh API
+	// +optional
+	LastSyncTime *metav1.Time `json:"lastSyncTime,omitempty"`
+
+	// LastAppliedHash is the hash of the last spec applied to this cluster
+	// +optional
+	LastAppliedHash string `json:"lastAppliedHash,omitempty"`
+
+	// AgentCount is the number of agents in this group on this cluster
 	// +optional
 	AgentCount int `json:"agentCount,omitempty"`
+
+	// Message provides additional information about this cluster's state
+	// +optional
+	Message string `json:"message,omitempty"`
 }
 
 // AgentGroupPhase represents the phase of the agent group
@@ -93,10 +125,8 @@ const (
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced,shortName=wagentgroup
-// +kubebuilder:printcolumn:name="Cluster",type=string,JSONPath=`.spec.clusterRef.name`
 // +kubebuilder:printcolumn:name="Group",type=string,JSONPath=`.spec.groupName`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
-// +kubebuilder:printcolumn:name="Agents",type=integer,JSONPath=`.status.agentCount`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // WazuhAgentGroup is the Schema for the wazuhagentgroups API

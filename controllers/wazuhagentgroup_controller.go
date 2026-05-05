@@ -180,25 +180,25 @@ func (r *WazuhAgentGroupReconciler) findGroupsForCluster(ctx context.Context, ob
 		return nil
 	}
 
+	// List across all namespaces: WazuhAgentGroups can target clusters in any namespace.
 	groupList := &wazuhv1.WazuhAgentGroupList{}
-	if err := r.List(ctx, groupList, client.InNamespace(cluster.Namespace)); err != nil {
+	if err := r.List(ctx, groupList); err != nil {
 		log.Error(err, "Failed to list WazuhAgentGroups for cluster", "cluster", cluster.Name)
 		return nil
 	}
 
 	var requests []reconcile.Request
 	for _, group := range groupList.Items {
-		clusterNamespace := group.Spec.ClusterRef.Namespace
-		if clusterNamespace == "" {
-			clusterNamespace = group.Namespace
-		}
-		if group.Spec.ClusterRef.Name == cluster.Name && clusterNamespace == cluster.Namespace {
-			requests = append(requests, reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name:      group.Name,
-					Namespace: group.Namespace,
-				},
-			})
+		for _, ref := range group.Spec.ClusterRefs {
+			if ref.Name == cluster.Name && ref.Namespace == cluster.Namespace {
+				requests = append(requests, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      group.Name,
+						Namespace: group.Namespace,
+					},
+				})
+				break
+			}
 		}
 	}
 

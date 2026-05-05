@@ -2,9 +2,16 @@ apiVersion: resources.wazuh.com/v1
 kind: WazuhAgentGroup
 metadata:
   name: linux-servers
+  # The CR can live in any namespace. ConfigMaps for files are created
+  # in each target cluster's namespace via finalizer-based cleanup.
+  namespace: default
 spec:
-  clusterRef:
-    name: wazuh-cluster
+  # One or more target clusters. Both name and namespace are mandatory.
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+    # - name: wazuh-cluster-dr
+    #   namespace: wazuh-dr
   groupName: linux
   description: "Linux servers group"
   agentConf: |
@@ -14,9 +21,9 @@ spec:
         <directories>/etc,/usr/bin,/usr/sbin</directories>
       </syscheck>
     </agent_config>
-  # Optional: extra files placed in /var/ossec/etc/shared/linux/
-  # The Wazuh API only supports agent.conf writes; additional files
-  # are mounted via ConfigMap + SubPath.
+  # Optional: extra files placed in /var/ossec/etc/shared/<groupName>/ on
+  # each target cluster's manager pods. The Wazuh API only supports agent.conf
+  # writes; additional files are mounted via ConfigMap + SubPath.
   files:
     ar.conf: |
       restart-wazuh0 - ar.conf - 0
