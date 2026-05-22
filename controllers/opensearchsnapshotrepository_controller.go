@@ -106,6 +106,7 @@ func (r *OpenSearchSnapshotRepositoryReconciler) Reconcile(ctx context.Context, 
 func (r *OpenSearchSnapshotRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.OpenSearchSnapshotRepository{}).
+		WithEventFilter(eventLogPredicate("OpenSearchSnapshotRepository", &wazuhv1.OpenSearchSnapshotRepository{})).
 		// Watch Secrets that may contain credentials
 		Watches(
 			&corev1.Secret{},

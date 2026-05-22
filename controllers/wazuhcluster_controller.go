@@ -2266,6 +2266,7 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	ctrlBuilder := ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.WazuhCluster{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		WithEventFilter(eventLogPredicate("WazuhCluster", &wazuhv1.WazuhCluster{})).
 		Owns(&appsv1.StatefulSet{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).

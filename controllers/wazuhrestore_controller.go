@@ -116,6 +116,7 @@ func (r *WazuhRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Request
 func (r *WazuhRestoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.WazuhRestore{}).
+		WithEventFilter(eventLogPredicate("WazuhRestore", &wazuhv1.WazuhRestore{})).
 		Owns(&batchv1.Job{}).
 		Watches(
 			&batchv1.Job{},

@@ -105,6 +105,7 @@ func (r *OpenSearchUserReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 func (r *OpenSearchUserReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.OpenSearchUser{}).
+		WithEventFilter(eventLogPredicate("OpenSearchUser", &wazuhv1.OpenSearchUser{})).
 		Named("opensearchuser").
 		Complete(r)
 }

@@ -119,6 +119,7 @@ func (r *WazuhBackupReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 func (r *WazuhBackupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.WazuhBackup{}).
+		WithEventFilter(eventLogPredicate("WazuhBackup", &wazuhv1.WazuhBackup{})).
 		Owns(&batchv1.Job{}).
 		Owns(&batchv1.CronJob{}).
 		Watches(

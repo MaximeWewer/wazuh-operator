@@ -105,6 +105,7 @@ func (r *OpenSearchTenantReconciler) Reconcile(ctx context.Context, req ctrl.Req
 func (r *OpenSearchTenantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.OpenSearchTenant{}).
+		WithEventFilter(eventLogPredicate("OpenSearchTenant", &wazuhv1.OpenSearchTenant{})).
 		Named("opensearchtenant").
 		Complete(r)
 }

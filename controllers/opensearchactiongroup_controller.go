@@ -105,6 +105,7 @@ func (r *OpenSearchActionGroupReconciler) Reconcile(ctx context.Context, req ctr
 func (r *OpenSearchActionGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.OpenSearchActionGroup{}).
+		WithEventFilter(eventLogPredicate("OpenSearchActionGroup", &wazuhv1.OpenSearchActionGroup{})).
 		Named("opensearchactiongroup").
 		Complete(r)
 }

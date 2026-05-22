@@ -112,6 +112,7 @@ func (r *WazuhFilebeatReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 func (r *WazuhFilebeatReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.WazuhFilebeat{}).
+		WithEventFilter(eventLogPredicate("WazuhFilebeat", &wazuhv1.WazuhFilebeat{})).
 		Owns(&corev1.ConfigMap{}).
 		// Watch for WazuhCluster spec changes that this filebeat references
 		Watches(

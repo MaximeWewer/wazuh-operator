@@ -162,6 +162,7 @@ func (r *WazuhAgentGroupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 func (r *WazuhAgentGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.WazuhAgentGroup{}).
+		WithEventFilter(eventLogPredicate("WazuhAgentGroup", &wazuhv1.WazuhAgentGroup{})).
 		Owns(&corev1.ConfigMap{}).
 		Watches(
 			&wazuhv1.WazuhCluster{},

@@ -109,6 +109,7 @@ func (r *OpenSearchAuthConfigReconciler) Reconcile(ctx context.Context, req ctrl
 func (r *OpenSearchAuthConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.OpenSearchAuthConfig{}).
+		WithEventFilter(eventLogPredicate("OpenSearchAuthConfig", &wazuhv1.OpenSearchAuthConfig{})).
 		// Watch secrets for secret references (client secret, exchange key, etc.)
 		Watches(
 			&corev1.Secret{},

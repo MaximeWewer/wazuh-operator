@@ -105,6 +105,7 @@ func (r *OpenSearchIndexTemplateReconciler) Reconcile(ctx context.Context, req c
 func (r *OpenSearchIndexTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.OpenSearchIndexTemplate{}).
+		WithEventFilter(eventLogPredicate("OpenSearchIndexTemplate", &wazuhv1.OpenSearchIndexTemplate{})).
 		Named("opensearchindextemplate").
 		Complete(r)
 }

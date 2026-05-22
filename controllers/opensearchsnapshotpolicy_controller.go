@@ -105,6 +105,7 @@ func (r *OpenSearchSnapshotPolicyReconciler) Reconcile(ctx context.Context, req 
 func (r *OpenSearchSnapshotPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.OpenSearchSnapshotPolicy{}).
+		WithEventFilter(eventLogPredicate("OpenSearchSnapshotPolicy", &wazuhv1.OpenSearchSnapshotPolicy{})).
 		Named("opensearchsnapshotpolicy").
 		Complete(r)
 }

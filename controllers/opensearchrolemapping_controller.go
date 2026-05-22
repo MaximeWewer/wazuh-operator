@@ -105,6 +105,7 @@ func (r *OpenSearchRoleMappingReconciler) Reconcile(ctx context.Context, req ctr
 func (r *OpenSearchRoleMappingReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.OpenSearchRoleMapping{}).
+		WithEventFilter(eventLogPredicate("OpenSearchRoleMapping", &wazuhv1.OpenSearchRoleMapping{})).
 		Named("opensearchrolemapping").
 		Complete(r)
 }

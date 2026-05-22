@@ -105,6 +105,7 @@ func (r *OpenSearchPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Req
 func (r *OpenSearchPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.OpenSearchISMPolicy{}).
+		WithEventFilter(eventLogPredicate("OpenSearchISMPolicy", &wazuhv1.OpenSearchISMPolicy{})).
 		Named("opensearchismpolicy").
 		Complete(r)
 }

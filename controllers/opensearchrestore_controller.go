@@ -111,6 +111,7 @@ func (r *OpenSearchRestoreReconciler) Reconcile(ctx context.Context, req ctrl.Re
 func (r *OpenSearchRestoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.OpenSearchRestore{}).
+		WithEventFilter(eventLogPredicate("OpenSearchRestore", &wazuhv1.OpenSearchRestore{})).
 		Named("opensearchrestore").
 		Complete(r)
 }

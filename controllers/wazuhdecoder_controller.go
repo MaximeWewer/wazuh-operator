@@ -161,6 +161,7 @@ func (r *WazuhDecoderReconciler) Reconcile(ctx context.Context, req ctrl.Request
 func (r *WazuhDecoderReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.WazuhDecoder{}).
+		WithEventFilter(eventLogPredicate("WazuhDecoder", &wazuhv1.WazuhDecoder{})).
 		Owns(&corev1.ConfigMap{}).
 		// Watch for WazuhCluster spec changes to re-reconcile decoders when cluster changes
 		Watches(

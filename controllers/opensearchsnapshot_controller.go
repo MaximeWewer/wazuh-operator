@@ -109,6 +109,7 @@ func (r *OpenSearchSnapshotReconciler) Reconcile(ctx context.Context, req ctrl.R
 func (r *OpenSearchSnapshotReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.OpenSearchSnapshot{}).
+		WithEventFilter(eventLogPredicate("OpenSearchSnapshot", &wazuhv1.OpenSearchSnapshot{})).
 		Named("opensearchsnapshot").
 		Complete(r)
 }

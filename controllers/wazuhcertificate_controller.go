@@ -251,6 +251,7 @@ func (r *WazuhCertificateReconciler) deleteCrossNSSecret(ctx context.Context, ce
 func (r *WazuhCertificateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&wazuhv1.WazuhCertificate{}).
+		WithEventFilter(eventLogPredicate("WazuhCertificate", &wazuhv1.WazuhCertificate{})).
 		Owns(&corev1.Secret{}).
 		Named("wazuhcertificate").
 		Complete(r)
