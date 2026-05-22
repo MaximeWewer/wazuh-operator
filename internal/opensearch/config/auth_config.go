@@ -126,6 +126,11 @@ func (b *AuthConfigBuilder) buildAuthDomains() []AuthDomainConfig {
 		domains = append(domains, b.buildLDAPAuthDomain(b.authConfig.LDAP))
 	}
 
+	// JWT
+	if b.authConfig.JWT != nil && b.authConfig.JWT.Enabled {
+		domains = append(domains, b.buildJWTAuthDomain(b.authConfig.JWT))
+	}
+
 	// Sort by order
 	sort.Slice(domains, func(i, j int) bool {
 		return domains[i].Order < domains[j].Order
@@ -297,6 +302,9 @@ func (b *AuthConfigBuilder) GetActiveAuthMethods() []string {
 	if b.authConfig.LDAP != nil && b.authConfig.LDAP.Enabled {
 		methods = append(methods, "ldap")
 	}
+	if b.authConfig.JWT != nil && b.authConfig.JWT.Enabled {
+		methods = append(methods, "jwt")
+	}
 
 	return methods
 }
@@ -315,6 +323,9 @@ func (b *AuthConfigBuilder) ValidateChallengeSettings() error {
 		challengeCount++
 	}
 	if b.authConfig.LDAP != nil && b.authConfig.LDAP.Enabled && b.authConfig.LDAP.Challenge {
+		challengeCount++
+	}
+	if b.authConfig.JWT != nil && b.authConfig.JWT.Enabled && b.authConfig.JWT.Challenge {
 		challengeCount++
 	}
 
@@ -337,6 +348,9 @@ func (b *AuthConfigBuilder) ValidateMultiAuthRequiresBasic() error {
 		enabled++
 	}
 	if b.authConfig.SAML != nil && b.authConfig.SAML.Enabled {
+		enabled++
+	}
+	if b.authConfig.JWT != nil && b.authConfig.JWT.Enabled {
 		enabled++
 	}
 	basicOn := b.authConfig.BasicAuth != nil && b.authConfig.BasicAuth.Enabled

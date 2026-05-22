@@ -1,4 +1,4 @@
-# Multi-Namespace Deployment Example for Story 1.5
+# Multi-Namespace Deployment Example
 # This example demonstrates deploying multiple independent Wazuh clusters
 # across different namespaces (dev, staging, prod) for team/environment isolation.
 

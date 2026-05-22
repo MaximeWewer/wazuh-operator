@@ -53,7 +53,7 @@ func reconcileUntilDone(ctx context.Context, req reconcile.Request, maxIteration
 }
 
 var _ = Describe("WazuhCluster Controller", func() {
-	Context("When creating a WazuhCluster with basic topology (Story 1.1)", func() {
+	Context("When creating a WazuhCluster with basic topology", func() {
 		const (
 			timeout  = time.Second * 10
 			interval = time.Millisecond * 500
@@ -556,7 +556,7 @@ var _ = Describe("WazuhCluster Controller", func() {
 	})
 
 	// Story 1.2: Configure Component Topology with Custom Replica Counts
-	Context("When scaling cluster from 1-1-1 to 3-3-2 topology (Story 1.2)", func() {
+	Context("When scaling cluster from 1-1-1 to 3-3-2 topology", func() {
 		const (
 			timeout  = time.Second * 15
 			interval = time.Second * 1
@@ -1256,7 +1256,7 @@ var _ = Describe("WazuhCluster Controller", func() {
 	})
 
 	// Story 1.3: Configuration Updates & Automatic Reconciliation
-	Context("When updating cluster configuration with automatic reconciliation (Story 1.3)", func() {
+	Context("When updating cluster configuration with automatic reconciliation", func() {
 		const (
 			timeout          = time.Second * 15
 			interval         = time.Second * 1
@@ -2220,8 +2220,8 @@ var _ = Describe("WazuhCluster Controller", func() {
 		})
 	})
 
-	// Task 10: Testing - Basic Cluster Deletion (Story 1.4)
-	Context("When deleting a WazuhCluster (Story 1.4)", func() {
+	// Task 10: Testing - Basic Cluster Deletion
+	Context("When deleting a WazuhCluster", func() {
 		const (
 			timeout  = time.Second * 15
 			interval = time.Second * 1
@@ -2833,7 +2833,7 @@ var _ = Describe("WazuhCluster Controller", func() {
 	})
 
 	// Story 1.5: Multi-Namespace Support
-	Context("When managing multiple independent clusters across namespaces (Story 1.5)", func() {
+	Context("When managing multiple independent clusters across namespaces", func() {
 		const (
 			timeout  = time.Second * 20
 			interval = time.Second * 1
@@ -3325,7 +3325,7 @@ var _ = Describe("WazuhCluster Controller", func() {
 		})
 	})
 
-	Context("When validating inline mode configuration (Story 1.6)", func() {
+	Context("When validating inline mode configuration", func() {
 		const (
 			timeout  = time.Second * 20
 			interval = time.Second * 1
@@ -3703,9 +3703,8 @@ var _ = Describe("WazuhCluster Controller", func() {
 		})
 	})
 
-
-	// Story 2.5: Deploy Multi-Node HA Manager Cluster (3+ Nodes)
-	Context("When deploying HA Manager cluster (Story 2.5)", func() {
+	// Deploy Multi-Node HA Manager Cluster (3+ Nodes)
+	Context("When deploying HA Manager cluster", func() {
 		var (
 			ctx              context.Context
 			namespace        string
@@ -3969,8 +3968,8 @@ var _ = Describe("WazuhCluster Controller", func() {
 		})
 	})
 
-	// Story 2.6: Deploy Multi-Node HA Indexer Cluster (3+ Nodes)
-	Context("When deploying HA Indexer cluster (Story 2.6)", func() {
+	// Deploy Multi-Node HA Indexer Cluster (3+ Nodes)
+	Context("When deploying HA Indexer cluster", func() {
 		var (
 			ctx              context.Context
 			namespace        string

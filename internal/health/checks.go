@@ -63,7 +63,7 @@ type Watchdog struct {
 	mu        sync.Mutex
 	lastSeen  time.Time
 	timeout   time.Duration
-	activated bool          // true after the first Touch() call
+	activated bool             // true after the first Touch() call
 	now       func() time.Time // for testing
 }
 

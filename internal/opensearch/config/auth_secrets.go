@@ -29,10 +29,11 @@ import (
 
 // Secret map keys used across dashboard and indexer auth builders.
 const (
-	AuthSecretKeyOIDCClientSecret    = "oidc_client_secret"
-	AuthSecretKeyOIDCCookiePassword  = "oidc_cookie_password"
-	AuthSecretKeySAMLExchangeKey     = "saml_exchange_key"
-	AuthSecretKeyLDAPBindPassword    = "ldap_bind_password"
+	AuthSecretKeyOIDCClientSecret   = "oidc_client_secret"
+	AuthSecretKeyOIDCCookiePassword = "oidc_cookie_password"
+	AuthSecretKeySAMLExchangeKey    = "saml_exchange_key"
+	AuthSecretKeyLDAPBindPassword   = "ldap_bind_password"
+	AuthSecretKeyJWTSigningKey      = "jwt_signing_key"
 )
 
 // ResolveAuthSecrets resolves all secret references declared by an OpenSearchAuthConfig
@@ -76,6 +77,14 @@ func ResolveAuthSecrets(ctx context.Context, cli client.Client, authConfig *wazu
 			return nil, fmt.Errorf("failed to resolve LDAP bind password: %w", err)
 		}
 		secrets[AuthSecretKeyLDAPBindPassword] = v
+	}
+
+	if authConfig.Spec.JWT != nil && authConfig.Spec.JWT.SigningKeyRef != nil {
+		v, err := getSecretValue(ctx, cli, ns, authConfig.Spec.JWT.SigningKeyRef)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve JWT signing key: %w", err)
+		}
+		secrets[AuthSecretKeyJWTSigningKey] = v
 	}
 
 	return secrets, nil

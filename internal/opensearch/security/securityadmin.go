@@ -50,9 +50,22 @@ func NewSecurityAdminExecutor(k8sClient client.Client, restConfig *rest.Config, 
 	}
 }
 
-// ApplySecurityConfig runs securityadmin.sh on the first indexer pod to push security config to OpenSearch
-func (e *SecurityAdminExecutor) ApplySecurityConfig(ctx context.Context, clusterName, namespace string) error {
+// ApplySecurityConfig runs securityadmin.sh on the first indexer pod to push the
+// authentication configuration (config.yml) into the .opendistro_security index.
+//
+// securityConfigYML must be the freshly rendered config.yml content. It is pushed
+// inline (written to a temp file in the pod) rather than read from the mounted
+// config.yml: that file is mounted from a Secret via subPath, and subPath Secret
+// mounts are NOT refreshed by Kubernetes after pod creation. A long-running indexer
+// pod therefore still sees the original config.yml, so applying the mounted file
+// would silently push stale auth domains. ApplyInternalUsers pushes inline for the
+// same reason.
+func (e *SecurityAdminExecutor) ApplySecurityConfig(ctx context.Context, clusterName, namespace, securityConfigYML string) error {
 	log := logf.FromContext(ctx).WithValues("cluster", clusterName, "namespace", namespace)
+
+	if securityConfigYML == "" {
+		return fmt.Errorf("empty security config content for cluster %s/%s", namespace, clusterName)
+	}
 
 	// Target the first indexer pod
 	podName := fmt.Sprintf("%s-indexer-0", clusterName)
@@ -67,19 +80,8 @@ func (e *SecurityAdminExecutor) ApplySecurityConfig(ctx context.Context, cluster
 		return fmt.Errorf("indexer pod %s is not running (phase: %s)", podName, pod.Status.Phase)
 	}
 
-	// Build the securityadmin.sh command
-	// Use bash -c with OPENSEARCH_JAVA_HOME since the container may not have 'which'
-	cmd := []string{
-		"bash", "-c",
-		fmt.Sprintf("OPENSEARCH_JAVA_HOME=/usr/share/wazuh-indexer/jdk "+
-			"/usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh "+
-			"-f /usr/share/wazuh-indexer/opensearch-security/config.yml "+
-			"-icl -nhnv "+
-			"-cacert %s/ca.crt "+
-			"-cert %s/tls.crt "+
-			"-key %s/tls.key",
-			constants.PathIndexerCerts, constants.PathIndexerAdminCerts, constants.PathIndexerAdminCerts),
-	}
+	// Build the securityadmin.sh command (pushes the rendered config inline)
+	cmd := buildInlineSecurityConfigCommand(securityConfigYML)
 
 	log.Info("Executing securityadmin.sh", "pod", podName)
 
@@ -143,6 +145,36 @@ func (e *SecurityAdminExecutor) ApplyInternalUsers(ctx context.Context, clusterN
 		"stdout", stdout)
 
 	return nil
+}
+
+// buildInlineSecurityConfigCommand writes the rendered config.yml to a temp file in the
+// pod, then applies it with "securityadmin.sh -t config". Pushing inline (rather than the
+// mounted config.yml) avoids stale Secret subPath mounts.
+//
+// Two details that previously broke the on-disk variant of this call:
+//   - securityadmin.sh requires "-t config" alongside "-f"; without the type it refuses
+//     the single-file upload.
+//   - "-cacert" must point at a CA that signed the node's REST cert. The admin certs
+//     directory always ships its own ca.crt (same root CA as the node certs) and lives at
+//     a fixed, version-independent path, keeping -cacert/-cert/-key consistent.
+//
+// Uses bash -c with OPENSEARCH_JAVA_HOME since the container may not have 'which'.
+func buildInlineSecurityConfigCommand(securityConfigYML string) []string {
+	encoded := base64.StdEncoding.EncodeToString([]byte(securityConfigYML))
+	return []string{
+		"bash", "-c",
+		fmt.Sprintf("echo '%s' | base64 -d > /tmp/config.yml; "+
+			"OPENSEARCH_JAVA_HOME=/usr/share/wazuh-indexer/jdk "+
+			"/usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh "+
+			"-f /tmp/config.yml "+
+			"-t config "+
+			"-icl -nhnv "+
+			"-cacert %s/ca.crt "+
+			"-cert %s/tls.crt "+
+			"-key %s/tls.key",
+			encoded,
+			constants.PathIndexerAdminCerts, constants.PathIndexerAdminCerts, constants.PathIndexerAdminCerts),
+	}
 }
 
 // buildInternalUsersCommand constructs the securityadmin.sh command for pushing internal_users.yml

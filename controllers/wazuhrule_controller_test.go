@@ -36,7 +36,7 @@ import (
 )
 
 var _ = Describe("WazuhRule Controller", func() {
-	Context("When creating a WazuhRule (Story 1.8)", func() {
+	Context("When creating a WazuhRule", func() {
 		const (
 			timeout  = time.Minute * 2
 			interval = time.Second * 1

@@ -506,10 +506,10 @@ func (a *WazuhAPIAdapter) GetAgentsSummary(ctx context.Context) (*AgentsSummary,
 
 // GroupInfo represents a Wazuh agent group
 type GroupInfo struct {
-	Name       string `json:"name"`
-	Count      int    `json:"count"`
-	MergedSum  string `json:"mergedSum"`
-	ConfigSum  string `json:"configSum"`
+	Name      string `json:"name"`
+	Count     int    `json:"count"`
+	MergedSum string `json:"mergedSum"`
+	ConfigSum string `json:"configSum"`
 }
 
 // CreateGroup creates a new agent group

@@ -176,5 +176,12 @@ func (r *OpenSearchAuthConfigReconciler) authConfigReferencesSecret(authConfig *
 		}
 	}
 
+	// Check JWT signing key
+	if authConfig.Spec.JWT != nil && authConfig.Spec.JWT.SigningKeyRef != nil {
+		if authConfig.Spec.JWT.SigningKeyRef.Name == secretName {
+			return true
+		}
+	}
+
 	return false
 }

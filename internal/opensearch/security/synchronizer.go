@@ -143,7 +143,7 @@ func (s *SecurityConfigSynchronizer) SyncUsers(ctx context.Context, cluster *waz
 
 	// List all users for this cluster
 	var userList wazuhv1.OpenSearchUserList
-	if err := s.k8sClient.List(ctx, &userList, /* cross-namespace */); err != nil {
+	if err := s.k8sClient.List(ctx, &userList /* cross-namespace */); err != nil {
 		return fmt.Errorf("failed to list OpenSearchUser CRDs: %w", err)
 	}
 
@@ -247,7 +247,7 @@ func (s *SecurityConfigSynchronizer) SyncRoles(ctx context.Context, cluster *waz
 
 	// List all roles for this cluster
 	var roleList wazuhv1.OpenSearchRoleList
-	if err := s.k8sClient.List(ctx, &roleList, /* cross-namespace */); err != nil {
+	if err := s.k8sClient.List(ctx, &roleList /* cross-namespace */); err != nil {
 		return fmt.Errorf("failed to list OpenSearchRole CRDs: %w", err)
 	}
 
@@ -336,7 +336,7 @@ func (s *SecurityConfigSynchronizer) SyncRoleMappings(ctx context.Context, clust
 
 	// List all role mappings for this cluster
 	var mappingList wazuhv1.OpenSearchRoleMappingList
-	if err := s.k8sClient.List(ctx, &mappingList, /* cross-namespace */); err != nil {
+	if err := s.k8sClient.List(ctx, &mappingList /* cross-namespace */); err != nil {
 		return fmt.Errorf("failed to list OpenSearchRoleMapping CRDs: %w", err)
 	}
 
@@ -403,7 +403,7 @@ func (s *SecurityConfigSynchronizer) SyncTenants(ctx context.Context, cluster *w
 
 	// List all tenants for this cluster
 	var tenantList wazuhv1.OpenSearchTenantList
-	if err := s.k8sClient.List(ctx, &tenantList, /* cross-namespace */); err != nil {
+	if err := s.k8sClient.List(ctx, &tenantList /* cross-namespace */); err != nil {
 		return fmt.Errorf("failed to list OpenSearchTenant CRDs: %w", err)
 	}
 
@@ -468,7 +468,7 @@ func (s *SecurityConfigSynchronizer) SyncActionGroups(ctx context.Context, clust
 
 	// List all action groups for this cluster
 	var actionGroupList wazuhv1.OpenSearchActionGroupList
-	if err := s.k8sClient.List(ctx, &actionGroupList, /* cross-namespace */); err != nil {
+	if err := s.k8sClient.List(ctx, &actionGroupList /* cross-namespace */); err != nil {
 		return fmt.Errorf("failed to list OpenSearchActionGroup CRDs: %w", err)
 	}
 

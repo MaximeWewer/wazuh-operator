@@ -51,6 +51,13 @@ type OpenSearchAuthConfigSpec struct {
 	// LDAP configures LDAP/Active Directory authentication
 	// +optional
 	LDAP *LDAPAuthSpec `json:"ldap,omitempty"`
+
+	// JWT configures JSON Web Token (bearer token) authentication.
+	// Tokens are validated against a static signing key or a remote JWKS
+	// endpoint, making this suitable for proxy-injected tokens such as
+	// Teleport application access (Teleport-Jwt-Assertion header).
+	// +optional
+	JWT *JWTAuthSpec `json:"jwt,omitempty"`
 }
 
 // ============================================================================
@@ -397,6 +404,90 @@ type LDAPConnectionPoolSpec struct {
 }
 
 // ============================================================================
+// JWT Configuration
+// ============================================================================
+
+// JWTAuthSpec configures JSON Web Token (bearer token) authentication.
+// Reference: https://docs.opensearch.org/latest/security/authentication-backends/jwt/
+//
+// Exactly one verification source must be provided: a static SigningKeyRef
+// (shared HMAC secret or PEM public key) or a remote JwksURL. For Teleport,
+// point JwksURL at the proxy JWKS endpoint and set JwtHeader to
+// "Teleport-Jwt-Assertion".
+type JWTAuthSpec struct {
+	// Enabled enables JWT authentication
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Order determines the evaluation order of this auth domain
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	// +kubebuilder:default=4
+	Order int `json:"order,omitempty"`
+
+	// Challenge enables authentication challenge
+	// JWT is non-interactive; this should stay false when other domains are enabled
+	// +kubebuilder:default=false
+	Challenge bool `json:"challenge,omitempty"`
+
+	// HTTPEnabled enables authentication on HTTP layer
+	// +kubebuilder:default=true
+	HTTPEnabled bool `json:"httpEnabled,omitempty"`
+
+	// TransportEnabled enables authentication on transport layer
+	// +kubebuilder:default=false
+	TransportEnabled bool `json:"transportEnabled,omitempty"`
+
+	// SigningKeyRef references a Secret containing the JWT signing key used to
+	// verify token signatures. For HMAC algorithms this is the base64-encoded
+	// shared secret; for RSA/ECDSA it is the PEM-encoded public key.
+	// Either SigningKeyRef or JwksURL must be specified.
+	// +optional
+	SigningKeyRef *SecretKeyRef `json:"signingKeyRef,omitempty"`
+
+	// JwksURL is the JSON Web Key Set endpoint used to fetch public keys for
+	// signature verification. Use this for issuers that rotate keys, such as
+	// Teleport (e.g. https://teleport.example.com/.well-known/jwks.json).
+	// Either SigningKeyRef or JwksURL must be specified.
+	// +optional
+	JwksURL string `json:"jwksUrl,omitempty"`
+
+	// JwtHeader is the HTTP header carrying the bearer token.
+	// Defaults to "Authorization" (expects a "Bearer <token>" value).
+	// Teleport application access injects "Teleport-Jwt-Assertion".
+	// +kubebuilder:default="Authorization"
+	JwtHeader string `json:"jwtHeader,omitempty"`
+
+	// JwtURLParameter reads the token from a URL query parameter instead of a
+	// header. Mutually exclusive with header-based extraction in practice.
+	// +optional
+	JwtURLParameter string `json:"jwtUrlParameter,omitempty"`
+
+	// SubjectKey is the JWT claim to use as the username.
+	// When empty, OpenSearch falls back to the standard "sub" claim.
+	// +optional
+	SubjectKey string `json:"subjectKey,omitempty"`
+
+	// RolesKey is the JWT claim containing the user's backend roles.
+	// +optional
+	RolesKey string `json:"rolesKey,omitempty"`
+
+	// RequiredAudience rejects tokens whose "aud" claim does not match.
+	// +optional
+	RequiredAudience string `json:"requiredAudience,omitempty"`
+
+	// RequiredIssuer rejects tokens whose "iss" claim does not match.
+	// +optional
+	RequiredIssuer string `json:"requiredIssuer,omitempty"`
+
+	// ClockSkewToleranceSeconds is the allowed leeway when validating the
+	// "exp" and "nbf" claims, to absorb clock drift between issuer and cluster.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	ClockSkewToleranceSeconds int `json:"clockSkewToleranceSeconds,omitempty"`
+}
+
+// ============================================================================
 // Status
 // ============================================================================
 
@@ -457,11 +548,12 @@ type OpenSearchAuthConfigStatus struct {
 // +kubebuilder:printcolumn:name="OIDC",type=boolean,JSONPath=`.spec.oidc.enabled`
 // +kubebuilder:printcolumn:name="SAML",type=boolean,JSONPath=`.spec.saml.enabled`
 // +kubebuilder:printcolumn:name="LDAP",type=boolean,JSONPath=`.spec.ldap.enabled`
+// +kubebuilder:printcolumn:name="JWT",type=boolean,JSONPath=`.spec.jwt.enabled`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // OpenSearchAuthConfig is the Schema for the opensearchauthconfigs API
 // It manages authentication configuration for OpenSearch clusters including
-// basic auth, OIDC, SAML, and LDAP authentication methods.
+// basic auth, OIDC, SAML, LDAP, and JWT authentication methods.
 type OpenSearchAuthConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

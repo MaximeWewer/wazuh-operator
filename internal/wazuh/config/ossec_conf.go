@@ -199,11 +199,11 @@ type AuthConfig struct {
 
 // AuthForceConfig holds configuration for the <force> block inside <auth>
 type AuthForceConfig struct {
-	Enabled               bool
-	DisconnectedTime      string
+	Enabled                 bool
+	DisconnectedTime        string
 	DisconnectedTimeEnabled bool
-	AfterRegistrationTime string
-	KeyMismatch           bool
+	AfterRegistrationTime   string
+	KeyMismatch             bool
 }
 
 // SecretKeyReference references a secret key

@@ -717,17 +717,84 @@ Creates custom action groups.
 
 ### OpenSearchAuthConfig
 
-Manages authentication configuration (Basic, OIDC, SAML, LDAP).
+Manages authentication configuration (Basic, OIDC, SAML, LDAP, JWT).
+Multiple methods can be enabled at once (e.g. `jwt` + `basicAuth`); each becomes
+a separate `authc` domain ordered by its `order` field. Per the
+security-dashboards-plugin requirement, when more than one method is enabled
+`basicAuth.enabled` must be `true`.
 
 **Short Names:** `osauthconfig`, `osauth`
 
 | Field        | Type                  | Required | Default | Description       |
 | ------------ | --------------------- | -------- | ------- | ----------------- |
-| `clusterRef` | WazuhClusterReference | **Yes**  | -       | Cluster reference |
+| `clusterRefs`| []WazuhClusterRef     | **Yes**  | -       | Cluster references|
 | `basicAuth`  | BasicAuthSpec         | No       | -       | Basic auth config |
 | `oidc`       | OIDCAuthSpec          | No       | -       | OIDC config       |
 | `saml`       | SAMLAuthSpec          | No       | -       | SAML config       |
 | `ldap`       | LDAPAuthSpec          | No       | -       | LDAP config       |
+| `jwt`        | JWTAuthSpec           | No       | -       | JWT config        |
+
+#### JWTAuthSpec
+
+JSON Web Token (bearer token) authentication. Exactly one verification source
+is required: `signingKeyRef` **or** `jwksUrl`. Suitable for proxy-injected
+tokens such as Teleport application access.
+
+| Field                       | Type         | Required | Default         | Description                                                              |
+| --------------------------- | ------------ | -------- | --------------- | ------------------------------------------------------------------------ |
+| `enabled`                   | bool         | No       | `false`         | Enable JWT auth domain                                                   |
+| `order`                     | int          | No       | `4`             | Evaluation order among auth domains                                      |
+| `challenge`                 | bool         | No       | `false`         | Issue auth challenge (keep `false` for JWT)                              |
+| `httpEnabled`               | bool         | No       | `true`          | Enable on HTTP layer                                                     |
+| `transportEnabled`          | bool         | No       | `false`         | Enable on transport layer                                                |
+| `signingKeyRef`             | SecretKeyRef | No\*     | -               | Secret with the signing key (base64 HMAC secret or PEM public key)       |
+| `jwksUrl`                   | string       | No\*     | -               | JWKS endpoint to fetch public keys (e.g. Teleport proxy)                 |
+| `jwtHeader`                 | string       | No       | `Authorization` | HTTP header carrying the token (Teleport: `Teleport-Jwt-Assertion`)      |
+| `jwtUrlParameter`           | string       | No       | -               | Read token from a URL query parameter instead of a header               |
+| `subjectKey`                | string       | No       | (`sub`)         | JWT claim used as the username                                           |
+| `rolesKey`                  | string       | No       | -               | JWT claim containing backend roles                                       |
+| `requiredAudience`          | string       | No       | -               | Reject tokens whose `aud` claim does not match                          |
+| `requiredIssuer`            | string       | No       | -               | Reject tokens whose `iss` claim does not match                          |
+| `clockSkewToleranceSeconds` | int          | No       | -               | Leeway for `exp`/`nbf` validation                                        |
+
+\* `signingKeyRef` and `jwksUrl` are mutually exclusive; one of the two is required.
+
+**Example — JWT (Teleport) + local basic auth:**
+
+```yaml
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchAuthConfig
+metadata:
+  name: teleport-jwt
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: production
+      namespace: wazuh
+  # Local users stay available; required when multiple methods are enabled.
+  basicAuth:
+    enabled: true
+    order: 0
+  jwt:
+    enabled: true
+    order: 4
+    jwksUrl: "https://teleport.example.com/.well-known/jwks.json"
+    jwtHeader: "Teleport-Jwt-Assertion"
+    subjectKey: "username"
+    rolesKey: "roles"
+```
+
+To validate with a static key instead of JWKS, drop `jwksUrl` and reference a Secret:
+
+```yaml
+  jwt:
+    enabled: true
+    signingKeyRef:
+      name: teleport-jwt-key
+      key: signing_key   # base64 HMAC secret or PEM public key
+    jwtHeader: "Teleport-Jwt-Assertion"
+    rolesKey: "roles"
+```
 
 See sample files for detailed authentication configurations.
 

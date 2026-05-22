@@ -68,7 +68,7 @@ func (v *OpenSearchAuthConfigCustomValidator) validateOpenSearchAuthConfig(authC
 
 	// Rule 1: At least one auth method must be enabled
 	if !v.hasEnabledAuthMethod(spec) {
-		allErrors = append(allErrors, "spec: at least one authentication method must be enabled (basicAuth, oidc, saml, or ldap)")
+		allErrors = append(allErrors, "spec: at least one authentication method must be enabled (basicAuth, oidc, saml, ldap, or jwt)")
 	}
 
 	// Rule 2: OIDC enabled → connectURL and clientId required
@@ -107,7 +107,19 @@ func (v *OpenSearchAuthConfigCustomValidator) validateOpenSearchAuthConfig(authC
 		}
 	}
 
-	// Rule 5: Warning if more than one auth domain has challenge=true
+	// Rule 5: JWT enabled → exactly one verification source (signingKeyRef or jwksUrl)
+	if spec.JWT != nil && spec.JWT.Enabled {
+		hasKey := spec.JWT.SigningKeyRef != nil
+		hasJWKS := spec.JWT.JwksURL != ""
+		if !hasKey && !hasJWKS {
+			allErrors = append(allErrors, "spec.jwt: either signingKeyRef or jwksUrl is required when JWT is enabled")
+		}
+		if hasKey && hasJWKS {
+			allErrors = append(allErrors, "spec.jwt: signingKeyRef and jwksUrl are mutually exclusive")
+		}
+	}
+
+	// Rule 6: Warning if more than one auth domain has challenge=true
 	challengeCount := v.countChallengeDomains(spec)
 	if challengeCount > 1 {
 		warnings = append(warnings, fmt.Sprintf("%d authentication domains have challenge=true; only one should issue challenges to avoid conflicts", challengeCount))
@@ -134,6 +146,9 @@ func (v *OpenSearchAuthConfigCustomValidator) hasEnabledAuthMethod(spec *OpenSea
 	if spec.LDAP != nil && spec.LDAP.Enabled {
 		return true
 	}
+	if spec.JWT != nil && spec.JWT.Enabled {
+		return true
+	}
 	return false
 }
 
@@ -150,6 +165,9 @@ func (v *OpenSearchAuthConfigCustomValidator) countChallengeDomains(spec *OpenSe
 		count++
 	}
 	if spec.LDAP != nil && spec.LDAP.Enabled && spec.LDAP.Challenge {
+		count++
+	}
+	if spec.JWT != nil && spec.JWT.Enabled && spec.JWT.Challenge {
 		count++
 	}
 	return count

@@ -25,8 +25,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	retry "k8s.io/client-go/util/retry"
 	"k8s.io/client-go/tools/record"
+	retry "k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -89,6 +89,16 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 		return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Validation failed: %v", err))
 	}
 
+	// Render config.yml once from the spec + resolved secrets. This is the same
+	// content the indexer security Secret carries; we push it inline via
+	// securityadmin.sh because the pod's mounted config.yml (a Secret subPath) is
+	// not refreshed after pod creation and would otherwise be stale.
+	cfgBuilder := config.NewAuthConfigBuilder(&authConfig.Spec)
+	for k, v := range secrets {
+		cfgBuilder.WithSecret(k, v)
+	}
+	securityConfigYML := cfgBuilder.BuildSecurityConfig()
+
 	// Iterate over each target cluster: cleanup orphan ConfigMaps and apply
 	// the security config via securityadmin.sh per cluster. Errors are logged
 	// per cluster but do not abort the loop.
@@ -97,7 +107,7 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 		st := wazuhv1.OpenSearchClusterStatus{Name: ref.Name, Namespace: ref.Namespace}
 		r.cleanupLegacyConfigMaps(ctx, ref.Name, ref.Namespace)
 		if r.SecurityAdminExecutor != nil {
-			if err := r.SecurityAdminExecutor.ApplySecurityConfig(ctx, ref.Name, ref.Namespace); err != nil {
+			if err := r.SecurityAdminExecutor.ApplySecurityConfig(ctx, ref.Name, ref.Namespace, securityConfigYML); err != nil {
 				log.Error(err, "Failed to apply security config via securityadmin.sh on cluster",
 					"cluster", ref.Name, "clusterNamespace", ref.Namespace)
 				st.Phase = wazuhv1.OpenSearchResourcePhasePending
@@ -116,9 +126,27 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 	}
 	authConfig.Status.ClusterStatuses = newStatuses
 
+	// Derive the overall phase from per-cluster results: a single cluster that
+	// failed to apply must not be reported as a fully Ready resource.
+	var failed []string
+	for _, st := range newStatuses {
+		if st.Phase != wazuhv1.OpenSearchResourcePhaseReady {
+			failed = append(failed, fmt.Sprintf("%s/%s", st.Namespace, st.Name))
+		}
+	}
+
 	log.Info("Auth config reconciliation completed",
 		"name", authConfig.Name,
-		"activeAuthDomains", r.getActiveAuthDomains(authConfig))
+		"activeAuthDomains", r.getActiveAuthDomains(authConfig),
+		"failedClusters", failed)
+
+	if len(failed) > 0 {
+		r.recordEvent(authConfig, corev1.EventTypeWarning, "SyncPartial",
+			fmt.Sprintf("Failed to apply security config on: %v", failed))
+		return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhasePending,
+			fmt.Sprintf("Security config not applied on %d of %d target cluster(s): %v",
+				len(failed), len(newStatuses), failed))
+	}
 
 	r.recordEvent(authConfig, corev1.EventTypeNormal, "Synced", "Authentication configuration applied on all target clusters")
 	return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseReady, "Authentication configuration applied")
@@ -174,6 +202,14 @@ func (r *AuthConfigReconciler) validateConfig(authConfig *wazuhv1.OpenSearchAuth
 		}
 	}
 
+	// Validate JWT config
+	if authConfig.Spec.JWT != nil && authConfig.Spec.JWT.Enabled {
+		jwtBuilder := config.NewJWTConfigBuilder(authConfig.Spec.JWT)
+		if err := jwtBuilder.ValidateConfig(); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -220,6 +256,9 @@ func (r *AuthConfigReconciler) getActiveAuthDomains(authConfig *wazuhv1.OpenSear
 	if authConfig.Spec.LDAP != nil && authConfig.Spec.LDAP.Enabled {
 		domains = append(domains, "ldap")
 	}
+	if authConfig.Spec.JWT != nil && authConfig.Spec.JWT.Enabled {
+		domains = append(domains, "jwt")
+	}
 
 	return domains
 }
@@ -228,37 +267,47 @@ func (r *AuthConfigReconciler) getActiveAuthDomains(authConfig *wazuhv1.OpenSear
 func (r *AuthConfigReconciler) updateStatus(ctx context.Context, authConfig *wazuhv1.OpenSearchAuthConfig, phase wazuhv1.OpenSearchResourcePhase, message string) error {
 	activeDomains := r.getActiveAuthDomains(authConfig)
 	configSynced := phase == "Ready"
+	// ClusterStatuses were populated on authConfig.Status by Reconcile before this call.
+	clusterStatuses := authConfig.Status.ClusterStatuses
 
-	// Skip entirely when nothing changed
-	if authConfig.Status.Phase == phase && authConfig.Status.Message == message &&
-		authConfig.Status.ObservedGeneration == authConfig.Generation &&
-		authConfig.Status.ConfigSynced == configSynced &&
-		authConfig.Status.DashboardConfigSynced == configSynced {
-		return nil
-	}
-
-	// Only update LastSyncTime when transitioning to Ready
-	wasReady := authConfig.Status.Phase == wazuhv1.OpenSearchResourcePhase("Ready") &&
-		authConfig.Status.ObservedGeneration == authConfig.Generation
-	if phase == "Ready" && !wasReady {
-		now := metav1.Now()
-		authConfig.Status.LastSyncTime = &now
-	}
-
-	authConfig.Status.Phase = phase
-	authConfig.Status.Message = message
-	authConfig.Status.ObservedGeneration = authConfig.Generation
-	authConfig.Status.ActiveAuthDomains = activeDomains
-	authConfig.Status.ConfigSynced = configSynced
-	authConfig.Status.DashboardConfigSynced = configSynced
-
-	desiredStatus := authConfig.Status
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		latest := &wazuhv1.OpenSearchAuthConfig{}
 		if err := r.Get(ctx, types.NamespacedName{Name: authConfig.Name, Namespace: authConfig.Namespace}, latest); err != nil {
 			return err
 		}
-		latest.Status = desiredStatus
+
+		// Skip the write only when the persisted status already matches the desired
+		// one — including per-cluster statuses. The earlier version compared only the
+		// scalar fields, so a corrected ClusterStatuses (e.g. a cluster moving from
+		// Pending to Ready while the overall phase stayed Ready) was never persisted.
+		if latest.Status.Phase == phase && latest.Status.Message == message &&
+			latest.Status.ObservedGeneration == authConfig.Generation &&
+			latest.Status.ConfigSynced == configSynced &&
+			latest.Status.DashboardConfigSynced == configSynced &&
+			clusterStatusesEqual(latest.Status.ClusterStatuses, clusterStatuses) {
+			authConfig.Status = latest.Status
+			return nil
+		}
+
+		// Only refresh LastSyncTime when transitioning to Ready; otherwise preserve the
+		// persisted value so repeated reconciles do not churn the status.
+		wasReady := latest.Status.Phase == wazuhv1.OpenSearchResourcePhaseReady &&
+			latest.Status.ObservedGeneration == authConfig.Generation
+		lastSyncTime := latest.Status.LastSyncTime
+		if phase == wazuhv1.OpenSearchResourcePhaseReady && !wasReady {
+			now := metav1.Now()
+			lastSyncTime = &now
+		}
+
+		latest.Status.Phase = phase
+		latest.Status.Message = message
+		latest.Status.ObservedGeneration = authConfig.Generation
+		latest.Status.ActiveAuthDomains = activeDomains
+		latest.Status.ConfigSynced = configSynced
+		latest.Status.DashboardConfigSynced = configSynced
+		latest.Status.ClusterStatuses = clusterStatuses
+		latest.Status.LastSyncTime = lastSyncTime
+
 		if err := r.Status().Update(ctx, latest); err != nil {
 			return err
 		}
@@ -267,3 +316,22 @@ func (r *AuthConfigReconciler) updateStatus(ctx context.Context, authConfig *waz
 	})
 }
 
+// clusterStatusesEqual compares per-cluster statuses ignoring LastSyncTime, which is
+// timestamp noise that would otherwise force a write on every reconcile.
+func clusterStatusesEqual(a, b []wazuhv1.OpenSearchClusterStatus) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	type key struct{ name, namespace string }
+	index := make(map[key]wazuhv1.OpenSearchClusterStatus, len(a))
+	for _, s := range a {
+		index[key{s.Name, s.Namespace}] = s
+	}
+	for _, s := range b {
+		prev, ok := index[key{s.Name, s.Namespace}]
+		if !ok || prev.Phase != s.Phase || prev.Message != s.Message {
+			return false
+		}
+	}
+	return true
+}

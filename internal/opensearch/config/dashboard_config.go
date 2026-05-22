@@ -101,6 +101,10 @@ func (b *DashboardAuthConfigBuilder) BuildAuthSection() (string, error) {
 		sb.WriteString(b.buildSAMLDashboardConfig())
 	}
 
+	if b.authConfig.JWT != nil && b.authConfig.JWT.Enabled {
+		sb.WriteString(b.buildJWTDashboardConfig())
+	}
+
 	// Global session cookie password. Required whenever the dashboard serves
 	// session-based auth flows (OIDC, SAML) so that signed cookies survive
 	// dashboard restarts and are accepted across replicas.
@@ -135,6 +139,9 @@ func (b *DashboardAuthConfigBuilder) determineAuthType() string {
 	if b.authConfig.SAML != nil && b.authConfig.SAML.Enabled {
 		types = append(types, "saml")
 	}
+	if b.authConfig.JWT != nil && b.authConfig.JWT.Enabled {
+		types = append(types, "jwt")
+	}
 
 	// Single type
 	if len(types) == 1 {
@@ -160,6 +167,9 @@ func (b *DashboardAuthConfigBuilder) isMultiAuthEnabled() bool {
 		count++
 	}
 	if b.authConfig.SAML != nil && b.authConfig.SAML.Enabled {
+		count++
+	}
+	if b.authConfig.JWT != nil && b.authConfig.JWT.Enabled {
 		count++
 	}
 	return count > 1
@@ -265,6 +275,33 @@ func (b *DashboardAuthConfigBuilder) buildSAMLDashboardConfig() string {
 }
 
 // ============================================================================
+// JWT Dashboard Config
+// ============================================================================
+
+// buildJWTDashboardConfig generates JWT-specific dashboard configuration.
+// Reference: https://docs.opensearch.org/latest/security/authentication-backends/jwt/
+// Only the two keys documented for opensearch_dashboards.yml are emitted:
+// `opensearch_security.jwt.url_param` (token query parameter) and
+// `opensearch_security.jwt.header` (token header). Both are optional; when the
+// token is injected by a reverse proxy such as Teleport, only the header is set.
+// JWT is stateless, so unlike OIDC/SAML it requires no session cookie password.
+func (b *DashboardAuthConfigBuilder) buildJWTDashboardConfig() string {
+	var sb strings.Builder
+	spec := b.authConfig.JWT
+
+	sb.WriteString("\n# JWT Configuration\n")
+
+	if spec.JwtURLParameter != "" {
+		fmt.Fprintf(&sb, "opensearch_security.jwt.url_param: \"%s\"\n", spec.JwtURLParameter)
+	}
+	if spec.JwtHeader != "" {
+		fmt.Fprintf(&sb, "opensearch_security.jwt.header: \"%s\"\n", spec.JwtHeader)
+	}
+
+	return sb.String()
+}
+
+// ============================================================================
 // Multi-Auth Dashboard Config
 // ============================================================================
 
@@ -293,6 +330,9 @@ func (b *DashboardAuthConfigBuilder) buildMultiAuthConfig() string {
 	}
 	if b.authConfig.SAML != nil && b.authConfig.SAML.Enabled {
 		methods = append(methods, authMethod{"saml", b.authConfig.SAML.Order})
+	}
+	if b.authConfig.JWT != nil && b.authConfig.JWT.Enabled {
+		methods = append(methods, authMethod{"jwt", b.authConfig.JWT.Order})
 	}
 
 	// Sort by order
@@ -332,6 +372,9 @@ func (b *DashboardAuthConfigBuilder) GetActiveAuthTypes() []string {
 	if b.authConfig.SAML != nil && b.authConfig.SAML.Enabled {
 		types = append(types, "saml")
 	}
+	if b.authConfig.JWT != nil && b.authConfig.JWT.Enabled {
+		types = append(types, "jwt")
+	}
 
 	return types
 }
@@ -353,6 +396,22 @@ func (b *DashboardAuthConfigBuilder) NeedsDashboardRestart(previous *v1.OpenSear
 	currSAML := b.authConfig.SAML != nil && b.authConfig.SAML.Enabled
 	if prevSAML != currSAML {
 		return true
+	}
+
+	prevJWT := previous.JWT != nil && previous.JWT.Enabled
+	currJWT := b.authConfig.JWT != nil && b.authConfig.JWT.Enabled
+	if prevJWT != currJWT {
+		return true
+	}
+
+	// Check if JWT verification source changed
+	if currJWT && previous.JWT != nil {
+		if b.authConfig.JWT.JwksURL != previous.JWT.JwksURL {
+			return true
+		}
+		if b.authConfig.JWT.JwtHeader != previous.JWT.JwtHeader {
+			return true
+		}
 	}
 
 	// Check if OIDC connect URL changed

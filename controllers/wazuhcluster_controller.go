@@ -37,11 +37,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	networkingv1 "k8s.io/api/networking/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -68,8 +68,8 @@ import (
 )
 
 const (
-	wazuhClusterFinalizer = "resources.wazuh.com/finalizer"
-	apiCredentialRecoveryHashAnnotation = "wazuh.com/api-credential-recovery-hash"
+	wazuhClusterFinalizer                 = "resources.wazuh.com/finalizer"
+	apiCredentialRecoveryHashAnnotation   = "wazuh.com/api-credential-recovery-hash"
 	authdCredentialRecoveryHashAnnotation = "wazuh.com/authd-credential-recovery-hash"
 
 	// RequeueIntervalNormal is the normal requeue interval when cluster is stable

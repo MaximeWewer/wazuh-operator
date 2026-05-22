@@ -34,6 +34,9 @@ spec:
     - jsonPath: .spec.ldap.enabled
       name: LDAP
       type: boolean
+    - jsonPath: .spec.jwt.enabled
+      name: JWT
+      type: boolean
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -43,7 +46,7 @@ spec:
         description: |-
           OpenSearchAuthConfig is the Schema for the opensearchauthconfigs API
           It manages authentication configuration for OpenSearch clusters including
-          basic auth, OIDC, SAML, and LDAP authentication methods.
+          basic auth, OIDC, SAML, LDAP, and JWT authentication methods.
         properties:
           apiVersion:
             description: |-
@@ -126,6 +129,99 @@ spec:
                 - name
                 - namespace
                 x-kubernetes-list-type: map
+              jwt:
+                description: |-
+                  JWT configures JSON Web Token (bearer token) authentication.
+                  Tokens are validated against a static signing key or a remote JWKS
+                  endpoint, making this suitable for proxy-injected tokens such as
+                  Teleport application access (Teleport-Jwt-Assertion header).
+                properties:
+                  challenge:
+                    default: false
+                    description: |-
+                      Challenge enables authentication challenge
+                      JWT is non-interactive; this should stay false when other domains are enabled
+                    type: boolean
+                  clockSkewToleranceSeconds:
+                    description: |-
+                      ClockSkewToleranceSeconds is the allowed leeway when validating the
+                      "exp" and "nbf" claims, to absorb clock drift between issuer and cluster.
+                    minimum: 0
+                    type: integer
+                  enabled:
+                    default: false
+                    description: Enabled enables JWT authentication
+                    type: boolean
+                  httpEnabled:
+                    default: true
+                    description: HTTPEnabled enables authentication on HTTP layer
+                    type: boolean
+                  jwksUrl:
+                    description: |-
+                      JwksURL is the JSON Web Key Set endpoint used to fetch public keys for
+                      signature verification. Use this for issuers that rotate keys, such as
+                      Teleport (e.g. https://teleport.example.com/.well-known/jwks.json).
+                      Either SigningKeyRef or JwksURL must be specified.
+                    type: string
+                  jwtHeader:
+                    default: Authorization
+                    description: |-
+                      JwtHeader is the HTTP header carrying the bearer token.
+                      Defaults to "Authorization" (expects a "Bearer <token>" value).
+                      Teleport application access injects "Teleport-Jwt-Assertion".
+                    type: string
+                  jwtUrlParameter:
+                    description: |-
+                      JwtURLParameter reads the token from a URL query parameter instead of a
+                      header. Mutually exclusive with header-based extraction in practice.
+                    type: string
+                  order:
+                    default: 4
+                    description: Order determines the evaluation order of this auth
+                      domain
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  requiredAudience:
+                    description: RequiredAudience rejects tokens whose "aud" claim
+                      does not match.
+                    type: string
+                  requiredIssuer:
+                    description: RequiredIssuer rejects tokens whose "iss" claim does
+                      not match.
+                    type: string
+                  rolesKey:
+                    description: RolesKey is the JWT claim containing the user's backend
+                      roles.
+                    type: string
+                  signingKeyRef:
+                    description: |-
+                      SigningKeyRef references a Secret containing the JWT signing key used to
+                      verify token signatures. For HMAC algorithms this is the base64-encoded
+                      shared secret; for RSA/ECDSA it is the PEM-encoded public key.
+                      Either SigningKeyRef or JwksURL must be specified.
+                    properties:
+                      key:
+                        default: password
+                        description: Key is the key in the secret
+                        type: string
+                      name:
+                        description: Name is the secret name
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  subjectKey:
+                    description: |-
+                      SubjectKey is the JWT claim to use as the username.
+                      When empty, OpenSearch falls back to the standard "sub" claim.
+                    type: string
+                  transportEnabled:
+                    default: false
+                    description: TransportEnabled enables authentication on transport
+                      layer
+                    type: boolean
+                type: object
               ldap:
                 description: LDAP configures LDAP/Active Directory authentication
                 properties:

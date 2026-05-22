@@ -266,6 +266,84 @@ func TestOpenSearchAuthConfigValidator_LDAPValid(t *testing.T) {
 	}
 }
 
+func TestOpenSearchAuthConfigValidator_JWTMissingSource(t *testing.T) {
+	v := &OpenSearchAuthConfigCustomValidator{}
+
+	authConfig := &OpenSearchAuthConfig{
+		Spec: OpenSearchAuthConfigSpec{
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
+			JWT: &JWTAuthSpec{
+				Enabled: true,
+			},
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), authConfig)
+	if err == nil {
+		t.Error("expected error when JWT has neither signingKeyRef nor jwksUrl, got nil")
+	}
+}
+
+func TestOpenSearchAuthConfigValidator_JWTMutuallyExclusiveSources(t *testing.T) {
+	v := &OpenSearchAuthConfigCustomValidator{}
+
+	authConfig := &OpenSearchAuthConfig{
+		Spec: OpenSearchAuthConfigSpec{
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
+			JWT: &JWTAuthSpec{
+				Enabled:       true,
+				JwksURL:       "https://teleport.example.com/.well-known/jwks.json",
+				SigningKeyRef: &SecretKeyRef{Name: "jwt-key", Key: "signing_key"},
+			},
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), authConfig)
+	if err == nil {
+		t.Error("expected error when JWT sets both signingKeyRef and jwksUrl, got nil")
+	}
+}
+
+func TestOpenSearchAuthConfigValidator_JWTValidWithJWKS(t *testing.T) {
+	v := &OpenSearchAuthConfigCustomValidator{}
+
+	authConfig := &OpenSearchAuthConfig{
+		Spec: OpenSearchAuthConfigSpec{
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
+			JWT: &JWTAuthSpec{
+				Enabled:   true,
+				JwksURL:   "https://teleport.example.com/.well-known/jwks.json",
+				JwtHeader: "Teleport-Jwt-Assertion",
+				RolesKey:  "roles",
+			},
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), authConfig)
+	if err != nil {
+		t.Errorf("expected no error with valid JWT (jwks) config, got: %v", err)
+	}
+}
+
+func TestOpenSearchAuthConfigValidator_JWTValidWithSigningKey(t *testing.T) {
+	v := &OpenSearchAuthConfigCustomValidator{}
+
+	authConfig := &OpenSearchAuthConfig{
+		Spec: OpenSearchAuthConfigSpec{
+			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
+			JWT: &JWTAuthSpec{
+				Enabled:       true,
+				SigningKeyRef: &SecretKeyRef{Name: "jwt-key", Key: "signing_key"},
+			},
+		},
+	}
+
+	_, err := v.ValidateCreate(context.Background(), authConfig)
+	if err != nil {
+		t.Errorf("expected no error with valid JWT (signing key) config, got: %v", err)
+	}
+}
+
 func TestOpenSearchAuthConfigValidator_MultipleChallengeWarning(t *testing.T) {
 	v := &OpenSearchAuthConfigCustomValidator{}
 
@@ -355,13 +433,13 @@ func TestOpenSearchAuthConfigValidator_ValidateUpdate(t *testing.T) {
 	old := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
 			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
-			BasicAuth:  &BasicAuthSpec{Enabled: true},
+			BasicAuth:   &BasicAuthSpec{Enabled: true},
 		},
 	}
 	new := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
 			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
-			BasicAuth:  &BasicAuthSpec{Enabled: true},
+			BasicAuth:   &BasicAuthSpec{Enabled: true},
 			OIDC: &OIDCAuthSpec{
 				Enabled:    true,
 				ConnectURL: "https://idp.example.com/.well-known/openid-configuration",
