@@ -74,6 +74,9 @@ type ClusterReconciler struct {
 	DecoderReconciler *DecoderReconciler
 	// AgentGroupReconciler handles WazuhAgentGroup resources for mounting group files to manager pods
 	AgentGroupReconciler *AgentGroupReconciler
+	// IntegrationReconciler handles WazuhIntegration resources for mounting integration scripts
+	// and injecting <integration> blocks into ossec.conf on manager pods
+	IntegrationReconciler *IntegrationReconciler
 }
 
 // NewClusterReconciler creates a new ClusterReconciler
@@ -105,6 +108,13 @@ func (r *ClusterReconciler) WithDecoderReconciler(dr *DecoderReconciler) *Cluste
 // WithAgentGroupReconciler sets the agent group reconciler for mounting group file ConfigMaps to manager pods
 func (r *ClusterReconciler) WithAgentGroupReconciler(agr *AgentGroupReconciler) *ClusterReconciler {
 	r.AgentGroupReconciler = agr
+	return r
+}
+
+// WithIntegrationReconciler sets the integration reconciler for mounting integration scripts
+// and injecting <integration> blocks into ossec.conf on manager pods
+func (r *ClusterReconciler) WithIntegrationReconciler(ir *IntegrationReconciler) *ClusterReconciler {
+	r.IntegrationReconciler = ir
 	return r
 }
 
@@ -688,6 +698,20 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		}
 	}
 
+	// Mount integration script ConfigMaps if IntegrationReconciler is configured
+	var integrationHash string
+	if r.IntegrationReconciler != nil {
+		integrationConfigMaps, hash, err := r.IntegrationReconciler.GetIntegrationConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace, config.NodeTypeMaster)
+		if err != nil {
+			log.Error(err, "Failed to get integration ConfigMaps for cluster, continuing without integrations")
+		} else if len(integrationConfigMaps) > 0 {
+			stsBuilder.WithIntegrationConfigMaps(convertIntegrationConfigMaps(integrationConfigMaps))
+			stsBuilder.WithIntegrationHash(hash)
+			integrationHash = hash
+			log.V(1).Info("Mounting integration ConfigMaps to master", "count", len(integrationConfigMaps), "hash", utils.ShortHash(hash))
+		}
+	}
+
 	// Mount agent group file ConfigMaps if AgentGroupReconciler is configured
 	var agentGroupFilesHash string
 	if r.AgentGroupReconciler != nil {
@@ -710,7 +734,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	found := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Master StatefulSet", "name", sts.Name, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash), "ruleHash", utils.ShortHash(ruleHash), "decoderHash", utils.ShortHash(decoderHash), "agentGroupFilesHash", utils.ShortHash(agentGroupFilesHash))
+		log.Info("Creating Master StatefulSet", "name", sts.Name, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash), "ruleHash", utils.ShortHash(ruleHash), "decoderHash", utils.ShortHash(decoderHash), "agentGroupFilesHash", utils.ShortHash(agentGroupFilesHash), "integrationHash", utils.ShortHash(integrationHash))
 		if err := r.Create(ctx, sts); err != nil {
 			return nil, fmt.Errorf("failed to create master statefulset: %w", err)
 		}
@@ -756,12 +780,14 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	existingRuleHash := ""
 	existingDecoderHash := ""
 	existingAgentGroupFilesHash := ""
+	existingIntegrationHash := ""
 	if found.Spec.Template.Annotations != nil {
 		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
 		existingConfigHash = found.Spec.Template.Annotations[constants.AnnotationConfigHash]
 		existingRuleHash = found.Spec.Template.Annotations[constants.AnnotationRuleHash]
 		existingDecoderHash = found.Spec.Template.Annotations[constants.AnnotationDecoderHash]
 		existingAgentGroupFilesHash = found.Spec.Template.Annotations[constants.AnnotationAgentGroupFilesHash]
+		existingIntegrationHash = found.Spec.Template.Annotations[constants.AnnotationIntegrationHash]
 	}
 	if found.Annotations != nil {
 		existingSpecHash = found.Annotations[constants.AnnotationSpecHash]
@@ -863,6 +889,18 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingAgentGroupFilesHash),
 			"newHash", utils.ShortHash(agentGroupFilesHash))
+	}
+	if integrationHash != existingIntegrationHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+integration-change"
+		} else {
+			updateReason = "integration-change"
+		}
+		log.Info("Master StatefulSet needs update due to integration hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingIntegrationHash),
+			"newHash", utils.ShortHash(integrationHash))
 	}
 
 	if needsUpdate {
@@ -1223,6 +1261,20 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		}
 	}
 
+	// Mount integration script ConfigMaps if IntegrationReconciler is configured
+	var integrationHash string
+	if r.IntegrationReconciler != nil {
+		integrationConfigMaps, hash, err := r.IntegrationReconciler.GetIntegrationConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace, config.NodeTypeWorker)
+		if err != nil {
+			log.Error(err, "Failed to get integration ConfigMaps for cluster, continuing without integrations")
+		} else if len(integrationConfigMaps) > 0 {
+			stsBuilder.WithIntegrationConfigMaps(convertIntegrationConfigMaps(integrationConfigMaps))
+			stsBuilder.WithIntegrationHash(hash)
+			integrationHash = hash
+			log.V(1).Info("Mounting integration ConfigMaps to workers", "count", len(integrationConfigMaps), "hash", utils.ShortHash(hash))
+		}
+	}
+
 	// Mount agent group file ConfigMaps if AgentGroupReconciler is configured
 	var agentGroupFilesHash string
 	if r.AgentGroupReconciler != nil {
@@ -1245,7 +1297,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	found := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Worker StatefulSet", "name", sts.Name, "replicas", replicas, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash), "ruleHash", utils.ShortHash(ruleHash), "decoderHash", utils.ShortHash(decoderHash), "agentGroupFilesHash", utils.ShortHash(agentGroupFilesHash))
+		log.Info("Creating Worker StatefulSet", "name", sts.Name, "replicas", replicas, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash), "ruleHash", utils.ShortHash(ruleHash), "decoderHash", utils.ShortHash(decoderHash), "agentGroupFilesHash", utils.ShortHash(agentGroupFilesHash), "integrationHash", utils.ShortHash(integrationHash))
 		if err := r.Create(ctx, sts); err != nil {
 			return nil, fmt.Errorf("failed to create worker statefulset: %w", err)
 		}
@@ -1295,12 +1347,14 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	existingRuleHash := ""
 	existingDecoderHash := ""
 	existingAgentGroupFilesHash := ""
+	existingIntegrationHash := ""
 	if found.Spec.Template.Annotations != nil {
 		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
 		existingConfigHash = found.Spec.Template.Annotations[constants.AnnotationConfigHash]
 		existingRuleHash = found.Spec.Template.Annotations[constants.AnnotationRuleHash]
 		existingDecoderHash = found.Spec.Template.Annotations[constants.AnnotationDecoderHash]
 		existingAgentGroupFilesHash = found.Spec.Template.Annotations[constants.AnnotationAgentGroupFilesHash]
+		existingIntegrationHash = found.Spec.Template.Annotations[constants.AnnotationIntegrationHash]
 	}
 	if found.Annotations != nil {
 		existingSpecHash = found.Annotations[constants.AnnotationSpecHash]
@@ -1402,6 +1456,18 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingAgentGroupFilesHash),
 			"newHash", utils.ShortHash(agentGroupFilesHash))
+	}
+	if integrationHash != existingIntegrationHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+integration-change"
+		} else {
+			updateReason = "integration-change"
+		}
+		log.Info("Worker StatefulSet needs update due to integration hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingIntegrationHash),
+			"newHash", utils.ShortHash(integrationHash))
 	}
 
 	if needsUpdate {
@@ -2378,6 +2444,8 @@ func (r *ClusterReconciler) buildMasterOSSECConfig(ctx context.Context, cluster 
 		return "", fmt.Errorf("failed to resolve manager config: %w", err)
 	}
 
+	extraConfig = r.appendIntegrationBlocks(ctx, cluster, extraConfig, config.NodeTypeMaster)
+
 	ossecConfig := config.DefaultOSSECConfig(cluster.Name, cluster.Name+"-manager-master")
 	ossecConfig.Namespace = cluster.Namespace
 	ossecConfig.ExtraConfig = extraConfig
@@ -2398,6 +2466,8 @@ func (r *ClusterReconciler) buildWorkerOSSECConfig(ctx context.Context, cluster 
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve manager config: %w", err)
 	}
+
+	extraConfig = r.appendIntegrationBlocks(ctx, cluster, extraConfig, config.NodeTypeWorker)
 
 	ossecConfig := config.DefaultOSSECConfig(cluster.Name, cluster.Name+"-manager-worker")
 	ossecConfig.NodeType = config.NodeTypeWorker
@@ -2911,6 +2981,39 @@ func convertDecoderConfigMaps(infos []DecoderConfigMapInfo) []deployments.Decode
 		}
 	}
 	return refs
+}
+
+// convertIntegrationConfigMaps converts IntegrationConfigMapInfo from the integration reconciler to IntegrationConfigMapRef for the builder
+func convertIntegrationConfigMaps(infos []IntegrationConfigMapInfo) []deployments.IntegrationConfigMapRef {
+	refs := make([]deployments.IntegrationConfigMapRef, len(infos))
+	for i, info := range infos {
+		refs[i] = deployments.IntegrationConfigMapRef{
+			Name:     info.ConfigMapName,
+			FileName: info.FileName,
+		}
+	}
+	return refs
+}
+
+// appendIntegrationBlocks appends the <integration> ossec.conf blocks for the given node
+// type to the provided extra configuration. On error it logs and returns extraConfig unchanged.
+func (r *ClusterReconciler) appendIntegrationBlocks(ctx context.Context, cluster *wazuhv1.WazuhCluster, extraConfig, nodeType string) string {
+	if r.IntegrationReconciler == nil {
+		return extraConfig
+	}
+	blocks, err := r.IntegrationReconciler.GetIntegrationOSSECBlocks(ctx, cluster.Name, cluster.Namespace, nodeType)
+	if err != nil {
+		logf.FromContext(ctx).Error(err, "Failed to build integration blocks, continuing without them",
+			"cluster", cluster.Name, "namespace", cluster.Namespace, "nodeType", nodeType)
+		return extraConfig
+	}
+	if blocks == "" {
+		return extraConfig
+	}
+	if strings.TrimSpace(extraConfig) == "" {
+		return blocks
+	}
+	return extraConfig + "\n" + blocks
 }
 
 // convertAgentGroupFiles converts AgentGroupFileInfo from the agent group reconciler to AgentGroupFileRef for the builder

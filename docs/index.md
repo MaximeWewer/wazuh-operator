@@ -40,7 +40,7 @@ kubectl get wazuhcluster -n wazuh
 ### User Guide
 
 - [User Documentation](usage/README.md) - Complete user guide index
-- [CRD Reference](usage/CRD-REFERENCE.md) - API documentation for all 22 CRDs
+- [CRD Reference](usage/CRD-REFERENCE.md) - API documentation for all 23 CRDs
 - [Examples](usage/examples/README.md) - Ready-to-use configurations
 
 ### Key Features

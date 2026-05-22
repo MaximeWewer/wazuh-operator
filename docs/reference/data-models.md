@@ -23,7 +23,7 @@ These CRDs define the main Wazuh cluster components.
   - `drain`: Safe scale-down strategy configuration
 - **Short Name**: `wc`
 
-### 2. Wazuh Configuration CRDs (5)
+### 2. Wazuh Configuration CRDs (6)
 
 These CRDs manage Wazuh-specific configuration and operational concerns.
 
@@ -47,6 +47,20 @@ These CRDs manage Wazuh-specific configuration and operational concerns.
   - `targetNodes`: Deploy to "all", "master", or "workers"
   - `decoders`: XML decoder definitions
 - **Short Name**: `wdec`
+
+#### WazuhIntegration
+
+- **Purpose**: Provision Wazuh custom integrations (external API forwarding) declaratively
+- **Key Fields**:
+  - `clusterRefs`: Target WazuhClusters (cross-namespace)
+  - `name`: Logical name without the `custom-` prefix (operator forces it)
+  - `script`: Integration script content (shebang required)
+  - `scriptExtension`: Optional file extension → `custom-<name>.<ext>`
+  - `hookURL` / `hookURLSecretRef`, `apiKeySecretRef`: endpoint and credential (rendered into ossec.conf)
+  - `level`, `ruleID`, `group`, `eventLocation`, `alertFormat`, `options`: `<integration>` alert filters
+  - `targetNodes`: Deploy to "all", "master", or "workers"
+- **Behavior**: Installs `/var/ossec/integrations/custom-<name>[.<ext>]` (read-only ConfigMap subPath mount, `root:wazuh` mode 0750 via DefaultMode + the pod fsGroup) and injects the matching `<integration>` block into ossec.conf
+- **Short Name**: `wintegration`
 
 #### WazuhCertificate
 
@@ -311,6 +325,7 @@ WazuhCluster (1) ─┬─> (1..N) Manager Pods (master + workers)
 
 WazuhCluster (1) <──── (0..N) WazuhRule ────> Manager ConfigMaps
 WazuhCluster (1) <──── (0..N) WazuhDecoder ─> Manager ConfigMaps
+WazuhCluster (1) <──── (0..N) WazuhIntegration ─> Manager scripts + ossec.conf <integration>
 WazuhCluster (1) <──── (0..N) WazuhAgentGroup ─> Manager Agent Groups + File ConfigMaps
 WazuhCluster (1) <──── (0..1) WazuhCertificate ─> TLS Secrets
 

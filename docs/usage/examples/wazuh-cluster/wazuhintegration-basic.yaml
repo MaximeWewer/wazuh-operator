@@ -1,0 +1,83 @@
+# WazuhIntegration — custom integration with an external API.
+#
+# A WazuhIntegration provisions BOTH halves of a Wazuh custom integration:
+#   1. the executable script at /var/ossec/integrations/<integrationName>
+#   2. the matching <integration> block in ossec.conf (wazuh-integratord)
+#
+# The manager pods are rolled automatically when the script or configuration
+# changes. See:
+# https://documentation.wazuh.com/current/user-manual/manager/manual-integration.html
+---
+# Secret holding the external API key. It must live in the TARGET cluster's
+# namespace (the operator reads it there to render <api_key> in ossec.conf).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: slack-integration-credentials
+  namespace: wazuh
+type: Opaque
+stringData:
+  api-key: "T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
+---
+apiVersion: resources.wazuh.com/v1
+kind: WazuhIntegration
+metadata:
+  name: slack-high-severity
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
+
+  # Logical name WITHOUT the "custom-" prefix (the operator adds it).
+  # With scriptExtension below, the script file and the ossec.conf <name> tag
+  # both become "custom-slack.py".
+  name: slack
+  scriptExtension: py
+
+  # wazuh-integratord runs on every manager node; restrict to master if you
+  # only want alerts processed on the master node forwarded.
+  targetNodes: all
+
+  # Only forward alerts at level >= 10.
+  level: 10
+  alertFormat: json
+
+  # The endpoint passed to the script as argv[3]. Use hookURLSecretRef instead
+  # when the URL itself is sensitive.
+  hookURL: "https://hooks.slack.com/services"
+
+  # API key resolved from the Secret above and rendered as <api_key> / argv[2].
+  apiKeySecretRef:
+    name: slack-integration-credentials
+    key: api-key
+
+  # The integration script. The first line MUST be a shebang. The operator
+  # mounts it read-only at /var/ossec/integrations/custom-slack.py as root:wazuh
+  # mode 0750 (DefaultMode + the pod fsGroup) — exactly what Wazuh requires.
+  script: |
+    #!/usr/bin/env python3
+    import sys
+    import json
+    import requests
+
+    # Arguments passed by wazuh-integratord:
+    #   argv[1] = path to the JSON alert file
+    #   argv[2] = api_key   (from <api_key>)
+    #   argv[3] = hook_url  (from <hook_url>)
+    alert_file = sys.argv[1]
+    api_key = sys.argv[2]
+    hook_url = sys.argv[3]
+
+    with open(alert_file) as f:
+        alert = json.load(f)
+
+    rule = alert.get("rule", {})
+    payload = {
+        "text": "Wazuh alert (level %s): %s" % (
+            rule.get("level"), rule.get("description"),
+        ),
+    }
+
+    requests.post("%s/%s" % (hook_url, api_key), json=payload, timeout=10)
+    sys.exit(0)

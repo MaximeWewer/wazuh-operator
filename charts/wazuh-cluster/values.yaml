@@ -1274,6 +1274,27 @@ wazuhDecoders: []
 #           <program_name>myapp</program_name>
 #         </decoder>
 
+# -- Wazuh custom integrations to create (script + ossec.conf <integration> block)
+# @default -- `[]`
+wazuhIntegrations: []
+# Example:
+#   - name: jira-integration
+#     spec:
+#       name: jira              # operator forces the prefix -> custom-jira
+#       scriptExtension: py     # -> script file & <name> become custom-jira.py
+#       targetNodes: master
+#       alertFormat: json
+#       level: 10
+#       hookURL: https://your-instance.atlassian.net
+#       apiKeySecretRef:
+#         name: jira-credentials
+#         key: api-key
+#       script: |
+#         #!/usr/bin/env python3
+#         import sys, json
+#         # alert_file, api_key, hook_url = sys.argv[1], sys.argv[2], sys.argv[3]
+#         # ... forward the alert to the external API ...
+
 # -- Wazuh agent groups to create
 # @default -- `[]`
 wazuhAgentGroups: []

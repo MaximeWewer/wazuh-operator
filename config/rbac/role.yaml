@@ -176,6 +176,7 @@ rules:
   - wazuhclusters
   - wazuhdecoders
   - wazuhfilebeats
+  - wazuhintegrations
   - wazuhrestores
   - wazuhrules
   verbs:
@@ -209,6 +210,7 @@ rules:
   - wazuhclusters/finalizers
   - wazuhdecoders/finalizers
   - wazuhfilebeats/finalizers
+  - wazuhintegrations/finalizers
   - wazuhrestores/finalizers
   - wazuhrules/finalizers
   verbs:
@@ -236,6 +238,7 @@ rules:
   - wazuhclusters/status
   - wazuhdecoders/status
   - wazuhfilebeats/status
+  - wazuhintegrations/status
   - wazuhrestores/status
   - wazuhrules/status
   verbs:

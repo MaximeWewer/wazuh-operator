@@ -95,6 +95,22 @@ Manages Wazuh log decoders declaratively.
 4. Mount ConfigMap to manager pods at `/var/ossec/etc/decoders/`
 5. Trigger decoder reload via API
 
+### WazuhIntegration Controller
+
+**controllers/wazuhintegration_controller.go**
+
+Provisions Wazuh custom integrations (external API forwarding) declaratively.
+
+**Reconciliation**:
+
+1. Validate name/script (shebang, `custom-` prefix forced)
+2. Create/update ConfigMap holding the script (`custom-<name>[.<ext>]`)
+3. Resolve `hookURL`/`apiKey` from Secrets in the target cluster namespace
+4. Mount the script read-only into `/var/ossec/integrations/` (`root:wazuh` 0750 via DefaultMode + fsGroup)
+5. Inject the `<integration>` block into ossec.conf and roll the targeted manager pods (integratord reads config at start)
+
+**Targeting**: `all` / `master` / `workers`
+
 ### WazuhCertificate Controller
 
 **controllers/wazuhcertificate_controller.go**

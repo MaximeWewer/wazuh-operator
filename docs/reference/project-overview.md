@@ -54,7 +54,7 @@ The operator follows the standard Kubernetes operator pattern with:
 
 - **Declarative Cluster Management**: Define entire Wazuh cluster via YAML
 - **Automated Deployment**: Provisions Manager, Indexer, and Dashboard automatically
-- **Component Management**: 22 CRDs covering all aspects of Wazuh deployment
+- **Component Management**: 23 CRDs covering all aspects of Wazuh deployment
 
 ### Wazuh Management
 
@@ -122,7 +122,7 @@ The operator creates and manages:
 **Completed Features**:
 
 - Core operator functionality
-- All 22 CRDs implemented
+- All 23 CRDs implemented
 - TLS with auto-generation and hot reload
 - Prometheus monitoring integration
 - Advanced indexer topology (NodePools)

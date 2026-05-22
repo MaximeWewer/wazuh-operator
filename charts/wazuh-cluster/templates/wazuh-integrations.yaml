@@ -1,0 +1,12 @@
+{{- range .Values.wazuhIntegrations }}
+---
+apiVersion: resources.wazuh.com/v1
+kind: WazuhIntegration
+metadata:
+  name: {{ .name }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    {{- include "wazuh-cluster.labels" $ | nindent 4 }}
+spec:
+  {{- include "wazuh-cluster.specWithClusterRef" (dict "spec" .spec "clusterName" $.Values.cluster.name "clusterNamespace" $.Values.namespace) | nindent 2 }}
+{{- end }}

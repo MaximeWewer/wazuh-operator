@@ -39,8 +39,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -315,6 +315,8 @@ func main() {
 	decoderReconciler := wazuhreconciler.NewDecoderReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhDecoderRecorder)
 	wazuhAgentGroupRecorder := mgr.GetEventRecorderFor("wazuhagentgroup-controller")
 	agentGroupReconciler := wazuhreconciler.NewAgentGroupReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhAgentGroupRecorder)
+	wazuhIntegrationRecorder := mgr.GetEventRecorderFor("wazuhintegration-controller")
+	integrationReconciler := wazuhreconciler.NewIntegrationReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhIntegrationRecorder)
 
 	// WazuhCluster Controller (main orchestration)
 	wazuhClusterReconciler := &controllers.WazuhClusterReconciler{
@@ -324,7 +326,8 @@ func main() {
 		ClusterReconciler: wazuhreconciler.NewClusterReconciler(mgr.GetClient(), mgr.GetScheme()).
 			WithRuleReconciler(ruleReconciler).
 			WithDecoderReconciler(decoderReconciler).
-			WithAgentGroupReconciler(agentGroupReconciler),
+			WithAgentGroupReconciler(agentGroupReconciler).
+			WithIntegrationReconciler(integrationReconciler),
 		CertificateReconciler:   certReconciler,
 		IndexerReconciler:       opensearchreconciler.NewIndexerReconciler(mgr.GetClient(), mgr.GetScheme()).WithClientFactory(osClientFactory).WithSecurityAdminExecutor(securityAdminExecutor),
 		DashboardReconciler:     opensearchreconciler.NewDashboardReconciler(mgr.GetClient(), mgr.GetScheme()),
@@ -391,6 +394,15 @@ func main() {
 		AgentGroupReconciler: agentGroupReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WazuhAgentGroup")
+		os.Exit(1)
+	}
+	if err := (&controllers.WazuhIntegrationReconciler{
+		Client:                mgr.GetClient(),
+		Scheme:                mgr.GetScheme(),
+		Recorder:              wazuhIntegrationRecorder,
+		IntegrationReconciler: integrationReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WazuhIntegration")
 		os.Exit(1)
 	}
 

@@ -2121,6 +2121,21 @@ func (r *WazuhClusterReconciler) findClustersForDecoder(ctx context.Context, obj
 	return requests
 }
 
+// findClustersForIntegration emits one reconcile request per target cluster of a WazuhIntegration.
+func (r *WazuhClusterReconciler) findClustersForIntegration(ctx context.Context, obj client.Object) []ctrl.Request {
+	integration, ok := obj.(*wazuhv1.WazuhIntegration)
+	if !ok {
+		return []ctrl.Request{}
+	}
+	requests := make([]ctrl.Request, 0, len(integration.Spec.ClusterRefs))
+	for _, ref := range integration.Spec.ClusterRefs {
+		requests = append(requests, ctrl.Request{
+			NamespacedName: types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace},
+		})
+	}
+	return requests
+}
+
 // findClustersForAgentGroup finds every WazuhCluster targeted by a WazuhAgentGroup.
 // Returns one reconcile request per cluster ref so each target STS picks up the
 // new file ConfigMap.
@@ -2279,6 +2294,13 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&wazuhv1.WazuhAgentGroup{},
 			handler.EnqueueRequestsFromMapFunc(r.findClustersForAgentGroup),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
+		// Watch WazuhIntegration CRs - reconcile WazuhCluster when integration spec changes
+		// so the manager picks up the new script mount and ossec.conf <integration> block.
+		Watches(
+			&wazuhv1.WazuhIntegration{},
+			handler.EnqueueRequestsFromMapFunc(r.findClustersForIntegration),
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
 		// Watch OpenSearchAuthConfig CRs - reconcile WazuhCluster when auth spec changes

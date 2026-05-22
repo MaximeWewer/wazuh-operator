@@ -96,6 +96,10 @@ const (
 	// This triggers rolling update when agent group shared files are added, modified, or deleted
 	AnnotationAgentGroupFilesHash = "wazuh.com/agentgroup-files-hash"
 
+	// AnnotationIntegrationHash stores the hash of WazuhIntegration scripts and config for pod restart detection
+	// This triggers rolling update when custom integrations are added, modified, or deleted
+	AnnotationIntegrationHash = "wazuh.com/integration-hash"
+
 	// NOTE: AnnotationCertHash is defined in labels.go as "wazuh.com/cert-hash"
 )
 

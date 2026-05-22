@@ -46,9 +46,9 @@ flowchart TD
         subgraph CRM[Controller Runtime Manager]
             CRM1["Manages controller lifecycle · Shared caches and informers<br/>Leader election · Metrics server · Health checks"]
         end
-        subgraph Controllers[22 Reconciliation Controllers]
+        subgraph Controllers[23 Reconciliation Controllers]
             WCR["WazuhClusterReconciler (Main)<br/>Orchestrates all components · Delegates to helper reconcilers"]
-            CONFIG["Config Controllers (5)<br/>Rules, Decoders, Certificates, Filebeat, AgentGroups"]
+            CONFIG["Config Controllers (6)<br/>Rules, Decoders, Integrations, Certificates, Filebeat, AgentGroups"]
             SEC["OpenSearch Security Controllers (5)<br/>Users, Roles, RoleMappings, etc."]
             IDX["OpenSearch Index Controllers (5)<br/>Indices, Templates, ISM Policies"]
             BACKUP["Backup/Restore Controllers (4)<br/>Wazuh and OpenSearch backups"]
@@ -80,7 +80,7 @@ flowchart TD
 
 **Components**:
 
-- 22 CRD type definitions
+- 23 CRD type definitions
 - Validation markers (Kubebuilder)
 - Status subresources
 - Short names and categories
@@ -251,14 +251,14 @@ builder := statefulsets.NewManagerBuilder(name, namespace).
 
 ## Data Architecture
 
-### Custom Resource Definitions (22 CRDs)
+### Custom Resource Definitions (23 CRDs)
 
 **API Group**: `resources.wazuh.com/v1`
 
 **Categories**:
 
 1. **Wazuh Core** (1): WazuhCluster
-2. **Wazuh Config** (5): WazuhRule, WazuhDecoder, WazuhCertificate, WazuhFilebeat, WazuhAgentGroup
+2. **Wazuh Config** (6): WazuhRule, WazuhDecoder, WazuhIntegration, WazuhCertificate, WazuhFilebeat, WazuhAgentGroup
 3. **Wazuh Backup** (2): WazuhBackup, WazuhRestore
 4. **OpenSearch Security** (6): OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchActionGroup, OpenSearchTenant, OpenSearchAuthConfig
 5. **OpenSearch Index** (5): OpenSearchIndex, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchISMPolicy, OpenSearchSnapshotPolicy

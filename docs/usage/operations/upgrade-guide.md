@@ -9,7 +9,7 @@ support targeting clusters that live in a different namespace from the CR.
 
 | Field shape | CRDs |
 |-------------|------|
-| `spec.clusterRefs: [{name, namespace}]` (list, both required, MinItems=1) | WazuhAgentGroup, WazuhRule, WazuhDecoder, WazuhFilebeat, OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchTenant, OpenSearchActionGroup, OpenSearchAuthConfig, OpenSearchISMPolicy, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchIndex, OpenSearchSnapshotPolicy, OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore |
+| `spec.clusterRefs: [{name, namespace}]` (list, both required, MinItems=1) | WazuhAgentGroup, WazuhRule, WazuhDecoder, WazuhIntegration, WazuhFilebeat, OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchTenant, OpenSearchActionGroup, OpenSearchAuthConfig, OpenSearchISMPolicy, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchIndex, OpenSearchSnapshotPolicy, OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore |
 | `spec.clusterRef: {name, namespace}` (single, both required) | WazuhBackup, WazuhRestore, WazuhCertificate |
 
 Migrate every existing CR before upgrading the operator:

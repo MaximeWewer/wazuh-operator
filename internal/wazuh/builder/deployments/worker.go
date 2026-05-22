@@ -58,6 +58,8 @@ type WorkerStatefulSetBuilder struct {
 	decoderConfigMaps []DecoderConfigMapRef
 	// Agent group file ConfigMaps to mount
 	agentGroupFiles []AgentGroupFileRef
+	// Integration script ConfigMaps to mount
+	integrationConfigMaps []IntegrationConfigMapRef
 	// Extra init containers
 	extraInitContainers []corev1.Container
 	// Extra sidecar containers
@@ -286,6 +288,26 @@ func (b *WorkerStatefulSetBuilder) WithDecoderHash(hash string) *WorkerStatefulS
 			b.podAnnotations = make(map[string]string)
 		}
 		b.podAnnotations[constants.AnnotationDecoderHash] = hash
+	}
+	return b
+}
+
+// WithIntegrationConfigMaps sets the integration script ConfigMaps to mount
+// Each ConfigMap holds a custom integration script that will be mounted executable
+// to /var/ossec/integrations/<filename>
+func (b *WorkerStatefulSetBuilder) WithIntegrationConfigMaps(refs []IntegrationConfigMapRef) *WorkerStatefulSetBuilder {
+	b.integrationConfigMaps = refs
+	return b
+}
+
+// WithIntegrationHash sets the integration hash annotation on pods
+// This triggers pod restart when integration scripts or configuration change
+func (b *WorkerStatefulSetBuilder) WithIntegrationHash(hash string) *WorkerStatefulSetBuilder {
+	if hash != "" {
+		if b.podAnnotations == nil {
+			b.podAnnotations = make(map[string]string)
+		}
+		b.podAnnotations[constants.AnnotationIntegrationHash] = hash
 	}
 	return b
 }
@@ -575,9 +597,9 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 					ImagePullSecrets:              b.imagePullSecrets,
 					TopologySpreadConstraints:     b.topologySpreadConstraints,
 					SecurityContext:               podSecCtx,
-					InitContainers: initContainers,
-					Containers:     containers,
-					Volumes:        volumes,
+					InitContainers:                initContainers,
+					Containers:                    containers,
+					Volumes:                       volumes,
 				},
 			},
 			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
@@ -720,6 +742,23 @@ func (b *WorkerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 		})
 	}
 
+	// Add integration script ConfigMap volumes. Mounted read-only via subPath into
+	// /var/ossec/integrations; DefaultMode 0750 + the pod fsGroup (wazuh) yield
+	// root:wazuh 0750 — exactly what Wazuh requires for a custom integration script.
+	for _, ref := range b.integrationConfigMaps {
+		volumes = append(volumes, corev1.Volume{
+			Name: fmt.Sprintf("wazuh-integration-%s", ref.Name),
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: ref.Name,
+					},
+					DefaultMode: &integrationScriptMode,
+				},
+			},
+		})
+	}
+
 	return volumes
 }
 
@@ -792,12 +831,23 @@ func (b *WorkerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 		}
 	}
 
+	// Add integration script mounts at /var/ossec/integrations/<filename>.
+	// Read-only subPath mount; DefaultMode 0750 + fsGroup give root:wazuh 0750.
+	for _, ref := range b.integrationConfigMaps {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      fmt.Sprintf("wazuh-integration-%s", ref.Name),
+			MountPath: fmt.Sprintf("%s/%s", constants.PathWazuhIntegrations, ref.FileName),
+			SubPath:   ref.FileName,
+			ReadOnly:  true,
+		})
+	}
+
 	return mounts
 }
 
 // buildInitContainerVolumeMounts builds the volume mount list for the init container
 func (b *WorkerStatefulSetBuilder) buildInitContainerVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
+	mounts := []corev1.VolumeMount{
 		// Source: ConfigMap (read-only)
 		{
 			Name:      constants.VolumeNameWazuhConfigSource,
@@ -827,6 +877,8 @@ func (b *WorkerStatefulSetBuilder) buildInitContainerVolumeMounts() []corev1.Vol
 			MountPath: "/wazuh-data",
 		},
 	}
+
+	return mounts
 }
 
 // buildInitContainer creates the init container that copies configs to writable volumes

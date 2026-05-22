@@ -48,6 +48,7 @@ additional cluster when targeting more than one.
   - [WazuhRule](#wazuhrule)
   - [WazuhAgentGroup](#wazuhagentgroup)
   - [WazuhDecoder](#wazuhdecoder)
+  - [WazuhIntegration](#wazuhintegration)
   - [WazuhCertificate](#wazuhcertificate)
   - [WazuhFilebeat](#wazuhfilebeat)
 - [Wazuh Backup CRDs](#wazuh-backup-crds)
@@ -996,6 +997,62 @@ Manages custom log decoders.
 | `priority`      | int32                 | No       | `500`   | Application priority        |
 | `overwrite`     | bool                  | No       | `false` | Overwrite existing          |
 | `parentDecoder` | string                | No       | -       | Parent decoder name         |
+
+### WazuhIntegration
+
+Provisions a Wazuh [custom integration](https://documentation.wazuh.com/current/user-manual/manager/manual-integration.html): it installs an executable script in `/var/ossec/integrations/` **and** injects the matching `<integration>` block into `ossec.conf` so `wazuh-integratord` forwards alerts to the script.
+
+**Short Name:** `wintegration`
+
+| Field              | Type                | Required | Default | Description                                                                                          |
+| ------------------ | ------------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------- |
+| `clusterRefs`      | []WazuhClusterRef   | **Yes**  | -       | Target clusters (cross-namespace)                                                                    |
+| `name`             | string              | **Yes**  | -       | Logical name **without** the `custom-` prefix (pattern `^[a-zA-Z0-9_-]+$`); the operator adds it     |
+| `script`           | string              | **Yes**  | -       | Integration script content; first line must be a shebang                                             |
+| `scriptExtension`  | string              | No       | -       | Optional file extension (no dot), e.g. `py`/`sh` → file becomes `custom-<name>.<ext>`                |
+| `hookURL`          | string              | No       | -       | Endpoint passed to the script (`argv[3]`), rendered as `<hook_url>`                                   |
+| `hookURLSecretRef` | SecretKeySelector   | No       | -       | Read the hook URL from a Secret in the target cluster namespace (overrides `hookURL`)                |
+| `apiKeySecretRef`  | SecretKeySelector   | No       | -       | Read the API key from a Secret in the target cluster namespace; rendered as `<api_key>` (`argv[2]`)  |
+| `level`            | int32               | No       | -       | Minimum alert level filter (`<level>`, 0-16)                                                         |
+| `ruleID`           | []int32             | No       | -       | Rule ID filter (`<rule_id>`, comma-joined)                                                            |
+| `group`            | string              | No       | -       | Rule group filter (`<group>`)                                                                         |
+| `eventLocation`    | string              | No       | -       | Alert source filter (`<location>`)                                                                   |
+| `alertFormat`      | string              | No       | `json`  | Alert payload format (`json`/`full_log`)                                                              |
+| `options`          | string              | No       | -       | Raw JSON forwarded inside `<options>`                                                                 |
+| `targetNodes`      | string              | No       | `all`   | Target manager nodes (master/workers/all)                                                            |
+
+The generated script filename and the `<integration>` `<name>` tag are both `custom-<name>[.<scriptExtension>]` (kept in sync because `wazuh-integratord` executes the file named exactly like `<name>`). The script is mounted read-only into `/var/ossec/integrations/` as `root:wazuh` with mode `0750` (the ownership Wazuh requires) — the executable bit comes from the ConfigMap DefaultMode and the wazuh group from the pod's fsGroup. Adding, changing, or removing an integration triggers a rolling restart of the targeted manager pods.
+
+#### Example
+
+```yaml
+# docs/usage/examples/wazuh-cluster/wazuhintegration-basic.yaml
+apiVersion: resources.wazuh.com/v1
+kind: WazuhIntegration
+metadata:
+  name: slack-high-severity
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  name: slack            # operator forces the prefix -> custom-slack
+  scriptExtension: py    # -> file & <name> become custom-slack.py
+  targetNodes: master
+  level: 10
+  alertFormat: json
+  hookURL: "https://hooks.slack.com/services"
+  apiKeySecretRef:       # Secret must live in the target cluster's namespace
+    name: slack-integration-credentials
+    key: api-key
+  script: |
+    #!/usr/bin/env python3
+    import sys, json
+    alert_file, api_key, hook_url = sys.argv[1], sys.argv[2], sys.argv[3]
+    with open(alert_file) as f:
+        alert = json.load(f)
+    # ... forward the alert to the external API ...
+    sys.exit(0)
+```
 
 ### WazuhCertificate
 

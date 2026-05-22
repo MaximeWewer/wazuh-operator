@@ -180,6 +180,7 @@ rules:
   - wazuhcertificates
   - wazuhdecoders
   - wazuhfilebeats
+  - wazuhintegrations
   - wazuhrules
   - opensearchactiongroups
   - opensearchauthconfigs
@@ -213,6 +214,7 @@ rules:
   - wazuhcertificates/finalizers
   - wazuhdecoders/finalizers
   - wazuhfilebeats/finalizers
+  - wazuhintegrations/finalizers
   - wazuhrules/finalizers
   - opensearchactiongroups/finalizers
   - opensearchauthconfigs/finalizers
@@ -240,6 +242,7 @@ rules:
   - wazuhcertificates/status
   - wazuhdecoders/status
   - wazuhfilebeats/status
+  - wazuhintegrations/status
   - wazuhrules/status
   - opensearchactiongroups/status
   - opensearchauthconfigs/status

@@ -73,6 +73,7 @@ Controllers for managing Wazuh detection rules and decoders:
 - **CRDs Managed**:
   - WazuhRule - Custom detection rules
   - WazuhDecoder - Custom log decoders
+  - WazuhIntegration - Custom integrations (script + ossec.conf `<integration>` block)
 
 ## Design Patterns
 
