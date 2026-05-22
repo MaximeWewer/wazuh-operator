@@ -127,6 +127,15 @@ jobs:
           tags: |
             type=raw,value=${{ needs.prepare.outputs.version }}
             type=raw,value=latest,enable=${{ needs.prepare.outputs.is_prerelease == 'false' }}
+          labels: |
+            org.opencontainers.image.title=Wazuh Operator Backup Tools
+            org.opencontainers.image.description=Backup and restore tooling for the Wazuh Operator
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+            org.opencontainers.image.vendor=${{ github.repository_owner }}
+            org.opencontainers.image.licenses=Apache-2.0
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.url=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
 
       - name: Build and push backup-tools image
         uses: docker/build-push-action@v7
@@ -138,6 +147,7 @@ jobs:
           cache-from: type=gha,scope=backup-tools
           cache-to: type=gha,scope=backup-tools,mode=max
           tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
   # =============================================================================
   # Job 3: Build and Push Operator Docker Image
