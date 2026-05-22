@@ -747,9 +747,9 @@ tokens such as Teleport application access.
 | `challenge`                 | bool         | No       | `false`         | Issue auth challenge (keep `false` for JWT)                              |
 | `httpEnabled`               | bool         | No       | `true`          | Enable on HTTP layer                                                     |
 | `transportEnabled`          | bool         | No       | `false`         | Enable on transport layer                                                |
-| `signingKeyRef`             | SecretKeyRef | No\*     | -               | Secret with the signing key (base64 HMAC secret or PEM public key)       |
+| `signingKeyRef`             | SecretKeyRef | No\*     | -               | Secret with the signing key (see "Signing key format" below)             |
 | `jwksUrl`                   | string       | No\*     | -               | JWKS endpoint to fetch public keys (e.g. Teleport proxy)                 |
-| `jwtHeader`                 | string       | No       | `Authorization` | HTTP header carrying the token (Teleport: `Teleport-Jwt-Assertion`)      |
+| `jwtHeader`                 | string       | No       | `Authorization` | HTTP header carrying the token                                          |
 | `jwtUrlParameter`           | string       | No       | -               | Read token from a URL query parameter instead of a header               |
 | `subjectKey`                | string       | No       | (`sub`)         | JWT claim used as the username                                           |
 | `rolesKey`                  | string       | No       | -               | JWT claim containing backend roles                                       |
@@ -759,7 +759,39 @@ tokens such as Teleport application access.
 
 \* `signingKeyRef` and `jwksUrl` are mutually exclusive; one of the two is required.
 
-**Example — JWT (Teleport) + local basic auth:**
+**Version-aware routing (automatic).** The OpenSearch `jwt` authenticator only
+accepts a `jwks_uri` from **OpenSearch 3.3+**. On older versions, JWKS validation
+must go through the `openid` authenticator (where `jwks_uri` replaces
+`openid_connect_url`). The operator picks the right form automatically from the
+target cluster's version (`spec.version` → OpenSearch version):
+
+| `signingKeyRef`/`jwksUrl` | OpenSearch < 3.3            | OpenSearch ≥ 3.3        |
+| ------------------------- | -------------------------- | ----------------------- |
+| `jwksUrl`                 | `type: openid` + jwks_uri  | `type: jwt` + jwks_uri  |
+| `signingKeyRef`           | `type: jwt` + signing_key  | `type: jwt` + signing_key |
+
+> All current Wazuh releases ship OpenSearch ≤ 2.19, so `jwksUrl` is emitted as an
+> `openid` domain today. The native `jwt` + `jwks_uri` form activates automatically
+> once a Wazuh version that ships OpenSearch 3.3+ is mapped in
+> `pkg/versions.WazuhToOpenSearchVersion`.
+
+**Signing key format (`signingKeyRef`).** The value is base64-decoded by the
+security plugin (strict decoder — no embedded newlines):
+
+- **HMAC**: the base64-encoded shared secret.
+- **RSA/ECDSA**: the base64 of the DER public key on a **single line** (i.e. the PEM
+  body with headers and line breaks stripped). A wrapped multi-line PEM fails with
+  `Illegal base64 character`.
+
+Produce it from a PEM or a Teleport JWKS:
+
+```bash
+# from a PEM public key
+openssl rsa -pubin -in teleport-jwt.pem -outform DER | base64 -w0 > signing_key.b64
+kubectl create secret generic teleport-jwt-key -n wazuh --from-file=signing_key=signing_key.b64
+```
+
+**Example — JWT (Teleport JWKS) + local basic auth:**
 
 ```yaml
 apiVersion: resources.wazuh.com/v1
@@ -774,27 +806,34 @@ spec:
   # Local users stay available; required when multiple methods are enabled.
   basicAuth:
     enabled: true
-    order: 0
+    order: 1
+    challenge: true
   jwt:
     enabled: true
-    order: 4
+    order: 0
+    # Routed to the openid authenticator on OpenSearch < 3.3, native jwt on >= 3.3.
     jwksUrl: "https://teleport.example.com/.well-known/jwks.json"
-    jwtHeader: "Teleport-Jwt-Assertion"
-    subjectKey: "username"
+    jwtHeader: "Authorization"
+    subjectKey: "sub"
     rolesKey: "roles"
+    clockSkewToleranceSeconds: 30
 ```
 
-To validate with a static key instead of JWKS, drop `jwksUrl` and reference a Secret:
+Static-key variant (works on every version, `type: jwt`):
 
 ```yaml
   jwt:
     enabled: true
+    order: 0
     signingKeyRef:
       name: teleport-jwt-key
-      key: signing_key   # base64 HMAC secret or PEM public key
-    jwtHeader: "Teleport-Jwt-Assertion"
+      key: signing_key   # single-line base64 (see "Signing key format")
+    jwtHeader: "Authorization"
+    subjectKey: "sub"
     rolesKey: "roles"
 ```
+
+Map the `roles` claim to OpenSearch roles with an `OpenSearchRoleMapping` (backend roles).
 
 See sample files for detailed authentication configurations.
 

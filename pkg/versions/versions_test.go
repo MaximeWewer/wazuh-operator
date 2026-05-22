@@ -288,7 +288,7 @@ func TestWazuhToOpenSearchVersion(t *testing.T) {
 		{
 			name:         "Wazuh 5.0.0 fallback",
 			wazuhVersion: "5.0.0",
-			wantVersion:  "2.19.0",
+			wantVersion:  "3.0.0",
 		},
 	}
 

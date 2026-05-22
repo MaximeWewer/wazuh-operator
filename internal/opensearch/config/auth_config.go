@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/pkg/versions"
 )
 
 // AuthConfigBuilder builds the config.yml authentication section from CRD spec
@@ -29,6 +30,9 @@ type AuthConfigBuilder struct {
 	authConfig *v1.OpenSearchAuthConfigSpec
 	// Resolved secrets (populated by reconciler)
 	resolvedSecrets map[string]string
+	// wazuhVersion of the target cluster; used to route JWKS-based JWT auth to the
+	// authenticator the cluster's OpenSearch version supports. Empty = unknown.
+	wazuhVersion string
 }
 
 // NewAuthConfigBuilder creates a new AuthConfigBuilder
@@ -43,6 +47,27 @@ func NewAuthConfigBuilder(spec *v1.OpenSearchAuthConfigSpec) *AuthConfigBuilder 
 func (b *AuthConfigBuilder) WithSecret(key, value string) *AuthConfigBuilder {
 	b.resolvedSecrets[key] = value
 	return b
+}
+
+// WithWazuhVersion sets the target cluster's Wazuh version so JWKS-based JWT auth is
+// emitted for the matching OpenSearch authenticator (openid for < 3.3, jwt for >= 3.3).
+func (b *AuthConfigBuilder) WithWazuhVersion(version string) *AuthConfigBuilder {
+	b.wazuhVersion = version
+	return b
+}
+
+// openSearchSupportsJwtJwks reports whether the target cluster's OpenSearch version has
+// a native `jwt` authenticator that accepts `jwks_uri`. When the version is unknown or
+// older, JWKS-based JWT auth must be routed through the `openid` authenticator instead.
+func (b *AuthConfigBuilder) openSearchSupportsJwtJwks() bool {
+	if b.wazuhVersion == "" {
+		return false
+	}
+	osVersion, err := versions.WazuhToOpenSearchVersion(b.wazuhVersion)
+	if err != nil {
+		return false
+	}
+	return osVersion.GreaterThanOrEqual(versions.MinOpenSearchVersionForJwtJwks)
 }
 
 // AuthDomainConfig represents a single authentication domain configuration
@@ -261,9 +286,19 @@ func formatConfigMap(config map[string]any, indent int) string {
 		value := config[key]
 		switch v := value.(type) {
 		case string:
-			if strings.Contains(v, "\n") || strings.Contains(v, ":") || strings.Contains(v, "#") {
+			switch {
+			case strings.Contains(v, "\n"):
+				// Multi-line values (e.g. an RSA/ECDSA PEM signing_key) must use a YAML
+				// literal block scalar; a double-quoted scalar folds the raw newlines into
+				// spaces and mangles the key. "|-" preserves newlines and strips the final
+				// one. Block content is indented two spaces past the key.
+				fmt.Fprintf(&sb, "%s%s: |-\n", prefix, key)
+				for _, line := range strings.Split(v, "\n") {
+					fmt.Fprintf(&sb, "%s  %s\n", prefix, line)
+				}
+			case strings.Contains(v, ":") || strings.Contains(v, "#"):
 				fmt.Fprintf(&sb, "%s%s: \"%s\"\n", prefix, key, v)
-			} else {
+			default:
 				fmt.Fprintf(&sb, "%s%s: %s\n", prefix, key, v)
 			}
 		case bool:

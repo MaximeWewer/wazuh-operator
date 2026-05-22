@@ -144,8 +144,11 @@ func WazuhToOpenSearchVersion(wazuhVersion string) (*Version, error) {
 		// Wazuh 4.4.x-4.6.x → OpenSearch 2.6.x
 		return &Version{Major: 2, Minor: 6, Patch: 0}, nil
 	case wv.Major >= 5:
-		// Wazuh 5.x (future) → OpenSearch 2.19.x+
-		return &Version{Major: 2, Minor: 19, Patch: 0}, nil
+		// Wazuh 5.x ships OpenSearch 3.x. TODO: set the exact OpenSearch version once
+		// the Wazuh 5 release is pinned — it gates JWT-JWKS routing (>= 3.3 uses the
+		// native jwt authenticator with jwks_uri; < 3.3 uses the openid authenticator).
+		// Until then this conservative 3.0.0 keeps JWKS on the openid authenticator.
+		return &Version{Major: 3, Minor: 0, Patch: 0}, nil
 	default:
 		// Older versions → OpenSearch 1.x or earlier
 		return &Version{Major: 1, Minor: 0, Patch: 0}, nil
@@ -185,6 +188,12 @@ var MinOpenSearchVersionForHotReload = &Version{Major: 2, Minor: 13, Patch: 0}
 
 // MinOpenSearchVersionForAutoHotReload is the minimum version for automatic hot reload
 var MinOpenSearchVersionForAutoHotReload = &Version{Major: 2, Minor: 19, Patch: 0}
+
+// MinOpenSearchVersionForJwtJwks is the first OpenSearch version whose native `jwt`
+// authenticator accepts a `jwks_uri` (dynamic key retrieval). Below this, JWKS-based
+// JWT validation must go through the `openid` authenticator instead (jwks_uri replaces
+// openid_connect_url). See the JWT authentication backend docs (3.2 vs 3.3).
+var MinOpenSearchVersionForJwtJwks = &Version{Major: 3, Minor: 3, Patch: 0}
 
 // MinWazuhVersionForHotReload is the minimum Wazuh version that supports hot reload
 var MinWazuhVersionForHotReload = &Version{Major: 4, Minor: 9, Patch: 0}
@@ -259,6 +268,8 @@ type WazuhVersionInfo struct {
 // The plugin version format is: OpenSearchVersion.PatchVersion (e.g., 2.19.1.0)
 var wazuhVersionMapping = map[string]WazuhVersionInfo{
 	// Wazuh 4.14.x - OpenSearch 2.19.3+
+	"4.14.5": {WazuhVersion: "4.14.5", OpenSearchVersion: "2.19.4", PrometheusExporterPluginVersion: "2.19.4.0"},
+	"4.14.4": {WazuhVersion: "4.14.4", OpenSearchVersion: "2.19.4", PrometheusExporterPluginVersion: "2.19.4.0"},
 	"4.14.3": {WazuhVersion: "4.14.3", OpenSearchVersion: "2.19.4", PrometheusExporterPluginVersion: "2.19.4.0"},
 	"4.14.2": {WazuhVersion: "4.14.2", OpenSearchVersion: "2.19.4", PrometheusExporterPluginVersion: "2.19.4.0"},
 	"4.14.1": {WazuhVersion: "4.14.1", OpenSearchVersion: "2.19.3", PrometheusExporterPluginVersion: "2.19.3.0"},

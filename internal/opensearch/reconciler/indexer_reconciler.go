@@ -352,7 +352,7 @@ func (r *IndexerReconciler) reconcileSecrets(ctx context.Context, cluster *wazuh
 		if secErr != nil {
 			log.Error(secErr, "Failed to resolve auth secrets, indexer will use default security config", "authConfig", authConfig.Name)
 		} else {
-			b := config.NewAuthConfigBuilder(&authConfig.Spec)
+			b := config.NewAuthConfigBuilder(&authConfig.Spec).WithWazuhVersion(cluster.Spec.Version)
 			for k, v := range authSecrets {
 				b.WithSecret(k, v)
 			}

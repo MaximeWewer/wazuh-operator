@@ -89,23 +89,28 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 		return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Validation failed: %v", err))
 	}
 
-	// Render config.yml once from the spec + resolved secrets. This is the same
-	// content the indexer security Secret carries; we push it inline via
-	// securityadmin.sh because the pod's mounted config.yml (a Secret subPath) is
-	// not refreshed after pod creation and would otherwise be stale.
-	cfgBuilder := config.NewAuthConfigBuilder(&authConfig.Spec)
-	for k, v := range secrets {
-		cfgBuilder.WithSecret(k, v)
-	}
-	securityConfigYML := cfgBuilder.BuildSecurityConfig()
-
 	// Iterate over each target cluster: cleanup orphan ConfigMaps and apply
 	// the security config via securityadmin.sh per cluster. Errors are logged
 	// per cluster but do not abort the loop.
+	//
+	// config.yml is rendered per cluster (not once) because JWKS-based JWT auth is
+	// routed to a different authenticator depending on the cluster's OpenSearch
+	// version, so target clusters on different versions need different output. We push
+	// it inline via securityadmin.sh because the pod's mounted config.yml (a Secret
+	// subPath) is not refreshed after pod creation and would otherwise be stale.
 	newStatuses := make([]wazuhv1.OpenSearchClusterStatus, 0, len(authConfig.Spec.ClusterRefs))
 	for _, ref := range authConfig.Spec.ClusterRefs {
 		st := wazuhv1.OpenSearchClusterStatus{Name: ref.Name, Namespace: ref.Namespace}
 		r.cleanupLegacyConfigMaps(ctx, ref.Name, ref.Namespace)
+
+		// Resolve the target cluster's Wazuh version (best effort) to route JWKS-based
+		// JWT auth to the authenticator its OpenSearch version supports.
+		cfgBuilder := config.NewAuthConfigBuilder(&authConfig.Spec).WithWazuhVersion(r.clusterWazuhVersion(ctx, ref.Name, ref.Namespace))
+		for k, v := range secrets {
+			cfgBuilder.WithSecret(k, v)
+		}
+		securityConfigYML := cfgBuilder.BuildSecurityConfig()
+
 		if r.SecurityAdminExecutor != nil {
 			if err := r.SecurityAdminExecutor.ApplySecurityConfig(ctx, ref.Name, ref.Namespace, securityConfigYML); err != nil {
 				log.Error(err, "Failed to apply security config via securityadmin.sh on cluster",
@@ -150,6 +155,19 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 
 	r.recordEvent(authConfig, corev1.EventTypeNormal, "Synced", "Authentication configuration applied on all target clusters")
 	return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseReady, "Authentication configuration applied")
+}
+
+// clusterWazuhVersion returns the target WazuhCluster's version, or "" if it cannot be
+// resolved. Best effort: a missing version simply makes the auth builder fall back to the
+// version-agnostic routing (JWKS via the openid authenticator).
+func (r *AuthConfigReconciler) clusterWazuhVersion(ctx context.Context, name, namespace string) string {
+	cluster := &wazuhv1.WazuhCluster{}
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, cluster); err != nil {
+		logf.FromContext(ctx).V(1).Info("Could not resolve target cluster version for auth routing",
+			"cluster", name, "namespace", namespace, "err", err)
+		return ""
+	}
+	return cluster.Spec.Version
 }
 
 // recordEvent emits an event if the recorder is available

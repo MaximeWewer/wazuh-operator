@@ -6,15 +6,29 @@ import (
 
 // buildJWTAuthDomain creates the jwt auth domain configuration for config.yml.
 // Reference: https://docs.opensearch.org/latest/security/authentication-backends/jwt/
+//
+// JWKS-based validation is routed to the authenticator the target OpenSearch version
+// supports. The native `jwt` authenticator only accepts `jwks_uri` from OpenSearch 3.3;
+// on older versions JWKS validation must use the `openid` authenticator (where `jwks_uri`
+// replaces `openid_connect_url`). A static `signing_key` always uses the `jwt`
+// authenticator, which is valid on every version.
 func (b *AuthConfigBuilder) buildJWTAuthDomain(spec *v1.JWTAuthSpec) AuthDomainConfig {
 	config := make(map[string]any)
 
-	// Verification source: either a static signing key (resolved from a Secret)
-	// or a remote JWKS endpoint.
+	usesJWKS := spec.JwksURL != ""
+
+	// Default to the native jwt authenticator; route JWKS to openid on versions whose
+	// jwt authenticator predates jwks_uri support.
+	authType := "jwt"
+	if usesJWKS && !b.openSearchSupportsJwtJwks() {
+		authType = "openid"
+	}
+
+	// Static signing key (jwt authenticator only). Mutually exclusive with jwks_uri.
 	if secret, ok := b.resolvedSecrets[AuthSecretKeyJWTSigningKey]; ok && secret != "" {
 		config["signing_key"] = secret
 	}
-	if spec.JwksURL != "" {
+	if usesJWKS {
 		config["jwks_uri"] = spec.JwksURL
 	}
 
@@ -40,13 +54,16 @@ func (b *AuthConfigBuilder) buildJWTAuthDomain(spec *v1.JWTAuthSpec) AuthDomainC
 		config["jwt_clock_skew_tolerance_seconds"] = spec.ClockSkewToleranceSeconds
 	}
 
+	// The domain name is an arbitrary key; keep it stable as "jwt_auth_domain" (even when
+	// the authenticator is openid) so it never collides with the dedicated OIDC block's
+	// "openid_auth_domain".
 	return AuthDomainConfig{
 		Name:                "jwt_auth_domain",
 		Order:               spec.Order,
 		HTTPEnabled:         spec.HTTPEnabled,
 		TransportEnabled:    spec.TransportEnabled,
 		Challenge:           spec.Challenge,
-		AuthenticatorType:   "jwt",
+		AuthenticatorType:   authType,
 		AuthenticatorConfig: config,
 		BackendType:         "noop",
 		Description:         "Authenticate via JWT bearer token",

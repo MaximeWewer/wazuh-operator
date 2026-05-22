@@ -439,8 +439,11 @@ type JWTAuthSpec struct {
 	TransportEnabled bool `json:"transportEnabled,omitempty"`
 
 	// SigningKeyRef references a Secret containing the JWT signing key used to
-	// verify token signatures. For HMAC algorithms this is the base64-encoded
-	// shared secret; for RSA/ECDSA it is the PEM-encoded public key.
+	// verify token signatures. The value is base64-decoded by the security plugin
+	// with a strict decoder (no embedded newlines): for HMAC it is the base64-encoded
+	// shared secret; for RSA/ECDSA it is the base64 of the DER public key on a single
+	// line (the PEM body with headers and line breaks stripped) — a wrapped multi-line
+	// PEM fails to parse. Works on all OpenSearch versions (jwt authenticator).
 	// Either SigningKeyRef or JwksURL must be specified.
 	// +optional
 	SigningKeyRef *SecretKeyRef `json:"signingKeyRef,omitempty"`
@@ -448,6 +451,9 @@ type JWTAuthSpec struct {
 	// JwksURL is the JSON Web Key Set endpoint used to fetch public keys for
 	// signature verification. Use this for issuers that rotate keys, such as
 	// Teleport (e.g. https://teleport.example.com/.well-known/jwks.json).
+	// Routed automatically to the authenticator the target OpenSearch version
+	// supports: the openid authenticator on < 3.3, the native jwt authenticator on
+	// >= 3.3 (which is the first version whose jwt authenticator accepts jwks_uri).
 	// Either SigningKeyRef or JwksURL must be specified.
 	// +optional
 	JwksURL string `json:"jwksUrl,omitempty"`
