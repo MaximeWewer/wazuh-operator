@@ -982,21 +982,26 @@ cluster:
         # -- Enable Wazuh exporter
         enabled: true
         # -- Wazuh exporter image
-        image: "kennyopennix/wazuh-exporter:latest"
+        image: "ghcr.io/maximewewer/wazuh-prometheus-exporter:latest"
         # -- Wazuh exporter metrics port
-        port: 9090
+        port: 9555
         # -- API protocol for connecting to Wazuh API
         apiProtocol: "https"
-        # -- Verify SSL when connecting to Wazuh API
-        apiVerifySSL: false
-        # -- Exporter log level
-        logLevel: "INFO"
-        # -- Skip last logs metric
-        skipLastLogs: false
-        # -- Skip last registered agent metric
-        skipLastRegisteredAgent: false
-        # -- Skip Wazuh API info metric
-        skipWazuhAPIInfo: false
+        # -- Verify SSL when connecting to Wazuh API (false skips TLS verification)
+        apiVerifySSL: true
+        # apiCASecretRef references a Secret holding the CA that verifies the Wazuh API
+        # cert when apiVerifySSL is true. Defaults to the cluster's common CA when unset.
+        # apiCASecretRef:
+        #   name: my-ca-secret
+        #   key: ca.crt
+        # -- Exporter log level (trace, debug, info, warn, error)
+        logLevel: "info"
+        # -- Metrics cache TTL (keep >= Prometheus scrape interval), e.g. "30s"
+        cacheTTL: ""
+        # -- Quiet-startup window (WAZUH_STARTUP_GRACE): collection failures log as
+        #    warn instead of error until the first success, letting a slow Wazuh API
+        #    boot without noise. 0 (off) to 10m.
+        startupGrace: "60s"
 
       # @extra cluster.spec.monitoring.indexerExporter OpenSearch indexer exporter configuration
       indexerExporter:

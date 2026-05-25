@@ -427,8 +427,13 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 
 	// Build pod-level security context with defaults, then merge user overrides
 	// Defaults: FSGroup=999 (wazuh group), SeccompProfile=Unconfined (needed for Filebeat)
+	// FSGroupChangePolicy=OnRootMismatch so the kubelet only recursively chowns the
+	// data PVC when its root is not already the fsGroup — without this (default
+	// "Always") every pod start re-chowns the whole volume, adding minutes.
+	onRootMismatch := corev1.FSGroupChangeOnRootMismatch
 	podSecCtx := &corev1.PodSecurityContext{
-		FSGroup: func() *int64 { v := int64(999); return &v }(),
+		FSGroup:             func() *int64 { v := int64(999); return &v }(),
+		FSGroupChangePolicy: &onRootMismatch,
 		SeccompProfile: &corev1.SeccompProfile{
 			Type: corev1.SeccompProfileTypeUnconfined,
 		},
@@ -436,6 +441,9 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	if b.securityContext != nil {
 		if b.securityContext.FSGroup != nil {
 			podSecCtx.FSGroup = b.securityContext.FSGroup
+		}
+		if b.securityContext.FSGroupChangePolicy != nil {
+			podSecCtx.FSGroupChangePolicy = b.securityContext.FSGroupChangePolicy
 		}
 		if b.securityContext.RunAsUser != nil {
 			podSecCtx.RunAsUser = b.securityContext.RunAsUser
@@ -508,7 +516,11 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			Command: []string{
 				"/bin/bash",
 				"-c",
-				"find /var/ossec -writable -exec chown 999:999 {} +",
+				// Chown only writable files not already owned by 999: "-writable" skips
+				// read-only mounts (e.g. the authd.pass Secret) that would otherwise fail
+				// the chown on a read-only fs; "! -user 999" skips the already-correct
+				// files so restarts don't re-chown the whole /var/ossec tree.
+				"find /var/ossec -writable ! -user 999 -print0 | xargs -0 -r chown 999:999",
 			},
 			VolumeMounts: b.buildVolumeMounts(),
 		},

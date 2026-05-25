@@ -790,44 +790,55 @@ type WazuhExporterConfig struct {
 
 	// Image for the exporter
 	// +optional
-	// +kubebuilder:default="pytoshka/wazuh-prometheus-exporter:latest"
+	// +kubebuilder:default="ghcr.io/maximewewer/wazuh-prometheus-exporter:latest"
 	Image string `json:"image,omitempty"`
 
 	// Port for metrics endpoint
 	// +optional
-	// +kubebuilder:default=9090
+	// +kubebuilder:default=9555
 	Port int32 `json:"port,omitempty"`
 
 	// Resources for the exporter container
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
-	// API protocol
+	// API protocol (https or http) used to build the Wazuh API URL
 	// +optional
 	// +kubebuilder:default="https"
 	APIProtocol string `json:"apiProtocol,omitempty"`
 
-	// Verify SSL certificates
+	// Verify the Wazuh API TLS certificate. When false, certificate verification
+	// is skipped (WAZUH_API_TLS_SKIP_VERIFY=true). Defaults to true: the operator
+	// issues the Wazuh API certificate from the cluster's common CA, which the
+	// exporter verifies against (mounted as WAZUH_API_CA_FILE).
 	// +optional
-	// +kubebuilder:default=false
+	// +kubebuilder:default=true
 	APIVerifySSL bool `json:"apiVerifySSL,omitempty"`
 
-	// Log level
+	// APICASecretRef references a Secret holding the CA bundle that verifies the
+	// Wazuh API certificate. Only used when apiVerifySSL is true. When omitted, the
+	// operator defaults to the cluster's common CA (the manager certs secret's
+	// ca.crt). The referenced key is mounted into the exporter as WAZUH_API_CA_FILE.
 	// +optional
-	// +kubebuilder:default="INFO"
+	APICASecretRef *SecretKeyRef `json:"apiCASecretRef,omitempty"`
+
+	// Log level (trace, debug, info, warn, error)
+	// +optional
+	// +kubebuilder:default="info"
 	LogLevel string `json:"logLevel,omitempty"`
 
-	// Skip last logs metrics
+	// CacheTTL is how long collected metrics are cached. Keep it >= the Prometheus
+	// scrape interval. Maps to WAZUH_CACHE_TTL (e.g. "30s").
 	// +optional
-	SkipLastLogs bool `json:"skipLastLogs,omitempty"`
+	CacheTTL string `json:"cacheTTL,omitempty"`
 
-	// Skip last registered agent metrics
+	// StartupGrace is a quiet-startup window (WAZUH_STARTUP_GRACE) during which
+	// collection failures are logged at warn ("waiting for Wazuh API") instead of
+	// error, until the first successful collection. Lets a slow-to-boot Wazuh API
+	// come up without error noise. Range 0 (off) to 10m.
 	// +optional
-	SkipLastRegisteredAgent bool `json:"skipLastRegisteredAgent,omitempty"`
-
-	// Skip Wazuh API info metrics
-	// +optional
-	SkipWazuhAPIInfo bool `json:"skipWazuhAPIInfo,omitempty"`
+	// +kubebuilder:default="60s"
+	StartupGrace string `json:"startupGrace,omitempty"`
 }
 
 // IndexerExporterConfig defines OpenSearch Prometheus exporter configuration
@@ -853,7 +864,7 @@ type ServiceMonitorConfig struct {
 
 	// Scrape interval
 	// +optional
-	// +kubebuilder:default="30s"
+	// +kubebuilder:default="60s"
 	Interval string `json:"interval,omitempty"`
 
 	// Scrape timeout

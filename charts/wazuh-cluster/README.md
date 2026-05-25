@@ -410,14 +410,13 @@ kubectl delete -f <(helm template my-wazuh-cluster ./charts/wazuh-cluster --name
 | cluster.spec.monitoring.serviceMonitor.labels | object | `{}` | Additional labels for ServiceMonitor |
 | cluster.spec.monitoring.serviceMonitor.scrapeTimeout | string | `"10s"` | Scrape timeout |
 | cluster.spec.monitoring.wazuhExporter.apiProtocol | string | `"https"` | API protocol for connecting to Wazuh API |
-| cluster.spec.monitoring.wazuhExporter.apiVerifySSL | bool | `false` | Verify SSL when connecting to Wazuh API |
+| cluster.spec.monitoring.wazuhExporter.apiVerifySSL | bool | `true` | Verify SSL when connecting to Wazuh API (false skips TLS verification) |
+| cluster.spec.monitoring.wazuhExporter.cacheTTL | string | `""` | Metrics cache TTL (keep >= Prometheus scrape interval), e.g. "30s" |
 | cluster.spec.monitoring.wazuhExporter.enabled | bool | `true` | Enable Wazuh exporter |
-| cluster.spec.monitoring.wazuhExporter.image | string | `"kennyopennix/wazuh-exporter:latest"` | Wazuh exporter image |
-| cluster.spec.monitoring.wazuhExporter.logLevel | string | `"INFO"` | Exporter log level |
-| cluster.spec.monitoring.wazuhExporter.port | int | `9090` | Wazuh exporter metrics port |
-| cluster.spec.monitoring.wazuhExporter.skipLastLogs | bool | `false` | Skip last logs metric |
-| cluster.spec.monitoring.wazuhExporter.skipLastRegisteredAgent | bool | `false` | Skip last registered agent metric |
-| cluster.spec.monitoring.wazuhExporter.skipWazuhAPIInfo | bool | `false` | Skip Wazuh API info metric |
+| cluster.spec.monitoring.wazuhExporter.image | string | `"ghcr.io/maximewewer/wazuh-prometheus-exporter:latest"` | Wazuh exporter image |
+| cluster.spec.monitoring.wazuhExporter.logLevel | string | `"info"` | Exporter log level (trace, debug, info, warn, error) |
+| cluster.spec.monitoring.wazuhExporter.port | int | `9555` | Wazuh exporter metrics port |
+| cluster.spec.monitoring.wazuhExporter.startupGrace | string | `"60s"` | Quiet-startup window (WAZUH_STARTUP_GRACE): collection failures log as warn instead of error until first success (0–10m) |
 
 ### Drain Configuration
 

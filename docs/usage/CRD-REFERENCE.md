@@ -160,13 +160,16 @@ Configuration for safe scale-down operations. See [Drain Strategy](features/drai
 
 | Field          | Type                 | Required | Default                              | Description         |
 | -------------- | -------------------- | -------- | ------------------------------------ | ------------------- |
-| `enabled`      | bool                 | No       | `false`                              | Enable exporter     |
-| `image`        | string               | No       | `kennyopennix/wazuh-exporter:latest` | Exporter image      |
-| `port`         | int32                | No       | `9090`                               | Metrics port        |
-| `apiProtocol`  | string               | No       | `https`                              | API protocol        |
-| `apiVerifySSL` | bool                 | No       | `false`                              | Verify SSL          |
-| `logLevel`     | string               | No       | `INFO`                               | Log level           |
-| `resources`    | ResourceRequirements | No       | -                                    | Container resources |
+| `enabled`      | bool                 | No       | `false`                                              | Enable exporter                                  |
+| `image`        | string               | No       | `ghcr.io/maximewewer/wazuh-prometheus-exporter:latest` | Exporter image                                 |
+| `port`         | int32                | No       | `9555`                                               | Metrics port                                     |
+| `apiProtocol`  | string               | No       | `https`                                              | API protocol (builds the Wazuh API URL)          |
+| `apiVerifySSL` | bool                 | No       | `true`                                               | Verify Wazuh API TLS cert (false skips verify)   |
+| `apiCASecretRef` | SecretKeyRef       | No       | cluster common CA                                    | CA bundle to verify the API cert (when apiVerifySSL=true); defaults to the manager certs `ca.crt` |
+| `logLevel`     | string               | No       | `info`                                               | Log level (trace/debug/info/warn/error)          |
+| `cacheTTL`     | string               | No       | -                                                    | Metrics cache TTL (>= scrape interval), e.g. 30s |
+| `startupGrace` | string               | No       | `60s`                                                | Quiet-startup window (warn vs error) for a slow Wazuh API; 0–10m |
+| `resources`    | ResourceRequirements | No       | -                                                    | Container resources                              |
 
 ### IndexerExporterConfig
 

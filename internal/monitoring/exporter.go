@@ -18,6 +18,7 @@ package monitoring
 
 import (
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -39,18 +40,33 @@ const (
 // DefaultWazuhAPIPort is the default Wazuh API port (derived from constants)
 var DefaultWazuhAPIPort = fmt.Sprintf("%d", constants.PortManagerAPI)
 
-// WazuhExporterConfig holds configuration for the Wazuh exporter sidecar
+const (
+	// exporterCAVolumeName is the sidecar volume holding the CA used to verify the API cert
+	exporterCAVolumeName = "wazuh-exporter-ca"
+	// exporterCAMountPath is where that CA is mounted in the exporter sidecar
+	exporterCAMountPath = "/etc/wazuh-exporter/ca"
+	// exporterCAFileName is the projected CA filename (→ WAZUH_API_CA_FILE)
+	exporterCAFileName = "ca.crt"
+)
+
+// WazuhExporterConfig holds configuration for the Wazuh exporter sidecar.
+// Targets github.com/MaximeWewer/wazuh-prometheus-exporter (Go binary), which is
+// configured entirely through WAZUH_* environment variables.
 type WazuhExporterConfig struct {
 	ClusterName       string
 	Image             string
 	Port              int32
 	APIProtocol       string
+	APIVerifySSL      bool
 	LogLevel          string
-	SkipLastLogs      bool
-	SkipLastAgent     bool
-	SkipWazuhAPIInfo  bool
+	CacheTTL          string
+	StartupGrace      string
 	Resources         *corev1.ResourceRequirements
 	APICredentialsRef string
+	// CASecretName/CASecretKey identify the CA bundle mounted to verify the API cert
+	// (only set when APIVerifySSL is true).
+	CASecretName string
+	CASecretKey  string
 }
 
 // NewWazuhExporterConfig creates a new WazuhExporterConfig from the cluster spec
@@ -66,7 +82,9 @@ func NewWazuhExporterConfig(cluster *wazuhv1.WazuhCluster) *WazuhExporterConfig 
 		Image:             DefaultWazuhExporterImage,
 		Port:              DefaultWazuhExporterPort,
 		APIProtocol:       "https",
-		LogLevel:          "INFO",
+		APIVerifySSL:      exporterSpec.APIVerifySSL,
+		LogLevel:          "info",
+		StartupGrace:      "60s",
 		APICredentialsRef: constants.APICredentialsName(cluster.Name),
 	}
 
@@ -83,17 +101,36 @@ func NewWazuhExporterConfig(cluster *wazuhv1.WazuhCluster) *WazuhExporterConfig 
 	if exporterSpec.LogLevel != "" {
 		config.LogLevel = exporterSpec.LogLevel
 	}
-	config.SkipLastLogs = exporterSpec.SkipLastLogs
-	config.SkipLastAgent = exporterSpec.SkipLastRegisteredAgent
-	config.SkipWazuhAPIInfo = exporterSpec.SkipWazuhAPIInfo
+	config.CacheTTL = exporterSpec.CacheTTL
+	if exporterSpec.StartupGrace != "" {
+		config.StartupGrace = exporterSpec.StartupGrace
+	}
 	config.Resources = exporterSpec.Resources
+
+	// When TLS verification is enabled, resolve the CA bundle to mount. Default to the
+	// cluster's common CA (manager master certs secret) since the operator issues the
+	// Wazuh API cert from it; a custom APICASecretRef overrides that.
+	if config.APIVerifySSL {
+		if ref := exporterSpec.APICASecretRef; ref != nil && ref.Name != "" {
+			config.CASecretName = ref.Name
+			config.CASecretKey = ref.Key
+			if config.CASecretKey == "" {
+				config.CASecretKey = constants.SecretKeyCACert
+			}
+		} else {
+			config.CASecretName = constants.ManagerCertsName(cluster.Name, "master")
+			config.CASecretKey = constants.SecretKeyCACert
+		}
+	}
 
 	return config
 }
 
-// BuildExporterContainer creates the Wazuh Prometheus exporter sidecar container
+// BuildExporterContainer creates the Wazuh Prometheus exporter sidecar container.
+// The exporter is a self-contained Go binary with its own entrypoint, so no startup
+// wrapper is needed: its /ready endpoint stays 503 until the first successful
+// collection, which the startup probe absorbs while the Wazuh API comes up.
 func (c *WazuhExporterConfig) BuildExporterContainer() corev1.Container {
-	// Build environment variables
 	env := c.buildEnvVars()
 
 	// Default resources for exporter
@@ -111,47 +148,19 @@ func (c *WazuhExporterConfig) BuildExporterContainer() corev1.Container {
 		}
 	}
 
-	// Build startup command that waits for Wazuh API to be available
-	// This prevents the exporter from crashing before the manager is ready
-	// Uses Python instead of curl since the exporter image is Python-based
-	startupScript := fmt.Sprintf(`
-echo "Waiting for Wazuh API to be available..."
-max_attempts=%d
-attempt=0
-while [ $attempt -lt $max_attempts ]; do
-    if python -c "
-import urllib.request, ssl, base64, json, sys
-try:
-    creds = base64.b64encode(('$WAZUH_API_USERNAME:$WAZUH_API_PASSWORD').encode()).decode()
-    req = urllib.request.Request('https://localhost:%s/security/user/authenticate', headers={'Authorization': 'Basic ' + creds})
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    resp = urllib.request.urlopen(req, context=ctx, timeout=5)
-    data = json.loads(resp.read())
-    sys.exit(0 if 'data' in data else 1)
-except Exception:
-    sys.exit(1)
-" 2>/dev/null; then
-        echo "Wazuh API is ready!"
-        break
-    fi
-    attempt=$((attempt + 1))
-    echo "Attempt $attempt/$max_attempts: Wazuh API not ready yet, waiting %ds..."
-    sleep %d
-done
-if [ $attempt -eq $max_attempts ]; then
-    echo "WARNING: Wazuh API did not become available after $max_attempts attempts, starting exporter anyway..."
-fi
-exec python ./main.py
-`, constants.APIReadinessMaxAttempts, DefaultWazuhAPIPort, constants.APIReadinessCheckIntervalSeconds, constants.APIReadinessCheckIntervalSeconds)
+	var volumeMounts []corev1.VolumeMount
+	if c.APIVerifySSL && c.CASecretName != "" {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      exporterCAVolumeName,
+			MountPath: exporterCAMountPath,
+			ReadOnly:  true,
+		})
+	}
 
 	return corev1.Container{
 		Name:            "prometheus-exporter",
 		Image:           c.Image,
 		ImagePullPolicy: corev1.PullIfNotPresent,
-		Command:         []string{"/bin/sh", "-c"},
-		Args:            []string{startupScript},
 		Ports: []corev1.ContainerPort{
 			{
 				Name:          "metrics",
@@ -159,13 +168,15 @@ exec python ./main.py
 				Protocol:      corev1.ProtocolTCP,
 			},
 		},
-		Env:       env,
-		Resources: *resources,
-		// Startup probe allows container to start slowly while waiting for manager
+		Env:          env,
+		Resources:    *resources,
+		VolumeMounts: volumeMounts,
+		// Startup probe absorbs a slow Wazuh API: /ready stays 503 until the first
+		// collection succeeds.
 		StartupProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path:   "/metrics",
+					Path:   "/ready",
 					Port:   intstr.FromInt32(c.Port),
 					Scheme: corev1.URISchemeHTTP,
 				},
@@ -175,11 +186,25 @@ exec python ./main.py
 			TimeoutSeconds:      5,
 			FailureThreshold:    constants.ProbeStartupFailureThreshold, // Allow up to 5 minutes for manager to start
 		},
-		// Liveness probe ensures exporter is still healthy
+		// Liveness: the exporter is serving (independent of the Wazuh API).
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path:   "/metrics",
+					Path:   "/health",
+					Port:   intstr.FromInt32(c.Port),
+					Scheme: corev1.URISchemeHTTP,
+				},
+			},
+			InitialDelaySeconds: constants.ProbeLivenessInitialDelaySeconds,
+			PeriodSeconds:       constants.ProbeLivenessPeriodSeconds,
+			TimeoutSeconds:      constants.ProbeTimeoutSeconds,
+			FailureThreshold:    constants.ProbeLivenessFailureThreshold,
+		},
+		// Readiness: a collection has succeeded (Wazuh API reachable).
+		ReadinessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path:   "/ready",
 					Port:   intstr.FromInt32(c.Port),
 					Scheme: corev1.URISchemeHTTP,
 				},
@@ -192,20 +217,17 @@ exec python ./main.py
 	}
 }
 
-// buildEnvVars constructs the environment variables for the Wazuh exporter
+// buildEnvVars constructs the WAZUH_* environment variables for the exporter
 func (c *WazuhExporterConfig) buildEnvVars() []corev1.EnvVar {
 	env := []corev1.EnvVar{
 		{
-			Name:  "WAZUH_API_HOST",
-			Value: "localhost",
+			// The exporter runs as a sidecar in the manager pod; the API is on localhost.
+			Name:  "WAZUH_API_URL",
+			Value: fmt.Sprintf("%s://localhost:%d", c.APIProtocol, constants.PortManagerAPI),
 		},
 		{
-			Name:  "WAZUH_API_PORT",
-			Value: DefaultWazuhAPIPort,
-		},
-		{
-			Name:  "WAZUH_API_PROTOCOL",
-			Value: c.APIProtocol,
+			Name:  "WAZUH_LISTEN_ADDRESS",
+			Value: fmt.Sprintf("0.0.0.0:%d", c.Port),
 		},
 		{
 			Name: "WAZUH_API_USERNAME",
@@ -230,34 +252,37 @@ func (c *WazuhExporterConfig) buildEnvVars() []corev1.EnvVar {
 			},
 		},
 		{
-			Name:  "EXPORTER_PORT",
-			Value: fmt.Sprintf("%d", c.Port),
+			// CRD APIVerifySSL=false (default) means skip verification (self-signed certs).
+			Name:  "WAZUH_API_TLS_SKIP_VERIFY",
+			Value: fmt.Sprintf("%t", !c.APIVerifySSL),
 		},
 		{
-			Name:  "EXPORTER_LOG_LEVEL",
-			Value: c.LogLevel,
+			Name:  "WAZUH_LOG_LEVEL",
+			Value: strings.ToLower(c.LogLevel),
 		},
 	}
 
-	// Add optional skip flags if enabled
-	if c.SkipLastLogs {
+	if c.CacheTTL != "" {
 		env = append(env, corev1.EnvVar{
-			Name:  "SKIP_LAST_LOGS",
-			Value: "true",
+			Name:  "WAZUH_CACHE_TTL",
+			Value: c.CacheTTL,
 		})
 	}
 
-	if c.SkipLastAgent {
+	// Quiet-startup window so a slow-to-boot Wazuh API logs warn (not error) until
+	// the first successful collection.
+	if c.StartupGrace != "" {
 		env = append(env, corev1.EnvVar{
-			Name:  "SKIP_LAST_REGISTERED_AGENT",
-			Value: "true",
+			Name:  "WAZUH_STARTUP_GRACE",
+			Value: c.StartupGrace,
 		})
 	}
 
-	if c.SkipWazuhAPIInfo {
+	// Point the exporter at the mounted CA bundle when verifying the API cert.
+	if c.APIVerifySSL && c.CASecretName != "" {
 		env = append(env, corev1.EnvVar{
-			Name:  "SKIP_WAZUH_API_INFO",
-			Value: "true",
+			Name:  "WAZUH_API_CA_FILE",
+			Value: exporterCAMountPath + "/" + exporterCAFileName,
 		})
 	}
 
@@ -278,6 +303,27 @@ func BuildExporterSidecar(cluster *wazuhv1.WazuhCluster) *corev1.Container {
 	}
 	container := config.BuildExporterContainer()
 	return &container
+}
+
+// BuildExporterCAVolume returns the pod volume projecting the CA used to verify the
+// Wazuh API certificate, or nil when verification is disabled / no CA is resolved.
+// The caller (manager pod builder) appends it to the pod volumes alongside the sidecar.
+func BuildExporterCAVolume(cluster *wazuhv1.WazuhCluster) *corev1.Volume {
+	config := NewWazuhExporterConfig(cluster)
+	if config == nil || !config.APIVerifySSL || config.CASecretName == "" {
+		return nil
+	}
+	return &corev1.Volume{
+		Name: exporterCAVolumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: config.CASecretName,
+				Items: []corev1.KeyToPath{
+					{Key: config.CASecretKey, Path: exporterCAFileName},
+				},
+			},
+		},
+	}
 }
 
 // GetExporterMetricsPort returns the metrics port from the cluster spec

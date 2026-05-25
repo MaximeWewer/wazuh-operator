@@ -25,11 +25,11 @@ spec:
     enabled: true
     wazuhExporter:
       enabled: true
-      image: "kennyopennix/wazuh-exporter:latest"
-      port: 9090
+      image: "ghcr.io/maximewewer/wazuh-prometheus-exporter:latest"
+      port: 9555
       apiProtocol: "https"
-      apiVerifySSL: false
-      logLevel: "INFO"
+      apiVerifySSL: true
+      logLevel: "info"
     indexerExporter:
       enabled: true
     serviceMonitor:
@@ -48,16 +48,23 @@ The Wazuh exporter is deployed as a sidecar container on the manager master pod.
 
 | Field                     | Type                 | Default                                     | Description                        |
 | ------------------------- | -------------------- | ------------------------------------------- | ---------------------------------- |
-| `enabled`                 | bool                 | `false`                                     | Enable Wazuh exporter sidecar      |
-| `image`                   | string               | `kennyopennix/wazuh-exporter:latest` | Exporter image                     |
-| `port`                    | int32                | `9090`                                      | Metrics port                       |
-| `apiProtocol`             | string               | `https`                                     | Wazuh API protocol                 |
-| `apiVerifySSL`            | bool                 | `false`                                     | Verify SSL certificates            |
-| `logLevel`                | string               | `INFO`                                      | Log level                          |
-| `resources`               | ResourceRequirements | -                                           | Container resources                |
-| `skipLastLogs`            | bool                 | `false`                                     | Skip last logs metrics             |
-| `skipLastRegisteredAgent` | bool                 | `false`                                     | Skip last registered agent metrics |
-| `skipWazuhAPIInfo`        | bool                 | `false`                                     | Skip Wazuh API info metrics        |
+| `enabled`                 | bool                 | `false`                                                | Enable Wazuh exporter sidecar                 |
+| `image`                   | string               | `ghcr.io/maximewewer/wazuh-prometheus-exporter:latest` | Exporter image                                |
+| `port`                    | int32                | `9555`                                                 | Metrics port                                  |
+| `apiProtocol`             | string               | `https`                                                | Wazuh API protocol (builds the API URL)       |
+| `apiVerifySSL`            | bool                 | `true`                                                 | Verify Wazuh API TLS cert (false skips verify)|
+| `apiCASecretRef`          | SecretKeyRef         | cluster common CA                                      | CA to verify the API cert (apiVerifySSL=true) |
+| `logLevel`                | string               | `info`                                                 | Log level (trace/debug/info/warn/error)       |
+| `cacheTTL`                | string               | -                                                      | Metrics cache TTL (>= scrape interval)        |
+| `startupGrace`            | string               | `60s`                                                   | Quiet-startup window (warn vs error), 0–10m   |
+| `resources`               | ResourceRequirements | -                                                      | Container resources                           |
+
+#### TLS to the Wazuh API
+
+The exporter sidecar talks to the Wazuh API over HTTPS (`apiProtocol: https`).
+
+- `apiVerifySSL: true` (default) verifies the API certificate. The operator issues the Wazuh API cert from the cluster's **common CA** (the manager certs `ca.crt`, which also signs OpenSearch and Filebeat) and mounts that CA as `WAZUH_API_CA_FILE`. Override the CA with `apiCASecretRef`.
+- `apiVerifySSL: false` skips certificate verification (`WAZUH_API_TLS_SKIP_VERIFY=true`).
 
 ### Available Metrics
 

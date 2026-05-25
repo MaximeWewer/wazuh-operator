@@ -37444,7 +37444,7 @@ spec:
                         description: Enable ServiceMonitor creation
                         type: boolean
                       interval:
-                        default: 30s
+                        default: 60s
                         description: Scrape interval
                         type: string
                       labels:
@@ -37460,27 +37460,54 @@ spec:
                   wazuhExporter:
                     description: Wazuh exporter configuration
                     properties:
+                      apiCASecretRef:
+                        description: |-
+                          APICASecretRef references a Secret holding the CA bundle that verifies the
+                          Wazuh API certificate. Only used when apiVerifySSL is true. When omitted, the
+                          operator defaults to the cluster's common CA (the manager certs secret's
+                          ca.crt). The referenced key is mounted into the exporter as WAZUH_API_CA_FILE.
+                        properties:
+                          key:
+                            default: password
+                            description: Key is the key in the secret
+                            type: string
+                          name:
+                            description: Name is the secret name
+                            type: string
+                        required:
+                        - name
+                        type: object
                       apiProtocol:
                         default: https
-                        description: API protocol
+                        description: API protocol (https or http) used to build the
+                          Wazuh API URL
                         type: string
                       apiVerifySSL:
-                        default: false
-                        description: Verify SSL certificates
+                        default: true
+                        description: |-
+                          Verify the Wazuh API TLS certificate. When false, certificate verification
+                          is skipped (WAZUH_API_TLS_SKIP_VERIFY=true). Defaults to true: the operator
+                          issues the Wazuh API certificate from the cluster's common CA, which the
+                          exporter verifies against (mounted as WAZUH_API_CA_FILE).
                         type: boolean
+                      cacheTTL:
+                        description: |-
+                          CacheTTL is how long collected metrics are cached. Keep it >= the Prometheus
+                          scrape interval. Maps to WAZUH_CACHE_TTL (e.g. "30s").
+                        type: string
                       enabled:
                         description: Enable Wazuh exporter sidecar
                         type: boolean
                       image:
-                        default: pytoshka/wazuh-prometheus-exporter:latest
+                        default: ghcr.io/maximewewer/wazuh-prometheus-exporter:latest
                         description: Image for the exporter
                         type: string
                       logLevel:
-                        default: INFO
-                        description: Log level
+                        default: info
+                        description: Log level (trace, debug, info, warn, error)
                         type: string
                       port:
-                        default: 9090
+                        default: 9555
                         description: Port for metrics endpoint
                         format: int32
                         type: integer
@@ -37543,15 +37570,14 @@ spec:
                               More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                             type: object
                         type: object
-                      skipLastLogs:
-                        description: Skip last logs metrics
-                        type: boolean
-                      skipLastRegisteredAgent:
-                        description: Skip last registered agent metrics
-                        type: boolean
-                      skipWazuhAPIInfo:
-                        description: Skip Wazuh API info metrics
-                        type: boolean
+                      startupGrace:
+                        default: 60s
+                        description: |-
+                          StartupGrace is a quiet-startup window (WAZUH_STARTUP_GRACE) during which
+                          collection failures are logged at warn ("waiting for Wazuh API") instead of
+                          error, until the first successful collection. Lets a slow-to-boot Wazuh API
+                          come up without error noise. Range 0 (off) to 10m.
+                        type: string
                     type: object
                 type: object
               storageClassName:

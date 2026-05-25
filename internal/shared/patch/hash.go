@@ -44,9 +44,10 @@ type WazuhExporterHashInput struct {
 	APIProtocol             string                       `json:"apiProtocol,omitempty"`
 	APIVerifySSL            bool                         `json:"apiVerifySSL,omitempty"`
 	LogLevel                string                       `json:"logLevel,omitempty"`
-	SkipLastLogs            bool                         `json:"skipLastLogs,omitempty"`
-	SkipLastRegisteredAgent bool                         `json:"skipLastRegisteredAgent,omitempty"`
-	SkipWazuhAPIInfo        bool                         `json:"skipWazuhAPIInfo,omitempty"`
+	CacheTTL                string                       `json:"cacheTTL,omitempty"`
+	StartupGrace            string                       `json:"startupGrace,omitempty"`
+	APICASecretName         string                       `json:"apiCASecretName,omitempty"`
+	APICASecretKey          string                       `json:"apiCASecretKey,omitempty"`
 }
 
 // IndexerExporterHashInput mirrors IndexerExporterConfig for hash computation.

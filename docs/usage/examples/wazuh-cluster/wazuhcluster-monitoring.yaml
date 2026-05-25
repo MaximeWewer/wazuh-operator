@@ -24,19 +24,17 @@ spec:
     wazuhExporter:
       enabled: true
       # Docker image for the exporter
-      image: "kennyopennix/wazuh-exporter:latest"
+      image: "ghcr.io/maximewewer/wazuh-prometheus-exporter:latest"
       # Port for metrics endpoint
-      port: 9090
-      # Wazuh API protocol
+      port: 9555
+      # Wazuh API protocol (https or http)
       apiProtocol: "https"
-      # Verify SSL certificates (set to false for self-signed)
+      # Verify SSL certificates (false skips TLS verification, e.g. self-signed)
       apiVerifySSL: false
-      # Log level: DEBUG, INFO, WARNING, ERROR
-      logLevel: "INFO"
-      # Skip specific metrics for performance
-      skipLastLogs: false
-      skipLastRegisteredAgent: false
-      skipWazuhAPIInfo: false
+      # Log level: trace, debug, info, warn, error
+      logLevel: "info"
+      # Metrics cache TTL (keep >= Prometheus scrape interval), e.g. "30s"
+      cacheTTL: ""
       # Resource limits
       resources:
         requests:

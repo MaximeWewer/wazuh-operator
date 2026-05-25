@@ -28,11 +28,11 @@ const (
 // Monitoring images
 const (
 	// ImageWazuhExporter is the default Wazuh Prometheus exporter image
-	ImageWazuhExporter = "kennyopennix/wazuh-exporter:latest"
+	ImageWazuhExporter = "ghcr.io/maximewewer/wazuh-prometheus-exporter:latest"
 )
 
 // Exporter ports
 const (
 	// PortWazuhExporter is the default port for the Wazuh Prometheus exporter
-	PortWazuhExporter int32 = 9090
+	PortWazuhExporter int32 = 9555
 )

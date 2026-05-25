@@ -95,8 +95,8 @@ preflight_checks() {
         exit 1
     fi
 
-    if [[ ! -f "${PROJECT_ROOT}/Dockerfile" ]]; then
-        log_error "Dockerfile not found in project root"
+    if [[ ! -f "${PROJECT_ROOT}/build/operator/Dockerfile" ]]; then
+        log_error "Operator Dockerfile not found at build/operator/Dockerfile"
         exit 1
     fi
 
@@ -185,7 +185,7 @@ build_operator_image() {
         --pull \
         --tag "${OPERATOR_IMAGE}:${OPERATOR_TAG}" \
         --tag "${OPERATOR_IMAGE}:latest" \
-        --file Dockerfile \
+        --file build/operator/Dockerfile \
         .
 
     log_success "Docker image built successfully"
@@ -314,6 +314,7 @@ deploy_wazuh_cluster() {
         --set sizing.profile="${SIZING_PROFILE}" \
         --set cluster.name="${CLUSTER_NAME}" \
         --set namespace="${CLUSTER_NAMESPACE}" \
+        --set cluster.spec.monitoring.enabled=true \
         --set secrets.wazuhApi.password="MyS3cureP@ssw0rd" \
         --set secrets.indexerAdmin.password="MyS3cureP@ssw0rd" \
         --set secrets.wazuhAuthd.password="MyS3cureP@ssw0rd" \

@@ -2937,18 +2937,22 @@ func toWazuhExporterHashInput(cluster *wazuhv1.WazuhCluster) *patch.WazuhExporte
 		return nil
 	}
 	e := cluster.Spec.Monitoring.WazuhExporter
-	return &patch.WazuhExporterHashInput{
-		Enabled:                 e.Enabled,
-		Image:                   e.Image,
-		Port:                    e.Port,
-		Resources:               e.Resources,
-		APIProtocol:             e.APIProtocol,
-		APIVerifySSL:            e.APIVerifySSL,
-		LogLevel:                e.LogLevel,
-		SkipLastLogs:            e.SkipLastLogs,
-		SkipLastRegisteredAgent: e.SkipLastRegisteredAgent,
-		SkipWazuhAPIInfo:        e.SkipWazuhAPIInfo,
+	h := &patch.WazuhExporterHashInput{
+		Enabled:      e.Enabled,
+		Image:        e.Image,
+		Port:         e.Port,
+		Resources:    e.Resources,
+		APIProtocol:  e.APIProtocol,
+		APIVerifySSL: e.APIVerifySSL,
+		LogLevel:     e.LogLevel,
+		CacheTTL:     e.CacheTTL,
+		StartupGrace: e.StartupGrace,
 	}
+	if e.APICASecretRef != nil {
+		h.APICASecretName = e.APICASecretRef.Name
+		h.APICASecretKey = e.APICASecretRef.Key
+	}
+	return h
 }
 
 // legacyManagerImagePullPolicy extracts the image pull policy from the manager image spec
