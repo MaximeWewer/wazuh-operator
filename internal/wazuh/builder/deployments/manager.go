@@ -938,6 +938,13 @@ func (b *ManagerStatefulSetBuilder) buildInitContainerVolumeMounts() []corev1.Vo
 			Name:      constants.VolumeNameWazuhData,
 			MountPath: "/wazuh-data",
 		},
+		// Operator-issued cert (signed by the common CA, SAN localhost) — copied into
+		// the API ssl dir below so the Wazuh API serves a CA-verifiable certificate.
+		{
+			Name:      constants.VolumeNameWazuhCerts,
+			MountPath: "/operator-certs",
+			ReadOnly:  true,
+		},
 	}
 
 	return mounts
@@ -989,6 +996,18 @@ fi
 echo "Configuration copy complete"
 ls -la /wazuh-config-mount/etc/ 2>/dev/null || true
 ls -la /etc/filebeat/ 2>/dev/null || true
+# Install the operator-issued Wazuh API server certificate (signed by the common CA,
+# SAN includes localhost) into the PVC-backed API ssl dir, replacing the API's default
+# self-signed cert. Copied (not mounted) so wazuh-apid can chown it at startup; the
+# chown -R below sets ownership to wazuh. Path matches SubPathWazuhAPIConfig.
+if [ -f /operator-certs/filebeat.pem ] && [ -f /operator-certs/filebeat-key.pem ]; then
+    mkdir -p /wazuh-data/wazuh/api/configuration/ssl
+    cp /operator-certs/filebeat.pem /wazuh-data/wazuh/api/configuration/ssl/server.crt
+    cp /operator-certs/filebeat-key.pem /wazuh-data/wazuh/api/configuration/ssl/server.key
+    chmod 644 /wazuh-data/wazuh/api/configuration/ssl/server.crt
+    chmod 640 /wazuh-data/wazuh/api/configuration/ssl/server.key
+    echo "Installed operator-managed Wazuh API server certificate"
+fi
 # Fix ownership of all PVC-backed data and emptyDir config
 echo "Fixing ownership to wazuh (999:999)..."
 chown -R 999:999 /wazuh-data
