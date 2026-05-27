@@ -39,6 +39,7 @@ jobs:
       is_prerelease: ${{ steps.get_version.outputs.is_prerelease }}
       image_name_lower: ${{ steps.lowercase.outputs.image_name_lower }}
       repository_owner_lower: ${{ steps.lowercase.outputs.repository_owner_lower }}
+      wazuh_version: ${{ steps.wazuh_version.outputs.wazuh_version }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -94,6 +95,23 @@ jobs:
           fi
 
           echo "::notice::Release version: ${VERSION} (tag: ${TAG})"
+
+      - name: Resolve latest supported Wazuh version
+        id: wazuh_version
+        run: |
+          # Source of truth is the operator's curated compatibility matrix
+          # (pkg/versions/versions.go). Each Wazuh version there maps to an exact
+          # OpenSearch + Prometheus-exporter-plugin version, so the chart default
+          # must never exceed what the operator actually knows about.
+          WAZUH_VERSION=$(grep -oE '^[[:space:]]*"[0-9]+\.[0-9]+\.[0-9]+":' pkg/versions/versions.go \
+            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' \
+            | sort -V | tail -n 1)
+          if [ -z "${WAZUH_VERSION}" ]; then
+            echo "::error::Could not resolve a Wazuh version from pkg/versions/versions.go"
+            exit 1
+          fi
+          echo "wazuh_version=${WAZUH_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "::notice::Latest supported Wazuh version: ${WAZUH_VERSION}"
 
   # =============================================================================
   # Job 2: Build and Push Backup Tools Image
@@ -315,6 +333,23 @@ jobs:
 
           echo "Updated Chart.yaml:"
           cat "${HELM_CLUSTER_CHART_PATH}/Chart.yaml"
+
+      - name: Pin default Wazuh version in values.yaml
+        env:
+          WAZUH_VERSION: ${{ needs.prepare.outputs.wazuh_version }}
+        run: |
+          # Replace the cluster.spec.version default with the latest version the operator supports.
+          sed -i '/# -- Wazuh version to deploy/{n;s/version: .*/version: "'"${WAZUH_VERSION}"'"/}' \
+            "${HELM_CLUSTER_CHART_PATH}/values.yaml"
+
+      - name: Regenerate chart README with helm-docs
+        env:
+          HELM_DOCS_VERSION: 1.14.2
+        run: |
+          curl -fsSL "https://github.com/norwoodj/helm-docs/releases/download/v${HELM_DOCS_VERSION}/helm-docs_${HELM_DOCS_VERSION}_Linux_x86_64.tar.gz" \
+            | tar -xz helm-docs
+          ./helm-docs --chart-search-root="${HELM_CLUSTER_CHART_PATH}"
+          rm -f helm-docs
 
       - name: Lint Helm chart
         run: helm lint "${HELM_CLUSTER_CHART_PATH}"
