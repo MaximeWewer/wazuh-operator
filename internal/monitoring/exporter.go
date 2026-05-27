@@ -54,6 +54,7 @@ const (
 // configured entirely through WAZUH_* environment variables.
 type WazuhExporterConfig struct {
 	ClusterName       string
+	Namespace         string
 	Image             string
 	Port              int32
 	APIProtocol       string
@@ -79,6 +80,7 @@ func NewWazuhExporterConfig(cluster *wazuhv1.WazuhCluster) *WazuhExporterConfig 
 
 	config := &WazuhExporterConfig{
 		ClusterName:       cluster.Name,
+		Namespace:         cluster.Namespace,
 		Image:             DefaultWazuhExporterImage,
 		Port:              DefaultWazuhExporterPort,
 		APIProtocol:       "https",
@@ -221,9 +223,12 @@ func (c *WazuhExporterConfig) BuildExporterContainer() corev1.Container {
 func (c *WazuhExporterConfig) buildEnvVars() []corev1.EnvVar {
 	env := []corev1.EnvVar{
 		{
-			// The exporter runs as a sidecar in the manager pod; the API is on localhost.
+			// The exporter is a sidecar in the manager pod, but it targets the
+			// manager API via its service FQDN rather than localhost: the API TLS
+			// cert SAN is the service FQDN (so apiVerifySSL=true works) and the
+			// API does not necessarily bind the loopback interface.
 			Name:  "WAZUH_API_URL",
-			Value: fmt.Sprintf("%s://localhost:%d", c.APIProtocol, constants.PortManagerAPI),
+			Value: fmt.Sprintf("%s://%s:%d", c.APIProtocol, constants.ManagerMasterServiceFQDN(c.ClusterName, c.Namespace), constants.PortManagerAPI),
 		},
 		{
 			Name:  "WAZUH_LISTEN_ADDRESS",
