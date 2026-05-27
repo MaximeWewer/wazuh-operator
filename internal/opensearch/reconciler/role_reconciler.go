@@ -93,7 +93,9 @@ func (r *RoleReconciler) Reconcile(ctx context.Context, role *wazuhv1.OpenSearch
 	}
 
 	osRole := r.buildRole(role)
-	roleName := role.Name
+	// The OpenSearch role name may differ from the CR name (e.g. "all_access"
+	// is not a valid Kubernetes object name).
+	roleName := role.ResolveRoleName()
 	specHash, _ := patch.ComputeSpecHash(role.Spec)
 
 	newStatuses := make([]wazuhv1.OpenSearchClusterStatus, 0, len(role.Spec.ClusterRefs))
@@ -316,7 +318,7 @@ func (r *RoleReconciler) Delete(ctx context.Context, role *wazuhv1.OpenSearchRol
 				"cluster", ref.Name, "clusterNamespace", ref.Namespace, "error", err)
 			continue
 		}
-		if err := osClient.DeleteRole(ctx, role.Name); err != nil {
+		if err := osClient.DeleteRole(ctx, role.ResolveRoleName()); err != nil {
 			r.recordEvent(role, corev1.EventTypeWarning, "DeleteFailed",
 				fmt.Sprintf("Failed to delete role from %s/%s: %v", ref.Namespace, ref.Name, err))
 			continue

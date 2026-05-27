@@ -126,15 +126,18 @@ spec:
 
 ---
 # Both groups need the built-in kibana_user role so the dashboard app loads.
+# The CR name can't be "kibana_user" (underscores are invalid in k8s names),
+# so the role name is set via spec.roleName.
 apiVersion: resources.wazuh.com/v1
 kind: OpenSearchRoleMapping
 metadata:
-  name: kibana_user
+  name: kibana-user
   namespace: wazuh
 spec:
   clusterRefs:
     - name: wazuh-cluster
       namespace: wazuh
+  roleName: kibana_user          # actual OpenSearch role (invalid as a CR name)
   backendRoles: ["wazuh-admins", "wazuh-viewers"]
 
 # =============================================================================

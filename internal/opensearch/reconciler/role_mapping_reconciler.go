@@ -99,19 +99,23 @@ func (r *RoleMappingReconciler) Reconcile(ctx context.Context, mapping *wazuhv1.
 	roleMapping := r.buildRoleMapping(mapping)
 	specHash, _ := patch.ComputeSpecHash(mapping.Spec)
 
+	// The OpenSearch role name may differ from the CR name (e.g. "kibana_user"
+	// is not a valid Kubernetes object name).
+	roleName := mapping.ResolveRoleName()
+
 	res := ReconcileMultiCluster(ctx, mapping.Spec.ClusterRefs, r.ClientFactory, mapping.Status.ClusterStatuses,
 		func(ctx context.Context, apiClient *api.Client, ref wazuhv1.WazuhClusterRef) (string, error) {
 			securityAPI := api.NewSecurityAPI(apiClient)
-			existing, err := securityAPI.GetRoleMapping(ctx, mapping.Name)
+			existing, err := securityAPI.GetRoleMapping(ctx, roleName)
 			if err != nil {
 				return "", fmt.Errorf("failed to check role mapping existence: %w", err)
 			}
 			if existing == nil {
-				log.Info("Creating role mapping", "name", mapping.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+				log.Info("Creating role mapping", "role", roleName, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
 			} else {
-				log.Info("Updating role mapping", "name", mapping.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+				log.Info("Updating role mapping", "role", roleName, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
 			}
-			if err := securityAPI.CreateRoleMapping(ctx, mapping.Name, roleMapping); err != nil {
+			if err := securityAPI.CreateRoleMapping(ctx, roleName, roleMapping); err != nil {
 				return "", fmt.Errorf("failed to apply role mapping: %w", err)
 			}
 			return specHash, nil
@@ -238,7 +242,7 @@ func (r *RoleMappingReconciler) Delete(ctx context.Context, mapping *wazuhv1.Ope
 			continue
 		}
 		securityAPI := api.NewSecurityAPI(apiClient)
-		if err := securityAPI.DeleteRoleMapping(ctx, mapping.Name); err != nil {
+		if err := securityAPI.DeleteRoleMapping(ctx, mapping.ResolveRoleName()); err != nil {
 			r.recordEvent(mapping, corev1.EventTypeWarning, "DeleteFailed",
 				fmt.Sprintf("Failed to delete role mapping from %s/%s: %v", ref.Namespace, ref.Name, err))
 			continue

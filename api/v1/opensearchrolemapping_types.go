@@ -32,6 +32,13 @@ type OpenSearchRoleMappingSpec struct {
 	// +listMapKey=namespace
 	ClusterRefs []WazuhClusterRef `json:"clusterRefs"`
 
+	// RoleName is the OpenSearch role this mapping targets. Defaults to metadata.name.
+	// Set this when the role name is not a valid Kubernetes object name — e.g. it
+	// contains underscores like "kibana_user" or "all_access".
+	// +optional
+	// +kubebuilder:validation:MaxLength=255
+	RoleName string `json:"roleName,omitempty"`
+
 	// Users are the internal users to map to this role
 	// +optional
 	Users []string `json:"users,omitempty"`
@@ -130,6 +137,15 @@ type OpenSearchRoleMappingList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []OpenSearchRoleMapping `json:"items"`
+}
+
+// ResolveRoleName returns the OpenSearch role name this mapping targets
+// (spec.roleName, or metadata.name when unset).
+func (m *OpenSearchRoleMapping) ResolveRoleName() string {
+	if m.Spec.RoleName != "" {
+		return m.Spec.RoleName
+	}
+	return m.Name
 }
 
 func init() {

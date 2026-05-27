@@ -32,6 +32,13 @@ type OpenSearchRoleSpec struct {
 	// +listMapKey=namespace
 	ClusterRefs []WazuhClusterRef `json:"clusterRefs"`
 
+	// RoleName is the OpenSearch role name. Defaults to metadata.name.
+	// Set this when the role name is not a valid Kubernetes object name — e.g. it
+	// contains underscores like "all_access".
+	// +optional
+	// +kubebuilder:validation:MaxLength=255
+	RoleName string `json:"roleName,omitempty"`
+
 	// ClusterPermissions are cluster-level permissions
 	// +optional
 	ClusterPermissions []string `json:"clusterPermissions,omitempty"`
@@ -164,6 +171,15 @@ type OpenSearchRoleList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []OpenSearchRole `json:"items"`
+}
+
+// ResolveRoleName returns the OpenSearch role name (spec.roleName, or
+// metadata.name when unset).
+func (r *OpenSearchRole) ResolveRoleName() string {
+	if r.Spec.RoleName != "" {
+		return r.Spec.RoleName
+	}
+	return r.Name
 }
 
 func init() {

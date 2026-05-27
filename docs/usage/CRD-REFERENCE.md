@@ -667,6 +667,7 @@ Manages OpenSearch security roles.
 | Field                | Type                  | Required | Default | Description         |
 | -------------------- | --------------------- | -------- | ------- | ------------------- |
 | `clusterRef`         | WazuhClusterReference | **Yes**  | -       | Cluster reference   |
+| `roleName`           | string                | No       | `metadata.name` | OpenSearch role name; set when the name isn't a valid k8s object name (e.g. `all_access`) |
 | `clusterPermissions` | []string              | No       | -       | Cluster permissions |
 | `indexPermissions`   | []IndexPermission     | No       | -       | Index permissions   |
 | `tenantPermissions`  | []TenantPermission    | No       | -       | Tenant permissions  |
@@ -691,6 +692,7 @@ Maps users/roles to OpenSearch roles.
 | Field             | Type                  | Required | Default | Description       |
 | ----------------- | --------------------- | -------- | ------- | ----------------- |
 | `clusterRef`      | WazuhClusterReference | **Yes**  | -       | Cluster reference |
+| `roleName`        | string                | No       | `metadata.name` | Target role name; set when invalid as a k8s object name (e.g. `kibana_user`) |
 | `users`           | []string              | No       | -       | Internal users    |
 | `backendRoles`    | []string              | No       | -       | Backend roles     |
 | `hosts`           | []string              | No       | -       | Host patterns     |
