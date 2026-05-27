@@ -11,8 +11,9 @@ The Wazuh Operator supports OpenTelemetry distributed tracing, allowing you to m
 - **Helper reconciler spans**: Child spans for all helper reconcilers (indexer, dashboard, manager, certificates, monitoring, networking, etc.) with error recording
 - **Trace-log correlation**: All logs within a traced reconciliation automatically include `trace_id` and `span_id` fields for cross-referencing with your tracing backend
 - **Error recording**: Reconciliation errors are automatically attached to their spans via `RecordError`
-- **Configurable sampling**: Control trace volume with a sampling ratio (0.0 to 1.0)
-- **OTLP export**: Traces are exported via gRPC to any OTLP-compatible collector
+- **Configurable sampling**: Control trace volume with a sampling ratio or any standard `OTEL_TRACES_SAMPLER` mode
+- **OTLP export**: Traces are exported over gRPC or HTTP to any OTLP-compatible collector, with optional headers (auth) and a custom CA bundle for TLS
+- **Kubernetes resource attributes**: Spans carry `k8s.pod.name`, `k8s.namespace.name` and `k8s.node.name` (via the downward API) plus any extra attributes you configure
 - **Conditional activation**: Tracing is only enabled when an endpoint is configured
 
 ## Configuration
@@ -21,11 +22,19 @@ The Wazuh Operator supports OpenTelemetry distributed tracing, allowing you to m
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | (disabled) | OTLP gRPC endpoint (e.g., `jaeger-collector:4317`) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | (disabled) | OTLP endpoint. Accepts `host:port` or a full URL with scheme (e.g. `otel-collector:4317`, `https://otlp.example.com:4317`, `http://otel:4318`) |
+| `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` | Transport: `grpc` or `http` (`http/protobuf`) |
 | `OTEL_EXPORTER_OTLP_INSECURE` | `false` | Use insecure connection (no TLS) |
+| `OTEL_EXPORTER_OTLP_HEADERS` | (none) | Extra headers as `k1=v1,k2=v2` (e.g. auth tokens for SaaS backends) |
+| `OTEL_EXPORTER_OTLP_CERTIFICATE` | (system roots) | Path to a PEM CA bundle to verify the collector cert when not insecure |
 | `OTEL_SERVICE_NAME` | `wazuh-operator` | Service name in traces |
 | `OTEL_SERVICE_VERSION` | `0.1.0` | Service version in traces |
-| `OTEL_TRACES_SAMPLER_ARG` | `1.0` | Sampling ratio (0.0-1.0). `1.0` = sample all, `0.5` = 50%, `0.0` = sample none |
+| `OTEL_TRACES_SAMPLER` | (parent-based ratio) | Standard sampler mode: `always_on`, `always_off`, `traceidratio`, `parentbased_traceidratio`, … |
+| `OTEL_TRACES_SAMPLER_ARG` | `1.0` | Sampling ratio (0.0-1.0) used by ratio samplers |
+| `OTEL_RESOURCE_ATTRIBUTES` | (k8s.* auto) | Extra resource attributes as `k1=v1,k2=v2` (merged with auto k8s.pod/namespace/node) |
+
+The traces-specific variants (`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `..._PROTOCOL`,
+`..._HEADERS`, `..._CERTIFICATE`) take precedence over the generic ones.
 
 ### Helm Configuration
 
@@ -35,22 +44,44 @@ telemetry:
   # Enable OpenTelemetry tracing
   enabled: true
 
-  # OTLP exporter endpoint (gRPC)
-  endpoint: "jaeger-collector.observability:4317"
+  # OTLP endpoint ("host:port" or a full URL with scheme)
+  endpoint: "otel-collector.observability:4317"
+
+  # Transport protocol: "grpc" (default) or "http"
+  protocol: "grpc"
 
   # Use insecure connection (no TLS)
   insecure: true
 
-  # Service name reported in traces
+  # Custom CA bundle (mounted from a Secret) to verify the collector cert
+  # when insecure=false. Leave secretName empty to use system roots.
+  caCert:
+    secretName: ""
+    key: "ca.crt"
+
+  # Extra OTLP headers (e.g. auth). Prefer headersSecret for credentials.
+  headers: ""               # "api-key=secret,x-tenant=acme"
+  headersSecret:
+    name: ""                # Secret holding the headers string
+    key: "headers"
+
+  # Service name / version reported in traces
   serviceName: "wazuh-operator"
+  serviceVersion: ""        # Defaults to chart appVersion
 
-  # Service version reported in traces
-  serviceVersion: ""  # Defaults to chart appVersion
+  # Sampler: empty = parent-based ratio driven by samplingRatio.
+  # Or a standard mode, e.g. "parentbased_traceidratio", "always_on".
+  sampler: ""
+  samplingRatio: "1.0"      # 1.0 = all, 0.5 = 50%, 0.0 = none
 
-  # Trace sampling ratio (0.0-1.0)
-  # 1.0 = sample all traces, 0.5 = 50%, 0.0 = none
-  samplingRatio: "1.0"
+  # Extra resource attributes appended to the auto k8s.* attributes
+  resourceAttributes: ""    # "deployment.environment=prod"
 ```
+
+> The operator also tags every span with `k8s.pod.name`, `k8s.namespace.name`
+> and `k8s.node.name` automatically (via the downward API). For authenticated
+> SaaS backends (Grafana Cloud, Honeycomb, …) set `protocol: http` and provide
+> the API key through `headersSecret`.
 
 ## Deployment Examples
 

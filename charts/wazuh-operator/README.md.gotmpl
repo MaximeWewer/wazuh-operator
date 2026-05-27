@@ -259,9 +259,12 @@ operator:
         severity: critical
 ```
 
-> **Note:** When `metrics.secure` is `true`, the operator serves metrics over HTTPS and the
-> ServiceMonitor is automatically configured with `scheme: https` and `insecureSkipVerify: true`.
-> When `false` (default), metrics are served over plain HTTP.
+> **Note:** When `metrics.secure` is `true`, the operator serves metrics over HTTPS behind an
+> authn/authz filter. The chart then also creates the RBAC to validate scrape tokens
+> (`tokenreviews` + `subjectaccessreviews`), a `metrics-reader` ClusterRole bound to the operator
+> ServiceAccount, and a token Secret; the ServiceMonitor is configured with `scheme: https`,
+> `insecureSkipVerify: true` and `authorization: Bearer` using that token (override via
+> `serviceMonitor.authorization`). When `false` (default), metrics are served over plain HTTP.
 
 ### With Gateway API Support
 

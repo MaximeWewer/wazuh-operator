@@ -416,7 +416,7 @@ kubectl delete -f <(helm template my-wazuh-cluster ./charts/wazuh-cluster --name
 | cluster.spec.monitoring.wazuhExporter.image | string | `"ghcr.io/maximewewer/wazuh-prometheus-exporter:latest"` | Wazuh exporter image |
 | cluster.spec.monitoring.wazuhExporter.logLevel | string | `"info"` | Exporter log level (trace, debug, info, warn, error) |
 | cluster.spec.monitoring.wazuhExporter.port | int | `9555` | Wazuh exporter metrics port |
-| cluster.spec.monitoring.wazuhExporter.startupGrace | string | `"60s"` | Quiet-startup window (WAZUH_STARTUP_GRACE): collection failures log as warn instead of error until first success (0–10m) |
+| cluster.spec.monitoring.wazuhExporter.startupGrace | string | `"60s"` | Quiet-startup window (WAZUH_STARTUP_GRACE): collection failures log as warn instead of error until the first success, letting a slow Wazuh API boot without noise. 0 (off) to 10m. |
 
 ### Drain Configuration
 

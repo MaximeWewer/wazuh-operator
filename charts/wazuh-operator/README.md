@@ -160,6 +160,7 @@ kubectl delete -f <(helm template wazuh-operator ./charts/wazuh-operator --names
 | operator.serviceAccount.annotations | object | `{}` | Service account annotations |
 | operator.serviceAccount.create | bool | `true` | Create service account |
 | operator.serviceAccount.name | string | `""` | Service account name (auto-generated if empty) |
+| operator.serviceMonitor.authorization | object | `{}` | Override the scrape authorization used when metrics.secure=true. Defaults to the operator ServiceAccount token (see metrics-rbac.yaml). Example: { type: Bearer, credentials: { name: my-secret, key: token } } |
 | operator.serviceMonitor.enabled | bool | `false` | Enable ServiceMonitor for Prometheus Operator |
 | operator.serviceMonitor.interval | string | `"30s"` | Scrape interval |
 | operator.serviceMonitor.labels | object | `{}` | Additional labels for ServiceMonitor |
@@ -196,9 +197,18 @@ kubectl delete -f <(helm template wazuh-operator ./charts/wazuh-operator --names
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| telemetry.caCert | object | `{"key":"ca.crt","secretName":""}` | Path-less PEM CA bundle (mounted from a Secret) to verify the collector certificate when insecure=false. Leave secretName empty to use system roots. |
+| telemetry.caCert.key | string | `"ca.crt"` | Key in the Secret holding the PEM CA |
+| telemetry.caCert.secretName | string | `""` | Secret containing the CA bundle |
 | telemetry.enabled | bool | `false` | Enable OpenTelemetry distributed tracing |
-| telemetry.endpoint | string | `""` | OTLP exporter endpoint (gRPC). Examples: "jaeger-collector.observability:4317", "otel-collector.monitoring:4317" |
+| telemetry.endpoint | string | `""` | OTLP exporter endpoint. Accepts "host:port" or a full URL with scheme. gRPC default port 4317, HTTP 4318. Examples: "otel-collector.monitoring:4317", "https://otlp.example.com:4317", "http://otel-collector:4318". |
+| telemetry.headers | string | `""` | Extra OTLP headers as "k1=v1,k2=v2" (e.g. auth tokens for SaaS backends). Prefer headersSecret for credentials. |
+| telemetry.headersSecret.key | string | `"headers"` | Key in the Secret holding the headers |
+| telemetry.headersSecret.name | string | `""` | Secret containing the OTLP headers string |
 | telemetry.insecure | bool | `true` | Use insecure connection (no TLS). Set to true for local development or service mesh. |
+| telemetry.protocol | string | `"grpc"` | OTLP transport protocol: "grpc" (default) or "http". |
+| telemetry.resourceAttributes | string | `""` | Extra OTEL_RESOURCE_ATTRIBUTES appended to the auto k8s.* attributes, as "key1=val1,key2=val2" (e.g. "deployment.environment=prod"). |
+| telemetry.sampler | string | `""` | Standard OTEL_TRACES_SAMPLER (e.g. "parentbased_traceidratio", "always_on"). Empty uses a parent-based ratio sampler driven by samplingRatio. |
 | telemetry.samplingRatio | string | `"1.0"` | Trace sampling ratio (0.0-1.0). 1.0 = sample all, 0.5 = 50%. |
 | telemetry.serviceName | string | `"wazuh-operator"` | Service name reported in traces |
 | telemetry.serviceVersion | string | `""` | Service version reported in traces (defaults to chart appVersion) |
@@ -321,9 +331,12 @@ operator:
         severity: critical
 ```
 
-> **Note:** When `metrics.secure` is `true`, the operator serves metrics over HTTPS and the
-> ServiceMonitor is automatically configured with `scheme: https` and `insecureSkipVerify: true`.
-> When `false` (default), metrics are served over plain HTTP.
+> **Note:** When `metrics.secure` is `true`, the operator serves metrics over HTTPS behind an
+> authn/authz filter. The chart then also creates the RBAC to validate scrape tokens
+> (`tokenreviews` + `subjectaccessreviews`), a `metrics-reader` ClusterRole bound to the operator
+> ServiceAccount, and a token Secret; the ServiceMonitor is configured with `scheme: https`,
+> `insecureSkipVerify: true` and `authorization: Bearer` using that token (override via
+> `serviceMonitor.authorization`). When `false` (default), metrics are served over plain HTTP.
 
 ### With Gateway API Support
 
