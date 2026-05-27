@@ -110,6 +110,10 @@ operator:
     interval: "30s"
     # -- Scrape timeout
     scrapeTimeout: "10s"
+    # -- Override the scrape authorization used when metrics.secure=true.
+    # Defaults to the operator ServiceAccount token (see metrics-rbac.yaml).
+    # Example: { type: Bearer, credentials: { name: my-secret, key: token } }
+    authorization: {}
 
   # @extra operator.prometheusRules Prometheus alerting rules
   prometheusRules:

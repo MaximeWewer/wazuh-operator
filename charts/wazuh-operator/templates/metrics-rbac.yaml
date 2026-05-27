@@ -1,0 +1,48 @@
+{{- if and (include "wazuh-operator.installOperator" .) .Values.operator.metrics.enabled .Values.operator.metrics.secure }}
+# Secure metrics RBAC (only when operator.metrics.secure=true).
+# The controller-runtime metrics endpoint requires the scraper to present a
+# bearer token that is authorized for GET /metrics. We bind a dedicated
+# metrics-reader role to the operator ServiceAccount and expose its token so the
+# ServiceMonitor can authenticate without depending on the Prometheus SA.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "wazuh-operator.fullname" . }}-metrics-reader
+  labels:
+    {{- include "wazuh-operator.labels" . | nindent 4 }}
+rules:
+- nonResourceURLs:
+  - /metrics
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "wazuh-operator.fullname" . }}-metrics-reader
+  labels:
+    {{- include "wazuh-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "wazuh-operator.fullname" . }}-metrics-reader
+subjects:
+- kind: ServiceAccount
+  name: {{ include "wazuh-operator.serviceAccountName" . }}
+  namespace: {{ include "wazuh-operator.namespace" . }}
+{{- if .Values.operator.serviceMonitor.enabled }}
+---
+# Long-lived token for the operator ServiceAccount, referenced by the
+# ServiceMonitor's authorization to scrape the secure metrics endpoint.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "wazuh-operator.fullname" . }}-metrics-token
+  namespace: {{ include "wazuh-operator.namespace" . }}
+  labels:
+    {{- include "wazuh-operator.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/service-account.name: {{ include "wazuh-operator.serviceAccountName" . }}
+type: kubernetes.io/service-account-token
+{{- end }}
+{{- end }}

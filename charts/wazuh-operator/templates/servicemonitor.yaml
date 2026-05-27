@@ -21,6 +21,17 @@ spec:
     scheme: https
     tlsConfig:
       insecureSkipVerify: true
+    # Authenticate to the auth-protected metrics endpoint with the operator SA
+    # token (RBAC in metrics-rbac.yaml). Overridable via serviceMonitor.authorization.
+    authorization:
+      {{- if .Values.operator.serviceMonitor.authorization }}
+      {{- toYaml .Values.operator.serviceMonitor.authorization | nindent 6 }}
+      {{- else }}
+      type: Bearer
+      credentials:
+        name: {{ include "wazuh-operator.fullname" . }}-metrics-token
+        key: token
+      {{- end }}
     {{- end }}
     interval: {{ .Values.operator.serviceMonitor.interval | quote }}
     scrapeTimeout: {{ .Values.operator.serviceMonitor.scrapeTimeout | quote }}
