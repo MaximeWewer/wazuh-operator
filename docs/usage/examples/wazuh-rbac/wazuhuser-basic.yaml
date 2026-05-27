@@ -1,0 +1,36 @@
+# WazuhUser - an internal Wazuh Manager API user (username + password).
+# Use this for direct API access (scripts, integrations) rather than the
+# dashboard run_as flow. The user is linked to the named Wazuh API roles;
+# "administrator" is the built-in reserved role.
+apiVersion: resources.wazuh.com/v1
+kind: WazuhUser
+metadata:
+  name: api-automation
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+
+  username: api-automation
+
+  passwordSecret:
+    secretName: api-automation-credentials
+    passwordKey: password
+
+  # Wazuh API role names. May reference a WazuhRole (by its resolved roleName)
+  # or a built-in role such as "administrator" / "readonly".
+  roles:
+    - wazuh-api-viewer
+
+  # Allow this user to be impersonated through run_as / auth-context.
+  allowRunAs: false
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: api-automation-credentials
+  namespace: wazuh
+type: Opaque
+stringData:
+  password: "ChangeMe123!" # Wazuh API passwords must be 8-64 chars

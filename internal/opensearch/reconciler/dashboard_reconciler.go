@@ -39,6 +39,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates"
 	opensearchcerts "github.com/MaximeWewer/wazuh-operator/internal/certificates/opensearch"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
@@ -521,6 +522,17 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 			deployBuilder.WithResources(cluster.Spec.Dashboard.Resources)
 		}
 		deployBuilder.WithEnableSSL(cluster.Spec.Dashboard.EnableSSL)
+		// Drive run_as from the Wazuh plugin API endpoint config so changing it
+		// rolls out the dashboard and regenerates the effective wazuh.yml.
+		if wp := cluster.Spec.Dashboard.WazuhPlugin; wp != nil {
+			runAs := false
+			if len(wp.APIEndpoints) > 0 {
+				runAs = wp.APIEndpoints[0].RunAs
+			} else if wp.DefaultAPIEndpoint != nil {
+				runAs = wp.DefaultAPIEndpoint.RunAs
+			}
+			deployBuilder.WithRunAs(runAs)
+		}
 		if cluster.Spec.Dashboard.Image != nil {
 			if cluster.Spec.Dashboard.Image.PullPolicy != "" {
 				deployBuilder.WithImagePullPolicy(cluster.Spec.Dashboard.Image.PullPolicy)
@@ -969,6 +981,10 @@ func (r *DashboardReconciler) ReconcileNonBlocking(ctx context.Context, cluster 
 		return DashboardReconcileResult{Error: fmt.Errorf("failed to reconcile dashboard deployment: %w", err)}
 	}
 
+	// Ensure the dashboard's API user allows run_as impersonation to match the
+	// configured runAs (best-effort; does not block reconciliation).
+	r.ensureAPIUserRunAs(ctx, cluster)
+
 	// Reconcile PodDisruptionBudget
 	if err := r.reconcilePDB(ctx, cluster); err != nil {
 		return DashboardReconcileResult{Error: fmt.Errorf("failed to reconcile dashboard PDB: %w", err)}
@@ -1060,6 +1076,19 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		enableSSL = cluster.Spec.Dashboard.EnableSSL
 	}
 
+	// Extract run_as from the Wazuh plugin API endpoint config. Included in the
+	// spec hash so toggling it rolls out the dashboard, and passed to the
+	// builder as the RUN_AS env consumed by wazuh_app_config.sh.
+	runAs := false
+	if cluster.Spec.Dashboard != nil && cluster.Spec.Dashboard.WazuhPlugin != nil {
+		wp := cluster.Spec.Dashboard.WazuhPlugin
+		if len(wp.APIEndpoints) > 0 {
+			runAs = wp.APIEndpoints[0].RunAs
+		} else if wp.DefaultAPIEndpoint != nil {
+			runAs = wp.DefaultAPIEndpoint.RunAs
+		}
+	}
+
 	// Compute spec hash for change detection (includes all configurable fields)
 	specHash, err := patch.ComputeDashboardSpecHashFull(patch.DashboardSpecInput{
 		Replicas:                      replicas,
@@ -1085,6 +1114,7 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		TerminationGracePeriodSeconds: terminationGracePeriodSeconds,
 		ImagePullPolicy:               imagePullPolicy,
 		EnableSSL:                     enableSSL,
+		RunAs:                         runAs,
 	})
 	if err != nil {
 		log.Error(err, "Failed to compute dashboard spec hash, continuing without spec tracking")
@@ -1096,6 +1126,7 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 
 	deployBuilder := deployments.NewDashboardDeploymentBuilder(cluster.Name, cluster.Namespace)
 	deployBuilder.WithEnableSSL(enableSSL)
+	deployBuilder.WithRunAs(runAs)
 	if imagePullPolicy != "" {
 		deployBuilder.WithImagePullPolicy(imagePullPolicy)
 	}
@@ -1472,4 +1503,60 @@ func getDeploymentPhase(dep *appsv1.Deployment) wazuhv1.ComponentStatusPhase {
 		return wazuhv1.ComponentStatusPhaseScaling
 	}
 	return wazuhv1.ComponentStatusPhaseReady
+}
+
+// ensureAPIUserRunAs sets allow_run_as on the dashboard's Wazuh API user to
+// match the configured runAs, so the run_as auth-context flow works without
+// manual intervention. Best-effort: any failure (API unavailable, user not
+// found) is logged and never blocks dashboard reconciliation.
+func (r *DashboardReconciler) ensureAPIUserRunAs(ctx context.Context, cluster *wazuhv1.WazuhCluster) {
+	log := logf.FromContext(ctx)
+
+	if cluster.Spec.Dashboard == nil || cluster.Spec.Dashboard.WazuhPlugin == nil {
+		return
+	}
+	wp := cluster.Spec.Dashboard.WazuhPlugin
+	runAs := false
+	if len(wp.APIEndpoints) > 0 {
+		runAs = wp.APIEndpoints[0].RunAs
+	} else if wp.DefaultAPIEndpoint != nil {
+		runAs = wp.DefaultAPIEndpoint.RunAs
+	}
+
+	// The dashboard authenticates to the Manager API with the operator-managed
+	// API credentials secret (same as the API_USERNAME/API_PASSWORD env vars).
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: constants.APICredentialsName(cluster.Name), Namespace: cluster.Namespace}, secret); err != nil {
+		log.V(1).Info("Skipping allow_run_as: cannot read API credentials secret", "error", err)
+		return
+	}
+	username := string(secret.Data[constants.SecretKeyAPIUsername])
+	password := string(secret.Data[constants.SecretKeyAPIPassword])
+	if username == "" || password == "" {
+		log.V(1).Info("Skipping allow_run_as: API credentials secret missing username/password")
+		return
+	}
+
+	baseURL := fmt.Sprintf("https://%s:%d", constants.ManagerMasterServiceFQDN(cluster.Name, cluster.Namespace), constants.PortManagerAPI)
+	apiClient := adapters.NewWazuhAPIAdapter(adapters.WazuhAPIConfig{
+		BaseURL:  baseURL,
+		Username: username,
+		Password: password,
+		Insecure: true,
+	})
+	if !apiClient.IsHealthy(ctx) {
+		log.V(1).Info("Skipping allow_run_as: Wazuh API not reachable yet")
+		return
+	}
+
+	id, err := apiClient.GetUserByName(ctx, username)
+	if err != nil || id == 0 {
+		log.V(1).Info("Skipping allow_run_as: API user not resolved", "user", username, "error", err)
+		return
+	}
+	if err := apiClient.SetUserRunAs(ctx, id, runAs); err != nil {
+		log.Info("Failed to set allow_run_as on dashboard API user (best-effort)", "user", username, "runAs", runAs, "error", err)
+		return
+	}
+	log.V(1).Info("Ensured dashboard API user allow_run_as", "user", username, "allowRunAs", runAs)
 }

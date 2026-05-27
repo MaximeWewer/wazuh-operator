@@ -178,7 +178,9 @@ rules:
   - wazuhfilebeats
   - wazuhintegrations
   - wazuhrestores
+  - wazuhroles
   - wazuhrules
+  - wazuhusers
   verbs:
   - create
   - delete
@@ -212,7 +214,9 @@ rules:
   - wazuhfilebeats/finalizers
   - wazuhintegrations/finalizers
   - wazuhrestores/finalizers
+  - wazuhroles/finalizers
   - wazuhrules/finalizers
+  - wazuhusers/finalizers
   verbs:
   - update
 - apiGroups:
@@ -240,7 +244,9 @@ rules:
   - wazuhfilebeats/status
   - wazuhintegrations/status
   - wazuhrestores/status
+  - wazuhroles/status
   - wazuhrules/status
+  - wazuhusers/status
   verbs:
   - get
   - patch

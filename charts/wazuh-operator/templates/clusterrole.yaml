@@ -184,6 +184,8 @@ rules:
   - wazuhfilebeats
   - wazuhintegrations
   - wazuhrules
+  - wazuhroles
+  - wazuhusers
   - opensearchactiongroups
   - opensearchauthconfigs
   - opensearchcomponenttemplates
@@ -218,6 +220,8 @@ rules:
   - wazuhfilebeats/finalizers
   - wazuhintegrations/finalizers
   - wazuhrules/finalizers
+  - wazuhroles/finalizers
+  - wazuhusers/finalizers
   - opensearchactiongroups/finalizers
   - opensearchauthconfigs/finalizers
   - opensearchcomponenttemplates/finalizers
@@ -246,6 +250,8 @@ rules:
   - wazuhfilebeats/status
   - wazuhintegrations/status
   - wazuhrules/status
+  - wazuhroles/status
+  - wazuhusers/status
   - opensearchactiongroups/status
   - opensearchauthconfigs/status
   - opensearchcomponenttemplates/status

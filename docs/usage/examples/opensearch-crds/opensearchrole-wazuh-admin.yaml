@@ -1,0 +1,34 @@
+# OpenSearchRole - wazuh-admin
+# Mirrors the OpenSearch built-in "all_access" / admin role: full control over
+# cluster, all indices and all tenants. The CRD metadata.name becomes the
+# OpenSearch role name (-> "wazuh-admin").
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchRole
+metadata:
+  name: wazuh-admin
+  namespace: wazuh
+spec:
+  # Swap for your WazuhCluster name/namespace
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
+
+  # Full cluster-level control (matches all_access cluster_permissions: ["*"])
+  clusterPermissions:
+    - "*"
+
+  # Full access to every index
+  indexPermissions:
+    - indexPatterns:
+        - "*"
+      allowedActions:
+        - "*"
+
+  # Full dashboard / multi-tenancy control (write on every tenant)
+  tenantPermissions:
+    - tenantPatterns:
+        - "*"
+      allowedActions:
+        - kibana_all_write
+
+  description: "Full admin access - mirrors the OpenSearch built-in all_access role"

@@ -1,0 +1,21 @@
+# OpenSearchRoleMapping - binds users/backend-roles to the wazuh-admin role.
+# metadata.name must match the role name being mapped.
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchRoleMapping
+metadata:
+  name: wazuh-admin
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
+
+  # Internal users granted admin
+  users:
+    - admin
+
+  # Backend roles (from LDAP/AD/SSO) granted admin
+  backendRoles:
+    - wazuh-admins
+
+  description: "Maps admins to the wazuh-admin role"

@@ -18,6 +18,7 @@ package deployments
 
 import (
 	"fmt"
+	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -51,6 +52,7 @@ type DashboardDeploymentBuilder struct {
 	volumeMounts                  []corev1.VolumeMount
 	indexerURL                    string
 	wazuhPlugin                   bool
+	runAs                         bool
 	terminationGracePeriodSeconds *int64
 	enableSSL                     bool
 	// Extra init containers
@@ -200,6 +202,15 @@ func (b *DashboardDeploymentBuilder) WithIndexerURL(url string) *DashboardDeploy
 // WithWazuhPlugin enables or disables the Wazuh plugin
 func (b *DashboardDeploymentBuilder) WithWazuhPlugin(enabled bool) *DashboardDeploymentBuilder {
 	b.wazuhPlugin = enabled
+	return b
+}
+
+// WithRunAs sets whether the Wazuh app authenticates to the Manager API using
+// run_as (auth-context impersonation). It is consumed by wazuh_app_config.sh
+// (RUN_AS env) when rendering the effective wazuh.yml hosts block. Including it
+// in the pod spec ensures a change rolls out the dashboard.
+func (b *DashboardDeploymentBuilder) WithRunAs(runAs bool) *DashboardDeploymentBuilder {
+	b.runAs = runAs
 	return b
 }
 
@@ -763,6 +774,12 @@ func (b *DashboardDeploymentBuilder) buildEnvVars() []corev1.EnvVar {
 			corev1.EnvVar{
 				Name:  "WAZUH_API_URL",
 				Value: wazuhAPIURL,
+			},
+			// RUN_AS is consumed by wazuh_app_config.sh to set run_as in the
+			// effective wazuh.yml hosts block (auth-context impersonation).
+			corev1.EnvVar{
+				Name:  "RUN_AS",
+				Value: strconv.FormatBool(b.runAs),
 			},
 			corev1.EnvVar{
 				Name: "API_USERNAME",

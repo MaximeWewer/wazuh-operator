@@ -1,0 +1,328 @@
+{{- if .Values.crds.install }}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.0
+  name: wazuhroles.resources.wazuh.com
+spec:
+  group: resources.wazuh.com
+  names:
+    kind: WazuhRole
+    listKind: WazuhRoleList
+    plural: wazuhroles
+    shortNames:
+    - wrole
+    singular: wazuhrole
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.roleName
+      name: Role
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        description: WazuhRole is the Schema for the wazuhroles API (Wazuh Manager
+          API RBAC role).
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of WazuhRole
+            properties:
+              clusterRefs:
+                description: |-
+                  ClusterRefs lists the WazuhCluster instances this role targets.
+                  Each entry must specify both name and namespace. The CR itself can live
+                  in any namespace.
+                items:
+                  description: |-
+                    WazuhClusterRef references a WazuhCluster by name and namespace.
+                    Both fields are mandatory; cross-namespace references are supported and
+                    require the consuming CR to opt into multi-cluster propagation via
+                    ClusterRefs lists.
+                  properties:
+                    name:
+                      description: Name of the WazuhCluster resource
+                      minLength: 1
+                      type: string
+                    namespace:
+                      description: Namespace of the WazuhCluster resource
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                - namespace
+                x-kubernetes-list-type: map
+              policies:
+                description: Policies are RBAC policies created inline and linked
+                  to this role.
+                items:
+                  description: WazuhRolePolicy is an inline Wazuh API policy definition.
+                  properties:
+                    actions:
+                      description: Actions are the Wazuh API actions (e.g. "agent:read",
+                        "rules:read").
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                    effect:
+                      default: allow
+                      description: Effect is allow or deny.
+                      enum:
+                      - allow
+                      - deny
+                      type: string
+                    name:
+                      description: Name is the Wazuh API policy name.
+                      maxLength: 64
+                      pattern: ^[a-zA-Z0-9._-]+$
+                      type: string
+                    resources:
+                      description: Resources are the targeted resources (e.g. "*:*:*",
+                        "agent:group:default").
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                  required:
+                  - actions
+                  - name
+                  - resources
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+              roleName:
+                description: |-
+                  RoleName is the Wazuh API role name. Defaults to metadata.name.
+                  Use a distinct name to avoid colliding with reserved Wazuh roles.
+                maxLength: 64
+                pattern: ^[a-zA-Z0-9._-]+$
+                type: string
+              rules:
+                description: |-
+                  Rules are auth-context matcher rules created inline and linked to this
+                  role. Used with run_as to map an authenticated dashboard user onto this
+                  role (e.g. body {"FIND":{"user_name":"jdoe"}}).
+                items:
+                  description: WazuhRoleRule is an inline Wazuh API authentication-context
+                    rule.
+                  properties:
+                    body:
+                      description: |-
+                        Body is the auth-context matcher pushed as the rule definition, e.g.
+                        {"FIND":{"user_name":"jdoe"}} or {"MATCH":{"backend_roles":"admins"}}.
+                        The structure is free-form Wazuh rule syntax (FIND/MATCH/AND/OR) and is
+                        validated by the Wazuh API on apply.
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    name:
+                      description: Name is the Wazuh API rule name.
+                      maxLength: 64
+                      pattern: ^[a-zA-Z0-9._-]+$
+                      type: string
+                  required:
+                  - body
+                  - name
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
+            required:
+            - clusterRefs
+            type: object
+          status:
+            description: status defines the observed state of WazuhRole
+            properties:
+              clusterStatuses:
+                description: ClusterStatuses reports per-target-cluster reconciliation
+                  state.
+                items:
+                  description: |-
+                    WazuhRBACClusterStatus reports reconciliation state for a single cluster.
+                    Wazuh API object IDs differ per cluster, so they are tracked per entry and
+                    used for unlink/delete on cleanup.
+                  properties:
+                    assignedRoleIds:
+                      additionalProperties:
+                        type: integer
+                      description: |-
+                        AssignedRoleIDs maps role name to its resolved Wazuh API role ID for the
+                        roles linked to this user (WazuhUser only). Used to prune removed roles.
+                      type: object
+                    lastAppliedHash:
+                      description: LastAppliedHash is the hash of the last spec applied
+                        to this cluster.
+                      type: string
+                    lastSyncTime:
+                      description: LastSyncTime is the last time this cluster was
+                        synced with its Wazuh API.
+                      format: date-time
+                      type: string
+                    message:
+                      description: Message provides additional information about this
+                        cluster's state.
+                      type: string
+                    name:
+                      description: Name of the target WazuhCluster.
+                      type: string
+                    namespace:
+                      description: Namespace of the target WazuhCluster.
+                      type: string
+                    phase:
+                      description: Phase of this cluster's reconciliation (Pending,
+                        Ready, Failed).
+                      enum:
+                      - Pending
+                      - Ready
+                      - Failed
+                      type: string
+                    policyIds:
+                      additionalProperties:
+                        type: integer
+                      description: PolicyIDs maps policy name to its resolved Wazuh
+                        API ID (WazuhRole only).
+                      type: object
+                    roleId:
+                      description: RoleID is the resolved Wazuh API role ID on this
+                        cluster (WazuhRole only).
+                      type: integer
+                    ruleIds:
+                      additionalProperties:
+                        type: integer
+                      description: RuleIDs maps rule name to its resolved Wazuh API
+                        ID (WazuhRole only).
+                      type: object
+                    userId:
+                      description: UserID is the resolved Wazuh API user ID on this
+                        cluster (WazuhUser only).
+                      type: integer
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                - namespace
+                x-kubernetes-list-type: map
+              conditions:
+                description: Conditions represent the latest aggregate observations.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              message:
+                description: Message provides additional aggregate information about
+                  the current state.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration reflects the generation of the most
+                  recently observed spec.
+                format: int64
+                type: integer
+              phase:
+                description: |-
+                  Phase is the aggregate phase across all target clusters.
+                  Ready when every cluster is Ready; Failed if any is Failed; Pending otherwise.
+                enum:
+                - Pending
+                - Ready
+                - Failed
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+{{- end }}

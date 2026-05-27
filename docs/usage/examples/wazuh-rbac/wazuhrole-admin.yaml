@@ -1,0 +1,84 @@
+# WazuhRole - wazuh-api-admin
+# Full Wazuh Manager API role mapped to a dashboard admin via run_as.
+#
+# Wazuh API resources are TYPED per action, and the dashboard performs
+# per-section permission checks against the specific resource (e.g.
+# security:read on user:id:*/role:id:*). A generic "*:*:*" resource is NOT
+# accepted for those typed checks, so these policies mirror the built-in
+# "administrator" role's action->resource groupings (full read+write).
+#
+# (The built-in "administrator" role is reserved/immutable and cannot take a
+# custom auth-context rule, which is why run_as admins need this custom role.)
+apiVersion: resources.wazuh.com/v1
+kind: WazuhRole
+metadata:
+  name: wazuh-api-admin
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+
+  policies:
+    - name: wazuh-api-admin-resourceless
+      effect: allow
+      resources: ["*:*:*"]
+      actions:
+        - agent:create
+        - cluster:status
+        - decoders:update
+        - event:ingest
+        - group:create
+        - lists:update
+        - logtest:run
+        - manager:read
+        - manager:read_api_config
+        - manager:restart
+        - manager:update_config
+        - mitre:read
+        - rules:update
+        - security:create
+        - security:create_user
+        - security:edit_run_as
+        - security:read_config
+        - security:revoke
+        - security:update_config
+        - task:status
+    - name: wazuh-api-admin-agents
+      effect: allow
+      resources: ["agent:id:*", "agent:group:*"]
+      actions: [agent:delete, agent:modify_group, agent:read, agent:reconnect, agent:restart, agent:upgrade]
+    - name: wazuh-api-admin-agent-data
+      effect: allow
+      resources: ["agent:id:*"]
+      actions: [active-response:command, ciscat:read, rootcheck:clear, rootcheck:read, rootcheck:run, sca:read, syscheck:clear, syscheck:read, syscheck:run, syscollector:read]
+    - name: wazuh-api-admin-groups
+      effect: allow
+      resources: ["group:id:*"]
+      actions: [group:delete, group:modify_assignments, group:read, group:update_config]
+    - name: wazuh-api-admin-security
+      effect: allow
+      resources: ["policy:id:*", "role:id:*", "rule:id:*", "user:id:*"]
+      actions: [security:delete, security:read, security:update]
+    - name: wazuh-api-admin-decoders
+      effect: allow
+      resources: ["decoder:file:*"]
+      actions: [decoders:delete, decoders:read]
+    - name: wazuh-api-admin-lists
+      effect: allow
+      resources: ["list:file:*"]
+      actions: [lists:delete, lists:read]
+    - name: wazuh-api-admin-rules
+      effect: allow
+      resources: ["rule:file:*"]
+      actions: [rules:delete, rules:read]
+    - name: wazuh-api-admin-nodes
+      effect: allow
+      resources: ["node:id:*"]
+      actions: [cluster:read, cluster:read_api_config, cluster:restart, cluster:update_config]
+
+  rules:
+    - name: map-admins
+      body:
+        FIND:
+          user_name: test-admin

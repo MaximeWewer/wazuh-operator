@@ -406,6 +406,28 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Wazuh Manager API RBAC Controllers
+	wazuhRoleRecorder := mgr.GetEventRecorderFor("wazuhrole-controller")
+	if err := (&controllers.WazuhRoleReconciler{
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		Recorder:       wazuhRoleRecorder,
+		RoleReconciler: wazuhreconciler.NewWazuhAPIRoleReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhRoleRecorder),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WazuhRole")
+		os.Exit(1)
+	}
+	wazuhUserRecorder := mgr.GetEventRecorderFor("wazuhuser-controller")
+	if err := (&controllers.WazuhUserReconciler{
+		Client:         mgr.GetClient(),
+		Scheme:         mgr.GetScheme(),
+		Recorder:       wazuhUserRecorder,
+		UserReconciler: wazuhreconciler.NewWazuhAPIUserReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhUserRecorder),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WazuhUser")
+		os.Exit(1)
+	}
+
 	// OpenSearch Security Controllers
 	if err := (&controllers.OpenSearchUserReconciler{
 		Client: mgr.GetClient(),

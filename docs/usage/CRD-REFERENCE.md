@@ -11,7 +11,7 @@ references are supported.
 
 | Form | CRDs |
 |------|------|
-| `clusterRefs: [{name, namespace}]` (MinItems=1) | WazuhAgentGroup, WazuhRule, WazuhDecoder, WazuhFilebeat, OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchTenant, OpenSearchActionGroup, OpenSearchAuthConfig, OpenSearchISMPolicy, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchIndex, OpenSearchSnapshotPolicy, OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore |
+| `clusterRefs: [{name, namespace}]` (MinItems=1) | WazuhAgentGroup, WazuhRule, WazuhDecoder, WazuhFilebeat, WazuhRole, WazuhUser, OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchTenant, OpenSearchActionGroup, OpenSearchAuthConfig, OpenSearchISMPolicy, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchIndex, OpenSearchSnapshotPolicy, OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore |
 | `clusterRef: {name, namespace}` | WazuhBackup, WazuhRestore, WazuhCertificate |
 
 Multi-cluster CRDs report per-target-cluster reconciliation state via
@@ -51,6 +51,9 @@ additional cluster when targeting more than one.
   - [WazuhIntegration](#wazuhintegration)
   - [WazuhCertificate](#wazuhcertificate)
   - [WazuhFilebeat](#wazuhfilebeat)
+- [Wazuh API RBAC CRDs](#wazuh-api-rbac-crds)
+  - [WazuhRole](#wazuhrole)
+  - [WazuhUser](#wazuhuser)
 - [Wazuh Backup CRDs](#wazuh-backup-crds)
   - [WazuhBackup](#wazuhbackup)
   - [WazuhRestore](#wazuhrestore)
@@ -1282,6 +1285,117 @@ Manages Filebeat configuration for shipping Wazuh alerts and archives to OpenSea
 | `port`                 | int32                | `9200`  | OpenSearch port (1-65535)    |
 
 See [Filebeat Configuration Guide](./features/filebeat-configuration.md) for detailed usage and examples.
+
+---
+
+## Wazuh API RBAC CRDs
+
+Manage Wazuh **Manager API** RBAC (port 55000) — distinct from the OpenSearch
+indexer RBAC above. The operator pushes roles, inline policies, auth-context
+rules and API users to the Manager API and reconciles them per target cluster.
+Used with the dashboard `run_as` flow to restrict the API-backed menus
+(Management, Rules, Decoders, Server management, Dev Tools…) per user. See
+[Wazuh Manager API RBAC](features/wazuh-api-rbac.md) for the end-to-end guide.
+
+> Wazuh API resources are **typed per action** (`rules:read`→`rule:file:*`,
+> `security:read`→`user:id:*`/`role:id:*`, `agent:read`→`agent:id:*`/`agent:group:*`).
+> A generic `"*:*:*"` resource is rejected by the dashboard's per-section
+> permission checks — use the typed resource for each action. Reserved Wazuh
+> objects (ID < 100) are immutable: the operator never mutates/deletes them and
+> reports a name collision as `Failed`.
+
+### WazuhRole
+
+A Wazuh API role with inline policies and auth-context rules, created and linked
+on the Manager API.
+
+**Short Name:** `wrole`
+
+| Field         | Type                | Required | Default         | Description                                              |
+| ------------- | ------------------- | -------- | --------------- | -------------------------------------------------------- |
+| `clusterRefs` | []WazuhClusterRef   | **Yes**  | -               | Target clusters (MinItems=1)                             |
+| `roleName`    | string              | No       | `metadata.name` | Wazuh API role name (pattern `^[a-zA-Z0-9._-]+$`)        |
+| `policies`    | []WazuhRolePolicy   | No       | -               | Inline policies created and linked to the role           |
+| `rules`       | []WazuhRoleRule     | No       | -               | Inline auth-context rules (run_as mapping) linked to role |
+
+**WazuhRolePolicy:** `name` (req), `actions` []string (req), `resources` []string (req), `effect` (`allow`\|`deny`, default `allow`).
+**WazuhRoleRule:** `name` (req), `body` (req, raw JSON auth-context matcher, e.g. `{"FIND":{"user_name":"jdoe"}}`).
+
+#### Status Fields
+
+| Field                | Type                       | Description                                                       |
+| -------------------- | -------------------------- | ----------------------------------------------------------------- |
+| `phase`              | string                     | Aggregate phase (Pending/Ready/Failed)                            |
+| `conditions`         | []Condition                | Standard conditions                                               |
+| `observedGeneration` | int64                      | Last observed generation                                          |
+| `message`            | string                     | Additional information                                            |
+| `clusterStatuses`    | []WazuhRBACClusterStatus   | Per-cluster state incl. resolved `roleId`/`policyIds`/`ruleIds`   |
+
+#### Example
+
+```yaml
+# docs/usage/examples/wazuh-rbac/wazuhrole-viewer.yaml
+apiVersion: resources.wazuh.com/v1
+kind: WazuhRole
+metadata:
+  name: wazuh-api-viewer
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  policies:
+    - name: wazuh-api-viewer-rules
+      effect: allow
+      actions: [rules:read]
+      resources: ["rule:file:*"]
+  rules:
+    - name: map-viewers
+      body:
+        FIND:
+          user_name: test-viewer
+```
+
+### WazuhUser
+
+An internal Wazuh Manager API user (username + password from a Secret) linked to
+one or more Wazuh API roles. For direct API access (scripts/integrations); the
+dashboard run_as flow uses `WazuhRole` rules instead.
+
+**Short Name:** `wuser`
+
+| Field            | Type                 | Required | Default         | Description                                                  |
+| ---------------- | -------------------- | -------- | --------------- | ------------------------------------------------------------ |
+| `clusterRefs`    | []WazuhClusterRef    | **Yes**  | -               | Target clusters (MinItems=1)                                 |
+| `username`       | string               | No       | `metadata.name` | Wazuh API username (pattern `^[a-zA-Z0-9._-]+$`)             |
+| `passwordSecret` | CredentialsSecretRef | **Yes**  | -               | Secret holding the password (key `passwordKey`, def `password`) |
+| `roles`          | []string             | No       | -               | Wazuh API role names to assign (WazuhRole `roleName` or built-in) |
+| `allowRunAs`     | bool                 | No       | `false`         | Permit this user to be impersonated via run_as               |
+
+#### Status Fields
+
+Same shape as WazuhRole; per-cluster `clusterStatuses[]` carries the resolved
+`userId` and `assignedRoleIds`.
+
+#### Example
+
+```yaml
+# docs/usage/examples/wazuh-rbac/wazuhuser-basic.yaml
+apiVersion: resources.wazuh.com/v1
+kind: WazuhUser
+metadata:
+  name: api-automation
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  passwordSecret:
+    secretName: api-automation-credentials
+  roles:
+    - wazuh-api-viewer
+  allowRunAs: false
+```
 
 ---
 

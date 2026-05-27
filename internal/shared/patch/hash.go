@@ -37,17 +37,17 @@ type RepositoryPluginHashInput struct {
 
 // WazuhExporterHashInput mirrors WazuhExporterConfig for hash computation.
 type WazuhExporterHashInput struct {
-	Enabled                 bool                         `json:"enabled"`
-	Image                   string                       `json:"image,omitempty"`
-	Port                    int32                        `json:"port,omitempty"`
-	Resources               *corev1.ResourceRequirements `json:"resources,omitempty"`
-	APIProtocol             string                       `json:"apiProtocol,omitempty"`
-	APIVerifySSL            bool                         `json:"apiVerifySSL,omitempty"`
-	LogLevel                string                       `json:"logLevel,omitempty"`
-	CacheTTL                string                       `json:"cacheTTL,omitempty"`
-	StartupGrace            string                       `json:"startupGrace,omitempty"`
-	APICASecretName         string                       `json:"apiCASecretName,omitempty"`
-	APICASecretKey          string                       `json:"apiCASecretKey,omitempty"`
+	Enabled         bool                         `json:"enabled"`
+	Image           string                       `json:"image,omitempty"`
+	Port            int32                        `json:"port,omitempty"`
+	Resources       *corev1.ResourceRequirements `json:"resources,omitempty"`
+	APIProtocol     string                       `json:"apiProtocol,omitempty"`
+	APIVerifySSL    bool                         `json:"apiVerifySSL,omitempty"`
+	LogLevel        string                       `json:"logLevel,omitempty"`
+	CacheTTL        string                       `json:"cacheTTL,omitempty"`
+	StartupGrace    string                       `json:"startupGrace,omitempty"`
+	APICASecretName string                       `json:"apiCASecretName,omitempty"`
+	APICASecretKey  string                       `json:"apiCASecretKey,omitempty"`
 }
 
 // IndexerExporterHashInput mirrors IndexerExporterConfig for hash computation.
@@ -125,6 +125,7 @@ type DashboardSpec struct {
 	TerminationGracePeriodSeconds *int64                     `json:"terminationGracePeriodSeconds,omitempty"`
 	ImagePullPolicy               corev1.PullPolicy          `json:"imagePullPolicy,omitempty"`
 	EnableSSL                     bool                       `json:"enableSSL,omitempty"`
+	RunAs                         bool                       `json:"runAs,omitempty"`
 }
 
 // ManagerMasterSpec contains fields from WazuhCluster.Spec.Manager.Master used for hash computation
@@ -339,6 +340,7 @@ type DashboardSpecInput struct {
 	TerminationGracePeriodSeconds *int64
 	ImagePullPolicy               corev1.PullPolicy
 	EnableSSL                     bool
+	RunAs                         bool
 }
 
 // ComputeDashboardSpecHash computes the spec hash for a Dashboard component

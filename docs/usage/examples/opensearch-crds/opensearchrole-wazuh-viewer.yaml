@@ -1,0 +1,41 @@
+# OpenSearchRole - wazuh-viewer
+# Read-only access to the Wazuh indexer data plus read-only access to the
+# dashboards (global tenant). The CRD metadata.name becomes the OpenSearch
+# role name (-> "wazuh-viewer").
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchRole
+metadata:
+  name: wazuh-viewer
+  namespace: wazuh
+spec:
+  # Swap for your WazuhCluster name/namespace
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
+
+  # Read-only cluster ops: multi-search/scroll + cluster health/monitor so the
+  # dashboard can list indices and render its status panels.
+  clusterPermissions:
+    - cluster_composite_ops_ro
+    - cluster_monitor
+
+  # Read-only access to every Wazuh indexer index
+  indexPermissions:
+    - indexPatterns:
+        - "wazuh-alerts-*"
+        - "wazuh-archives-*"
+        - "wazuh-monitoring-*"
+        - "wazuh-statistics-*"
+        - "wazuh-states-*"
+      allowedActions:
+        - read              # action group: search/get/mget/fields-mapping
+        - indices_monitor   # action group: index stats/health for dashboard
+
+  # Read-only dashboards on the global tenant (kibana saved objects, visualizations)
+  tenantPermissions:
+    - tenantPatterns:
+        - "global_tenant"
+      allowedActions:
+        - kibana_all_read
+
+  description: "Read-only access to Wazuh indexer indices and dashboards"

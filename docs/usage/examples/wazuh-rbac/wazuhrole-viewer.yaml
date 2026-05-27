@@ -1,0 +1,69 @@
+# WazuhRole - wazuh-api-viewer
+# Read-only Wazuh Manager API role, mapped to a dashboard user via run_as.
+#
+# Wazuh API resources are TYPED per action (e.g. rules:read applies to
+# rule:file:*, agent:read to agent:id:*/agent:group:*). A generic "*:*:*"
+# resource does NOT satisfy the dashboard's per-section permission checks, so
+# the policies below mirror the built-in "readonly" role's action->resource
+# pairs. Result: the viewer can read every section but cannot write anything
+# and is denied the API Security (RBAC) management section.
+#
+# Flow (requires run_as enabled on the dashboard API endpoint, see
+# docs/usage/features/wazuh-api-rbac.md):
+#   OpenSearch dashboard login (user "test-viewer")
+#     -> dashboard forwards the auth context to the Wazuh API (run_as)
+#     -> the "map-viewers" rule matches user_name and grants this role.
+apiVersion: resources.wazuh.com/v1
+kind: WazuhRole
+metadata:
+  name: wazuh-api-viewer
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+
+  policies:
+    - name: wazuh-api-viewer-agents
+      effect: allow
+      actions: [agent:read]
+      resources: ["agent:id:*", "agent:group:*"]
+    - name: wazuh-api-viewer-groups
+      effect: allow
+      actions: [group:read]
+      resources: ["group:id:*"]
+    - name: wazuh-api-viewer-rules
+      effect: allow
+      actions: [rules:read]
+      resources: ["rule:file:*"]
+    - name: wazuh-api-viewer-decoders
+      effect: allow
+      actions: [decoders:read]
+      resources: ["decoder:file:*"]
+    - name: wazuh-api-viewer-lists
+      effect: allow
+      actions: [lists:read]
+      resources: ["list:file:*"]
+    - name: wazuh-api-viewer-agent-data
+      effect: allow
+      actions: [ciscat:read, rootcheck:read, sca:read, syscheck:read, syscollector:read, vulnerability:read]
+      resources: ["agent:id:*"]
+    - name: wazuh-api-viewer-mitre
+      effect: allow
+      actions: [mitre:read, task:status]
+      resources: ["*:*:*"]
+    - name: wazuh-api-viewer-manager
+      effect: allow
+      actions: [cluster:status, manager:read, manager:read_api_config]
+      resources: ["*:*:*"]
+    - name: wazuh-api-viewer-nodes
+      effect: allow
+      actions: [cluster:read, cluster:read_api_config]
+      resources: ["node:id:*"]
+
+  # Auth-context rule (run_as): match the authenticated dashboard identity.
+  rules:
+    - name: map-viewers
+      body:
+        FIND:
+          user_name: test-viewer
