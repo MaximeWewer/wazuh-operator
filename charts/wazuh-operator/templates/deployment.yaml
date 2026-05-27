@@ -97,14 +97,45 @@ spec:
         {{- if .Values.telemetry.enabled }}
         - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: {{ .Values.telemetry.endpoint | quote }}
+        - name: OTEL_EXPORTER_OTLP_PROTOCOL
+          value: {{ .Values.telemetry.protocol | default "grpc" | quote }}
         - name: OTEL_EXPORTER_OTLP_INSECURE
           value: {{ .Values.telemetry.insecure | quote }}
         - name: OTEL_SERVICE_NAME
           value: {{ .Values.telemetry.serviceName | default "wazuh-operator" | quote }}
         - name: OTEL_SERVICE_VERSION
           value: {{ .Values.telemetry.serviceVersion | default .Chart.AppVersion | quote }}
+        {{- with .Values.telemetry.sampler }}
+        - name: OTEL_TRACES_SAMPLER
+          value: {{ . | quote }}
+        {{- end }}
         - name: OTEL_TRACES_SAMPLER_ARG
           value: {{ .Values.telemetry.samplingRatio | default "1.0" | quote }}
+        {{- if .Values.telemetry.headersSecret.name }}
+        - name: OTEL_EXPORTER_OTLP_HEADERS
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.telemetry.headersSecret.name }}
+              key: {{ .Values.telemetry.headersSecret.key | default "headers" }}
+        {{- else if .Values.telemetry.headers }}
+        - name: OTEL_EXPORTER_OTLP_HEADERS
+          value: {{ .Values.telemetry.headers | quote }}
+        {{- end }}
+        {{- if .Values.telemetry.caCert.secretName }}
+        - name: OTEL_EXPORTER_OTLP_CERTIFICATE
+          value: /etc/otel/ca/{{ .Values.telemetry.caCert.key | default "ca.crt" }}
+        {{- end }}
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        # k8s.* attributes (+ user-provided) reported on every span's resource.
+        - name: OTEL_RESOURCE_ATTRIBUTES
+          value: "k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(POD_NAMESPACE),k8s.node.name=$(NODE_NAME){{- with .Values.telemetry.resourceAttributes }},{{ . }}{{- end }}"
         {{- end }}
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ .Values.operator.clusterDomain | default "cluster.local" | quote }}
@@ -163,6 +194,11 @@ spec:
           mountPath: /tmp/k8s-webhook-server/serving-certs
           readOnly: true
         {{- end }}
+        {{- if and .Values.telemetry.enabled .Values.telemetry.caCert.secretName }}
+        - name: otel-ca
+          mountPath: /etc/otel/ca
+          readOnly: true
+        {{- end }}
         {{- with .Values.operator.extraVolumeMounts }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -174,6 +210,12 @@ spec:
         secret:
           defaultMode: 420
           secretName: {{ include "wazuh-operator.fullname" . }}-webhook-cert
+      {{- end }}
+      {{- if and .Values.telemetry.enabled .Values.telemetry.caCert.secretName }}
+      - name: otel-ca
+        secret:
+          defaultMode: 420
+          secretName: {{ .Values.telemetry.caCert.secretName }}
       {{- end }}
       {{- with .Values.operator.extraVolumes }}
       {{- toYaml . | nindent 6 }}

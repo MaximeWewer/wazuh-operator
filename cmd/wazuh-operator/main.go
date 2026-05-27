@@ -177,8 +177,11 @@ func main() {
 					setupLog.Error(err, "failed to shutdown OpenTelemetry provider")
 				}
 			}()
-			setupLog.Info("OpenTelemetry tracing initialized successfully")
+			setupLog.Info("OpenTelemetry tracing initialized successfully",
+				"protocol", otelConfig.Protocol, "insecure", otelConfig.Insecure)
 		}
+	} else {
+		setupLog.Info("OpenTelemetry tracing disabled (set OTEL_EXPORTER_OTLP_ENDPOINT to enable)")
 	}
 
 	// if the enable-http2 flag is false (the default), http/2 should be disabled

@@ -300,11 +300,35 @@ telemetry:
   # -- Enable OpenTelemetry distributed tracing
   enabled: false
 
-  # -- OTLP exporter endpoint (gRPC). Examples: "jaeger-collector.observability:4317", "otel-collector.monitoring:4317"
+  # -- OTLP exporter endpoint. Accepts "host:port" or a full URL with scheme.
+  # gRPC default port 4317, HTTP 4318. Examples: "otel-collector.monitoring:4317",
+  # "https://otlp.example.com:4317", "http://otel-collector:4318".
   endpoint: ""
+
+  # -- OTLP transport protocol: "grpc" (default) or "http".
+  protocol: "grpc"
 
   # -- Use insecure connection (no TLS). Set to true for local development or service mesh.
   insecure: true
+
+  # -- Path-less PEM CA bundle (mounted from a Secret) to verify the collector
+  # certificate when insecure=false. Leave secretName empty to use system roots.
+  caCert:
+    # -- Secret containing the CA bundle
+    secretName: ""
+    # -- Key in the Secret holding the PEM CA
+    key: "ca.crt"
+
+  # -- Extra OTLP headers as "k1=v1,k2=v2" (e.g. auth tokens for SaaS backends).
+  # Prefer headersSecret for credentials.
+  headers: ""
+
+  # @extra telemetry.headersSecret OTLP headers sourced from a Secret (takes precedence over headers)
+  headersSecret:
+    # -- Secret containing the OTLP headers string
+    name: ""
+    # -- Key in the Secret holding the headers
+    key: "headers"
 
   # -- Service name reported in traces
   serviceName: "wazuh-operator"
@@ -312,8 +336,16 @@ telemetry:
   # -- Service version reported in traces (defaults to chart appVersion)
   serviceVersion: ""
 
+  # -- Standard OTEL_TRACES_SAMPLER (e.g. "parentbased_traceidratio", "always_on").
+  # Empty uses a parent-based ratio sampler driven by samplingRatio.
+  sampler: ""
+
   # -- Trace sampling ratio (0.0-1.0). 1.0 = sample all, 0.5 = 50%.
   samplingRatio: "1.0"
+
+  # -- Extra OTEL_RESOURCE_ATTRIBUTES appended to the auto k8s.* attributes,
+  # as "key1=val1,key2=val2" (e.g. "deployment.environment=prod").
+  resourceAttributes: ""
 
 # @section Gateway API Configuration
 
