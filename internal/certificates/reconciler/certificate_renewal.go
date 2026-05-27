@@ -19,6 +19,7 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"net"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -488,6 +489,11 @@ func (r *CertificateReconciler) reconcileNodeCert(ctx context.Context, cluster *
 func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.Context, cluster *wazuhv1.WazuhCluster, secretName, componentName string, sans []string, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) (bool, error) {
 	log := logf.FromContext(ctx)
 
+	// Manager certs (the API served on 55000) need a 127.0.0.1 IP SAN so in-pod
+	// sidecars (e.g. the Wazuh exporter) can verify TLS over the loopback.
+	isManagerCert := componentName == constants.CertComponentManagerMaster ||
+		componentName == constants.CertComponentManagerWorker
+
 	// Check if secret exists
 	found := &corev1.Secret{}
 	getErr := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cluster.Namespace}, found)
@@ -505,6 +511,9 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 			metrics.SetCertificateInfo(cluster.Name, cluster.Namespace, componentName,
 				certResult.Certificate.SerialNumber.String(), certResult.Certificate.Issuer.CommonName)
 
+			// Manager certs must carry the 127.0.0.1 IP SAN; older certs predate it.
+			missingLoopbackIP := isManagerCert && !hasLoopbackIPSAN(certResult.Certificate.IPAddresses)
+
 			// Check for cluster domain mismatch (e.g., after operator upgrade with new domain)
 			if certificates.RequiresDomainRegeneration(certResult.Certificate, secretName, cluster.Namespace, log) {
 				log.Info("Node certificate has domain mismatch, regenerating",
@@ -512,6 +521,10 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 					"component", componentName,
 					"expectedDomain", dns.ClusterDomain())
 				r.emitCertificateDomainMismatchEvent(cluster, secretName, dns.ClusterDomain())
+				// Fall through to regenerate certificate
+			} else if missingLoopbackIP {
+				log.Info("Node certificate missing required 127.0.0.1 IP SAN, regenerating",
+					"name", secretName, "component", componentName)
 				// Fall through to regenerate certificate
 			} else {
 				// Check if certificate needs renewal due to expiry
@@ -538,6 +551,11 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 	log.Info("Generating new node certificate", "name", secretName, "component", componentName, "validity", certificates.FormatCertDuration(certOpts.GetNodeValidity()))
 	nodeConfig := certificates.DefaultNodeCertConfig(cluster.Name + "-" + componentName)
 	nodeConfig.DNSNames = sans
+	// IPv4 loopback SAN so in-pod sidecars (e.g. the Wazuh exporter) can verify
+	// TLS when reaching the manager API over 127.0.0.1.
+	if isManagerCert {
+		nodeConfig.IPAddresses = []net.IP{net.ParseIP("127.0.0.1")}
+	}
 	// Apply subject fields from CRD configuration
 	nodeConfig.Country = certOpts.Country
 	nodeConfig.State = certOpts.State
@@ -612,4 +630,14 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 	r.emitTypedCertRenewedEvent(cluster, CertEventTypeNode, secretName)
 
 	return true, nil // Certificate was renewed
+}
+
+// hasLoopbackIPSAN reports whether the cert IP SANs include the IPv4 loopback.
+func hasLoopbackIPSAN(ips []net.IP) bool {
+	for _, ip := range ips {
+		if ip.Equal(net.IPv4(127, 0, 0, 1)) {
+			return true
+		}
+	}
+	return false
 }

@@ -54,7 +54,6 @@ const (
 // configured entirely through WAZUH_* environment variables.
 type WazuhExporterConfig struct {
 	ClusterName       string
-	Namespace         string
 	Image             string
 	Port              int32
 	APIProtocol       string
@@ -80,7 +79,6 @@ func NewWazuhExporterConfig(cluster *wazuhv1.WazuhCluster) *WazuhExporterConfig 
 
 	config := &WazuhExporterConfig{
 		ClusterName:       cluster.Name,
-		Namespace:         cluster.Namespace,
 		Image:             DefaultWazuhExporterImage,
 		Port:              DefaultWazuhExporterPort,
 		APIProtocol:       "https",
@@ -223,12 +221,15 @@ func (c *WazuhExporterConfig) BuildExporterContainer() corev1.Container {
 func (c *WazuhExporterConfig) buildEnvVars() []corev1.EnvVar {
 	env := []corev1.EnvVar{
 		{
-			// The exporter is a sidecar in the manager pod, but it targets the
-			// manager API via its service FQDN rather than localhost: the API TLS
-			// cert SAN is the service FQDN (so apiVerifySSL=true works) and the
-			// API does not necessarily bind the loopback interface.
+			// The exporter is a sidecar in the manager pod, so it reaches the API
+			// directly over the IPv4 loopback. NOT "localhost" (Go resolves it to
+			// the IPv6 [::1], but the Wazuh API binds 0.0.0.0 = IPv4 only -> refused)
+			// and NOT the service FQDN (routing through the Service would deadlock
+			// at startup: the pod only joins the Service endpoints once Ready, but
+			// the exporter's own readiness gates that). apiVerifySSL defaults to
+			// false for this in-pod loopback hop.
 			Name:  "WAZUH_API_URL",
-			Value: fmt.Sprintf("%s://%s:%d", c.APIProtocol, constants.ManagerMasterServiceFQDN(c.ClusterName, c.Namespace), constants.PortManagerAPI),
+			Value: fmt.Sprintf("%s://127.0.0.1:%d", c.APIProtocol, constants.PortManagerAPI),
 		},
 		{
 			Name:  "WAZUH_LISTEN_ADDRESS",
