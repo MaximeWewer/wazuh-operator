@@ -1,0 +1,282 @@
+# =============================================================================
+# Wazuh RBAC with an EXTERNAL identity provider (OIDC example).
+#
+# Identity comes from the IdP (Keycloak / Entra ID / Okta...). The IdP group
+# claim becomes OpenSearch "backend_roles". Two groups drive everything:
+#   - wazuh-admins  -> full access  (indexer/dashboard + Wazuh Manager API)
+#   - wazuh-viewers -> read-only     (indexer/dashboard + Wazuh Manager API)
+#
+# No local users: binding is by backend_role on both planes.
+#   OpenSearch  : OpenSearchRoleMapping.backendRoles  -> OpenSearchRole
+#   Wazuh API   : WazuhRole.rules (FIND backend_roles) -> WazuhRole  (via run_as)
+#
+# PREREQUISITE — enable run_as on the dashboard (in the WazuhCluster spec):
+#   spec.dashboard.wazuhPlugin.defaultApiEndpoint.runAs: true
+#
+# Swap "wazuh-cluster"/"wazuh" for your cluster name/namespace.
+# For LDAP/AD instead of OIDC, replace the OpenSearchAuthConfig below with the
+# LDAP block at the bottom of this file.
+# =============================================================================
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oidc-client-secret
+  namespace: wazuh
+type: Opaque
+stringData:
+  client-secret: "REPLACE_WITH_OIDC_CLIENT_SECRET"
+
+---
+# OIDC authentication. rolesKey is the token claim carrying the user's groups;
+# its values become OpenSearch backend_roles.
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchAuthConfig
+metadata:
+  name: oidc
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  oidc:
+    enabled: true
+    order: 0
+    challenge: false
+    connectURL: "https://idp.example.com/realms/wazuh/.well-known/openid-configuration"
+    clientId: "wazuh-dashboard"
+    clientSecretRef:
+      name: oidc-client-secret
+      key: client-secret
+    subjectKey: "preferred_username"
+    rolesKey: "groups"          # claim -> backend_roles
+    scope: "openid profile email groups"
+
+# =============================================================================
+# OpenSearch roles (indexer + dashboard) — identical to the internal-user case
+# =============================================================================
+---
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchRole
+metadata:
+  name: wazuh-admin
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  clusterPermissions: ["*"]
+  indexPermissions:
+    - indexPatterns: ["*"]
+      allowedActions: ["*"]
+  tenantPermissions:
+    - tenantPatterns: ["*"]
+      allowedActions: ["kibana_all_write"]
+
+---
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchRole
+metadata:
+  name: wazuh-viewer
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  clusterPermissions: ["cluster_composite_ops_ro", "cluster_monitor"]
+  indexPermissions:
+    - indexPatterns:
+        - "wazuh-alerts-*"
+        - "wazuh-archives-*"
+        - "wazuh-monitoring-*"
+        - "wazuh-statistics-*"
+        - "wazuh-states-*"
+      allowedActions: ["read", "indices_monitor"]
+  tenantPermissions:
+    - tenantPatterns: ["global_tenant"]
+      allowedActions: ["kibana_all_read"]
+
+# =============================================================================
+# OpenSearch role mappings — bind IdP groups (backend_roles) to the roles
+# =============================================================================
+---
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchRoleMapping
+metadata:
+  name: wazuh-admin            # name must match the OpenSearchRole
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  backendRoles: ["wazuh-admins"]
+
+---
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchRoleMapping
+metadata:
+  name: wazuh-viewer
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  backendRoles: ["wazuh-viewers"]
+
+---
+# Both groups need the built-in kibana_user role so the dashboard app loads.
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchRoleMapping
+metadata:
+  name: kibana_user
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  backendRoles: ["wazuh-admins", "wazuh-viewers"]
+
+# =============================================================================
+# Wazuh Manager API roles (run_as) — rules match backend_roles, not user_name
+# =============================================================================
+---
+apiVersion: resources.wazuh.com/v1
+kind: WazuhRole
+metadata:
+  name: wazuh-api-admin
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  policies:
+    - name: admin-resourceless
+      effect: allow
+      resources: ["*:*:*"]
+      actions: [agent:create, cluster:status, decoders:update, event:ingest, group:create,
+                lists:update, logtest:run, manager:read, manager:read_api_config, manager:restart,
+                manager:update_config, mitre:read, rules:update, security:create, security:create_user,
+                security:edit_run_as, security:read_config, security:revoke, security:update_config, task:status]
+    - name: admin-agents
+      effect: allow
+      resources: ["agent:id:*", "agent:group:*"]
+      actions: [agent:delete, agent:modify_group, agent:read, agent:reconnect, agent:restart, agent:upgrade]
+    - name: admin-agent-data
+      effect: allow
+      resources: ["agent:id:*"]
+      actions: [active-response:command, ciscat:read, rootcheck:clear, rootcheck:read, rootcheck:run,
+                sca:read, syscheck:clear, syscheck:read, syscheck:run, syscollector:read]
+    - name: admin-groups
+      effect: allow
+      resources: ["group:id:*"]
+      actions: [group:delete, group:modify_assignments, group:read, group:update_config]
+    - name: admin-security
+      effect: allow
+      resources: ["policy:id:*", "role:id:*", "rule:id:*", "user:id:*"]
+      actions: [security:delete, security:read, security:update]
+    - name: admin-decoders
+      effect: allow
+      resources: ["decoder:file:*"]
+      actions: [decoders:delete, decoders:read]
+    - name: admin-lists
+      effect: allow
+      resources: ["list:file:*"]
+      actions: [lists:delete, lists:read]
+    - name: admin-rules
+      effect: allow
+      resources: ["rule:file:*"]
+      actions: [rules:delete, rules:read]
+    - name: admin-nodes
+      effect: allow
+      resources: ["node:id:*"]
+      actions: [cluster:read, cluster:read_api_config, cluster:restart, cluster:update_config]
+  rules:
+    - name: map-admins
+      body:
+        FIND:
+          backend_roles: "wazuh-admins"
+
+---
+apiVersion: resources.wazuh.com/v1
+kind: WazuhRole
+metadata:
+  name: wazuh-api-viewer
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  policies:
+    - name: viewer-agents
+      effect: allow
+      resources: ["agent:id:*", "agent:group:*"]
+      actions: [agent:read]
+    - name: viewer-groups
+      effect: allow
+      resources: ["group:id:*"]
+      actions: [group:read]
+    - name: viewer-rules
+      effect: allow
+      resources: ["rule:file:*"]
+      actions: [rules:read]
+    - name: viewer-decoders
+      effect: allow
+      resources: ["decoder:file:*"]
+      actions: [decoders:read]
+    - name: viewer-lists
+      effect: allow
+      resources: ["list:file:*"]
+      actions: [lists:read]
+    - name: viewer-agent-data
+      effect: allow
+      resources: ["agent:id:*"]
+      actions: [ciscat:read, rootcheck:read, sca:read, syscheck:read, syscollector:read, vulnerability:read]
+    - name: viewer-mitre
+      effect: allow
+      resources: ["*:*:*"]
+      actions: [mitre:read, task:status]
+    - name: viewer-manager
+      effect: allow
+      resources: ["*:*:*"]
+      actions: [cluster:status, manager:read, manager:read_api_config]
+    - name: viewer-nodes
+      effect: allow
+      resources: ["node:id:*"]
+      actions: [cluster:read, cluster:read_api_config]
+  rules:
+    - name: map-viewers
+      body:
+        FIND:
+          backend_roles: "wazuh-viewers"
+
+# =============================================================================
+# LDAP / Active Directory ALTERNATIVE — replace the OpenSearchAuthConfig above.
+# Group cn values (e.g. "wazuh-admins") become backend_roles; everything else
+# (mappings + WazuhRole rules) stays identical.
+# =============================================================================
+# ---
+# apiVersion: resources.wazuh.com/v1
+# kind: OpenSearchAuthConfig
+# metadata:
+#   name: ldap
+#   namespace: wazuh
+# spec:
+#   clusterRefs:
+#     - name: wazuh-cluster
+#       namespace: wazuh
+#   ldap:
+#     enabled: true
+#     order: 0
+#     hosts: ["ldap.example.com:389"]
+#     authentication:
+#       bindDn: "cn=readonly,dc=example,dc=com"
+#       bindPasswordRef: { name: ldap-bind, key: password }
+#       userBase: "ou=people,dc=example,dc=com"
+#       usernameAttribute: "uid"
+#     authorization:
+#       enabled: true
+#       roleBase: "ou=groups,dc=example,dc=com"
+#       roleName: "cn"            # group cn -> backend_role
+#       userRoleName: "memberOf"
+#       resolveNestedRoles: true
