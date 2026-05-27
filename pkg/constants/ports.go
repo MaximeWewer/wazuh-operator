@@ -44,6 +44,10 @@ const (
 
 	// PortNameManagerCluster is the name for the cluster port
 	PortNameManagerCluster = "cluster"
+
+	// PortNameManagerMetrics is the name for the Wazuh exporter metrics port.
+	// Must match the ManagerServiceMonitor endpoint port ("metrics").
+	PortNameManagerMetrics = "metrics"
 )
 
 // OpenSearch Indexer ports

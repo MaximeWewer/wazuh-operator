@@ -51,6 +51,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/serviceaccount"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
+	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
 	"github.com/MaximeWewer/wazuh-operator/internal/validation"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/configmaps"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/cronjobs"
@@ -512,6 +513,9 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil {
 		applyManagerServiceSpec(serviceBuilder, cluster.Spec.Manager.Master.Service)
 	}
+	// Expose the Wazuh exporter metrics port (named "metrics") so the
+	// ManagerServiceMonitor can scrape the sidecar; no-op when disabled.
+	serviceBuilder.WithMetricsPort(monitoring.GetExporterMetricsPort(cluster))
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for master service: %w", err)
@@ -1658,6 +1662,9 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.Service != nil {
 		applyManagerServiceSpec(serviceBuilder, cluster.Spec.Manager.Master.Service)
 	}
+	// Expose the Wazuh exporter metrics port (named "metrics") so the
+	// ManagerServiceMonitor can scrape the sidecar; no-op when disabled.
+	serviceBuilder.WithMetricsPort(monitoring.GetExporterMetricsPort(cluster))
 	service := serviceBuilder.Build()
 	if err := controllerutil.SetControllerReference(cluster, service, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for master service: %w", err)

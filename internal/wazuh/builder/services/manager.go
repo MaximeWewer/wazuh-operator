@@ -41,6 +41,7 @@ type ManagerServiceBuilder struct {
 	annotations    map[string]string
 	loadBalancerIP string
 	ports          []corev1.ServicePort
+	metricsPort    int32
 }
 
 // NewManagerServiceBuilder creates a new ManagerServiceBuilder
@@ -100,6 +101,14 @@ func (b *ManagerServiceBuilder) WithLoadBalancerIP(ip string) *ManagerServiceBui
 }
 
 // WithPorts sets custom service ports
+// WithMetricsPort exposes the Wazuh Prometheus exporter sidecar port (named
+// "metrics") on the Service so the ManagerServiceMonitor can scrape it. A value
+// of 0 (exporter disabled) adds no port.
+func (b *ManagerServiceBuilder) WithMetricsPort(port int32) *ManagerServiceBuilder {
+	b.metricsPort = port
+	return b
+}
+
 func (b *ManagerServiceBuilder) WithPorts(ports []corev1.ServicePort) *ManagerServiceBuilder {
 	b.ports = ports
 	return b
@@ -156,6 +165,27 @@ func (b *ManagerServiceBuilder) Build() *corev1.Service {
 			TargetPort: intstr.FromInt(int(constants.PortManagerCluster)),
 			Protocol:   corev1.ProtocolTCP,
 		})
+	}
+
+	// Expose the Wazuh exporter sidecar port so the ServiceMonitor (port:
+	// "metrics") resolves. Skipped when the exporter is disabled (port 0) or a
+	// custom port set already uses that name.
+	if b.metricsPort > 0 {
+		hasMetricsPort := false
+		for _, p := range ports {
+			if p.Name == constants.PortNameManagerMetrics {
+				hasMetricsPort = true
+				break
+			}
+		}
+		if !hasMetricsPort {
+			ports = append(ports, corev1.ServicePort{
+				Name:       constants.PortNameManagerMetrics,
+				Port:       b.metricsPort,
+				TargetPort: intstr.FromInt(int(b.metricsPort)),
+				Protocol:   corev1.ProtocolTCP,
+			})
+		}
 	}
 
 	svc := &corev1.Service{
