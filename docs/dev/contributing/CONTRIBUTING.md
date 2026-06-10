@@ -71,7 +71,7 @@ minikube image load wazuh-operator:dev
 make deploy IMG=wazuh-operator:dev
 
 # Test with a sample cluster
-kubectl apply -f config/samples/wazuh_v1_wazuhcluster_minimal.yaml
+kubectl apply -f docs/usage/examples/quick-start/01-minimal-cluster.yaml
 ```
 
 ### 4. Submit a Pull Request
@@ -90,7 +90,7 @@ kubectl apply -f config/samples/wazuh_v1_wazuhcluster_minimal.yaml
 2. Add controller in `controllers/`
 3. Register controller in `cmd/wazuh-operator/main.go`
 4. Generate manifests: `make manifests`
-5. Add sample in `config/samples/`
+5. Add an example in `docs/usage/examples/`
 
 ### Adding a New Feature to WazuhCluster
 

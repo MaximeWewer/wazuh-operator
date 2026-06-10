@@ -1,65 +1,55 @@
 # OpenSearch CRD Examples
 
-This directory contains examples for managing OpenSearch security and index lifecycle through Kubernetes CRDs.
-
-## Available CRDs
-
-| CRD                     | Description                   | Example                                    |
-| ----------------------- | ----------------------------- | ------------------------------------------ |
-| OpenSearchUser          | Manage internal users         | [user.yaml](./user.yaml)                   |
-| OpenSearchRole          | Define roles with permissions | [role.yaml](./role.yaml)                   |
-| OpenSearchRoleMapping   | Map roles to users            | [rolemapping.yaml](./rolemapping.yaml)     |
-| OpenSearchIndexTemplate | Index templates               | [indextemplate.yaml](./indextemplate.yaml) |
-| OpenSearchISMPolicy     | Index State Management        | [ismpolicy.yaml](./ismpolicy.yaml)         |
+Manage OpenSearch security and index lifecycle through Kubernetes CRDs.
 
 ## Prerequisites
 
-- A running WazuhCluster with an accessible indexer
+- A running `WazuhCluster` with an accessible indexer
 - The operator must have connectivity to the OpenSearch cluster
 
-## Usage Examples
+## Security
 
-### Create a Read-Only User
+| File | Kind | Description |
+| ---- | ---- | ----------- |
+| [opensearchuser-basic.yaml](opensearchuser-basic.yaml) | OpenSearchUser | Internal user |
+| [opensearchrole-basic.yaml](opensearchrole-basic.yaml) | OpenSearchRole | Role with permissions |
+| [opensearchrole-wazuh-admin.yaml](opensearchrole-wazuh-admin.yaml) | OpenSearchRole | Wazuh admin role |
+| [opensearchrole-wazuh-viewer.yaml](opensearchrole-wazuh-viewer.yaml) | OpenSearchRole | Wazuh read-only role |
+| [opensearchrolemapping-basic.yaml](opensearchrolemapping-basic.yaml) | OpenSearchRoleMapping | Map a role to users/backend roles |
+| [opensearchrolemapping-wazuh-admin.yaml](opensearchrolemapping-wazuh-admin.yaml) | OpenSearchRoleMapping | Mapping for the admin role |
+| [opensearchrolemapping-wazuh-viewer.yaml](opensearchrolemapping-wazuh-viewer.yaml) | OpenSearchRoleMapping | Mapping for the viewer role |
+| [opensearchtenant-basic.yaml](opensearchtenant-basic.yaml) | OpenSearchTenant | Dashboards multi-tenancy |
+| [opensearchactiongroup-basic.yaml](opensearchactiongroup-basic.yaml) | OpenSearchActionGroup | Reusable permission group |
+| [opensearchauthconfig-basic.yaml](opensearchauthconfig-basic.yaml) | OpenSearchAuthConfig | Authentication backend config |
 
-1. Create the user:
+## Index Management
 
-```bash
-kubectl apply -f user.yaml
-```
+| File | Kind | Description |
+| ---- | ---- | ----------- |
+| [opensearchindex-basic.yaml](opensearchindex-basic.yaml) | OpenSearchIndex | Managed index |
+| [opensearchindextemplate-basic.yaml](opensearchindextemplate-basic.yaml) | OpenSearchIndexTemplate | Index template |
+| [opensearchcomponenttemplate-basic.yaml](opensearchcomponenttemplate-basic.yaml) | OpenSearchComponentTemplate | Reusable template component |
+| [opensearchismpolicy-basic.yaml](opensearchismpolicy-basic.yaml) | OpenSearchISMPolicy | Index State Management policy |
 
-1. Create a role with read permissions:
-
-```bash
-kubectl apply -f role.yaml
-```
-
-1. Map the role to the user:
-
-```bash
-kubectl apply -f rolemapping.yaml
-```
-
-### Set Up Index Lifecycle Management
-
-1. Create an ISM policy:
-
-```bash
-kubectl apply -f ismpolicy.yaml
-```
-
-1. Create an index template that uses the policy:
+## Usage
 
 ```bash
-kubectl apply -f indextemplate.yaml
+# Read-only user: create role, user, then map them
+kubectl apply -f opensearchrole-wazuh-viewer.yaml
+kubectl apply -f opensearchuser-basic.yaml
+kubectl apply -f opensearchrolemapping-wazuh-viewer.yaml
+
+# Index lifecycle: ISM policy + index template that references it
+kubectl apply -f opensearchismpolicy-basic.yaml
+kubectl apply -f opensearchindextemplate-basic.yaml
 ```
 
 ## Verifying Resources
 
 ```bash
-# Check CRD status
 kubectl get opensearchusers,opensearchroles,opensearchrolemappings -n wazuh
 
-# Verify in OpenSearch (from indexer pod)
+# From the indexer pod
 kubectl exec -it wazuh-cluster-indexer-0 -n wazuh -- \
   curl -k -u admin:$PASSWORD https://localhost:9200/_plugins/_security/api/internalusers
 ```
@@ -67,15 +57,10 @@ kubectl exec -it wazuh-cluster-indexer-0 -n wazuh -- \
 ## Cleanup
 
 ```bash
-# Delete all OpenSearch CRDs
 kubectl delete opensearchusers,opensearchroles,opensearchrolemappings --all -n wazuh
 ```
 
-## Additional CRDs
+## Related Documentation
 
-See [config/samples/](../../../config/samples/) for more OpenSearch CRD examples:
-
-- `opensearch_v1_tenant.yaml` - Multi-tenancy
-- `opensearch_v1_snapshotpolicy.yaml` - Automated backups
-- `opensearch_v1_componenttemplate.yaml` - Reusable template components
-- `opensearch_v1_actiongroup.yaml` - Permission groups
+- [OpenSearch Security](../../features/opensearch-security.md)
+- [OpenSearch Indices](../../features/opensearch-indices.md)

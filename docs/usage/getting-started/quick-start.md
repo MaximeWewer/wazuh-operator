@@ -16,7 +16,7 @@ That's it!
 
 ## Prerequisites
 
-See [Prerequisites and Requirements](../../requirements.md) for complete requirements.
+See [Prerequisites and Requirements](prerequisites.md) for complete requirements.
 
 **Quick check:**
 
@@ -113,7 +113,7 @@ For detailed resource requirements, see [Sizing Guide](../features/sizing.md).
 Create a `.env` file:
 
 ```bash
-cp scripts/.env.example .env
+cp dev_scripts/.env.example .env
 ```
 
 Edit `.env`:
@@ -137,13 +137,13 @@ If you prefer low-level scripts:
 
 ```bash
 # Full deployment
-./scripts/deploy-local.sh
+./dev_scripts/deploy-local.sh
 
 # Status
-./scripts/status.sh
+./dev_scripts/status.sh
 
 # Cleanup
-./scripts/cleanup-local.sh
+./dev_scripts/cleanup-local.sh
 ```
 
 ## Troubleshooting
@@ -187,7 +187,7 @@ minikube delete --profile wazuh-dev
 
 For more details, see:
 
-- **[scripts/README.md](../../../scripts/README.md)** - Complete scripts documentation
+- **[dev_scripts/README.md](../../../dev_scripts/README.md)** - Complete scripts documentation
 - **[charts/wazuh-operator/](../../../charts/wazuh-operator/)** - Operator Helm chart
 - **[charts/wazuh-cluster/](../../../charts/wazuh-cluster/)** - Cluster Helm chart
 - **[docs/](../../)** - General documentation
@@ -304,9 +304,9 @@ source .env && ./wazuh-dev deploy
 ./wazuh-dev help
 
 # Individual script help
-./scripts/deploy-local.sh --help
-./scripts/cleanup-local.sh --help
-./scripts/status.sh --help
+./dev_scripts/deploy-local.sh --help
+./dev_scripts/cleanup-local.sh --help
+./dev_scripts/status.sh --help
 ```
 
 ## Post-Deployment Checklist

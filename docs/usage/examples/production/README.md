@@ -40,17 +40,17 @@ kubectl create namespace wazuh
 
 ### 2. Create Secrets
 
-Edit `secrets.yaml` to set secure passwords, then apply:
+Edit `secrets-inline.yaml` to set secure passwords, then apply:
 
 ```bash
 # IMPORTANT: Change the passwords before applying!
-kubectl apply -f secrets.yaml
+kubectl apply -f secrets-inline.yaml
 ```
 
 ### 3. Deploy Cluster
 
 ```bash
-kubectl apply -f wazuh-cluster.yaml
+kubectl apply -f wazuhcluster-production.yaml
 ```
 
 ### 4. Monitor Deployment
@@ -73,7 +73,7 @@ Automated log cleanup is configured:
 
 ### Email Alerts
 
-Configure your SMTP server in `wazuh-cluster.yaml`:
+Configure your SMTP server in `wazuhcluster-production.yaml`:
 
 ```yaml
 global:

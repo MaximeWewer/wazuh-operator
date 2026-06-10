@@ -11,7 +11,7 @@ references are supported.
 
 | Form | CRDs |
 |------|------|
-| `clusterRefs: [{name, namespace}]` (MinItems=1) | WazuhAgentGroup, WazuhRule, WazuhDecoder, WazuhFilebeat, WazuhRole, WazuhUser, OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchTenant, OpenSearchActionGroup, OpenSearchAuthConfig, OpenSearchISMPolicy, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchIndex, OpenSearchSnapshotPolicy, OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore |
+| `clusterRefs: [{name, namespace}]` (MinItems=1) | WazuhAgentGroup, WazuhRule, WazuhDecoder, WazuhFilebeat, WazuhIntegration, WazuhRole, WazuhUser, OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchTenant, OpenSearchActionGroup, OpenSearchAuthConfig, OpenSearchISMPolicy, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchIndex, OpenSearchSnapshotPolicy, OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore |
 | `clusterRef: {name, namespace}` | WazuhBackup, WazuhRestore, WazuhCertificate |
 
 Multi-cluster CRDs report per-target-cluster reconciliation state via
@@ -649,7 +649,7 @@ Manages OpenSearch internal users.
 
 | Field             | Type                  | Required | Default | Description           |
 | ----------------- | --------------------- | -------- | ------- | --------------------- |
-| `clusterRef`      | WazuhClusterReference | **Yes**  | -       | Cluster reference     |
+| `clusterRefs`      | []WazuhClusterReference | **Yes**  | -       | Cluster reference     |
 | `defaultAdmin`    | bool                  | No       | `false` | Mark as default admin |
 | `passwordSecret`  | CredentialsSecretRef  | No       | -       | Password secret       |
 | `hash`            | string                | No       | -       | Pre-computed hash     |
@@ -666,7 +666,7 @@ Manages OpenSearch security roles.
 
 | Field                | Type                  | Required | Default | Description         |
 | -------------------- | --------------------- | -------- | ------- | ------------------- |
-| `clusterRef`         | WazuhClusterReference | **Yes**  | -       | Cluster reference   |
+| `clusterRefs`         | []WazuhClusterReference | **Yes**  | -       | Cluster reference   |
 | `roleName`           | string                | No       | `metadata.name` | OpenSearch role name; set when the name isn't a valid k8s object name (e.g. `all_access`) |
 | `clusterPermissions` | []string              | No       | -       | Cluster permissions |
 | `indexPermissions`   | []IndexPermission     | No       | -       | Index permissions   |
@@ -691,7 +691,7 @@ Maps users/roles to OpenSearch roles.
 
 | Field             | Type                  | Required | Default | Description       |
 | ----------------- | --------------------- | -------- | ------- | ----------------- |
-| `clusterRef`      | WazuhClusterReference | **Yes**  | -       | Cluster reference |
+| `clusterRefs`      | []WazuhClusterReference | **Yes**  | -       | Cluster reference |
 | `roleName`        | string                | No       | `metadata.name` | Target role name; set when invalid as a k8s object name (e.g. `kibana_user`) |
 | `users`           | []string              | No       | -       | Internal users    |
 | `backendRoles`    | []string              | No       | -       | Backend roles     |
@@ -707,7 +707,7 @@ Manages multi-tenancy for dashboards.
 
 | Field         | Type                  | Required | Default | Description       |
 | ------------- | --------------------- | -------- | ------- | ----------------- |
-| `clusterRef`  | WazuhClusterReference | **Yes**  | -       | Cluster reference |
+| `clusterRefs`  | []WazuhClusterReference | **Yes**  | -       | Cluster reference |
 | `description` | string                | No       | -       | Description       |
 
 ### OpenSearchActionGroup
@@ -718,7 +718,7 @@ Creates custom action groups.
 
 | Field            | Type                  | Required | Default | Description              |
 | ---------------- | --------------------- | -------- | ------- | ------------------------ |
-| `clusterRef`     | WazuhClusterReference | **Yes**  | -       | Cluster reference        |
+| `clusterRefs`     | []WazuhClusterReference | **Yes**  | -       | Cluster reference        |
 | `allowedActions` | []string              | **Yes**  | -       | Actions/groups           |
 | `type`           | string                | No       | -       | Type (cluster/index/all) |
 | `description`    | string                | No       | -       | Description              |
@@ -857,7 +857,7 @@ Manages OpenSearch indices.
 
 | Field        | Type                   | Required | Default | Description       |
 | ------------ | ---------------------- | -------- | ------- | ----------------- |
-| `clusterRef` | WazuhClusterReference  | **Yes**  | -       | Cluster reference |
+| `clusterRefs` | []WazuhClusterReference  | **Yes**  | -       | Cluster reference |
 | `settings`   | IndexSettings          | No       | -       | Index settings    |
 | `mappings`   | IndexMappings          | No       | -       | Field mappings    |
 | `aliases`    | []OpenSearchIndexAlias | No       | -       | Index aliases     |
@@ -870,7 +870,7 @@ Manages index templates.
 
 | Field           | Type                  | Required | Default | Description         |
 | --------------- | --------------------- | -------- | ------- | ------------------- |
-| `clusterRef`    | WazuhClusterReference | **Yes**  | -       | Cluster reference   |
+| `clusterRefs`    | []WazuhClusterReference | **Yes**  | -       | Cluster reference   |
 | `indexPatterns` | []string              | **Yes**  | -       | Index patterns      |
 | `template`      | IndexTemplate         | No       | -       | Template definition |
 | `composedOf`    | []string              | No       | -       | Component templates |
@@ -886,7 +886,7 @@ Manages reusable template components.
 
 | Field        | Type                  | Required | Default | Description         |
 | ------------ | --------------------- | -------- | ------- | ------------------- |
-| `clusterRef` | WazuhClusterReference | **Yes**  | -       | Cluster reference   |
+| `clusterRefs` | []WazuhClusterReference | **Yes**  | -       | Cluster reference   |
 | `template`   | ComponentTemplate     | **Yes**  | -       | Template definition |
 | `version`    | int64                 | No       | -       | Version             |
 
@@ -898,7 +898,7 @@ Manages Index State Management policies.
 
 | Field          | Type                  | Required | Default | Description       |
 | -------------- | --------------------- | -------- | ------- | ----------------- |
-| `clusterRef`   | WazuhClusterReference | **Yes**  | -       | Cluster reference |
+| `clusterRefs`   | []WazuhClusterReference | **Yes**  | -       | Cluster reference |
 | `description`  | string                | No       | -       | Description       |
 | `defaultState` | string                | **Yes**  | -       | Default state     |
 | `states`       | []ISMState            | **Yes**  | -       | Policy states     |
@@ -912,7 +912,7 @@ Manages snapshot/backup policies.
 
 | Field            | Type                  | Required | Default | Description       |
 | ---------------- | --------------------- | -------- | ------- | ----------------- |
-| `clusterRef`     | WazuhClusterReference | **Yes**  | -       | Cluster reference |
+| `clusterRefs`     | []WazuhClusterReference | **Yes**  | -       | Cluster reference |
 | `description`    | string                | No       | -       | Description       |
 | `repository`     | SnapshotRepository    | **Yes**  | -       | Repository config |
 | `snapshotConfig` | SnapshotConfig        | No       | -       | What to snapshot  |
@@ -932,7 +932,7 @@ Manages OpenSearch snapshot repositories for storing backups.
 
 | Field        | Type                       | Required | Default | Description                                       |
 | ------------ | -------------------------- | -------- | ------- | ------------------------------------------------- |
-| `clusterRef` | WazuhClusterReference      | **Yes**  | -       | Cluster reference                                 |
+| `clusterRefs` | []WazuhClusterReference      | **Yes**  | -       | Cluster reference                                 |
 | `type`       | string                     | **Yes**  | -       | Repository type: `s3`, `azure`, `fs`, `gcs`, `hdfs` |
 | `settings`   | SnapshotRepositorySettings | **Yes**  | -       | Repository settings                               |
 | `verify`     | bool                       | No       | `true`  | Verify repository after creation                  |
@@ -969,7 +969,7 @@ Triggers manual snapshots on-demand.
 
 | Field                | Type                  | Required | Default | Description                  |
 | -------------------- | --------------------- | -------- | ------- | ---------------------------- |
-| `clusterRef`         | WazuhClusterReference | **Yes**  | -       | Cluster reference            |
+| `clusterRefs`         | []WazuhClusterReference | **Yes**  | -       | Cluster reference            |
 | `repository`         | string                | **Yes**  | -       | Repository name              |
 | `indices`            | []string              | No       | all     | Index patterns to snapshot   |
 | `ignoreUnavailable`  | bool                  | No       | `true`  | Skip missing indices         |
@@ -992,7 +992,7 @@ Restores indices from a snapshot.
 
 | Field                | Type                  | Required | Default | Description                        |
 | -------------------- | --------------------- | -------- | ------- | ---------------------------------- |
-| `clusterRef`         | WazuhClusterReference | **Yes**  | -       | Cluster reference                  |
+| `clusterRefs`         | []WazuhClusterReference | **Yes**  | -       | Cluster reference                  |
 | `repository`         | string                | **Yes**  | -       | Repository name                    |
 | `snapshot`           | string                | **Yes**  | -       | Snapshot name to restore           |
 | `indices`            | []string              | No       | all     | Index patterns to restore          |
@@ -1023,7 +1023,7 @@ Manages custom Wazuh detection rules.
 
 | Field         | Type                  | Required | Default | Description                 |
 | ------------- | --------------------- | -------- | ------- | --------------------------- |
-| `clusterRef`  | WazuhClusterReference | **Yes**  | -       | Cluster reference           |
+| `clusterRefs`  | []WazuhClusterReference | **Yes**  | -       | Cluster reference           |
 | `ruleName`    | string                | **Yes**  | -       | Rule name                   |
 | `rules`       | string                | **Yes**  | -       | Rule XML content            |
 | `description` | string                | No       | -       | Description                 |
@@ -1044,7 +1044,7 @@ Manages Wazuh agent groups declaratively. Agent groups define shared configurati
 
 | Field         | Type                  | Required | Default           | Description                                                  |
 | ------------- | --------------------- | -------- | ----------------- | ------------------------------------------------------------ |
-| `clusterRef`  | WazuhClusterReference | **Yes**  | -                 | Cluster reference                                            |
+| `clusterRefs`  | []WazuhClusterReference | **Yes**  | -                 | Cluster reference                                            |
 | `groupName`   | string                | No       | `metadata.name`   | Agent group name (pattern: `^[a-zA-Z0-9._-]+$`)             |
 | `description` | string                | No       | -                 | Group description                                            |
 | `agentConf`   | string                | No       | -                 | XML agent configuration content (`<agent_config>` block)     |
@@ -1103,7 +1103,7 @@ Manages custom log decoders.
 
 | Field           | Type                  | Required | Default | Description                 |
 | --------------- | --------------------- | -------- | ------- | --------------------------- |
-| `clusterRef`    | WazuhClusterReference | **Yes**  | -       | Cluster reference           |
+| `clusterRefs`    | []WazuhClusterReference | **Yes**  | -       | Cluster reference           |
 | `decoderName`   | string                | **Yes**  | -       | Decoder name                |
 | `decoders`      | string                | **Yes**  | -       | Decoder XML content         |
 | `description`   | string                | No       | -       | Description                 |
@@ -1218,7 +1218,7 @@ Manages Filebeat configuration for shipping Wazuh alerts and archives to OpenSea
 
 | Field        | Type                   | Required | Default | Description                     |
 | ------------ | ---------------------- | -------- | ------- | ------------------------------- |
-| `clusterRef` | WazuhClusterReference  | **Yes**  | -       | Cluster reference               |
+| `clusterRefs` | []WazuhClusterReference  | **Yes**  | -       | Cluster reference               |
 | `alerts`     | FilebeatAlertsConfig   | No       | -       | Alerts module configuration     |
 | `archives`   | FilebeatArchivesConfig | No       | -       | Archives module configuration   |
 | `template`   | FilebeatTemplateConfig | No       | -       | Index template configuration    |
@@ -1480,10 +1480,13 @@ Manages scheduled or one-shot backups of Wazuh Manager data to S3, GCS, Azure, o
 
 | Field           | Type   | Description                         |
 | --------------- | ------ | ----------------------------------- |
-| `lastBackup`    | \*Time | Timestamp of last successful backup |
-| `lastBackupKey` | string | S3 key of last backup archive       |
-| `backupCount`   | int32  | Total number of backups             |
-| `jobName`       | string | Name of current/last Job            |
+| `lastBackup`          | \*Time | Timestamp of last successful backup    |
+| `nextScheduledBackup` | \*Time | Timestamp of next scheduled run        |
+| `backupCount`         | int32  | Total number of backups                |
+| `totalSize`           | string | Cumulative size of stored backups      |
+| `jobName`             | string | Name of current/last Job               |
+| `cronJobName`         | string | Name of the CronJob (scheduled backups)|
+| `backupHistory`       | []object | Recent backup entries (name, key, size, time) |
 
 ### WazuhRestore
 
@@ -1655,36 +1658,16 @@ See [Volume Expansion Guide](./features/volume-expansion.md) for detailed usage 
 
 ## Sample Files
 
-See `config/samples/` for example manifests:
+Ready-to-use manifests for every CRD live under [`docs/usage/examples/`](examples/README.md):
 
-### WazuhCluster Examples
-
-- `wazuh_v1_wazuhcluster_minimal.yaml` - Minimal development setup
-- `wazuh_v1_wazuhcluster_production.yaml` - Production configuration
-- `wazuh_v1_wazuhcluster_complete.yaml` - All options documented
-- `wazuh_v1_wazuhcluster_monitoring.yaml` - Prometheus monitoring
-- `wazuh_v1_wazuhcluster_tls.yaml` - TLS configurations
-- `wazuh_v1_wazuhcluster_cloud_workers.yaml` - Cloud log collection
-
-### Wazuh Configuration
-
-- `wazuh_v1_rule.yaml` - Custom rule example
-- `wazuh_v1_decoder.yaml` - Custom decoder example
-
-### OpenSearch Security & Index Management
-
-- `opensearch_v1_*.yaml` - OpenSearch resource examples
-
-### Backup & Restore
-
-- `opensearch_v1_opensearchsnapshotrepository_s3.yaml` - AWS S3 repository
-- `opensearch_v1_opensearchsnapshotrepository_minio.yaml` - MinIO repository
-- `opensearch_v1_opensearchsnapshotrepository_gcs.yaml` - GCS + HDFS repositories
-- `opensearch_v1_opensearchsnapshot_manual.yaml` - Manual snapshot trigger
-- `opensearch_v1_opensearchrestore.yaml` - Restore from snapshot
-- `wazuh_v1_wazuhcluster_with_plugins.yaml` - WazuhCluster with repository plugins
-- `wazuh_v1_wazuhbackup_scheduled.yaml` - Scheduled Wazuh backups (S3)
-- `wazuh_v1_wazuhbackup_gcs.yaml` - GCS backup (with Workload Identity variant)
-- `wazuh_v1_wazuhbackup_azure.yaml` - Azure Blob Storage backup
-- `wazuh_v1_wazuhbackup_oneshot.yaml` - One-shot Wazuh backup
-- `wazuh_v1_wazuhrestore.yaml` - Wazuh restore examples
+| Topic | Directory |
+| ----- | --------- |
+| Minimal cluster | [examples/quick-start/](examples/quick-start/) |
+| Production cluster | [examples/production/](examples/production/) |
+| Cluster feature variations (TLS, drain, monitoring, decoders, rules) | [examples/wazuh-cluster/](examples/wazuh-cluster/) |
+| Wazuh API RBAC (users, roles, external IdP) | [examples/wazuh-rbac/](examples/wazuh-rbac/) |
+| OpenSearch security & index management | [examples/opensearch-crds/](examples/opensearch-crds/) |
+| Backup & restore (snapshots, repositories) | [examples/backup-restore/](examples/backup-restore/) |
+| Filebeat log forwarding | [examples/filebeat/](examples/filebeat/) |
+| Gateway API exposure | [examples/gateway-api/](examples/gateway-api/) |
+| GitOps (ArgoCD, Flux) | [examples/gitops/](examples/gitops/) |

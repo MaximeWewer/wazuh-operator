@@ -176,7 +176,7 @@ spec:
 
 ## Complete Example
 
-See the full example at: [config/samples/wazuh_v1_wazuhcluster_gatewayapi.yaml](../../../config/samples/wazuh_v1_wazuhcluster_gatewayapi.yaml)
+See the full example at: [examples/gateway-api/wazuhcluster-gateway-api.yaml](../examples/gateway-api/wazuhcluster-gateway-api.yaml)
 
 ## Important Notes
 

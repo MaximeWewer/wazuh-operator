@@ -4,7 +4,7 @@ This guide covers how to install the Wazuh Operator in your Kubernetes cluster.
 
 ## Prerequisites
 
-See [Prerequisites and Requirements](../../requirements.md) for detailed requirements.
+See [Prerequisites and Requirements](prerequisites.md) for detailed requirements.
 
 **Quick check:**
 
@@ -114,7 +114,7 @@ make deploy IMG=wazuh-operator:dev
 ```bash
 kubectl get crds | grep wazuh
 
-# Expected (23 CRDs total):
+# Expected (25 CRDs total):
 # opensearchactiongroups.resources.wazuh.com
 # opensearchauthconfigs.resources.wazuh.com
 # opensearchcomponenttemplates.resources.wazuh.com
@@ -155,7 +155,7 @@ helm template wazuh-cluster ./charts/wazuh-cluster \
 
 # Or using kubectl
 kubectl create namespace wazuh
-kubectl apply -f config/samples/wazuh_v1_wazuhcluster_minimal.yaml
+kubectl apply -f docs/usage/examples/quick-start/01-minimal-cluster.yaml
 ```
 
 ## Upgrading

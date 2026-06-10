@@ -21,15 +21,18 @@ spec:
       locality: "Strasbourg"
       organization: "My Company Inc."
       organizationalUnit: "Security Operations"
-      commonName: "wazuh-admin"
 
-      # Node certificate validity as duration string
+      # Per-component certificate validity as duration string
       # Format: "<value><unit>" where unit is d (days), h (hours), or m (minutes)
-      # Can be shorter since hot reload allows seamless renewal
-      validity: "90d"
-
-      # Renewal threshold - certificates renewed when this duration remains
-      renewalThreshold: "30d"
+      # Node certs can be short since hot reload allows seamless renewal
+      indexerValidity: "90d"
+      indexerRenewalThreshold: "30d"
+      dashboardValidity: "90d"
+      dashboardRenewalThreshold: "30d"
+      filebeatValidity: "90d"
+      filebeatRenewalThreshold: "30d"
+      adminValidity: "365d"
+      adminRenewalThreshold: "30d"
 
       # CA certificate validity (default: 3650d / 10 years)
       # Should be longer since CA renewal requires pod restart

@@ -78,7 +78,7 @@ If your cluster has resource quotas, ensure sufficient resources are available:
 | L (production)  | ~22 cores    | ~44Gi           | ~500Gi  |
 | XL (enterprise) | ~70 cores    | ~140Gi          | ~1.7Ti  |
 
-See [Sizing Guide](usage/features/sizing.md) for detailed resource planning.
+See [Sizing Guide](../features/sizing.md) for detailed resource planning.
 
 ## Optional Components
 
@@ -93,5 +93,5 @@ kubectl get crd servicemonitors.monitoring.coreos.com
 
 ## Next Steps
 
-- [Installation Guide](usage/getting-started/installation.md) - Install the operator
-- [Quick Start](usage/getting-started/quick-start.md) - Deploy your first cluster
+- [Installation Guide](installation.md) - Install the operator
+- [Quick Start](quick-start.md) - Deploy your first cluster

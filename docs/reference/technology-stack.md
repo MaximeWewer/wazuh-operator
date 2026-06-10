@@ -8,7 +8,7 @@ The Wazuh Operator is a Kubernetes operator built with Go and Kubebuilder, follo
 
 | Category                     | Technology                       | Version                  | Justification                                                                                               |
 | ---------------------------- | -------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| **Core Language**            | Go                               | 1.26.0                   | Primary language for Kubernetes operators, native support for concurrency and efficient resource management |
+| **Core Language**            | Go                               | 1.26                   | Primary language for Kubernetes operators, native support for concurrency and efficient resource management |
 | **Operator Framework**       | Kubebuilder                      | controller-tools v0.20.0 | Industry-standard framework for building Kubernetes operators with code generation and scaffolding          |
 | **Controller Runtime**       | controller-runtime               | v0.23.1                  | Core library for building Kubernetes controllers with reconciliation loops and caching                      |
 | **Kubernetes Client**        | client-go                        | v0.35.1                  | Official Kubernetes Go client for API interactions                                                          |
@@ -34,7 +34,7 @@ The Wazuh Operator is a Kubernetes operator built with Go and Kubebuilder, follo
 
 The operator follows the standard Kubernetes operator pattern with:
 
-- **Custom Resource Definitions (CRDs)**: 23 CRDs for declarative resource management
+- **Custom Resource Definitions (CRDs)**: 25 CRDs for declarative resource management
 
   - Wazuh Core: WazuhCluster
   - Wazuh Config: WazuhRule, WazuhDecoder, WazuhIntegration, WazuhCertificate, WazuhFilebeat, WazuhAgentGroup
@@ -142,7 +142,7 @@ make test       # Run unit tests
 **Layered Kubernetes Operator Architecture**:
 
 1. **API Layer** (`api/v1/`): CRD type definitions (v1 storage version)
-2. **Controller Layer** (`controllers/`): Reconciliation logic (23 controllers)
+2. **Controller Layer** (`controllers/`): Reconciliation logic (25 controllers)
 3. **Business Logic Layer** (`internal/`):
    - `wazuh/`: Wazuh reconcilers, config, builders, drain (NO cross-domain imports)
    - `opensearch/`: OpenSearch reconcilers, API clients, config, builders (NO cross-domain imports)

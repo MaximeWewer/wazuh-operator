@@ -78,14 +78,14 @@ The operator creates StatefulSets, Services, ConfigMaps, and Secrets directly fr
 
 ## Sample Manifests
 
-All operator samples use inline mode:
+All examples use inline mode:
 
-- `config/samples/wazuh_v1_wazuhcluster_minimal.yaml` - Minimal deployment
-- `config/samples/wazuh_v1_wazuhcluster_inline_mode.yaml` - Full inline example
-- `config/samples/wazuh_v1_wazuhcluster_advanced_indexer.yaml` - Advanced topology
+- [examples/quick-start/01-minimal-cluster.yaml](../examples/quick-start/01-minimal-cluster.yaml) - Minimal deployment
+- [examples/production/wazuhcluster-production.yaml](../examples/production/wazuhcluster-production.yaml) - Full production example
+- [examples/wazuh-cluster/](../examples/wazuh-cluster/) - Feature-specific variations (TLS, drain, monitoring…)
 
 ```bash
-kubectl apply -f config/samples/wazuh_v1_wazuhcluster_inline_mode.yaml
+kubectl apply -f docs/usage/examples/quick-start/01-minimal-cluster.yaml
 ```
 
 ## Troubleshooting

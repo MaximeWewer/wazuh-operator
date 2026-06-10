@@ -2,13 +2,13 @@
 
 ## Executive Summary
 
-The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framework that manages the complete lifecycle of Wazuh security monitoring platform deployments on Kubernetes. It follows the operator pattern with declarative resource management through 22 Custom Resource Definitions (CRDs) and 22 reconciliation controllers.
+The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framework that manages the complete lifecycle of Wazuh security monitoring platform deployments on Kubernetes. It follows the operator pattern with declarative resource management through 25 Custom Resource Definitions (CRDs) and 25 reconciliation controllers.
 
 ## Technology Stack
 
 ### Core Technologies
 
-- **Language**: Go 1.26.0
+- **Language**: Go 1.26
 - **Framework**: Kubebuilder v4 with controller-runtime v0.23.1
 - **Kubernetes API**: client-go v0.35.1, k8s.io/api v0.35.1
 - **Gateway API**: sigs.k8s.io/gateway-api v1.4.1
@@ -46,7 +46,7 @@ flowchart TD
         subgraph CRM[Controller Runtime Manager]
             CRM1["Manages controller lifecycle · Shared caches and informers<br/>Leader election · Metrics server · Health checks"]
         end
-        subgraph Controllers[23 Reconciliation Controllers]
+        subgraph Controllers[25 Reconciliation Controllers]
             WCR["WazuhClusterReconciler (Main)<br/>Orchestrates all components · Delegates to helper reconcilers"]
             CONFIG["Config Controllers (6)<br/>Rules, Decoders, Integrations, Certificates, Filebeat, AgentGroups"]
             SEC["OpenSearch Security Controllers (5)<br/>Users, Roles, RoleMappings, etc."]
@@ -80,7 +80,7 @@ flowchart TD
 
 **Components**:
 
-- 23 CRD type definitions
+- 25 CRD type definitions
 - Validation markers (Kubebuilder)
 - Status subresources
 - Short names and categories
@@ -251,7 +251,7 @@ builder := statefulsets.NewManagerBuilder(name, namespace).
 
 ## Data Architecture
 
-### Custom Resource Definitions (23 CRDs)
+### Custom Resource Definitions (25 CRDs)
 
 **API Group**: `resources.wazuh.com/v1`
 

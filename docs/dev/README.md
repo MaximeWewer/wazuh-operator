@@ -22,7 +22,7 @@ Documentation for developers working on the Wazuh Operator.
 
 ## Quick Start
 
-See [Prerequisites](../requirements.md) for required tools.
+See [Prerequisites](../usage/getting-started/prerequisites.md) for required tools.
 
 ```bash
 # Generate CRDs and code

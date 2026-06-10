@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Wazuh Operator implements **22 Kubernetes controllers** that watch Custom Resources and reconcile them to their desired state. Each controller follows the Kubernetes operator pattern with reconciliation loops. These controllers manage **22 Custom Resource Definitions (CRDs)**.
+The Wazuh Operator implements **25 Kubernetes controllers** that watch Custom Resources and reconcile them to their desired state. Each controller follows the Kubernetes operator pattern with reconciliation loops. These controllers manage **25 Custom Resource Definitions (CRDs)**.
 
 ## Controller Architecture
 
@@ -57,7 +57,7 @@ The main orchestrating controller that manages the complete Wazuh cluster lifecy
 
 ---
 
-## Wazuh Configuration Controllers (5)
+## Wazuh Configuration Controllers (6)
 
 ### WazuhRule Controller
 
@@ -151,6 +151,18 @@ Manages Filebeat configuration for log forwarding.
 - Index templates (sent to OpenSearch)
 - Ingest pipelines (sent to OpenSearch)
 
+### WazuhAgentGroup Controller
+
+**controllers/wazuhagentgroup_controller.go**
+
+Manages Wazuh agent groups declaratively.
+
+**Reconciles**:
+
+- ConfigMap mounting shared group files under `/var/ossec/etc/shared/<groupName>/`
+- `agent.conf` (XML agent configuration) and extra files (e.g. `ar.conf`, `rootcheck.txt`)
+- Group lifecycle on the manager (create/update/delete)
+
 ---
 
 ## Wazuh Backup/Restore Controllers (2)
@@ -199,7 +211,38 @@ Restores Wazuh Manager data from S3/MinIO.
 
 ---
 
-## OpenSearch Security Controllers (5)
+## Wazuh API RBAC Controllers (2)
+
+These controllers interact with the Wazuh Manager API (`/security/...`) to manage API access control.
+
+### WazuhRole Controller
+
+**controllers/wazuhrole_controller.go**
+
+Manages Wazuh API roles, RBAC policies and auth-context matcher rules.
+
+**Reconciles**:
+
+- Wazuh API role (`roleName`, defaults to `metadata.name`)
+- Inline RBAC policies linked to the role
+- Auth-context matcher rules (used with `run_as` to map a dashboard user onto the role)
+- Targets one or more clusters via `clusterRefs` (cross-namespace)
+
+### WazuhUser Controller
+
+**controllers/wazuhuser_controller.go**
+
+Manages internal Wazuh API users and their role assignments.
+
+**Reconciles**:
+
+- Wazuh API user (`username`, defaults to `metadata.name`)
+- Password sourced from `passwordSecret`
+- Role assignments (`roles`) and `allowRunAs` impersonation flag
+
+---
+
+## OpenSearch Security Controllers (6)
 
 All OpenSearch security controllers interact with the OpenSearch Security Plugin API (`/_plugins/_security/api/`).
 

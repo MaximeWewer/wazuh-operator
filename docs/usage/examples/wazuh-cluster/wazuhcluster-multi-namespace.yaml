@@ -134,7 +134,6 @@ spec:
 
   manager:
     master:
-      replicas: 1
       resources:
         requests:
           cpu: "2000m"

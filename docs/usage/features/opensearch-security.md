@@ -615,5 +615,5 @@ OpenSearch security CRDs enforce validation rules:
 ## See Also
 
 - [OpenSearch Index Management](opensearch-indices.md)
-- [Authentication Configuration](opensearch-auth.md)
+- [OpenSearch CRD Examples](../examples/opensearch-crds/) - incl. `OpenSearchAuthConfig`
 - [CRD Reference](../CRD-REFERENCE.md)

@@ -15,7 +15,7 @@ Complete testing guide for the wazuh-operator project.
 
 ## Prerequisites
 
-- Go 1.26.0+
+- Go 1.26
 - Make
 - Docker
 - kubectl 1.25+
@@ -231,7 +231,7 @@ make docker-build IMG=wazuh-operator:latest
 minikube image load wazuh-operator:latest --profile wazuh-dev
 
 # 4. Redeploy
-./scripts/wazuh-dev deploy S
+./dev_scripts/wazuh-dev.sh deploy S
 
 # 5. Verify new image
 kubectl describe pod -n wazuh-operator -l app.kubernetes.io/name=wazuh-operator | grep Image:
@@ -240,10 +240,10 @@ kubectl describe pod -n wazuh-operator -l app.kubernetes.io/name=wazuh-operator 
 ### Full Reset (Nuclear Option)
 
 ```bash
-./scripts/wazuh-dev cleanup --force
+./dev_scripts/wazuh-dev.sh cleanup --force
 make docker-build IMG=wazuh-operator:latest
 minikube image load wazuh-operator:latest --profile wazuh-dev
-./scripts/wazuh-dev deploy S
+./dev_scripts/wazuh-dev.sh deploy S
 ```
 
 ---

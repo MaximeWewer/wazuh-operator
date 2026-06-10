@@ -4,7 +4,7 @@ Documentation for users of the Wazuh Operator.
 
 ## Getting Started
 
-- [Prerequisites](../requirements.md) - Required tools and cluster requirements
+- [Prerequisites](getting-started/prerequisites.md) - Required tools and cluster requirements
 - [Installation](getting-started/installation.md) - How to install the operator
 - [Quick Start](getting-started/quick-start.md) - Deploy your first cluster
 
@@ -43,16 +43,31 @@ Documentation for users of the Wazuh Operator.
 - [Log Rotation](features/log-rotation.md) - Automated log cleanup
 - [Filebeat Configuration](features/filebeat-configuration.md) - Log forwarding
 - [Wazuh API Hosts](features/wazuh-api-hosts.md) - Multi-API configuration
+- [Wazuh API RBAC](features/wazuh-api-rbac.md) - Wazuh API users and roles
+- [Repository Plugins](features/repository-plugins.md) - Snapshot repository plugins (S3, GCS, Azure)
+
+## Operations
+
+- [Production Deployment](operations/production-deployment.md) - HA, scaling, security, finalizers, health checks
+- [Upgrade Guide](operations/upgrade-guide.md) - Upgrade the operator and managed clusters
 
 ## Examples
 
-- [Quick Start Examples](examples/quick-start/) - Minimal deployments
-- [Production Examples](examples/production/) - Production configurations
+- [Quick Start](examples/quick-start/) - Minimal deployment to get started
+- [Production](examples/production/) - Production-ready configuration
+- [Wazuh Cluster](examples/wazuh-cluster/) - TLS, drain, monitoring, multi-namespace, decoders/rules
+- [Wazuh API RBAC](examples/wazuh-rbac/) - Wazuh API users and roles (incl. external IdP)
 - [OpenSearch CRDs](examples/opensearch-crds/) - Security and index management
+- [Backup & Restore](examples/backup-restore/) - Snapshots, repositories, restores
+- [Filebeat](examples/filebeat/) - Log forwarding configuration
+- [Gateway API](examples/gateway-api/) - Expose services via Gateway API
+- [GitOps](examples/gitops/) - ArgoCD and Flux deployment
+
+See [examples/README.md](examples/README.md) for the full index.
 
 ## Reference
 
-- [CRD Reference](CRD-REFERENCE.md) - Complete API documentation for all 23 CRDs
+- [CRD Reference](CRD-REFERENCE.md) - Complete API documentation for all 25 CRDs
 
 ## Troubleshooting
 

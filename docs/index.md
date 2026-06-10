@@ -22,10 +22,10 @@ kubectl get wazuhcluster -n wazuh
 | Property        | Value                                       |
 | --------------- | ------------------------------------------- |
 | **Type**        | Kubernetes Operator                         |
-| **Language**    | Go 1.26.0                                   |
+| **Language**    | Go 1.26                                   |
 | **Framework**   | Kubebuilder v4 + controller-runtime         |
-| **CRDs**        | 22 Custom Resource Definitions              |
-| **Controllers** | 22 reconciliation controllers               |
+| **CRDs**        | 25 Custom Resource Definitions              |
+| **Controllers** | 25 reconciliation controllers               |
 | **API Group**   | `resources.wazuh.com/v1`                    |
 | **Target**      | Kubernetes 1.25+                            |
 
@@ -33,14 +33,14 @@ kubectl get wazuhcluster -n wazuh
 
 ### Getting Started
 
-- [Prerequisites](requirements.md) - Required tools and cluster requirements
+- [Prerequisites](usage/getting-started/prerequisites.md) - Required tools and cluster requirements
 - [Installation](usage/getting-started/installation.md) - Install the operator
 - [Quick Start](usage/getting-started/quick-start.md) - Deploy your first cluster
 
 ### User Guide
 
 - [User Documentation](usage/README.md) - Complete user guide index
-- [CRD Reference](usage/CRD-REFERENCE.md) - API documentation for all 23 CRDs
+- [CRD Reference](usage/CRD-REFERENCE.md) - API documentation for all 25 CRDs
 - [Examples](usage/examples/README.md) - Ready-to-use configurations
 
 ### Key Features
@@ -52,6 +52,11 @@ kubectl get wazuhcluster -n wazuh
 | Observability    | [Monitoring](usage/features/monitoring.md), [OpenTelemetry](usage/features/opentelemetry.md)                                               |
 | OpenSearch       | [Security CRDs](usage/features/opensearch-security.md), [Index Management](usage/features/opensearch-indices.md)                           |
 | Operations       | [Backup/Restore](usage/features/backup-restore.md), [Sizing](usage/features/sizing.md), [Drain Strategy](usage/features/drain-strategy.md) |
+
+### Operations
+
+- [Production Deployment](usage/operations/production-deployment.md) - HA, scaling, security, finalizers, health checks
+- [Upgrade Guide](usage/operations/upgrade-guide.md) - Upgrade the operator and managed clusters
 
 ### Developer Guide
 
@@ -78,7 +83,7 @@ kubectl get wazuhcluster -n wazuh
 | Path                      | Description                                                          |
 | ------------------------- | -------------------------------------------------------------------- |
 | `api/v1/`                 | CRD type definitions (v1 storage version)                            |
-| `controllers/`            | 22 Kubernetes controllers                                            |
+| `controllers/`            | 25 Kubernetes controllers                                            |
 | `internal/wazuh/`         | Wazuh reconcilers, config, builders, drain                           |
 | `internal/opensearch/`    | OpenSearch reconcilers, API clients, config, builders                |
 | `internal/certificates/`  | TLS certificate reconciler and generation                            |
@@ -86,7 +91,7 @@ kubectl get wazuhcluster -n wazuh
 | `internal/shared/`        | Cross-cutting: affinity, PDB, drain state machine, config, patch     |
 | `internal/validation/`    | CRD validation (cluster, opensearch, wazuh, password)                |
 | `pkg/`                    | Public stable APIs (constants, config, dns, logging, version, versions) |
-| `config/`                 | CRDs, RBAC, samples                                                  |
+| `config/`                 | CRDs, RBAC, webhook                                                  |
 | `charts/`                 | Helm charts (operator, cluster)                                      |
 
 ## Build Commands

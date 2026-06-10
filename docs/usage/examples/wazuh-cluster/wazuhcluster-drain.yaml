@@ -46,8 +46,7 @@ spec:
   # Indexer configuration with 3 replicas
   indexer:
     replicas: 3
-    storage:
-      size: 10Gi
+    storageSize: 10Gi
     resources:
       requests:
         cpu: "500m"
@@ -56,21 +55,27 @@ spec:
         cpu: "2"
         memory: "4Gi"
 
-  # Manager configuration
+  # Manager configuration (single master + scalable workers)
   manager:
     master:
-      replicas: 1
-    worker:
+      storageSize: 5Gi
+      resources:
+        requests:
+          cpu: "250m"
+          memory: "512Mi"
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+    workers:
       replicas: 2
-    storage:
-      size: 5Gi
-    resources:
-      requests:
-        cpu: "250m"
-        memory: "512Mi"
-      limits:
-        cpu: "1"
-        memory: "2Gi"
+      storageSize: 5Gi
+      resources:
+        requests:
+          cpu: "250m"
+          memory: "512Mi"
+        limits:
+          cpu: "1"
+          memory: "2Gi"
 
   # Dashboard with PDB protection
   dashboard:
