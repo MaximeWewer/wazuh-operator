@@ -176,7 +176,7 @@ spec:
 
 ## Complete Example
 
-See the full example at: [examples/gateway-api/wazuhcluster-gateway-api.yaml](../examples/gateway-api/wazuhcluster-gateway-api.yaml)
+See the full example at: [examples/wazuh-cluster/wazuhcluster-gateway-api.yaml](../examples/wazuh-cluster/wazuhcluster-gateway-api.yaml)
 
 ## Important Notes
 

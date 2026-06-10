@@ -55,15 +55,18 @@ Documentation for users of the Wazuh Operator.
 
 - [Quick Start](examples/quick-start/) - Minimal deployment to get started
 - [Production](examples/production/) - Production-ready configuration
-- [Wazuh Cluster](examples/wazuh-cluster/) - TLS, drain, monitoring, multi-namespace, decoders/rules
-- [Wazuh API RBAC](examples/wazuh-rbac/) - Wazuh API users and roles (incl. external IdP)
-- [OpenSearch CRDs](examples/opensearch-crds/) - Security and index management
-- [Backup & Restore](examples/backup-restore/) - Snapshots, repositories, restores
+- [Wazuh Cluster](examples/wazuh-cluster/) - TLS, drain, monitoring, multi-namespace, Gateway API
+- [Wazuh Content](examples/wazuh-content/) - Rules, decoders, integrations, agent groups
+- [Wazuh Certificate](examples/wazuh-certificate/) - Standalone TLS certificates
 - [Filebeat](examples/filebeat/) - Log forwarding configuration
-- [Gateway API](examples/gateway-api/) - Expose services via Gateway API
+- [Wazuh API RBAC](examples/wazuh-rbac/) - Wazuh API users and roles (incl. external IdP)
+- [Wazuh Backup](examples/wazuh-backup/) - Manager backup and restore
+- [OpenSearch Security](examples/opensearch-security/) - Users, roles, tenants, auth
+- [OpenSearch Index](examples/opensearch-index/) - Indices, templates, ISM policies
+- [OpenSearch Backup](examples/opensearch-backup/) - Snapshots, repositories, restore
 - [GitOps](examples/gitops/) - ArgoCD and Flux deployment
 
-See [examples/README.md](examples/README.md) for the full index.
+See [examples/README.md](examples/README.md) for the full per-CRD index.
 
 ## Reference
 

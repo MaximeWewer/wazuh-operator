@@ -1,0 +1,48 @@
+# WazuhCertificate - indexer node certificate with auto-renewal and SAN generation
+# Manages a TLS certificate as a standalone CR (alternative to inline spec.tls).
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCertificate
+metadata:
+  name: indexer-node-cert
+  namespace: wazuh
+spec:
+  # Target cluster (single reference: name + namespace)
+  clusterRef:
+    name: wazuh
+    namespace: wazuh
+
+  # Certificate type: ca | node | admin | filebeat | indexer | dashboard
+  type: indexer
+
+  # Secret that will hold the generated certificate/key
+  secretName: wazuh-indexer-cert
+
+  # Validity as a duration string (e.g. "365d", "24h", "30m")
+  validity: "365d"
+
+  # Hot reload allows renewal without pod restart (Wazuh >= 4.9.0)
+  hotReload: true
+
+  # Subject fields
+  distinguishedName:
+    commonName: "wazuh-indexer"
+    organization: "Wazuh"
+    organizationalUnit: "Security Operations"
+    country: "US"
+
+  # Key configuration
+  keyConfig:
+    algorithm: ECDSA
+    curve: P256
+
+  # Automatically generate Subject Alternative Names for indexer services/pods
+  autoGenerateSANs:
+    enabled: true
+    includeIPSANs: false
+    indexerReplicas: 3
+
+  # Automatic renewal before expiry
+  autoRenewal:
+    enabled: true
+    schedule: "0 2 * * *"   # daily at 02:00
+    thresholdDays: 30

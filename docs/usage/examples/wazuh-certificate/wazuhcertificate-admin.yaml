@@ -1,0 +1,31 @@
+# WazuhCertificate - admin certificate (used for securityadmin / cluster admin)
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCertificate
+metadata:
+  name: admin-cert
+  namespace: wazuh
+spec:
+  clusterRef:
+    name: wazuh
+    namespace: wazuh
+
+  type: admin
+  secretName: wazuh-admin-cert
+  validity: "730d"
+
+  distinguishedName:
+    commonName: "admin"
+    organization: "Wazuh"
+    country: "US"
+
+  keyConfig:
+    algorithm: RSA
+    size: 2048
+
+  # Admin cert SANs are limited to localhost; no auto-SAN expansion needed
+  autoGenerateSANs:
+    enabled: false
+
+  autoRenewal:
+    enabled: true
+    thresholdDays: 60

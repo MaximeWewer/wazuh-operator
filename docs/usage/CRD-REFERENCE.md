@@ -1664,10 +1664,13 @@ Ready-to-use manifests for every CRD live under [`docs/usage/examples/`](example
 | ----- | --------- |
 | Minimal cluster | [examples/quick-start/](examples/quick-start/) |
 | Production cluster | [examples/production/](examples/production/) |
-| Cluster feature variations (TLS, drain, monitoring, decoders, rules) | [examples/wazuh-cluster/](examples/wazuh-cluster/) |
-| Wazuh API RBAC (users, roles, external IdP) | [examples/wazuh-rbac/](examples/wazuh-rbac/) |
-| OpenSearch security & index management | [examples/opensearch-crds/](examples/opensearch-crds/) |
-| Backup & restore (snapshots, repositories) | [examples/backup-restore/](examples/backup-restore/) |
+| Cluster feature variations (TLS, drain, monitoring, Gateway API) | [examples/wazuh-cluster/](examples/wazuh-cluster/) |
+| Wazuh content (rules, decoders, integrations, agent groups) | [examples/wazuh-content/](examples/wazuh-content/) |
+| Wazuh certificates | [examples/wazuh-certificate/](examples/wazuh-certificate/) |
 | Filebeat log forwarding | [examples/filebeat/](examples/filebeat/) |
-| Gateway API exposure | [examples/gateway-api/](examples/gateway-api/) |
+| Wazuh API RBAC (users, roles, external IdP) | [examples/wazuh-rbac/](examples/wazuh-rbac/) |
+| Wazuh Manager backup & restore | [examples/wazuh-backup/](examples/wazuh-backup/) |
+| OpenSearch security | [examples/opensearch-security/](examples/opensearch-security/) |
+| OpenSearch index management | [examples/opensearch-index/](examples/opensearch-index/) |
+| OpenSearch backup & restore | [examples/opensearch-backup/](examples/opensearch-backup/) |
 | GitOps (ArgoCD, Flux) | [examples/gitops/](examples/gitops/) |
