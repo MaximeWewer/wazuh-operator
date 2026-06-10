@@ -1,9 +1,9 @@
 # Minimal WazuhCluster - Quick Start Example
 #
-# This example deploys a minimal Wazuh cluster suitable for:
-# - Development and testing
-# - Learning the operator
-# - Resource-constrained environments (4 vCPU, 6GB RAM)
+# Single-node deployment for development, testing and learning the operator.
+# Fits on a 2 vCPU / 4GB node (minikube, kind, k3s) — NOT for production
+# (single indexer = no quorum, no HA, self-signed TLS).
+# Footprint: ~0.6 vCPU / ~2.75GiB requests.
 #
 # Usage:
 #   kubectl create namespace wazuh
@@ -19,6 +19,9 @@ metadata:
 spec:
   # Wazuh version - see https://documentation.wazuh.com for available versions
   version: "4.9.0"
+
+  # Uses the cluster's default StorageClass. Uncomment to pin one explicitly:
+  # storageClassName: "standard"
 
   # Indexer configuration (OpenSearch-based)
   indexer:

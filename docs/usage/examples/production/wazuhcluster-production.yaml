@@ -10,9 +10,19 @@ metadata:
 spec:
   version: "4.9.0"
 
+  # Pin a fast, replicated StorageClass for all PVCs (override per-component if needed)
+  storageClassName: "fast-ssd"
+
   manager:
     # Filebeat SSL verification mode
     filebeatSSLVerificationMode: "full"  # Options: full, certificate, none
+
+    # Spread master/worker pods across nodes for HA
+    antiAffinity:
+      enabled: true
+      type: preferred
+      topologyKey: kubernetes.io/hostname
+      weight: 100
 
     # API credentials for Wazuh API
     apiCredentials:
@@ -126,10 +136,11 @@ spec:
   indexer:
     replicas: 3
     storageSize: "500Gi"
-    javaOpts: "-Xms4g -Xmx4g -Dlog4j2.formatMsgNoLookups=true"
+    # Heap = 50% of the memory limit, capped well under 32Gi (compressed oops)
+    javaOpts: "-Xms8g -Xmx8g -Dlog4j2.formatMsgNoLookups=true"
     resources:
       requests:
-        memory: "8Gi"
+        memory: "16Gi"
         cpu: "2000m"
       limits:
         memory: "16Gi"
@@ -140,6 +151,11 @@ spec:
       passwordKey: password
     nodeSelector:
       node-role.kubernetes.io/wazuh: "true"
+    # Spread indexer pods across nodes so a node failure never takes quorum
+    antiAffinity:
+      enabled: true
+      type: required
+      topologyKey: kubernetes.io/hostname
     podDisruptionBudget:
       enabled: true
       minAvailable: 2
@@ -165,8 +181,38 @@ spec:
         - secretName: wazuh-tls
           hosts:
             - wazuh.company.com
+
+  # Prometheus monitoring (exporters + ServiceMonitor)
+  monitoring:
+    enabled: true
+    indexerExporter:
+      enabled: true
+    wazuhExporter:
+      enabled: true
+      apiVerifySSL: true
+    serviceMonitor:
+      enabled: true       # requires the Prometheus Operator CRDs
+      interval: "30s"
+      scrapeTimeout: "10s"
+
+  # TLS with hot reload so cert renewal needs no pod restart (Wazuh >= 4.9.0)
+  tls:
+    enabled: true
+    hotReload: true
+    certConfig:
+      organization: "Company Inc."
+      country: "US"
+      caValidity: "3650d"
+      indexerValidity: "365d"
+      indexerRenewalThreshold: "30d"
+      dashboardValidity: "365d"
+      filebeatValidity: "365d"
+      adminValidity: "730d"
 ---
-# Secrets for production deployment
+# Production secrets.
+# DO NOT commit real credentials. In production, generate these out-of-band or
+# manage them with a secrets operator (External Secrets, Vault, Sealed Secrets)
+# and remove this block. Values below are placeholders — replace every one.
 apiVersion: v1
 kind: Secret
 metadata:
@@ -175,7 +221,7 @@ metadata:
 type: Opaque
 stringData:
   username: "wazuh-wui"
-  password: "GenerateSecurePassword1!"
+  password: "REPLACE_WITH_STRONG_API_PASSWORD"
 ---
 apiVersion: v1
 kind: Secret
@@ -184,7 +230,7 @@ metadata:
   namespace: wazuh
 type: Opaque
 stringData:
-  enrollment-password: "AgentEnrollmentSecretKey2024!"
+  enrollment-password: "REPLACE_WITH_STRONG_ENROLLMENT_PASSWORD"
 ---
 apiVersion: v1
 kind: Secret
@@ -194,4 +240,4 @@ metadata:
 type: Opaque
 stringData:
   username: "admin"
-  password: "IndexerAdminSecurePass!"
+  password: "REPLACE_WITH_STRONG_INDEXER_PASSWORD"
