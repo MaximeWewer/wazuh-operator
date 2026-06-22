@@ -75,16 +75,22 @@ spec:
                   challenge:
                     default: true
                     description: |-
-                      Challenge enables WWW-Authenticate challenge header
-                      Only one auth domain should have challenge enabled when multiple are configured
+                      Challenge enables the WWW-Authenticate challenge header. Keep this true (the
+                      default) so local accounts stay reachable; SSO domains must use challenge=false
+                      (their default) since only one domain may issue the challenge.
                     type: boolean
                   enabled:
                     default: true
-                    description: Enabled enables HTTP Basic authentication
+                    description: |-
+                      Enabled is retained for backward compatibility but no longer removes the
+                      internal basic auth domain (it is always kept). Setting it to false is
+                      ignored and the operator emits a warning. Use Order/Challenge to tune behavior.
                     type: boolean
                   httpEnabled:
                     default: true
-                    description: HTTPEnabled enables authentication on HTTP layer
+                    description: |-
+                      HTTPEnabled is forced on by the operator (the basic domain must always be
+                      usable on the HTTP layer for service accounts); this field has no effect.
                     type: boolean
                   order:
                     default: 0
@@ -96,8 +102,8 @@ spec:
                     type: integer
                   transportEnabled:
                     default: true
-                    description: TransportEnabled enables authentication on transport
-                      layer
+                    description: TransportEnabled is forced on by the operator; this
+                      field has no effect.
                     type: boolean
                 type: object
               clusterRefs:

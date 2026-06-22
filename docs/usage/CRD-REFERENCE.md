@@ -726,21 +726,43 @@ Creates custom action groups.
 ### OpenSearchAuthConfig
 
 Manages authentication configuration (Basic, OIDC, SAML, LDAP, JWT).
-Multiple methods can be enabled at once (e.g. `jwt` + `basicAuth`); each becomes
-a separate `authc` domain ordered by its `order` field. Per the
-security-dashboards-plugin requirement, when more than one method is enabled
-`basicAuth.enabled` must be `true`.
+Each enabled method becomes a separate `authc` domain ordered by its `order` field.
+
+> **Internal basic auth is always kept.** The operator always emits
+> `basic_internal_auth_domain` (HTTP + transport), regardless of `basicAuth`. The
+> dashboard (`kibanaserver`), the operator's own API client (`admin`) and
+> `securityadmin` all authenticate via HTTP Basic — removing it locks them out and
+> breaks the cluster (symptom: dashboard logs *"Unable to retrieve version
+> information from OpenSearch nodes"*). `basicAuth.enabled: false` is therefore
+> **ignored** (the operator warns); use `basicAuth.order`/`challenge` to tune it.
+>
+> When adding SSO, keep the canonical layout: the SSO domain with `challenge: false`
+> (its default) and basic with `challenge: true` (its default) so local accounts
+> stay reachable — only one domain may issue the challenge. You do **not** need to
+> declare `basicAuth`; it is injected after the SSO domain automatically.
 
 **Short Names:** `osauthconfig`, `osauth`
 
 | Field        | Type                  | Required | Default | Description       |
 | ------------ | --------------------- | -------- | ------- | ----------------- |
 | `clusterRefs`| []WazuhClusterRef     | **Yes**  | -       | Cluster references|
-| `basicAuth`  | BasicAuthSpec         | No       | -       | Basic auth config |
+| `basicAuth`  | BasicAuthSpec         | No       | (always on) | Optional tuning of the always-present internal basic auth domain |
 | `oidc`       | OIDCAuthSpec          | No       | -       | OIDC config       |
 | `saml`       | SAMLAuthSpec          | No       | -       | SAML config       |
 | `ldap`       | LDAPAuthSpec          | No       | -       | LDAP config       |
 | `jwt`        | JWTAuthSpec           | No       | -       | JWT config        |
+
+#### BasicAuthSpec
+
+Tunes the **always-present** internal basic auth domain. All fields are optional.
+
+| Field              | Type | Required | Default | Description                                                        |
+| ------------------ | ---- | -------- | ------- | ------------------------------------------------------------------ |
+| `enabled`          | bool | No       | `true`  | Ignored — the domain is always kept (`false` triggers a warning)   |
+| `order`            | int  | No       | `0`     | Evaluation order; when omitted alongside SSO, basic is placed after it |
+| `challenge`        | bool | No       | `true`  | Keep `true` so local accounts stay reachable                       |
+| `httpEnabled`      | bool | No       | `true`  | Forced on by the operator (no effect)                              |
+| `transportEnabled` | bool | No       | `true`  | Forced on by the operator (no effect)                              |
 
 #### JWTAuthSpec
 

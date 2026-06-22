@@ -131,10 +131,12 @@ func (b *AuthConfigBuilder) BuildSecurityConfig() string {
 func (b *AuthConfigBuilder) buildAuthDomains() []AuthDomainConfig {
 	var domains []AuthDomainConfig
 
-	// Basic Auth
-	if b.authConfig.BasicAuth != nil && b.authConfig.BasicAuth.Enabled {
-		domains = append(domains, b.buildBasicAuthDomain(b.authConfig.BasicAuth))
-	}
+	// Basic Auth — ALWAYS included, regardless of spec. The dashboard
+	// (kibanaserver), the operator's own API client (admin) and securityadmin all
+	// authenticate via HTTP Basic against the internal users database; dropping
+	// basic_internal_auth_domain would lock them out and break the cluster. SSO
+	// domains (OIDC/SAML/JWT/LDAP) layer on top via their own order.
+	domains = append(domains, b.buildBasicAuthDomain(b.authConfig.BasicAuth))
 
 	// OIDC
 	if b.authConfig.OIDC != nil && b.authConfig.OIDC.Enabled {
@@ -238,18 +240,55 @@ func (b *AuthConfigBuilder) formatAuthzDomain(domain AuthDomainConfig) string {
 // Basic Auth Domain Builder (T009)
 // ============================================================================
 
-// buildBasicAuthDomain creates the basic auth domain configuration
+// buildBasicAuthDomain creates the basic auth domain configuration. The domain is
+// always emitted (see buildAuthDomains): when the user omits basicAuth we fall back
+// to safe defaults, evaluated after any SSO domain. HTTP/transport are forced on so
+// the dashboard/operator/securityadmin service accounts can always authenticate, so
+// the basicAuth.enabled flag cannot remove the domain (the reconciler warns on it).
 func (b *AuthConfigBuilder) buildBasicAuthDomain(spec *v1.BasicAuthSpec) AuthDomainConfig {
-	return AuthDomainConfig{
-		Name:              "basic_internal_auth_domain",
-		Order:             spec.Order,
-		HTTPEnabled:       spec.HTTPEnabled,
-		TransportEnabled:  spec.TransportEnabled,
-		Challenge:         spec.Challenge,
-		AuthenticatorType: "basic",
-		BackendType:       "internal",
-		Description:       "Authenticate via HTTP Basic against internal users database",
+	domain := DefaultBasicAuthDomain()
+
+	if spec != nil {
+		domain.Order = spec.Order
+		domain.Challenge = spec.Challenge
+	} else if maxOrder, ok := b.maxNonBasicOrder(); ok {
+		// No explicit basicAuth: evaluate it right after the SSO domain(s) so SSO
+		// owns the front door while basic stays the interactive fallback. Mirrors the
+		// canonical "SSO order 0 (challenge=false) + basic order N+1 (challenge=true)"
+		// layout that keeps local accounts reachable.
+		domain.Order = maxOrder + 1
 	}
+
+	// Service accounts (kibanaserver, admin) must always authenticate on both layers,
+	// so these are forced on regardless of spec.
+	domain.HTTPEnabled = true
+	domain.TransportEnabled = true
+
+	return domain
+}
+
+// maxNonBasicOrder returns the highest order among enabled non-basic auth domains,
+// and whether any such domain is enabled.
+func (b *AuthConfigBuilder) maxNonBasicOrder() (int, bool) {
+	maxOrder, found := 0, false
+	consider := func(enabled bool, order int) {
+		if enabled && (!found || order > maxOrder) {
+			maxOrder, found = order, true
+		}
+	}
+	if b.authConfig.OIDC != nil {
+		consider(b.authConfig.OIDC.Enabled, b.authConfig.OIDC.Order)
+	}
+	if b.authConfig.SAML != nil {
+		consider(b.authConfig.SAML.Enabled, b.authConfig.SAML.Order)
+	}
+	if b.authConfig.LDAP != nil {
+		consider(b.authConfig.LDAP.Enabled, b.authConfig.LDAP.Order)
+	}
+	if b.authConfig.JWT != nil {
+		consider(b.authConfig.JWT.Enabled, b.authConfig.JWT.Order)
+	}
+	return maxOrder, found
 }
 
 // DefaultBasicAuthDomain returns the default basic auth domain configuration
@@ -325,9 +364,9 @@ func formatConfigMap(config map[string]any, indent int) string {
 func (b *AuthConfigBuilder) GetActiveAuthMethods() []string {
 	var methods []string
 
-	if b.authConfig.BasicAuth != nil && b.authConfig.BasicAuth.Enabled {
-		methods = append(methods, "basic")
-	}
+	// basic_internal_auth_domain is always emitted (required by the dashboard and the
+	// operator's own API client), so it is always an active method.
+	methods = append(methods, "basic")
 	if b.authConfig.OIDC != nil && b.authConfig.OIDC.Enabled {
 		methods = append(methods, "oidc")
 	}

@@ -89,6 +89,16 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 		return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Validation failed: %v", err))
 	}
 
+	// basic_internal_auth_domain is always emitted: the dashboard (kibanaserver),
+	// the operator's own API client (admin) and securityadmin all authenticate via
+	// HTTP Basic, so disabling it would lock them out. Warn instead of honoring it.
+	if authConfig.Spec.BasicAuth != nil && !authConfig.Spec.BasicAuth.Enabled {
+		log.Info("basicAuth.enabled=false is ignored: internal basic auth is always kept so the dashboard and operator service accounts keep working; use basicAuth.challenge/order to tune it instead",
+			"name", authConfig.Name)
+		r.recordEvent(authConfig, corev1.EventTypeWarning, "BasicAuthAlwaysOn",
+			"basicAuth.enabled=false is ignored; internal basic auth is always kept (required by the dashboard and operator)")
+	}
+
 	// Iterate over each target cluster: cleanup orphan ConfigMaps and apply
 	// the security config via securityadmin.sh per cluster. Errors are logged
 	// per cluster but do not abort the loop.

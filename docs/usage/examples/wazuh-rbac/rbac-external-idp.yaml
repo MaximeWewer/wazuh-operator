@@ -40,10 +40,16 @@ spec:
   clusterRefs:
     - name: wazuh-cluster
       namespace: wazuh
+  # NOTE: internal basic auth (basic_internal_auth_domain) is ALWAYS kept by the
+  # operator — the dashboard (kibanaserver), the operator and securityadmin need it.
+  # You do NOT need to declare basicAuth. Add it only to tune order/challenge:
+  #   basicAuth:
+  #     order: 1          # evaluated after OIDC
+  #     challenge: true   # keep true so local accounts stay reachable
   oidc:
     enabled: true
     order: 0
-    challenge: false
+    challenge: false   # SSO must be false; basic owns the challenge
     connectURL: "https://idp.example.com/realms/wazuh/.well-known/openid-configuration"
     clientId: "wazuh-dashboard"
     clientSecretRef:

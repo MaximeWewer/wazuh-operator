@@ -64,9 +64,15 @@ type OpenSearchAuthConfigSpec struct {
 // Basic Auth Configuration (T002, T003)
 // ============================================================================
 
-// BasicAuthSpec configures HTTP Basic authentication
+// BasicAuthSpec configures HTTP Basic authentication against the internal users
+// database. This domain is ALWAYS emitted by the operator regardless of these
+// values: the dashboard (kibanaserver), the operator's own API client (admin) and
+// securityadmin all authenticate via HTTP Basic, so it cannot be removed without
+// locking them out. Use this block only to tune Order/Challenge when adding SSO.
 type BasicAuthSpec struct {
-	// Enabled enables HTTP Basic authentication
+	// Enabled is retained for backward compatibility but no longer removes the
+	// internal basic auth domain (it is always kept). Setting it to false is
+	// ignored and the operator emits a warning. Use Order/Challenge to tune behavior.
 	// +kubebuilder:default=true
 	Enabled bool `json:"enabled,omitempty"`
 
@@ -77,16 +83,18 @@ type BasicAuthSpec struct {
 	// +kubebuilder:default=0
 	Order int `json:"order,omitempty"`
 
-	// Challenge enables WWW-Authenticate challenge header
-	// Only one auth domain should have challenge enabled when multiple are configured
+	// Challenge enables the WWW-Authenticate challenge header. Keep this true (the
+	// default) so local accounts stay reachable; SSO domains must use challenge=false
+	// (their default) since only one domain may issue the challenge.
 	// +kubebuilder:default=true
 	Challenge bool `json:"challenge,omitempty"`
 
-	// HTTPEnabled enables authentication on HTTP layer
+	// HTTPEnabled is forced on by the operator (the basic domain must always be
+	// usable on the HTTP layer for service accounts); this field has no effect.
 	// +kubebuilder:default=true
 	HTTPEnabled bool `json:"httpEnabled,omitempty"`
 
-	// TransportEnabled enables authentication on transport layer
+	// TransportEnabled is forced on by the operator; this field has no effect.
 	// +kubebuilder:default=true
 	TransportEnabled bool `json:"transportEnabled,omitempty"`
 }
