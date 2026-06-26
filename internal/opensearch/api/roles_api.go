@@ -59,20 +59,23 @@ func NewRolesAPI(client *Client) *RolesAPI {
 	return &RolesAPI{client: client}
 }
 
-// Create creates a new role
+// Create creates a new role. The write is retried on transient security-index
+// version conflicts caused by a concurrent security CRD sync.
 func (a *RolesAPI) Create(ctx context.Context, roleName string, role Role) error {
-	resp, err := a.client.Put(ctx, "/_plugins/_security/api/roles/"+roleName, role)
-	if err != nil {
-		return fmt.Errorf("failed to create role: %w", err)
-	}
-	defer resp.Body.Close()
+	return retryOnSecurityConflict(ctx, func() error {
+		resp, err := a.client.Put(ctx, "/_plugins/_security/api/roles/"+roleName, role)
+		if err != nil {
+			return fmt.Errorf("failed to create role: %w", err)
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to create role: %s", string(body))
-	}
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("failed to create role: %s", string(body))
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // Get retrieves a role

@@ -46,20 +46,23 @@ func NewUsersAPI(client *Client) *UsersAPI {
 	return &UsersAPI{client: client}
 }
 
-// Create creates a new user
+// Create creates a new user. Retried on transient security-index version
+// conflicts caused by a concurrent security CRD sync.
 func (a *UsersAPI) Create(ctx context.Context, username string, user User) error {
-	resp, err := a.client.Put(ctx, "/_plugins/_security/api/internalusers/"+username, user)
-	if err != nil {
-		return fmt.Errorf("failed to create user: %w", err)
-	}
-	defer resp.Body.Close()
+	return retryOnSecurityConflict(ctx, func() error {
+		resp, err := a.client.Put(ctx, "/_plugins/_security/api/internalusers/"+username, user)
+		if err != nil {
+			return fmt.Errorf("failed to create user: %w", err)
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to create user: %s", string(body))
-	}
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("failed to create user: %s", string(body))
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // Get retrieves a user
