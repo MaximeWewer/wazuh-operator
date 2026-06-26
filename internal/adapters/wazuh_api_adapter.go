@@ -17,6 +17,7 @@ limitations under the License.
 package adapters
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -123,21 +124,53 @@ func (a *WazuhAPIAdapter) doRequest(ctx context.Context, method, path string, bo
 	return a.doRequestWithContentType(ctx, method, path, body, "application/json")
 }
 
-// doRequestWithContentType performs an authenticated request with a custom content type
+// doRequestWithContentType performs an authenticated request with a custom
+// content type. On a 401 it discards the cached token and retries once: the
+// Wazuh manager regenerates its JWT signing key on restart, which silently
+// invalidates a token the client still believes is valid (tokenExp is local).
 func (a *WazuhAPIAdapter) doRequestWithContentType(ctx context.Context, method, path string, body io.Reader, contentType string) (*http.Response, error) {
-	if err := a.Authenticate(ctx); err != nil {
+	// Buffer the body so the request can be replayed on retry; an io.Reader is
+	// consumed by the first attempt and would leave the retry with an empty body.
+	var buf []byte
+	if body != nil {
+		var err error
+		if buf, err = io.ReadAll(body); err != nil {
+			return nil, fmt.Errorf("failed to read request body: %w", err)
+		}
+	}
+
+	send := func() (*http.Response, error) {
+		if err := a.Authenticate(ctx); err != nil {
+			return nil, err
+		}
+
+		var reqBody io.Reader
+		if buf != nil {
+			reqBody = bytes.NewReader(buf)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, a.baseURL+path, reqBody)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+
+		req.Header.Set("Authorization", "Bearer "+a.token)
+		req.Header.Set("Content-Type", contentType)
+
+		return a.httpClient.Do(req)
+	}
+
+	resp, err := send()
+	if err != nil {
 		return nil, err
 	}
-
-	req, err := http.NewRequestWithContext(ctx, method, a.baseURL+path, body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+	if resp.StatusCode == http.StatusUnauthorized {
+		// Token rejected server-side; force a fresh authentication and retry once.
+		resp.Body.Close()
+		a.token = ""
+		a.tokenExp = time.Time{}
+		return send()
 	}
-
-	req.Header.Set("Authorization", "Bearer "+a.token)
-	req.Header.Set("Content-Type", contentType)
-
-	return a.httpClient.Do(req)
+	return resp, nil
 }
 
 // ClusterStatus represents Wazuh cluster status
