@@ -731,6 +731,13 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	}
 
 	sts := stsBuilder.Build()
+
+	// Hash the rendered pod template so non-CR template drift still rolls out.
+	tmplHash, hashErr := patch.StampPodTemplateHash(&sts.Spec.Template, constants.AnnotationPodTemplateHash)
+	if hashErr != nil {
+		return nil, fmt.Errorf("failed to compute master pod template hash: %w", hashErr)
+	}
+
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for master statefulset: %w", err)
 	}
@@ -839,6 +846,15 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		// Record spec hash change metric
 		metrics.RecordSpecHashChange(cluster.Name, cluster.Namespace, "master")
 		metrics.RecordPatchDetection(cluster.Name, cluster.Namespace, "master", "spec-change")
+	}
+	if patch.PodTemplateHashChanged(&found.Spec.Template, tmplHash, constants.AnnotationPodTemplateHash) {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+pod-template-change"
+		} else {
+			updateReason = "pod-template-change"
+		}
+		log.Info("Master StatefulSet needs update due to pod template change", "name", sts.Name)
 	}
 	if !apiequality.Semantic.DeepEqual(found.Spec.Template.Spec.Tolerations, sts.Spec.Template.Spec.Tolerations) {
 		needsUpdate = true
@@ -1294,6 +1310,13 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	}
 
 	sts := stsBuilder.Build()
+
+	// Hash the rendered pod template so non-CR template drift still rolls out.
+	tmplHash, hashErr := patch.StampPodTemplateHash(&sts.Spec.Template, constants.AnnotationPodTemplateHash)
+	if hashErr != nil {
+		return nil, fmt.Errorf("failed to compute worker pod template hash: %w", hashErr)
+	}
+
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for worker statefulset: %w", err)
 	}
@@ -1406,6 +1429,15 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		// Record spec hash change metric
 		metrics.RecordSpecHashChange(cluster.Name, cluster.Namespace, "worker")
 		metrics.RecordPatchDetection(cluster.Name, cluster.Namespace, "worker", "spec-change")
+	}
+	if patch.PodTemplateHashChanged(&found.Spec.Template, tmplHash, constants.AnnotationPodTemplateHash) {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+pod-template-change"
+		} else {
+			updateReason = "pod-template-change"
+		}
+		log.Info("Worker StatefulSet needs update due to pod template change", "name", sts.Name)
 	}
 	if !apiequality.Semantic.DeepEqual(found.Spec.Template.Spec.Tolerations, sts.Spec.Template.Spec.Tolerations) {
 		needsUpdate = true
@@ -1787,6 +1819,13 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	}
 
 	sts := stsBuilder.Build()
+
+	// Hash the rendered pod template so non-CR template drift still rolls out.
+	tmplHash, hashErr := patch.StampPodTemplateHash(&sts.Spec.Template, constants.AnnotationPodTemplateHash)
+	if hashErr != nil {
+		return fmt.Errorf("failed to compute master pod template hash: %w", hashErr)
+	}
+
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for master statefulset: %w", err)
 	}
@@ -1842,6 +1881,10 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 			"newHash", utils.ShortHash(specHash))
 		metrics.RecordSpecHashChange(cluster.Name, cluster.Namespace, "master")
 		metrics.RecordPatchDetection(cluster.Name, cluster.Namespace, "master", "spec-change")
+		needsUpdate = true
+	}
+	if patch.PodTemplateHashChanged(&found.Spec.Template, tmplHash, constants.AnnotationPodTemplateHash) {
+		log.Info("Updating Master StatefulSet due to pod template change", "name", sts.Name)
 		needsUpdate = true
 	}
 	if utils.HashMap(sts.Annotations) != utils.HashMap(found.Annotations) {
@@ -2131,6 +2174,13 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 	}
 
 	sts := stsBuilder.Build()
+
+	// Hash the rendered pod template so non-CR template drift still rolls out.
+	tmplHash, hashErr := patch.StampPodTemplateHash(&sts.Spec.Template, constants.AnnotationPodTemplateHash)
+	if hashErr != nil {
+		return fmt.Errorf("failed to compute worker pod template hash: %w", hashErr)
+	}
+
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for worker statefulset: %w", err)
 	}
@@ -2202,6 +2252,10 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 			"newHash", utils.ShortHash(specHash))
 		metrics.RecordSpecHashChange(cluster.Name, cluster.Namespace, "worker")
 		metrics.RecordPatchDetection(cluster.Name, cluster.Namespace, "worker", "spec-change")
+		needsUpdate = true
+	}
+	if patch.PodTemplateHashChanged(&found.Spec.Template, tmplHash, constants.AnnotationPodTemplateHash) {
+		log.Info("Updating Worker StatefulSet due to pod template change", "name", sts.Name)
 		needsUpdate = true
 	}
 	if utils.HashMap(sts.Annotations) != utils.HashMap(found.Annotations) {

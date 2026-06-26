@@ -734,14 +734,14 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 
 	sts := stsBuilder.Build()
 
-	templateHash, hashErr := patch.ComputeSpecHash(sts.Spec.Template.Spec)
+	// Stamp a hash of the rendered pod template so drift the cert-hash / replica
+	// checks below don't cover — image tag, init-container plugin version, env,
+	// resources — still rolls out. Without it a versions-table bump rebuilds the
+	// StatefulSet but never updates it, leaving the live init container stale.
+	templateHash, hashErr := patch.StampPodTemplateHash(&sts.Spec.Template, constants.AnnotationPodTemplateHash)
 	if hashErr != nil {
 		return fmt.Errorf("failed to compute indexer pod template hash: %w", hashErr)
 	}
-	if sts.Spec.Template.Annotations == nil {
-		sts.Spec.Template.Annotations = map[string]string{}
-	}
-	sts.Spec.Template.Annotations[constants.AnnotationSpecHash] = templateHash
 
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for indexer statefulset: %w", err)
@@ -816,17 +816,11 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 		}
 	}
 
-	// Update if the desired pod template drifted (image, plugin/init-container
+	// Update if the rendered pod template drifted (image, plugin/init-container
 	// version, env, resources …). This is what rolls out a versions-table bump.
-	existingTemplateHash := ""
-	if found.Spec.Template.Annotations != nil {
-		existingTemplateHash = found.Spec.Template.Annotations[constants.AnnotationSpecHash]
-	}
-	if templateHash != existingTemplateHash {
+	if patch.PodTemplateHashChanged(&found.Spec.Template, templateHash, constants.AnnotationPodTemplateHash) {
 		log.Info("Updating Indexer StatefulSet due to pod template change",
-			"name", sts.Name,
-			"oldHash", utils.ShortHash(existingTemplateHash),
-			"newHash", utils.ShortHash(templateHash))
+			"name", sts.Name, "newHash", utils.ShortHash(templateHash))
 		needsUpdate = true
 	}
 
@@ -2997,19 +2991,14 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 
 	sts := stsBuilder.Build()
 
-	// Stamp a hash of the desired pod template so drift the replica / config /
+	// Stamp a hash of the rendered pod template so drift the replica / config /
 	// annotation checks below don't cover — image tag, init-container plugin
-	// version (TARGET_VERSION), env, resources — still triggers a rollout.
-	// Without this a versions-table bump rebuilds the StatefulSet but never
-	// rolls it out, leaving the live init container on the stale plugin version.
-	npTemplateHash, hashErr := patch.ComputeSpecHash(sts.Spec.Template.Spec)
+	// version (TARGET_VERSION), env, resources — still rolls out. Without this a
+	// versions-table bump rebuilds the StatefulSet but never updates it.
+	npTemplateHash, hashErr := patch.StampPodTemplateHash(&sts.Spec.Template, constants.AnnotationPodTemplateHash)
 	if hashErr != nil {
 		return fmt.Errorf("failed to compute nodePool %s pod template hash: %w", pool.Name, hashErr)
 	}
-	if sts.Spec.Template.Annotations == nil {
-		sts.Spec.Template.Annotations = map[string]string{}
-	}
-	sts.Spec.Template.Annotations[constants.AnnotationSpecHash] = npTemplateHash
 
 	// Set controller reference
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
@@ -3077,12 +3066,8 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 		updateReason = fmt.Sprintf("replicas: %d->%d", currentReplicas, pool.Replicas)
 	}
 
-	// Check pod template drift (image, init-container plugin version, env, …)
-	existingTemplateHash := ""
-	if found.Spec.Template.Annotations != nil {
-		existingTemplateHash = found.Spec.Template.Annotations[constants.AnnotationSpecHash]
-	}
-	if npTemplateHash != existingTemplateHash {
+	// Check rendered pod template drift (image, init-container plugin version, env …)
+	if patch.PodTemplateHashChanged(&found.Spec.Template, npTemplateHash, constants.AnnotationPodTemplateHash) {
 		needsUpdate = true
 		if updateReason != "" {
 			updateReason += ", "

@@ -81,6 +81,13 @@ const (
 	// AnnotationSpecHash stores the hash of CRD spec fields that affect this resource
 	AnnotationSpecHash = "wazuh.com/spec-hash"
 
+	// AnnotationPodTemplateHash stores the hash of the rendered pod template spec.
+	// Unlike AnnotationSpecHash (derived from CR fields), this is computed from the
+	// fully-built PodSpec, so it also detects drift from operator-internal sources
+	// such as the versions table (e.g. the bundled plugin version in an init
+	// container) that change the template without any CR change.
+	AnnotationPodTemplateHash = "wazuh.com/pod-template-hash"
+
 	// AnnotationConfigHash stores the hash of ConfigMap/Secret content for pod restart detection
 	AnnotationConfigHash = "wazuh.com/config-hash"
 

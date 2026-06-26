@@ -226,6 +226,38 @@ func ComputeSpecHash(spec any) (string, error) {
 	return hex.EncodeToString(hash[:])[:16], nil
 }
 
+// StampPodTemplateHash computes a hash of the rendered pod template spec, writes
+// it into the template's annotations under annoKey, and returns the hash.
+//
+// This detects pod-template drift (image tag, init-container args, env, resources)
+// regardless of its source — including operator-internal values such as the
+// versions table — which CR-field-derived spec hashes miss. Hashing tmpl.Spec
+// (not the whole template) keeps the comparison desired-vs-desired across
+// reconciles and avoids server-defaulting noise; the annotation itself lives in
+// tmpl.ObjectMeta so it never feeds back into the hash.
+func StampPodTemplateHash(tmpl *corev1.PodTemplateSpec, annoKey string) (string, error) {
+	h, err := ComputeSpecHash(tmpl.Spec)
+	if err != nil {
+		return "", err
+	}
+	if tmpl.Annotations == nil {
+		tmpl.Annotations = map[string]string{}
+	}
+	tmpl.Annotations[annoKey] = h
+	return h, nil
+}
+
+// PodTemplateHashChanged reports whether the stored pod-template hash on found
+// differs from desiredHash. A nil/absent annotation counts as changed so a
+// freshly-adopted object (no stamp yet) gets reconciled once.
+func PodTemplateHashChanged(found *corev1.PodTemplateSpec, desiredHash, annoKey string) bool {
+	existing := ""
+	if found != nil && found.Annotations != nil {
+		existing = found.Annotations[annoKey]
+	}
+	return desiredHash != existing
+}
+
 // ComputeConfigHash computes a deterministic hash of ConfigMap data
 // Keys are sorted for consistent hashing regardless of map iteration order
 func ComputeConfigHash(data map[string]string) string {

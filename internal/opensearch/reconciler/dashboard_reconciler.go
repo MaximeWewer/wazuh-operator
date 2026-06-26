@@ -668,6 +668,14 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 	}
 
 	deployment := deployBuilder.Build()
+
+	// Hash the rendered pod template so any drift the CR-input spec hash misses
+	// (operator-internal derived template values) still rolls out.
+	templateHash, hashErr := patch.StampPodTemplateHash(&deployment.Spec.Template, constants.AnnotationPodTemplateHash)
+	if hashErr != nil {
+		return fmt.Errorf("failed to compute dashboard pod template hash: %w", hashErr)
+	}
+
 	if err := controllerutil.SetControllerReference(cluster, deployment, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for dashboard deployment: %w", err)
 	}
@@ -712,6 +720,13 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 			"name", deployment.Name,
 			"oldSpecHash", utils.ShortHash(existingSpecHash),
 			"newSpecHash", utils.ShortHash(specHash))
+		needsUpdate = true
+	}
+
+	// Check rendered pod template drift (catches non-CR template changes)
+	if patch.PodTemplateHashChanged(&found.Spec.Template, templateHash, constants.AnnotationPodTemplateHash) {
+		log.Info("Updating Dashboard Deployment due to pod template change",
+			"name", deployment.Name, "newHash", utils.ShortHash(templateHash))
 		needsUpdate = true
 	}
 
@@ -1224,6 +1239,13 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 	}
 
 	deployment := deployBuilder.Build()
+
+	// Hash the rendered pod template so non-CR template drift still rolls out.
+	templateHash, hashErr := patch.StampPodTemplateHash(&deployment.Spec.Template, constants.AnnotationPodTemplateHash)
+	if hashErr != nil {
+		return nil, fmt.Errorf("failed to compute dashboard pod template hash: %w", hashErr)
+	}
+
 	if err := controllerutil.SetControllerReference(cluster, deployment, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for dashboard deployment: %w", err)
 	}
@@ -1279,6 +1301,13 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 		if r.Recorder != nil {
 			r.Recorder.Event(cluster, corev1.EventTypeNormal, "SpecChanged",
 				fmt.Sprintf("Dashboard spec changed (version=%s, replicas=%d)", version, replicas))
+		}
+	}
+	if patch.PodTemplateHashChanged(&found.Spec.Template, templateHash, constants.AnnotationPodTemplateHash) {
+		log.Info("Dashboard pod template changed", "name", deployment.Name, "newHash", utils.ShortHash(templateHash))
+		needsUpdate = true
+		if updateReason == "" {
+			updateReason = "pod-template-change"
 		}
 	}
 	if !apiequality.Semantic.DeepEqual(found.Spec.Template.Spec.Tolerations, deployment.Spec.Template.Spec.Tolerations) {
