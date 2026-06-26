@@ -80,7 +80,7 @@ func NewManagerServiceMonitor(cluster *wazuhv1.WazuhCluster) *monitoringv1.Servi
 					Interval:      monitoringv1.Duration(interval),
 					ScrapeTimeout: monitoringv1.Duration(scrapeTimeout),
 					Path:          "/metrics",
-					Scheme:        schemePtr(monitoringv1.SchemeHTTP),
+					Scheme:        schemePtr(schemeHTTP),
 				},
 			},
 		},
@@ -139,7 +139,7 @@ func NewIndexerServiceMonitor(cluster *wazuhv1.WazuhCluster) *monitoringv1.Servi
 					Interval:      monitoringv1.Duration(interval),
 					ScrapeTimeout: monitoringv1.Duration(scrapeTimeout),
 					Path:          "/_prometheus/metrics",
-					Scheme:        schemePtr(monitoringv1.SchemeHTTPS),
+					Scheme:        schemePtr(schemeHTTPS),
 					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
 						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
 							TLSConfig: &monitoringv1.TLSConfig{
@@ -197,6 +197,15 @@ func isIndexerExporterEnabled(cluster *wazuhv1.WazuhCluster) bool {
 func boolPtr(b bool) *bool {
 	return &b
 }
+
+// Lowercase scheme values. The monitoringv1.SchemeHTTP/SchemeHTTPS constants are
+// uppercase ("HTTP"/"HTTPS"); older ServiceMonitor CRDs only allow the lowercase
+// enum (http;https) and reject uppercase. Lowercase is accepted by every CRD
+// version, so emit it for portability.
+const (
+	schemeHTTP  monitoringv1.Scheme = "http"
+	schemeHTTPS monitoringv1.Scheme = "https"
+)
 
 // schemePtr returns a pointer to a Scheme
 func schemePtr(s monitoringv1.Scheme) *monitoringv1.Scheme {
