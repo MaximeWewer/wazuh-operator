@@ -733,6 +733,16 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 	}
 
 	sts := stsBuilder.Build()
+
+	templateHash, hashErr := patch.ComputeSpecHash(sts.Spec.Template.Spec)
+	if hashErr != nil {
+		return fmt.Errorf("failed to compute indexer pod template hash: %w", hashErr)
+	}
+	if sts.Spec.Template.Annotations == nil {
+		sts.Spec.Template.Annotations = map[string]string{}
+	}
+	sts.Spec.Template.Annotations[constants.AnnotationSpecHash] = templateHash
+
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for indexer statefulset: %w", err)
 	}
@@ -804,6 +814,20 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 			needsUpdate = true
 			certHashChanged = true
 		}
+	}
+
+	// Update if the desired pod template drifted (image, plugin/init-container
+	// version, env, resources …). This is what rolls out a versions-table bump.
+	existingTemplateHash := ""
+	if found.Spec.Template.Annotations != nil {
+		existingTemplateHash = found.Spec.Template.Annotations[constants.AnnotationSpecHash]
+	}
+	if templateHash != existingTemplateHash {
+		log.Info("Updating Indexer StatefulSet due to pod template change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingTemplateHash),
+			"newHash", utils.ShortHash(templateHash))
+		needsUpdate = true
 	}
 
 	// Check if replicas changed
@@ -1848,15 +1872,23 @@ func (r *IndexerReconciler) updateStatefulSetWithRetry(ctx context.Context, desi
 }
 
 // toIndexerExporterHashInput converts the cluster's IndexerExporter config to a hash input struct.
+// It records the RESOLVED plugin version (CR override, else the value from the
+// versions table) rather than the raw CR field. Otherwise a bump in the versions
+// table — which changes the init container's installed plugin version without any
+// CR change — would not move the spec hash, and the StatefulSet would never roll out.
 func toIndexerExporterHashInput(cluster *wazuhv1.WazuhCluster) *patch.IndexerExporterHashInput {
 	if cluster.Spec.Monitoring == nil || !cluster.Spec.Monitoring.Enabled ||
 		cluster.Spec.Monitoring.IndexerExporter == nil {
 		return nil
 	}
 	e := cluster.Spec.Monitoring.IndexerExporter
+	version := e.Version
+	if version == "" && e.Enabled {
+		version = constants.GetPrometheusExporterPluginVersionForWazuh(cluster.Spec.Version)
+	}
 	return &patch.IndexerExporterHashInput{
 		Enabled: e.Enabled,
-		Version: e.Version,
+		Version: version,
 	}
 }
 
@@ -2965,6 +2997,20 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 
 	sts := stsBuilder.Build()
 
+	// Stamp a hash of the desired pod template so drift the replica / config /
+	// annotation checks below don't cover — image tag, init-container plugin
+	// version (TARGET_VERSION), env, resources — still triggers a rollout.
+	// Without this a versions-table bump rebuilds the StatefulSet but never
+	// rolls it out, leaving the live init container on the stale plugin version.
+	npTemplateHash, hashErr := patch.ComputeSpecHash(sts.Spec.Template.Spec)
+	if hashErr != nil {
+		return fmt.Errorf("failed to compute nodePool %s pod template hash: %w", pool.Name, hashErr)
+	}
+	if sts.Spec.Template.Annotations == nil {
+		sts.Spec.Template.Annotations = map[string]string{}
+	}
+	sts.Spec.Template.Annotations[constants.AnnotationSpecHash] = npTemplateHash
+
 	// Set controller reference
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference: %w", err)
@@ -3029,6 +3075,19 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 
 		needsUpdate = true
 		updateReason = fmt.Sprintf("replicas: %d->%d", currentReplicas, pool.Replicas)
+	}
+
+	// Check pod template drift (image, init-container plugin version, env, …)
+	existingTemplateHash := ""
+	if found.Spec.Template.Annotations != nil {
+		existingTemplateHash = found.Spec.Template.Annotations[constants.AnnotationSpecHash]
+	}
+	if npTemplateHash != existingTemplateHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += ", "
+		}
+		updateReason += "pod template changed"
 	}
 
 	// Check config hash change
