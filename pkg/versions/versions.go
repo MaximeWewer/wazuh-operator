@@ -268,7 +268,7 @@ type WazuhVersionInfo struct {
 // The plugin version format is: OpenSearchVersion.PatchVersion (e.g., 2.19.1.0)
 var wazuhVersionMapping = map[string]WazuhVersionInfo{
 	// Wazuh 4.14.x - OpenSearch 2.19.3+
-	"4.14.5": {WazuhVersion: "4.14.5", OpenSearchVersion: "2.19.4", PrometheusExporterPluginVersion: "2.19.4.0"},
+	"4.14.5": {WazuhVersion: "4.14.5", OpenSearchVersion: "2.19.5", PrometheusExporterPluginVersion: "2.19.5.0"},
 	"4.14.4": {WazuhVersion: "4.14.4", OpenSearchVersion: "2.19.4", PrometheusExporterPluginVersion: "2.19.4.0"},
 	"4.14.3": {WazuhVersion: "4.14.3", OpenSearchVersion: "2.19.4", PrometheusExporterPluginVersion: "2.19.4.0"},
 	"4.14.2": {WazuhVersion: "4.14.2", OpenSearchVersion: "2.19.4", PrometheusExporterPluginVersion: "2.19.4.0"},
