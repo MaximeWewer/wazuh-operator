@@ -292,6 +292,7 @@ var wazuhVersionMapping = map[string]WazuhVersionInfo{
 	"4.11.1": {WazuhVersion: "4.11.1", OpenSearchVersion: "2.16.0", PrometheusExporterPluginVersion: "2.16.0.0"},
 	"4.11.0": {WazuhVersion: "4.11.0", OpenSearchVersion: "2.16.0", PrometheusExporterPluginVersion: "2.16.0.0"},
 	// Wazuh 4.10.x - OpenSearch 2.16.0
+	"4.10.4": {WazuhVersion: "4.10.4", OpenSearchVersion: "2.16.0", PrometheusExporterPluginVersion: "2.16.0.0"},
 	"4.10.3": {WazuhVersion: "4.10.3", OpenSearchVersion: "2.16.0", PrometheusExporterPluginVersion: "2.16.0.0"},
 	"4.10.2": {WazuhVersion: "4.10.2", OpenSearchVersion: "2.16.0", PrometheusExporterPluginVersion: "2.16.0.0"},
 	"4.10.1": {WazuhVersion: "4.10.1", OpenSearchVersion: "2.16.0", PrometheusExporterPluginVersion: "2.16.0.0"},
