@@ -266,7 +266,14 @@ type WazuhVersionInfo struct {
 // wazuhVersionMapping maps Wazuh versions to OpenSearch and Prometheus exporter plugin versions
 // Based on Wazuh compatibility matrix
 // The plugin version format is: OpenSearchVersion.PatchVersion (e.g., 2.19.1.0)
+//
+// The rows between the BEGIN/END generated-mapping markers are maintained by
+// hack/version-sync (run weekly by .github/workflows/version-sync.yml). New rows
+// are appended automatically when a new Wazuh indexer tag ships and its matching
+// OpenSearch prometheus-exporter plugin release exists. Hand-editing inside the
+// markers is fine — the tool only inserts missing rows, it never rewrites yours.
 var wazuhVersionMapping = map[string]WazuhVersionInfo{
+	// BEGIN generated-mapping (managed by hack/version-sync — do not remove markers)
 	// Wazuh 4.14.x - OpenSearch 2.19.3+
 	"4.14.5": {WazuhVersion: "4.14.5", OpenSearchVersion: "2.19.5", PrometheusExporterPluginVersion: "2.19.5.0"},
 	"4.14.4": {WazuhVersion: "4.14.4", OpenSearchVersion: "2.19.4", PrometheusExporterPluginVersion: "2.19.4.0"},
@@ -289,10 +296,10 @@ var wazuhVersionMapping = map[string]WazuhVersionInfo{
 	"4.10.1": {WazuhVersion: "4.10.1", OpenSearchVersion: "2.16.0", PrometheusExporterPluginVersion: "2.16.0.0"},
 	"4.10.0": {WazuhVersion: "4.10.0", OpenSearchVersion: "2.16.0", PrometheusExporterPluginVersion: "2.16.0.0"},
 	// Wazuh 4.9.x - OpenSearch 2.13.0
-	"4.9.3": {WazuhVersion: "4.9.3", OpenSearchVersion: "2.13.0", PrometheusExporterPluginVersion: "2.13.0.0"},
 	"4.9.2": {WazuhVersion: "4.9.2", OpenSearchVersion: "2.13.0", PrometheusExporterPluginVersion: "2.13.0.0"},
 	"4.9.1": {WazuhVersion: "4.9.1", OpenSearchVersion: "2.13.0", PrometheusExporterPluginVersion: "2.13.0.0"},
 	"4.9.0": {WazuhVersion: "4.9.0", OpenSearchVersion: "2.13.0", PrometheusExporterPluginVersion: "2.13.0.0"},
+	// END generated-mapping
 }
 
 // GetWazuhVersionInfo returns complete version information for a given Wazuh version
