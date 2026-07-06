@@ -97,7 +97,7 @@ func run(file string, dryRun bool, summaryFn string) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", file, err)
 	}
-	existing := existingWazuhVersions(string(src))
+	existing, minorOS := parseExistingRows(string(src))
 
 	tags, err := fetchIndexerTags()
 	if err != nil {
@@ -130,6 +130,26 @@ func run(file string, dryRun bool, summaryFn string) error {
 			// Network / rate-limit / 5xx: abort rather than risk an incomplete update.
 			return fmt.Errorf("resolve OpenSearch version for %s: %w", wv, err)
 		}
+
+		// Consistency gate: within a Wazuh minor line the OpenSearch minor never
+		// changes. If this candidate disagrees with the OpenSearch minor already
+		// recorded for its Wazuh minor, upstream almost certainly mis-tagged or
+		// rebased the release (e.g. v4.10.4 tagged onto OpenSearch 2.19 long after
+		// the 4.10 line shipped on 2.16). Flag for a human instead of trusting it.
+		minorKey := fmt.Sprintf("%d.%d", parsed.Major, parsed.Minor)
+		osParsed, err := versions.ParseVersion(osVer)
+		if err != nil {
+			skipped = append(skipped, fmt.Sprintf("%s: unparseable OpenSearch version %q", wv, osVer))
+			continue
+		}
+		candOSMinor := fmt.Sprintf("%d.%d", osParsed.Major, osParsed.Minor)
+		if known, ok := minorOS[minorKey]; ok && known != candOSMinor {
+			skipped = append(skipped, fmt.Sprintf(
+				"%s: OpenSearch %s conflicts with the %s line's established %s.x — likely a mis-tagged upstream release, needs manual review",
+				wv, osVer, minorKey, known))
+			continue
+		}
+
 		plugin := osVer + ".0"
 
 		ok, err := exporterReleaseExists(plugin)
@@ -179,18 +199,36 @@ func isSupported(v *versions.Version) bool {
 	return v.Major == minWazuhMajor && v.Minor >= minWazuhMinor
 }
 
-// existingWazuhVersions returns the set of Wazuh versions already keyed in the map.
-func existingWazuhVersions(src string) map[string]struct{} {
-	re := regexp.MustCompile(`(?m)^\s*"(\d+\.\d+\.\d+)":\s*\{`)
-	out := map[string]struct{}{}
-	for _, m := range re.FindAllStringSubmatch(src, -1) {
-		out[m[1]] = struct{}{}
+var mapRowRe = regexp.MustCompile(
+	`(?m)^\s*"(\d+\.\d+\.\d+)":\s*\{WazuhVersion:\s*"[\d.]+",\s*OpenSearchVersion:\s*"(\d+\.\d+\.\d+)"`)
+
+// parseExistingRows reads the current map and returns:
+//   - seen: the set of Wazuh versions already keyed
+//   - minorOS: Wazuh "major.minor" -> the OpenSearch "major.minor" the existing
+//     rows in that line use. This is the compatibility invariant: every patch of
+//     a Wazuh minor ships the same OpenSearch minor, so a candidate that disagrees
+//     is almost certainly a mis-tagged/rebased upstream release and must not be
+//     added automatically.
+func parseExistingRows(src string) (seen map[string]struct{}, minorOS map[string]string) {
+	seen = map[string]struct{}{}
+	minorOS = map[string]string{}
+	for _, m := range mapRowRe.FindAllStringSubmatch(src, -1) {
+		wv, osv := m[1], m[2]
+		seen[wv] = struct{}{}
+		wp, err1 := versions.ParseVersion(wv)
+		op, err2 := versions.ParseVersion(osv)
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		minorOS[fmt.Sprintf("%d.%d", wp.Major, wp.Minor)] = fmt.Sprintf("%d.%d", op.Major, op.Minor)
 	}
-	return out
+	return seen, minorOS
 }
 
-// insertRows places the new rows immediately after the BEGIN marker line,
-// leaving every existing row untouched.
+// insertRows merges the new rows into the marker block in descending version
+// order, matching the map's newest-first convention. Every existing line is kept
+// verbatim; a new row is spliced in just before the first existing row whose
+// version is lower than it.
 func insertRows(src string, rows []row) (string, error) {
 	lines := strings.Split(src, "\n")
 	beginIdx, endIdx := -1, -1
@@ -207,18 +245,87 @@ func insertRows(src string, rows []row) (string, error) {
 		return "", fmt.Errorf("could not locate %q / %q markers in versions.go", beginMarker, endMarker)
 	}
 
-	rendered := make([]string, 0, len(rows))
-	for _, r := range rows {
-		rendered = append(rendered, fmt.Sprintf(
+	rowKeyRe := regexp.MustCompile(`^\s*"(\d+\.\d+\.\d+)":`)
+	block := lines[beginIdx+1 : endIdx]
+
+	render := func(r row) string {
+		return fmt.Sprintf(
 			"\t%q: {WazuhVersion: %q, OpenSearchVersion: %q, PrometheusExporterPluginVersion: %q},",
 			r.wazuh, r.wazuh, r.openSrch, r.plugin,
-		))
+		)
+	}
+	minorOf := func(v *versions.Version) string { return fmt.Sprintf("%d.%d", v.Major, v.Minor) }
+	// higherMinor reports whether a's Wazuh minor line sits above b's.
+	higherMinor := func(a, b *versions.Version) bool {
+		return a.Major > b.Major || (a.Major == b.Major && a.Minor > b.Minor)
 	}
 
-	out := make([]string, 0, len(lines)+len(rendered))
-	out = append(out, lines[:beginIdx+1]...)
-	out = append(out, rendered...)
-	out = append(out, lines[beginIdx+1:]...)
+	// Which Wazuh minors already have a section in the block: a new patch of an
+	// existing minor tucks under that minor's comment silently, whereas a brand-new
+	// minor gets its own generated "// Wazuh X.Y.x - OpenSearch A.B.x" header.
+	hasMinor := map[string]bool{}
+	for _, ln := range block {
+		if m := rowKeyRe.FindStringSubmatch(ln); m != nil {
+			if v, err := versions.ParseVersion(m[1]); err == nil {
+				hasMinor[minorOf(v)] = true
+			}
+		}
+	}
+
+	pending := append([]row(nil), rows...)
+	sort.Slice(pending, func(i, j int) bool { return pending[i].parsedVer.Compare(pending[j].parsedVer) > 0 })
+
+	out := make([]string, 0, len(lines)+2*len(pending))
+	out = append(out, lines[:beginIdx+1]...) // through the BEGIN marker
+
+	emit := func(r row) {
+		mk := minorOf(r.parsedVer)
+		if !hasMinor[mk] { // first row of a new minor line: add a section header
+			if osv, err := versions.ParseVersion(r.openSrch); err == nil {
+				out = append(out, fmt.Sprintf("\t// Wazuh %s.x - OpenSearch %d.%d.x", mk, osv.Major, osv.Minor))
+			}
+			hasMinor[mk] = true
+		}
+		out = append(out, render(r))
+	}
+	// flush emits every pending row (highest first) for which pred holds.
+	flush := func(pred func(r row) bool) {
+		for len(pending) > 0 && pred(pending[0]) {
+			emit(pending[0])
+			pending = pending[1:]
+		}
+	}
+	// nextRowVersion looks ahead from block[i] to the version of the next row line.
+	nextRowVersion := func(i int) *versions.Version {
+		for _, ln := range block[i:] {
+			if m := rowKeyRe.FindStringSubmatch(ln); m != nil {
+				if v, err := versions.ParseVersion(m[1]); err == nil {
+					return v
+				}
+			}
+		}
+		return nil
+	}
+
+	for i, ln := range block {
+		trimmed := strings.TrimSpace(ln)
+		switch {
+		case strings.HasPrefix(trimmed, "//"):
+			// Before an existing section comment, drop any pending row that belongs
+			// to a strictly higher minor so its new section lands above this one.
+			if nv := nextRowVersion(i); nv != nil {
+				flush(func(r row) bool { return higherMinor(r.parsedVer, nv) })
+			}
+		case rowKeyRe.MatchString(ln):
+			// Before an existing row, drop any pending row that outranks it.
+			cur, _ := versions.ParseVersion(rowKeyRe.FindStringSubmatch(ln)[1])
+			flush(func(r row) bool { return cur != nil && r.parsedVer.Compare(cur) > 0 })
+		}
+		out = append(out, ln)
+	}
+	flush(func(row) bool { return true }) // anything lower than every existing row
+
+	out = append(out, lines[endIdx:]...) // END marker onward
 	return strings.Join(out, "\n"), nil
 }
 
