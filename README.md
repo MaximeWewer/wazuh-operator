@@ -7,6 +7,7 @@ A Kubernetes operator for managing Wazuh clusters, providing a declarative way t
 - **Declarative Cluster Management** - Define your entire Wazuh cluster using Kubernetes custom resources
 - **Automated Deployment** - Automatically provisions Manager, Indexer, and Dashboard components
 - **Rule & Decoder Management** - Manage Wazuh detection rules and log decoders as CRDs
+- **CDB Lists & Active Response** - Manage CDB lists and custom active response scripts declaratively
 - **Integrations & Agent Groups** - Configure external integrations (Slack, VirusTotal, …) and shared agent group configuration declaratively
 - **OpenSearch Security CRDs** - Manage users, roles, role mappings, and tenants declaratively
 - **Wazuh API RBAC CRDs** - Manage Manager API roles, policies, rules, and users; restrict dashboard menus per user via run_as
@@ -86,26 +87,26 @@ Open <https://localhost:5601> - Credentials are auto-generated in secrets.
 
 ## Supported Wazuh Versions
 
-| Wazuh           | OpenSearch         | Notes                                                                               |
-| --------------- | ------------------ | ----------------------------------------------------------------------------------- |
-| 4.12.x - 4.14.x | 2.19.0+            | Automatic TLS certificate hot reload (file-watch).                                  |
-| 4.10.x - 4.11.x | 2.16.0             |                                                                                     |
-| 4.9.x           | 2.13.0             | TLS certificate hot reload via API call. Minimum version supported by the operator. |
-| < 4.9.0         | Not supported      | Might work, but it hasn't been tested.                                              |
+| Wazuh           | OpenSearch    | Notes                                                                               |
+| --------------- | ------------- | ----------------------------------------------------------------------------------- |
+| 4.12.x - 4.14.x | 2.19.0+       | Automatic TLS certificate hot reload (file-watch).                                  |
+| 4.10.x - 4.11.x | 2.16.0        |                                                                                     |
+| 4.9.x           | 2.13.0        | TLS certificate hot reload via API call. Minimum version supported by the operator. |
+| < 4.9.0         | Not supported | Might work, but it hasn't been tested.                                              |
 
 ## Custom Resource Definitions
 
 **API Group**: `resources.wazuh.com/v1`
 
-| Category                | CRDs                                                                                                                 | Short Names                                    |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| **Wazuh Core**          | WazuhCluster                                                                                                         | wc                                             |
-| **Wazuh Config**        | WazuhRule, WazuhDecoder, WazuhIntegration, WazuhCertificate, WazuhFilebeat, WazuhAgentGroup                          | wrule, wdecoder, wintegration, wzcert, wfb, wagentgroup |
-| **Wazuh API RBAC**      | WazuhRole, WazuhUser                                                                                                 | wrole, wuser                                   |
-| **Wazuh Backup**        | WazuhBackup, WazuhRestore                                                                                            | wbak, wrest                                    |
-| **OpenSearch Security** | OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchActionGroup, OpenSearchTenant, OpenSearchAuthConfig | osuser, osrole, osrmap, osag, ostenant, osauth |
-| **OpenSearch Index**    | OpenSearchIndex, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchISMPolicy, OpenSearchSnapshotPolicy | osidx, osidxt, osctpl, osism, ossnap           |
-| **OpenSearch Backup**   | OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore                                                  | osrepo, ossnapshot, osrestore                  |
+| Category                | CRDs                                                                                                                           | Short Names                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| **Wazuh Core**          | WazuhCluster                                                                                                                   | wc                                                                 |
+| **Wazuh Config**        | WazuhRule, WazuhDecoder, WazuhIntegration, WazuhCDBList, WazuhActiveResponse, WazuhCertificate, WazuhFilebeat, WazuhAgentGroup | wrule, wdecoder, wintegration, wcdb, war, wzcert, wfb, wagentgroup |
+| **Wazuh API RBAC**      | WazuhRole, WazuhUser                                                                                                           | wrole, wuser                                                       |
+| **Wazuh Backup**        | WazuhBackup, WazuhRestore                                                                                                      | wbak, wrest                                                        |
+| **OpenSearch Security** | OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchActionGroup, OpenSearchTenant, OpenSearchAuthConfig           | osuser, osrole, osrmap, osag, ostenant, osauth                     |
+| **OpenSearch Index**    | OpenSearchIndex, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchISMPolicy, OpenSearchSnapshotPolicy           | osidx, osidxt, osctpl, osism, ossnap                               |
+| **OpenSearch Backup**   | OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore                                                            | osrepo, ossnapshot, osrestore                                      |
 
 > See [CRD Reference](docs/usage/CRD-REFERENCE.md) for complete API documentation.
 
@@ -113,26 +114,26 @@ Open <https://localhost:5601> - Credentials are auto-generated in secrets.
 
 ### User Guide
 
-| Topic                                                                 | Description                       |
-| --------------------------------------------------------------------- | --------------------------------- |
-| [Installation](docs/usage/getting-started/installation.md)            | How to install the operator       |
-| [Quick Start](docs/usage/getting-started/quick-start.md)              | Deploy your first cluster         |
-| [Credentials](docs/usage/features/credentials.md)                     | Auto-generated passwords, secrets |
-| [TLS Configuration](docs/usage/features/tls.md)                       | Certificate management            |
+| Topic                                                                 | Description                                 |
+| --------------------------------------------------------------------- | ------------------------------------------- |
+| [Installation](docs/usage/getting-started/installation.md)            | How to install the operator                 |
+| [Quick Start](docs/usage/getting-started/quick-start.md)              | Deploy your first cluster                   |
+| [Credentials](docs/usage/features/credentials.md)                     | Auto-generated passwords, secrets           |
+| [TLS Configuration](docs/usage/features/tls.md)                       | Certificate management                      |
 | [Wazuh API RBAC](docs/usage/features/wazuh-api-rbac.md)               | Manager API roles/users, run_as restriction |
-| [Monitoring](docs/usage/features/monitoring.md)                       | Prometheus integration            |
-| [Backup & Restore](docs/usage/features/backup-restore.md)             | Data protection (S3, GCS, Azure, HDFS) |
-| [Repository Plugins](docs/usage/features/repository-plugins.md)       | Auto plugin install & keystore    |
-| [OpenSearch Security](docs/usage/features/opensearch-security.md)     | Indexer users, roles, tenants     |
-| [Gateway API & Ingress](docs/usage/features/gateway-api.md)           | Expose dashboard/manager          |
-| [Drain Strategy](docs/usage/features/drain-strategy.md)               | Safe node drain, retry, rollback  |
-| [Log Rotation](docs/usage/features/log-rotation.md)                   | Component log rotation            |
-| [Volume Expansion](docs/usage/features/volume-expansion.md)           | Online PVC growth                 |
-| [Filebeat](docs/usage/features/filebeat-configuration.md)             | Manager→indexer shipping config   |
-| [Advanced Topology](docs/usage/features/advanced-indexer-topology.md) | NodePools, dedicated roles        |
-| [Sizing](docs/usage/features/sizing.md)                               | Resource sizing guidance          |
-| [Examples](docs/usage/examples/)                                      | Configuration examples            |
-| [Troubleshooting](docs/usage/troubleshooting/)                        | Common issues and debugging       |
+| [Monitoring](docs/usage/features/monitoring.md)                       | Prometheus integration                      |
+| [Backup & Restore](docs/usage/features/backup-restore.md)             | Data protection (S3, GCS, Azure, HDFS)      |
+| [Repository Plugins](docs/usage/features/repository-plugins.md)       | Auto plugin install & keystore              |
+| [OpenSearch Security](docs/usage/features/opensearch-security.md)     | Indexer users, roles, tenants               |
+| [Gateway API & Ingress](docs/usage/features/gateway-api.md)           | Expose dashboard/manager                    |
+| [Drain Strategy](docs/usage/features/drain-strategy.md)               | Safe node drain, retry, rollback            |
+| [Log Rotation](docs/usage/features/log-rotation.md)                   | Component log rotation                      |
+| [Volume Expansion](docs/usage/features/volume-expansion.md)           | Online PVC growth                           |
+| [Filebeat](docs/usage/features/filebeat-configuration.md)             | Manager→indexer shipping config             |
+| [Advanced Topology](docs/usage/features/advanced-indexer-topology.md) | NodePools, dedicated roles                  |
+| [Sizing](docs/usage/features/sizing.md)                               | Resource sizing guidance                    |
+| [Examples](docs/usage/examples/)                                      | Configuration examples                      |
+| [Troubleshooting](docs/usage/troubleshooting/)                        | Common issues and debugging                 |
 
 ### Developer Guide
 
