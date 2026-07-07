@@ -711,7 +711,7 @@ func initBaseVolumeMounts() []corev1.VolumeMount {
 }
 
 // buildSeedAPIConfigInitContainer seeds the default Wazuh API configuration
-// (api.yaml, the security/ RBAC directory, and ssl/) into the PVC when it is empty.
+// (api.yaml, the security/ RBAC directory, and ssl/) into the PVC.
 //
 // /var/ossec/api/configuration is a PVC subPath mount, so a fresh PVC arrives empty and
 // hides the image defaults. The Wazuh entrypoint (0-wazuh-init: mount_permanent_data)
@@ -720,10 +720,12 @@ func initBaseVolumeMounts() []corev1.VolumeMount {
 // causes the entrypoint to SKIP its seed. The result is a missing security/ directory, so
 // wazuh-apid fails to create its RBAC database with "unable to open database file".
 //
-// This init container runs first and replicates the entrypoint's seed from the image's
-// permanent-data backup (only when the PVC is empty, matching the entrypoint's own guard),
-// guaranteeing security/ exists regardless of the later certificate staging. Shared by the
-// master and worker builders (both mount api/configuration as a PVC subPath and run wazuh-apid).
+// This init container runs first and restores any missing defaults from the image's
+// permanent-data backup using a no-clobber copy: it seeds a fresh PVC in full AND repairs
+// a cluster that a pre-fix operator left without security/ — all without ever overwriting
+// existing data or the operator-managed API cert in ssl/. A final mkdir guarantees the
+// RBAC directory even if the image backup is absent. Shared by the master and worker
+// builders (both mount api/configuration as a PVC subPath and run wazuh-apid).
 func buildSeedAPIConfigInitContainer(image string) corev1.Container {
 	return corev1.Container{
 		Name:  constants.InitContainerNameSeedAPIConfig,
@@ -734,19 +736,19 @@ func buildSeedAPIConfigInitContainer(image string) corev1.Container {
 			`set -e
 DEST=/wazuh-data/wazuh/api/configuration
 BACKUP=/var/ossec/data_tmp/permanent/var/ossec/api/configuration
-if find "$DEST" -mindepth 1 2>/dev/null | read _; then
-  echo "API configuration already present on PVC, skipping seed"
+mkdir -p "$DEST"
+if [ -d "$BACKUP" ]; then
+  # No-clobber: copy only files missing from the PVC. Seeds a fresh PVC fully and
+  # repairs a broken one (missing security/) without touching existing data or the
+  # operator API cert in ssl/.
+  cp -an "$BACKUP/." "$DEST/"
+  echo "Ensured API configuration defaults from image backup"
 else
-  echo "Seeding default API configuration into empty PVC"
-  mkdir -p "$DEST"
-  if [ -d "$BACKUP" ]; then
-    cp -ar "$BACKUP/." "$DEST/"
-    echo "Seeded API configuration from image backup"
-  else
-    echo "WARNING: image backup $BACKUP not found; creating minimal security/ and ssl/"
-    mkdir -p "$DEST/security" "$DEST/ssl"
-  fi
+  echo "WARNING: image backup $BACKUP not found; ensuring security/ and ssl/ exist"
+  mkdir -p "$DEST/ssl"
 fi
+# Guarantee the RBAC directory exists (wazuh-apid creates security/rbac.db inside it).
+mkdir -p "$DEST/security"
 chown -R 999:999 "$DEST"`,
 		},
 		VolumeMounts: []corev1.VolumeMount{
