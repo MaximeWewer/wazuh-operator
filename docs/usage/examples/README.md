@@ -13,7 +13,7 @@ examples/
 ├── gitops/               # GitOps deployment (ArgoCD, Flux)
 │
 ├── wazuh-cluster/        # WazuhCluster feature variants (TLS, drain, monitoring, gateway)
-├── wazuh-content/        # WazuhRule, WazuhDecoder, WazuhIntegration, WazuhAgentGroup
+├── wazuh-content/        # WazuhRule, WazuhDecoder, WazuhCDBList, WazuhActiveResponse, WazuhIntegration, WazuhAgentGroup
 ├── wazuh-certificate/    # WazuhCertificate
 ├── filebeat/             # WazuhFilebeat
 ├── wazuh-rbac/           # WazuhRole, WazuhUser (+ external IdP)
@@ -34,6 +34,8 @@ Every CRD has at least one example. Find the example for a given CRD here:
 | WazuhCertificate | [wazuh-certificate/](wazuh-certificate/) |
 | WazuhRule | [wazuh-content/wazuhrule-basic.yaml](wazuh-content/wazuhrule-basic.yaml) |
 | WazuhDecoder | [wazuh-content/wazuhdecoder-basic.yaml](wazuh-content/wazuhdecoder-basic.yaml) |
+| WazuhCDBList | [wazuh-content/wazuhcdblist-static.yaml](wazuh-content/wazuhcdblist-static.yaml), [wazuh-content/wazuhcdblist-url-iplist.yaml](wazuh-content/wazuhcdblist-url-iplist.yaml), [wazuh-content/wazuhcdblist-url-keylist.yaml](wazuh-content/wazuhcdblist-url-keylist.yaml) |
+| WazuhActiveResponse | [wazuh-content/wazuhactiveresponse-firewall-drop.yaml](wazuh-content/wazuhactiveresponse-firewall-drop.yaml) |
 | WazuhIntegration | [wazuh-content/wazuhintegration-basic.yaml](wazuh-content/wazuhintegration-basic.yaml) |
 | WazuhAgentGroup | [wazuh-content/wazuhagentgroup-basic.yaml](wazuh-content/wazuhagentgroup-basic.yaml) |
 | WazuhFilebeat | [filebeat/](filebeat/) |

@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framework that manages the complete lifecycle of Wazuh security monitoring platform deployments on Kubernetes. It follows the operator pattern with declarative resource management through 25 Custom Resource Definitions (CRDs) and 25 reconciliation controllers.
+The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framework that manages the complete lifecycle of Wazuh security monitoring platform deployments on Kubernetes. It follows the operator pattern with declarative resource management through 27 Custom Resource Definitions (CRDs) and 27 reconciliation controllers.
 
 ## Technology Stack
 
@@ -80,7 +80,7 @@ flowchart TD
 
 **Components**:
 
-- 25 CRD type definitions
+- 27 CRD type definitions
 - Validation markers (Kubebuilder)
 - Status subresources
 - Short names and categories
@@ -251,14 +251,14 @@ builder := statefulsets.NewManagerBuilder(name, namespace).
 
 ## Data Architecture
 
-### Custom Resource Definitions (25 CRDs)
+### Custom Resource Definitions (27 CRDs)
 
 **API Group**: `resources.wazuh.com/v1`
 
 **Categories**:
 
 1. **Wazuh Core** (1): WazuhCluster
-2. **Wazuh Config** (6): WazuhRule, WazuhDecoder, WazuhIntegration, WazuhCertificate, WazuhFilebeat, WazuhAgentGroup
+2. **Wazuh Config** (8): WazuhRule, WazuhDecoder, WazuhCDBList, WazuhActiveResponse, WazuhIntegration, WazuhCertificate, WazuhFilebeat, WazuhAgentGroup
 3. **Wazuh Backup** (2): WazuhBackup, WazuhRestore
 4. **OpenSearch Security** (6): OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchActionGroup, OpenSearchTenant, OpenSearchAuthConfig
 5. **OpenSearch Index** (5): OpenSearchIndex, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchISMPolicy, OpenSearchSnapshotPolicy

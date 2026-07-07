@@ -24,8 +24,8 @@ kubectl get wazuhcluster -n wazuh
 | **Type**        | Kubernetes Operator                         |
 | **Language**    | Go 1.26                                   |
 | **Framework**   | Kubebuilder v4 + controller-runtime         |
-| **CRDs**        | 25 Custom Resource Definitions              |
-| **Controllers** | 25 reconciliation controllers               |
+| **CRDs**        | 27 Custom Resource Definitions              |
+| **Controllers** | 27 reconciliation controllers               |
 | **API Group**   | `resources.wazuh.com/v1`                    |
 | **Target**      | Kubernetes 1.25+                            |
 
@@ -40,7 +40,7 @@ kubectl get wazuhcluster -n wazuh
 ### User Guide
 
 - [User Documentation](usage/README.md) - Complete user guide index
-- [CRD Reference](usage/CRD-REFERENCE.md) - API documentation for all 25 CRDs
+- [CRD Reference](usage/CRD-REFERENCE.md) - API documentation for all 27 CRDs
 - [Examples](usage/examples/README.md) - Ready-to-use configurations
 
 ### Key Features
@@ -48,6 +48,7 @@ kubectl get wazuhcluster -n wazuh
 | Feature          | Documentation                                                                                                                              |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Deployment Mode  | [Inline Mode](usage/features/inline-mode.md)                                                                                                |
+| Detection Content | [Detection Content](usage/features/detection-content.md) — rules, decoders, CDB lists, active response, integrations, agent groups        |
 | Security         | [Credentials](usage/features/credentials.md), [TLS](usage/features/tls.md)                                                                 |
 | Observability    | [Monitoring](usage/features/monitoring.md), [OpenTelemetry](usage/features/opentelemetry.md)                                               |
 | OpenSearch       | [Security CRDs](usage/features/opensearch-security.md), [Index Management](usage/features/opensearch-indices.md)                           |
@@ -83,7 +84,7 @@ kubectl get wazuhcluster -n wazuh
 | Path                      | Description                                                          |
 | ------------------------- | -------------------------------------------------------------------- |
 | `api/v1/`                 | CRD type definitions (v1 storage version)                            |
-| `controllers/`            | 25 Kubernetes controllers                                            |
+| `controllers/`            | 27 Kubernetes controllers                                            |
 | `internal/wazuh/`         | Wazuh reconcilers, config, builders, drain                           |
 | `internal/opensearch/`    | OpenSearch reconcilers, API clients, config, builders                |
 | `internal/certificates/`  | TLS certificate reconciler and generation                            |

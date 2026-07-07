@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Wazuh Operator defines 25 Custom Resource Definitions (CRDs) organized into 7 logical categories. All CRDs use API group `resources.wazuh.com` with version `v1` (the storage and served version).
+The Wazuh Operator defines 27 Custom Resource Definitions (CRDs) organized into 7 logical categories. All CRDs use API group `resources.wazuh.com` with version `v1` (the storage and served version).
 
 ## CRD Categories
 
@@ -23,7 +23,7 @@ These CRDs define the main Wazuh cluster components.
   - `drain`: Safe scale-down strategy configuration
 - **Short Name**: `wc`
 
-### 2. Wazuh Configuration CRDs (6)
+### 2. Wazuh Configuration CRDs (8)
 
 These CRDs manage Wazuh-specific configuration and operational concerns.
 
@@ -47,6 +47,32 @@ These CRDs manage Wazuh-specific configuration and operational concerns.
   - `targetNodes`: Deploy to "all", "master", or "workers"
   - `decoders`: XML decoder definitions
 - **Short Name**: `wdec`
+
+#### WazuhCDBList
+
+- **Purpose**: Manage Wazuh [CDB lists](https://documentation.wazuh.com/current/user-manual/ruleset/cdb-list.html) (key/value lookup files) declaratively
+- **Key Fields**:
+  - `clusterRefs`: Target WazuhClusters (cross-namespace)
+  - `listName`: List filename (no extension) under `/var/ossec/etc/lists/`
+  - `entries` / `content` / `source`: mutually-exclusive content sources (inline pairs, raw text, or a fetched URL)
+  - `format`: raw-content converter — `cdb`, `iplist`, or `keylist`
+  - `skipLines`: drop N header lines before conversion
+  - `targetNodes`: Deploy to "all", "master", or "workers"
+- **Behavior**: Writes `/var/ossec/etc/lists/<listName>` and auto-injects `<list>etc/lists/<listName></list>` into ossec.conf
+- **Short Name**: `wcdb`
+
+#### WazuhActiveResponse
+
+- **Purpose**: Provision custom active response scripts and triggers declaratively
+- **Key Fields**:
+  - `clusterRefs`: Target WazuhClusters (cross-namespace)
+  - `name`: Command name (`<command><name>`); `<executable>` = `name[.scriptExtension]`
+  - `script`: Response script content (shebang required)
+  - `timeoutAllowed`, `extraArgs`: `<command>` options
+  - `disabled`, `location`, `agentID`, `level`, `rulesID`, `rulesGroup`, `timeout`, `repeatedOffenders`: `<active-response>` trigger options
+  - `targetNodes`: Deploy to "all", "master", or "workers"
+- **Behavior**: Installs `/var/ossec/active-response/bin/<script>` (`root:wazuh` mode 0750) and injects the `<command>` + `<active-response>` blocks into ossec.conf
+- **Short Name**: `war`
 
 #### WazuhIntegration
 
@@ -351,6 +377,8 @@ WazuhCluster (1) ─┬─> (1..N) Manager Pods (master + workers)
 
 WazuhCluster (1) <──── (0..N) WazuhRule ────> Manager ConfigMaps
 WazuhCluster (1) <──── (0..N) WazuhDecoder ─> Manager ConfigMaps
+WazuhCluster (1) <──── (0..N) WazuhCDBList ─> Manager lists + ossec.conf <list>
+WazuhCluster (1) <──── (0..N) WazuhActiveResponse ─> Manager AR scripts + ossec.conf <command>/<active-response>
 WazuhCluster (1) <──── (0..N) WazuhIntegration ─> Manager scripts + ossec.conf <integration>
 WazuhCluster (1) <──── (0..N) WazuhAgentGroup ─> Manager Agent Groups + File ConfigMaps
 WazuhCluster (1) <──── (0..1) WazuhCertificate ─> TLS Secrets

@@ -17,6 +17,10 @@ Documentation for users of the Wazuh Operator.
 - [TLS Configuration](features/tls.md) - Certificate management
 - [Sizing Profiles](features/sizing.md) - Cluster sizing guide
 
+### Detection Content
+
+- [Detection Content](features/detection-content.md) - Rules, decoders, CDB lists, active response, integrations, and agent groups; how content is mounted and injected into `ossec.conf`
+
 ### Storage and Scaling
 
 - [Volume Expansion](features/volume-expansion.md) - Online PVC resizing
@@ -56,7 +60,7 @@ Documentation for users of the Wazuh Operator.
 - [Quick Start](examples/quick-start/) - Minimal deployment to get started
 - [Production](examples/production/) - Production-ready configuration
 - [Wazuh Cluster](examples/wazuh-cluster/) - TLS, drain, monitoring, multi-namespace, Gateway API
-- [Wazuh Content](examples/wazuh-content/) - Rules, decoders, integrations, agent groups
+- [Wazuh Content](examples/wazuh-content/) - Rules, decoders, CDB lists, active response, integrations, agent groups
 - [Wazuh Certificate](examples/wazuh-certificate/) - Standalone TLS certificates
 - [Filebeat](examples/filebeat/) - Log forwarding configuration
 - [Wazuh API RBAC](examples/wazuh-rbac/) - Wazuh API users and roles (incl. external IdP)
@@ -70,7 +74,7 @@ See [examples/README.md](examples/README.md) for the full per-CRD index.
 
 ## Reference
 
-- [CRD Reference](CRD-REFERENCE.md) - Complete API documentation for all 25 CRDs
+- [CRD Reference](CRD-REFERENCE.md) - Complete API documentation for all 27 CRDs
 
 ## Troubleshooting
 

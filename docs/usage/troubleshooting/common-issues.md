@@ -265,6 +265,55 @@ kubectl exec -n wazuh wazuh-indexer-0 -- \
 kubectl get statefulset -n wazuh wazuh-indexer -o yaml | grep -A 5 "certs"
 ```
 
+## Detection Content Issues
+
+See the [Detection Content guide](../features/detection-content.md) for the full
+model behind rules, decoders, CDB lists, active response, and integrations.
+
+### CDB List Rule Logs "List could not be loaded"
+
+`wazuh-analysisd` logs `List 'etc/lists/<name>' could not be loaded. Rule 'X' will
+be ignored.` when a `<list>` is declared in `ossec.conf` but its source file is
+missing or empty (so it never compiled to a `.cdb`).
+
+```bash
+# A loaded list shows BOTH the source file and a compiled <name>.cdb (owned wazuh:wazuh)
+kubectl exec -n wazuh wazuh-manager-master-0 -c wazuh-manager -- \
+  ls -l /var/ossec/etc/lists/
+```
+
+- For a `WazuhCDBList`: confirm the CR is `Applied` (`kubectl get wazuhcdblist -A`)
+  and that `entries`/`content`/`source` did not resolve empty (`status.entryCount`).
+- Sub-directory lists (`etc/lists/<dir>/<name>`) shipped outside the operator
+  (bundled rulesets, manual files) are **not** managed by a CRD — fix the source
+  file or remove the referencing rule.
+
+### Active Response / Integration Script Doesn't Execute
+
+Wazuh refuses to run a script that is not `root:wazuh` mode `0750`:
+
+```bash
+kubectl exec -n wazuh wazuh-manager-master-0 -c wazuh-manager -- \
+  ls -l /var/ossec/active-response/bin/<script>   # expect: -rwxr-x--- root wazuh
+```
+
+If the file is missing, the CR is not `Applied` or does not target this node
+(check `spec.targetNodes` and `status.clusterStatuses`).
+
+### Content Edited but Manager Didn't Reload
+
+`subPath` ConfigMap mounts do not hot-update, and Wazuh loads content at start, so
+the operator rolls the manager on change via a content-hash annotation. If nothing
+rolled, the hash did not change — usually because the CR never reached `Applied`.
+
+```bash
+# Content-hash annotations that drive the rollout
+kubectl get sts wazuh-manager-master -n wazuh \
+  -o jsonpath='{.spec.template.metadata.annotations}' | tr ',' '\n' | grep wazuh.com
+```
+
+Inspect the CR status: `kubectl get wazuhcdblist,wazuhactiveresponse,wazuhrule,wazuhdecoder -A`.
+
 ## Storage Issues
 
 ### PVC Not Bound

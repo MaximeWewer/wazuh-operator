@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Wazuh Operator implements **25 Kubernetes controllers** that watch Custom Resources and reconcile them to their desired state. Each controller follows the Kubernetes operator pattern with reconciliation loops. These controllers manage **25 Custom Resource Definitions (CRDs)**.
+The Wazuh Operator implements **27 Kubernetes controllers** that watch Custom Resources and reconcile them to their desired state. Each controller follows the Kubernetes operator pattern with reconciliation loops. These controllers manage **27 Custom Resource Definitions (CRDs)**.
 
 ## Controller Architecture
 
@@ -108,6 +108,37 @@ Provisions Wazuh custom integrations (external API forwarding) declaratively.
 3. Resolve `hookURL`/`apiKey` from Secrets in the target cluster namespace
 4. Mount the script read-only into `/var/ossec/integrations/` (`root:wazuh` 0750 via DefaultMode + fsGroup)
 5. Inject the `<integration>` block into ossec.conf and roll the targeted manager pods (integratord reads config at start)
+
+**Targeting**: `all` / `master` / `workers`
+
+### WazuhCDBList Controller
+
+**controllers/wazuhcdblist_controller.go**
+
+Manages Wazuh CDB lists (key/value lookup files) declaratively.
+
+**Reconciliation**:
+
+1. Validate list name and content source (exactly one of `entries` / `content` / `source`)
+2. Resolve content — render inline entries, or fetch the URL (with `refreshInterval`, auth headers, TLS options) and run the `format` converter (`cdb` / `iplist` / `keylist`) after `skipLines`
+3. Create/update ConfigMap holding `/var/ossec/etc/lists/<listName>`
+4. Mount it read-only into `/var/ossec/etc/lists/` and auto-inject `<list>etc/lists/<listName></list>` into ossec.conf
+5. Roll the targeted manager pods (content hash annotation) so analysisd recompiles the list
+
+**Targeting**: `all` / `master` / `workers`
+
+### WazuhActiveResponse Controller
+
+**controllers/wazuhactiveresponse_controller.go**
+
+Provisions custom active response scripts and their triggers declaratively.
+
+**Reconciliation**:
+
+1. Validate name/script (shebang), `location`/`agentID` coupling, trigger presence, and command-name uniqueness across overlapping clusters
+2. Create/update ConfigMap holding the script (`<name>[.<ext>]`)
+3. Mount it executable into `/var/ossec/active-response/bin/` (`root:wazuh` 0750 via DefaultMode + fsGroup)
+4. Inject the `<command>` + `<active-response>` blocks into ossec.conf and roll the targeted manager pods
 
 **Targeting**: `all` / `master` / `workers`
 
