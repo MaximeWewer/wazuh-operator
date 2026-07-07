@@ -41,4 +41,8 @@ const (
 
 	// InitContainerNameSecurityConfig is the init container for security config
 	InitContainerNameSecurityConfig = "security-config"
+
+	// InitContainerNameSeedAPIConfig seeds the default Wazuh API configuration
+	// (api.yaml, security/ RBAC dir, ssl/) into an empty PVC before the main container.
+	InitContainerNameSeedAPIConfig = "seed-api-config"
 )

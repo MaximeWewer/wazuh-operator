@@ -552,6 +552,7 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 
 	// Build init containers
 	initContainers := []corev1.Container{
+		buildSeedAPIConfigInitContainer(image),
 		b.buildInitContainer(),
 		{
 			Name:  "fix-ownership",

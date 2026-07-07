@@ -600,6 +600,7 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 
 	// Build init containers
 	initContainers := []corev1.Container{
+		buildSeedAPIConfigInitContainer(image),
 		b.buildInitContainer(),
 		{
 			Name:  "fix-ownership",
@@ -1058,6 +1059,51 @@ func (b *ManagerStatefulSetBuilder) buildInitContainerVolumeMounts() []corev1.Vo
 	}
 
 	return mounts
+}
+
+// buildSeedAPIConfigInitContainer seeds the default Wazuh API configuration
+// (api.yaml, the security/ RBAC directory, and ssl/) into the PVC when it is empty.
+//
+// /var/ossec/api/configuration is a PVC subPath mount, so a fresh PVC arrives empty and
+// hides the image defaults. The Wazuh entrypoint (0-wazuh-init: mount_permanent_data)
+// only seeds this directory when it is empty; the fix-permissions init container then
+// stages the operator API certificate into ssl/, which makes the directory non-empty and
+// causes the entrypoint to SKIP its seed. The result is a missing security/ directory, so
+// wazuh-apid fails to create its RBAC database with "unable to open database file".
+//
+// This init container runs first and replicates the entrypoint's seed from the image's
+// permanent-data backup (only when the PVC is empty, matching the entrypoint's own guard),
+// guaranteeing security/ exists regardless of the later certificate staging. Shared by the
+// master and worker builders (both mount api/configuration as a PVC subPath and run wazuh-apid).
+func buildSeedAPIConfigInitContainer(image string) corev1.Container {
+	return corev1.Container{
+		Name:  constants.InitContainerNameSeedAPIConfig,
+		Image: image,
+		Command: []string{
+			"/bin/bash",
+			"-c",
+			`set -e
+DEST=/wazuh-data/wazuh/api/configuration
+BACKUP=/var/ossec/data_tmp/permanent/var/ossec/api/configuration
+if find "$DEST" -mindepth 1 2>/dev/null | read _; then
+  echo "API configuration already present on PVC, skipping seed"
+else
+  echo "Seeding default API configuration into empty PVC"
+  mkdir -p "$DEST"
+  if [ -d "$BACKUP" ]; then
+    cp -ar "$BACKUP/." "$DEST/"
+    echo "Seeded API configuration from image backup"
+  else
+    echo "WARNING: image backup $BACKUP not found; creating minimal security/ and ssl/"
+    mkdir -p "$DEST/security" "$DEST/ssl"
+  fi
+fi
+chown -R 999:999 "$DEST"`,
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{Name: constants.VolumeNameWazuhData, MountPath: "/wazuh-data"},
+		},
+	}
 }
 
 // buildInitContainer creates the init container that copies configs to writable volumes
