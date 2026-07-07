@@ -25,6 +25,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -282,7 +283,7 @@ func (r *CDBListReconciler) readExistingContent(ctx context.Context, list *wazuh
 		if err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: ref.Namespace}, cm); err != nil {
 			continue
 		}
-		if content, ok := cm.Data[list.Spec.ListName]; ok {
+		if content, ok := cm.Data[cdbListDataKey(list.Spec.ListName)]; ok {
 			return content, true
 		}
 	}
@@ -441,6 +442,17 @@ func cdbListConfigMapName(crNamespace, crName string) string {
 	return fmt.Sprintf("%s-%s-cdblist", crNamespace, crName)
 }
 
+// cdbListDataKey returns the ConfigMap data key (and mount subPath) for a list.
+// It is the last path segment of listName, since ConfigMap keys cannot contain "/".
+// For a top-level list this equals listName; for "malicious-ioc/malicious-ip" it is
+// "malicious-ip". The file is still mounted at /var/ossec/etc/lists/<listName>.
+func cdbListDataKey(listName string) string {
+	if i := strings.LastIndex(listName, "/"); i >= 0 {
+		return listName[i+1:]
+	}
+	return listName
+}
+
 // reconcileConfigMap creates/updates the list ConfigMap in the target cluster's namespace.
 // The ConfigMap key is the list filename (no extension), matching the mount at
 // /var/ossec/etc/lists/<listName>.
@@ -468,7 +480,7 @@ func (r *CDBListReconciler) reconcileConfigMap(
 			},
 		},
 		Data: map[string]string{
-			list.Spec.ListName: content,
+			cdbListDataKey(list.Spec.ListName): content,
 		},
 	}
 
@@ -599,7 +611,8 @@ func (r *CDBListReconciler) ListCDBListsForCluster(ctx context.Context, clusterN
 // CDBListConfigMapInfo holds information about a CDB list ConfigMap for mounting.
 type CDBListConfigMapInfo struct {
 	ConfigMapName string
-	FileName      string // list filename (no extension), also the ConfigMap data key
+	FileName      string // list path relative to etc/lists (may contain a subdir), used for the mount path and <list> entry
+	Key           string // ConfigMap data key and mount subPath (basename of FileName)
 	TargetNodes   string
 	ListCRName    string
 }
@@ -631,6 +644,7 @@ func (r *CDBListReconciler) GetCDBListConfigMapsForCluster(ctx context.Context, 
 		configMaps = append(configMaps, CDBListConfigMapInfo{
 			ConfigMapName: cdbListConfigMapName(l.Namespace, l.Name),
 			FileName:      l.Spec.ListName,
+			Key:           cdbListDataKey(l.Spec.ListName),
 			TargetNodes:   l.Spec.TargetNodes,
 			ListCRName:    l.Name,
 		})

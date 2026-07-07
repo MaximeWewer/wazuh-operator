@@ -72,15 +72,16 @@ func IPListToCDB(input string) string {
 
 // KeyListToCDB converts a plain list of keys (one per line) into CDB list content:
 // each non-blank line is trimmed and becomes a key-only entry ("key:"). This is the
-// generic converter for hash lists (e.g. VirusShare MD5 dumps), domain lists, user
-// lists, or any newline-separated set of lookup keys. Lines already ending in ":" are
-// left untouched so pre-formatted content stays idempotent.
+// generic converter for hash lists (e.g. VirusShare MD5 dumps, MalwareBazaar exports),
+// domain lists, user lists, or any newline-separated set of lookup keys. Blank lines and
+// comment lines (starting with "#", common in feed headers) are skipped. Lines already
+// containing ":" are left untouched so pre-formatted content stays idempotent.
 func KeyListToCDB(input string) string {
 	var entries []string
 	for _, line := range strings.Split(input, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue // skip blank lines and comments (feed headers)
 		}
 		if !strings.Contains(line, ":") {
 			line += ":"

@@ -928,12 +928,14 @@ func (b *WorkerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 		})
 	}
 
-	// Add CDB list mounts at /var/ossec/etc/lists/<filename>
+	// Add CDB list mounts at /var/ossec/etc/lists/<path>. FileName may include a
+	// subdirectory; the subPath is the ConfigMap key (basename). kubelet creates any
+	// intermediate directory of the mount path.
 	for _, ref := range b.cdbListConfigMaps {
 		mounts = append(mounts, corev1.VolumeMount{
 			Name:      fmt.Sprintf("wazuh-cdblist-%s", ref.Name),
 			MountPath: fmt.Sprintf("/var/ossec/etc/lists/%s", ref.FileName),
-			SubPath:   ref.FileName,
+			SubPath:   ref.Key,
 			ReadOnly:  true,
 		})
 	}

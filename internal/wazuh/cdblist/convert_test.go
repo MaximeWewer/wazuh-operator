@@ -90,6 +90,11 @@ func TestKeyListToCDB(t *testing.T) {
 			in:   "user1:admin\nuser2:",
 			want: "user1:admin\nuser2:\n",
 		},
+		{
+			name: "feed header comments skipped",
+			in:   "# Feodo Tracker\n# Last updated: 2026\n\n1.2.3.4\nbad.example",
+			want: "1.2.3.4:\nbad.example:\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

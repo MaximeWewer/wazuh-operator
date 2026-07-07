@@ -1,0 +1,85 @@
+# WazuhCDBList - IOC lists grouped under a subdirectory.
+#
+# listName accepts a subdirectory path (e.g. "malicious-ioc/malicious-ip"): the file
+# is mounted at /var/ossec/etc/lists/malicious-ioc/malicious-ip and the operator
+# auto-injects <list>etc/lists/malicious-ioc/malicious-ip</list> into ossec.conf.
+# This lets you manage grouped IOC feeds as versioned CRs instead of baking the files
+# into the image and hand-declaring them in manager.config.ruleset.lists.
+#
+# Reference them from rules, e.g.:
+#   <list field="srcip"     lookup="match_key">etc/lists/malicious-ioc/malicious-ip</list>
+#   <list field="dns.rrname" lookup="match_key">etc/lists/malicious-ioc/malicious-domains</list>
+#   <list field="sha256"    lookup="match_key">etc/lists/malicious-ioc/malware-hashes</list>
+---
+# Malicious source IPs (key-only entries -> "ip:").
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCDBList
+metadata:
+  name: malicious-ioc-ip
+  namespace: wazuh
+spec:
+  clusterRefs: [{name: wazuh, namespace: wazuh}]
+  listName: malicious-ioc/malicious-ip
+  description: "Known malicious source IPs (IOC feed)"
+  format: cdb          # content is already CDB-formatted (key:value / key:)
+  targetNodes: all
+  content: |
+    196.251.85.62:
+    196.251.67.42:
+    # ...one IP per line, empty value = key-only lookup...
+---
+# Malicious domains (key-only entries -> "domain:").
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCDBList
+metadata:
+  name: malicious-ioc-domains
+  namespace: wazuh
+spec:
+  clusterRefs: [{name: wazuh, namespace: wazuh}]
+  listName: malicious-ioc/malicious-domains
+  description: "Known malicious domains (IOC feed)"
+  format: cdb
+  targetNodes: all
+  content: |
+    instagram.archive.com.im:
+    netflix-clone-two-opal.vercel.app:
+---
+# Malware hashes mapped to their family (key:value -> "sha256:family").
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCDBList
+metadata:
+  name: malicious-ioc-hashes
+  namespace: wazuh
+spec:
+  clusterRefs: [{name: wazuh, namespace: wazuh}]
+  listName: malicious-ioc/malware-hashes
+  description: "Known malware SHA256 hashes -> family (IOC feed)"
+  format: cdb
+  targetNodes: all
+  content: |
+    2fe6a7ae63c878bd84d7b829349b309e7c84194ddbb6a779816f5b84cd8ad45d:DarkComet
+    b82b7a6c942551964c3bd0b159dc4af1fb7deb945476183279092328228bd7a9:Allaple
+#
+# Recommended: instead of static `content`, point the lists at live threat-intel
+# feeds so the operator fetches and auto-refreshes them (a stale IOC list is useless).
+# The iplist/keylist converters skip feed header comments (lines starting with '#').
+# Example with free abuse.ch feeds:
+#
+#   # IPs -> Feodo Tracker botnet C2 (format: iplist)
+#   spec:
+#     listName: malicious-ioc/malicious-ip
+#     format: iplist
+#     source:
+#       url: https://feodotracker.abuse.ch/downloads/ipblocklist.txt
+#       refreshInterval: 12h
+#
+#   # SHA256 hashes -> MalwareBazaar recent (format: keylist)
+#   spec:
+#     listName: malicious-ioc/malware-hashes
+#     format: keylist
+#     source:
+#       url: https://bazaar.abuse.ch/export/txt/sha256/recent/
+#       refreshInterval: 24h
+#
+# Add `insecureSkipVerify` / `headersSecretRef` under `source` for internal feeds
+# (e.g. a MISP export) that need TLS overrides or an Authorization header.

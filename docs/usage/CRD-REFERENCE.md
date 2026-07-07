@@ -1217,7 +1217,7 @@ The `format` field selects the converter applied to raw `content`/`source` text.
 | Field         | Type              | Required | Default | Description                                                          |
 | ------------- | ----------------- | -------- | ------- | -------------------------------------------------------------------- |
 | `clusterRefs` | []WazuhClusterRef | **Yes**  | -       | Target clusters (cross-namespace)                                    |
-| `listName`    | string            | **Yes**  | -       | List filename (no extension) under `/var/ossec/etc/lists/` (`^[a-zA-Z0-9_-]+$`) |
+| `listName`    | string            | **Yes**  | -       | List path (no extension) under `/var/ossec/etc/lists/`. A single name (`blocked-ips`) or a subdirectory path (`malicious-ioc/malicious-ip`); segments are `[a-zA-Z0-9_-]+` joined by single `/` (no leading/trailing/double slash or `..`) |
 | `description` | string            | No       | -       | Description                                                          |
 | `targetNodes` | string            | No       | `all`   | Target manager nodes (master/workers/all)                           |
 | `entries`     | []CDBListEntry    | No\*     | -       | Static inline key/value pairs                                       |
@@ -1302,7 +1302,7 @@ spec:
     refreshInterval: 24h
 ```
 
-Reference the list from a rule with `<list field="...">etc/lists/<listName></list>`.
+Reference the list from a rule with `<list field="...">etc/lists/<listName></list>`. Subdirectory list names (e.g. `malicious-ioc/malicious-ip`) let you manage grouped IOC lists as CRs instead of baking them into the image and hand-declaring them in `manager.config.ruleset.lists` — see [`examples/wazuh-content/wazuhcdblist-ioc-subdir.yaml`](examples/wazuh-content/wazuhcdblist-ioc-subdir.yaml) for a full IOC feed example (IPs, domains, and `sha256:family` hashes under one subdirectory).
 
 ### WazuhActiveResponse
 

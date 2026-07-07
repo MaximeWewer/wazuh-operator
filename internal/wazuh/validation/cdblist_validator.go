@@ -37,7 +37,10 @@ func NewCDBListValidator(c client.Client) *CDBListValidator {
 	return &CDBListValidator{client: c}
 }
 
-var cdbListNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+// cdbListNameRegex allows a single name or a subdirectory path
+// (e.g. "blocked-ips" or "malicious-ioc/malicious-ip"). Each segment is a safe
+// name; leading/trailing/double slashes, ".", and ".." are rejected.
+var cdbListNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$`)
 
 // Validate performs validation of a WazuhCDBList.
 func (v *CDBListValidator) Validate(ctx context.Context, list *wazuhv1.WazuhCDBList) *ValidationResult {
@@ -48,10 +51,10 @@ func (v *CDBListValidator) Validate(ctx context.Context, list *wazuhv1.WazuhCDBL
 	switch {
 	case name == "":
 		result.addError("listName cannot be empty")
-	case len(name) > 64:
-		result.addError(fmt.Sprintf("listName '%s' is too long (max 64 characters)", name))
+	case len(name) > 128:
+		result.addError(fmt.Sprintf("listName '%s' is too long (max 128 characters)", name))
 	case !cdbListNameRegex.MatchString(name):
-		result.addError(fmt.Sprintf("listName '%s' contains invalid characters (only alphanumeric, underscores, and hyphens allowed)", name))
+		result.addError(fmt.Sprintf("listName '%s' is invalid: use safe path segments (alphanumeric, '_', '-') optionally separated by single '/', with no leading/trailing/double slash or '..'", name))
 	}
 
 	// Exactly one content source must be provided.

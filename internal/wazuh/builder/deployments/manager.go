@@ -102,7 +102,8 @@ type DecoderConfigMapRef struct {
 // CDBListConfigMapRef holds information about a CDB list ConfigMap to mount
 type CDBListConfigMapRef struct {
 	Name     string // ConfigMap name
-	FileName string // CDB list filename without extension (e.g., "blocked-ips")
+	FileName string // CDB list path relative to etc/lists (e.g. "blocked-ips" or "malicious-ioc/malicious-ip")
+	Key      string // ConfigMap data key and mount subPath (basename of FileName)
 }
 
 // ActiveResponseConfigMapRef holds information about an active response script ConfigMap to mount
@@ -990,12 +991,14 @@ func (b *ManagerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 		})
 	}
 
-	// Add CDB list mounts at /var/ossec/etc/lists/<filename>
+	// Add CDB list mounts at /var/ossec/etc/lists/<path>. FileName may include a
+	// subdirectory; the subPath is the ConfigMap key (basename). kubelet creates any
+	// intermediate directory of the mount path.
 	for _, ref := range b.cdbListConfigMaps {
 		mounts = append(mounts, corev1.VolumeMount{
 			Name:      fmt.Sprintf("wazuh-cdblist-%s", ref.Name),
 			MountPath: fmt.Sprintf("/var/ossec/etc/lists/%s", ref.FileName),
-			SubPath:   ref.FileName,
+			SubPath:   ref.Key,
 			ReadOnly:  true,
 		})
 	}

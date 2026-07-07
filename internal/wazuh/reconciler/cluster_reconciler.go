@@ -3210,6 +3210,7 @@ func convertCDBListConfigMaps(infos []CDBListConfigMapInfo) []deployments.CDBLis
 		refs[i] = deployments.CDBListConfigMapRef{
 			Name:     info.ConfigMapName,
 			FileName: info.FileName,
+			Key:      info.Key,
 		}
 	}
 	return refs

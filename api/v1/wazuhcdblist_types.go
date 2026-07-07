@@ -91,11 +91,15 @@ type WazuhCDBListSpec struct {
 	// +listMapKey=namespace
 	ClusterRefs []WazuhClusterRef `json:"clusterRefs"`
 
-	// ListName is the CDB list filename (without extension) created under
-	// /var/ossec/etc/lists/ on the manager. Must be a safe filename.
+	// ListName is the CDB list path (without extension) created under
+	// /var/ossec/etc/lists/ on the manager. A single filename (e.g. "blocked-ips")
+	// or a subdirectory path (e.g. "malicious-ioc/malicious-ip") is allowed; the
+	// operator mounts the file at /var/ossec/etc/lists/<listName> and injects the
+	// matching <list>etc/lists/<listName></list> entry. Each path segment must be a
+	// safe name (no ".", "..", leading/trailing/double slash).
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MaxLength=64
-	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_-]+$`
+	// +kubebuilder:validation:MaxLength=128
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$`
 	ListName string `json:"listName"`
 
 	// Description of the CDB list.

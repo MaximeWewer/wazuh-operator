@@ -134,10 +134,14 @@ spec:
                 type: string
               listName:
                 description: |-
-                  ListName is the CDB list filename (without extension) created under
-                  /var/ossec/etc/lists/ on the manager. Must be a safe filename.
-                maxLength: 64
-                pattern: ^[a-zA-Z0-9_-]+$
+                  ListName is the CDB list path (without extension) created under
+                  /var/ossec/etc/lists/ on the manager. A single filename (e.g. "blocked-ips")
+                  or a subdirectory path (e.g. "malicious-ioc/malicious-ip") is allowed; the
+                  operator mounts the file at /var/ossec/etc/lists/<listName> and injects the
+                  matching <list>etc/lists/<listName></list> entry. Each path segment must be a
+                  safe name (no ".", "..", leading/trailing/double slash).
+                maxLength: 128
+                pattern: ^[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$
                 type: string
               skipLines:
                 description: |-
