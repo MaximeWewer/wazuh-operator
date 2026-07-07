@@ -81,6 +81,9 @@ type ClusterReconciler struct {
 	// CDBListReconciler handles WazuhCDBList resources for mounting CDB lists to manager pods
 	// and injecting <list> entries into ossec.conf
 	CDBListReconciler *CDBListReconciler
+	// ActiveResponseReconciler handles WazuhActiveResponse resources for mounting AR scripts
+	// and injecting <command>/<active-response> blocks into ossec.conf on manager pods
+	ActiveResponseReconciler *ActiveResponseReconciler
 }
 
 // NewClusterReconciler creates a new ClusterReconciler
@@ -126,6 +129,13 @@ func (r *ClusterReconciler) WithIntegrationReconciler(ir *IntegrationReconciler)
 // and injecting <list> entries into ossec.conf on manager pods
 func (r *ClusterReconciler) WithCDBListReconciler(cr *CDBListReconciler) *ClusterReconciler {
 	r.CDBListReconciler = cr
+	return r
+}
+
+// WithActiveResponseReconciler sets the active response reconciler for mounting AR scripts
+// and injecting <command>/<active-response> blocks into ossec.conf on manager pods
+func (r *ClusterReconciler) WithActiveResponseReconciler(ar *ActiveResponseReconciler) *ClusterReconciler {
+	r.ActiveResponseReconciler = ar
 	return r
 }
 
@@ -754,6 +764,20 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		}
 	}
 
+	// Mount active response script ConfigMaps if ActiveResponseReconciler is configured
+	var activeResponseHash string
+	if r.ActiveResponseReconciler != nil {
+		arConfigMaps, hash, err := r.ActiveResponseReconciler.GetActiveResponseConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace, config.NodeTypeMaster)
+		if err != nil {
+			log.Error(err, "Failed to get active response ConfigMaps for cluster, continuing without active responses")
+		} else if len(arConfigMaps) > 0 {
+			stsBuilder.WithActiveResponseConfigMaps(convertActiveResponseConfigMaps(arConfigMaps))
+			stsBuilder.WithActiveResponseHash(hash)
+			activeResponseHash = hash
+			log.V(1).Info("Mounting active response ConfigMaps to master", "count", len(arConfigMaps), "hash", utils.ShortHash(hash))
+		}
+	}
+
 	sts := stsBuilder.Build()
 
 	// Hash the rendered pod template so non-CR template drift still rolls out.
@@ -817,6 +841,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	existingAgentGroupFilesHash := ""
 	existingIntegrationHash := ""
 	existingCDBListHash := ""
+	existingActiveResponseHash := ""
 	if found.Spec.Template.Annotations != nil {
 		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
 		existingConfigHash = found.Spec.Template.Annotations[constants.AnnotationConfigHash]
@@ -825,6 +850,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		existingAgentGroupFilesHash = found.Spec.Template.Annotations[constants.AnnotationAgentGroupFilesHash]
 		existingIntegrationHash = found.Spec.Template.Annotations[constants.AnnotationIntegrationHash]
 		existingCDBListHash = found.Spec.Template.Annotations[constants.AnnotationCDBListHash]
+		existingActiveResponseHash = found.Spec.Template.Annotations[constants.AnnotationActiveResponseHash]
 	}
 	if found.Annotations != nil {
 		existingSpecHash = found.Annotations[constants.AnnotationSpecHash]
@@ -959,6 +985,18 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingCDBListHash),
 			"newHash", utils.ShortHash(cdbListHash))
+	}
+	if activeResponseHash != existingActiveResponseHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+activeresponse-change"
+		} else {
+			updateReason = "activeresponse-change"
+		}
+		log.Info("Master StatefulSet needs update due to active response hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingActiveResponseHash),
+			"newHash", utils.ShortHash(activeResponseHash))
 	}
 
 	if needsUpdate {
@@ -1361,6 +1399,20 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		}
 	}
 
+	// Mount active response script ConfigMaps if ActiveResponseReconciler is configured
+	var activeResponseHash string
+	if r.ActiveResponseReconciler != nil {
+		arConfigMaps, hash, err := r.ActiveResponseReconciler.GetActiveResponseConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace, config.NodeTypeWorker)
+		if err != nil {
+			log.Error(err, "Failed to get active response ConfigMaps for cluster, continuing without active responses")
+		} else if len(arConfigMaps) > 0 {
+			stsBuilder.WithActiveResponseConfigMaps(convertActiveResponseConfigMaps(arConfigMaps))
+			stsBuilder.WithActiveResponseHash(hash)
+			activeResponseHash = hash
+			log.V(1).Info("Mounting active response ConfigMaps to workers", "count", len(arConfigMaps), "hash", utils.ShortHash(hash))
+		}
+	}
+
 	sts := stsBuilder.Build()
 
 	// Hash the rendered pod template so non-CR template drift still rolls out.
@@ -1428,6 +1480,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	existingAgentGroupFilesHash := ""
 	existingIntegrationHash := ""
 	existingCDBListHash := ""
+	existingActiveResponseHash := ""
 	if found.Spec.Template.Annotations != nil {
 		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
 		existingConfigHash = found.Spec.Template.Annotations[constants.AnnotationConfigHash]
@@ -1436,6 +1489,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		existingAgentGroupFilesHash = found.Spec.Template.Annotations[constants.AnnotationAgentGroupFilesHash]
 		existingIntegrationHash = found.Spec.Template.Annotations[constants.AnnotationIntegrationHash]
 		existingCDBListHash = found.Spec.Template.Annotations[constants.AnnotationCDBListHash]
+		existingActiveResponseHash = found.Spec.Template.Annotations[constants.AnnotationActiveResponseHash]
 	}
 	if found.Annotations != nil {
 		existingSpecHash = found.Annotations[constants.AnnotationSpecHash]
@@ -1570,6 +1624,18 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingCDBListHash),
 			"newHash", utils.ShortHash(cdbListHash))
+	}
+	if activeResponseHash != existingActiveResponseHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+activeresponse-change"
+		} else {
+			updateReason = "activeresponse-change"
+		}
+		log.Info("Worker StatefulSet needs update due to active response hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingActiveResponseHash),
+			"newHash", utils.ShortHash(activeResponseHash))
 	}
 
 	if needsUpdate {
@@ -2603,6 +2669,7 @@ func (r *ClusterReconciler) buildMasterOSSECConfig(ctx context.Context, cluster 
 	}
 
 	extraConfig = r.appendIntegrationBlocks(ctx, cluster, extraConfig, config.NodeTypeMaster)
+	extraConfig = r.appendActiveResponseBlocks(ctx, cluster, extraConfig, config.NodeTypeMaster)
 	rulesetCfg = r.withCDBListEntries(ctx, cluster, rulesetCfg)
 
 	ossecConfig := config.DefaultOSSECConfig(cluster.Name, cluster.Name+"-manager-master")
@@ -2627,6 +2694,7 @@ func (r *ClusterReconciler) buildWorkerOSSECConfig(ctx context.Context, cluster 
 	}
 
 	extraConfig = r.appendIntegrationBlocks(ctx, cluster, extraConfig, config.NodeTypeWorker)
+	extraConfig = r.appendActiveResponseBlocks(ctx, cluster, extraConfig, config.NodeTypeWorker)
 	rulesetCfg = r.withCDBListEntries(ctx, cluster, rulesetCfg)
 
 	ossecConfig := config.DefaultOSSECConfig(cluster.Name, cluster.Name+"-manager-worker")
@@ -3147,6 +3215,18 @@ func convertCDBListConfigMaps(infos []CDBListConfigMapInfo) []deployments.CDBLis
 	return refs
 }
 
+// convertActiveResponseConfigMaps converts ActiveResponseConfigMapInfo from the active response reconciler to ActiveResponseConfigMapRef for the builder
+func convertActiveResponseConfigMaps(infos []ActiveResponseConfigMapInfo) []deployments.ActiveResponseConfigMapRef {
+	refs := make([]deployments.ActiveResponseConfigMapRef, len(infos))
+	for i, info := range infos {
+		refs[i] = deployments.ActiveResponseConfigMapRef{
+			Name:     info.ConfigMapName,
+			FileName: info.FileName,
+		}
+	}
+	return refs
+}
+
 // convertDecoderConfigMaps converts DecoderConfigMapInfo from the decoder reconciler to DecoderConfigMapRef for the builder
 func convertDecoderConfigMaps(infos []DecoderConfigMapInfo) []deployments.DecoderConfigMapRef {
 	refs := make([]deployments.DecoderConfigMapRef, len(infos))
@@ -3180,6 +3260,27 @@ func (r *ClusterReconciler) appendIntegrationBlocks(ctx context.Context, cluster
 	blocks, err := r.IntegrationReconciler.GetIntegrationOSSECBlocks(ctx, cluster.Name, cluster.Namespace, nodeType)
 	if err != nil {
 		logf.FromContext(ctx).Error(err, "Failed to build integration blocks, continuing without them",
+			"cluster", cluster.Name, "namespace", cluster.Namespace, "nodeType", nodeType)
+		return extraConfig
+	}
+	if blocks == "" {
+		return extraConfig
+	}
+	if strings.TrimSpace(extraConfig) == "" {
+		return blocks
+	}
+	return extraConfig + "\n" + blocks
+}
+
+// appendActiveResponseBlocks appends the <command>/<active-response> blocks for every
+// WazuhActiveResponse applied to the cluster (for the given node type) to extraConfig.
+func (r *ClusterReconciler) appendActiveResponseBlocks(ctx context.Context, cluster *wazuhv1.WazuhCluster, extraConfig, nodeType string) string {
+	if r.ActiveResponseReconciler == nil {
+		return extraConfig
+	}
+	blocks, err := r.ActiveResponseReconciler.GetActiveResponseOSSECBlocks(ctx, cluster.Name, cluster.Namespace, nodeType)
+	if err != nil {
+		logf.FromContext(ctx).Error(err, "Failed to build active response blocks, continuing without them",
 			"cluster", cluster.Name, "namespace", cluster.Namespace, "nodeType", nodeType)
 		return extraConfig
 	}

@@ -170,6 +170,7 @@ rules:
   - opensearchsnapshots
   - opensearchtenants
   - opensearchusers
+  - wazuhactiveresponses
   - wazuhagentgroups
   - wazuhbackups
   - wazuhcdblists
@@ -207,6 +208,7 @@ rules:
   - opensearchsnapshots/finalizers
   - opensearchtenants/finalizers
   - opensearchusers/finalizers
+  - wazuhactiveresponses/finalizers
   - wazuhagentgroups/finalizers
   - wazuhbackups/finalizers
   - wazuhcdblists/finalizers
@@ -238,6 +240,7 @@ rules:
   - opensearchsnapshots/status
   - opensearchtenants/status
   - opensearchusers/status
+  - wazuhactiveresponses/status
   - wazuhagentgroups/status
   - wazuhbackups/status
   - wazuhcdblists/status

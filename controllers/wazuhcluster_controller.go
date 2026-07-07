@@ -2136,6 +2136,21 @@ func (r *WazuhClusterReconciler) findClustersForIntegration(ctx context.Context,
 	return requests
 }
 
+// findClustersForActiveResponse emits one reconcile request per target cluster of a WazuhActiveResponse.
+func (r *WazuhClusterReconciler) findClustersForActiveResponse(ctx context.Context, obj client.Object) []ctrl.Request {
+	ar, ok := obj.(*wazuhv1.WazuhActiveResponse)
+	if !ok {
+		return []ctrl.Request{}
+	}
+	requests := make([]ctrl.Request, 0, len(ar.Spec.ClusterRefs))
+	for _, ref := range ar.Spec.ClusterRefs {
+		requests = append(requests, ctrl.Request{
+			NamespacedName: types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace},
+		})
+	}
+	return requests
+}
+
 // findClustersForCDBList emits one reconcile request per target cluster of a WazuhCDBList.
 func (r *WazuhClusterReconciler) findClustersForCDBList(ctx context.Context, obj client.Object) []ctrl.Request {
 	list, ok := obj.(*wazuhv1.WazuhCDBList)
@@ -2324,6 +2339,14 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&wazuhv1.WazuhCDBList{},
 			handler.EnqueueRequestsFromMapFunc(r.findClustersForCDBList),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
+		// Watch WazuhActiveResponse CRs - reconcile WazuhCluster when an active response
+		// spec changes so the manager picks up the new script mount and ossec.conf
+		// <command>/<active-response> blocks.
+		Watches(
+			&wazuhv1.WazuhActiveResponse{},
+			handler.EnqueueRequestsFromMapFunc(r.findClustersForActiveResponse),
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
 		// Watch OpenSearchAuthConfig CRs - reconcile WazuhCluster when auth spec changes

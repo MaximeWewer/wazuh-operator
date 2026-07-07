@@ -62,6 +62,8 @@ type WorkerStatefulSetBuilder struct {
 	integrationConfigMaps []IntegrationConfigMapRef
 	// CDB list ConfigMaps to mount
 	cdbListConfigMaps []CDBListConfigMapRef
+	// Active response script ConfigMaps to mount
+	activeResponseConfigMaps []ActiveResponseConfigMapRef
 	// Extra init containers
 	extraInitContainers []corev1.Container
 	// Extra sidecar containers
@@ -309,6 +311,26 @@ func (b *WorkerStatefulSetBuilder) WithCDBListHash(hash string) *WorkerStatefulS
 			b.podAnnotations = make(map[string]string)
 		}
 		b.podAnnotations[constants.AnnotationCDBListHash] = hash
+	}
+	return b
+}
+
+// WithActiveResponseConfigMaps sets the active response script ConfigMaps to mount
+// Each ConfigMap holds a custom active response script mounted executable to
+// /var/ossec/active-response/bin/<filename>
+func (b *WorkerStatefulSetBuilder) WithActiveResponseConfigMaps(refs []ActiveResponseConfigMapRef) *WorkerStatefulSetBuilder {
+	b.activeResponseConfigMaps = refs
+	return b
+}
+
+// WithActiveResponseHash sets the active response hash annotation on pods
+// This triggers pod restart when active response scripts or configuration change
+func (b *WorkerStatefulSetBuilder) WithActiveResponseHash(hash string) *WorkerStatefulSetBuilder {
+	if hash != "" {
+		if b.podAnnotations == nil {
+			b.podAnnotations = make(map[string]string)
+		}
+		b.podAnnotations[constants.AnnotationActiveResponseHash] = hash
 	}
 	return b
 }
@@ -806,6 +828,23 @@ func (b *WorkerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 		})
 	}
 
+	// Add active response script ConfigMap volumes. Mounted executable via subPath into
+	// /var/ossec/active-response/bin; DefaultMode 0750 + the pod fsGroup (wazuh) yield
+	// root:wazuh 0750 — exactly what Wazuh requires for a custom active response script.
+	for _, ref := range b.activeResponseConfigMaps {
+		volumes = append(volumes, corev1.Volume{
+			Name: fmt.Sprintf("wazuh-activeresponse-%s", ref.Name),
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: ref.Name,
+					},
+					DefaultMode: &integrationScriptMode,
+				},
+			},
+		})
+	}
+
 	return volumes
 }
 
@@ -894,6 +933,17 @@ func (b *WorkerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 		mounts = append(mounts, corev1.VolumeMount{
 			Name:      fmt.Sprintf("wazuh-cdblist-%s", ref.Name),
 			MountPath: fmt.Sprintf("/var/ossec/etc/lists/%s", ref.FileName),
+			SubPath:   ref.FileName,
+			ReadOnly:  true,
+		})
+	}
+
+	// Add active response script mounts at /var/ossec/active-response/bin/<filename>.
+	// Read-only subPath mount; DefaultMode 0750 + fsGroup give root:wazuh 0750.
+	for _, ref := range b.activeResponseConfigMaps {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      fmt.Sprintf("wazuh-activeresponse-%s", ref.Name),
+			MountPath: fmt.Sprintf("%s/%s", constants.PathWazuhActiveResponse, ref.FileName),
 			SubPath:   ref.FileName,
 			ReadOnly:  true,
 		})

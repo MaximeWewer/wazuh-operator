@@ -322,6 +322,8 @@ func main() {
 	integrationReconciler := wazuhreconciler.NewIntegrationReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhIntegrationRecorder)
 	wazuhCDBListRecorder := mgr.GetEventRecorderFor("wazuhcdblist-controller")
 	cdbListReconciler := wazuhreconciler.NewCDBListReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhCDBListRecorder)
+	wazuhActiveResponseRecorder := mgr.GetEventRecorderFor("wazuhactiveresponse-controller")
+	activeResponseReconciler := wazuhreconciler.NewActiveResponseReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhActiveResponseRecorder)
 
 	// WazuhCluster Controller (main orchestration)
 	wazuhClusterReconciler := &controllers.WazuhClusterReconciler{
@@ -333,7 +335,8 @@ func main() {
 			WithDecoderReconciler(decoderReconciler).
 			WithAgentGroupReconciler(agentGroupReconciler).
 			WithIntegrationReconciler(integrationReconciler).
-			WithCDBListReconciler(cdbListReconciler),
+			WithCDBListReconciler(cdbListReconciler).
+			WithActiveResponseReconciler(activeResponseReconciler),
 		CertificateReconciler:   certReconciler,
 		IndexerReconciler:       opensearchreconciler.NewIndexerReconciler(mgr.GetClient(), mgr.GetScheme()).WithClientFactory(osClientFactory).WithSecurityAdminExecutor(securityAdminExecutor),
 		DashboardReconciler:     opensearchreconciler.NewDashboardReconciler(mgr.GetClient(), mgr.GetScheme()),
@@ -383,6 +386,15 @@ func main() {
 		CDBListReconciler: cdbListReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WazuhCDBList")
+		os.Exit(1)
+	}
+	if err := (&controllers.WazuhActiveResponseReconciler{
+		Client:                   mgr.GetClient(),
+		Scheme:                   mgr.GetScheme(),
+		Recorder:                 wazuhActiveResponseRecorder,
+		ActiveResponseReconciler: activeResponseReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WazuhActiveResponse")
 		os.Exit(1)
 	}
 	if err := (&controllers.WazuhCertificateReconciler{

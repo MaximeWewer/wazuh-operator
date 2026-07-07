@@ -11,7 +11,7 @@ references are supported.
 
 | Form | CRDs |
 |------|------|
-| `clusterRefs: [{name, namespace}]` (MinItems=1) | WazuhAgentGroup, WazuhRule, WazuhDecoder, WazuhFilebeat, WazuhIntegration, WazuhCDBList, WazuhRole, WazuhUser, OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchTenant, OpenSearchActionGroup, OpenSearchAuthConfig, OpenSearchISMPolicy, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchIndex, OpenSearchSnapshotPolicy, OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore |
+| `clusterRefs: [{name, namespace}]` (MinItems=1) | WazuhAgentGroup, WazuhRule, WazuhDecoder, WazuhFilebeat, WazuhIntegration, WazuhCDBList, WazuhActiveResponse, WazuhRole, WazuhUser, OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchTenant, OpenSearchActionGroup, OpenSearchAuthConfig, OpenSearchISMPolicy, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchIndex, OpenSearchSnapshotPolicy, OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore |
 | `clusterRef: {name, namespace}` | WazuhBackup, WazuhRestore, WazuhCertificate |
 
 Multi-cluster CRDs report per-target-cluster reconciliation state via
@@ -50,6 +50,7 @@ additional cluster when targeting more than one.
   - [WazuhDecoder](#wazuhdecoder)
   - [WazuhIntegration](#wazuhintegration)
   - [WazuhCDBList](#wazuhcdblist)
+  - [WazuhActiveResponse](#wazuhactiveresponse)
   - [WazuhCertificate](#wazuhcertificate)
   - [WazuhFilebeat](#wazuhfilebeat)
 - [Wazuh API RBAC CRDs](#wazuh-api-rbac-crds)
@@ -1302,6 +1303,85 @@ spec:
 ```
 
 Reference the list from a rule with `<list field="...">etc/lists/<listName></list>`.
+
+### WazuhActiveResponse
+
+Provisions a Wazuh [custom active response](https://documentation.wazuh.com/current/user-manual/capabilities/active-response/custom-active-response-scripts.html): it ships an executable script to `/var/ossec/active-response/bin/<script>` on the target manager nodes **and** injects the paired `<command>` and `<active-response>` blocks into `ossec.conf` so `wazuh-execd` runs the script when the trigger matches. Adding, changing, or removing an active response triggers a rolling restart of the targeted manager pods.
+
+Each CR is self-contained: one script + one `<command>` + one `<active-response>` trigger. The `<command> <name>` is `spec.name` and the `<executable>` is the script filename (`name[.scriptExtension]`). The script is mounted read-only as `root:wazuh` mode `0750` (what Wazuh requires) — executable bit from the ConfigMap DefaultMode, wazuh group from the pod fsGroup.
+
+**Short Name:** `war`
+
+| Field               | Type              | Required | Default | Description                                                                            |
+| ------------------- | ----------------- | -------- | ------- | -------------------------------------------------------------------------------------- |
+| `clusterRefs`       | []WazuhClusterRef | **Yes**  | -       | Target clusters (cross-namespace)                                                       |
+| `name`              | string            | **Yes**  | -       | Command name (`<command><name>`, `<active-response><command>`); `^[a-zA-Z0-9_-]+$`      |
+| `scriptExtension`   | string            | No       | -       | Optional filename extension (no dot), e.g. `sh`/`py` → `<name>.<ext>` = `<executable>`  |
+| `script`            | string            | **Yes**  | -       | Script content; first line must be a shebang                                            |
+| `timeoutAllowed`    | bool              | No       | `false` | `<timeout_allowed>` — enable the stateful add/delete timeout mechanism                  |
+| `extraArgs`         | string            | No       | -       | Static arguments passed to the script (`<extra_args>`)                                  |
+| `disabled`          | bool              | No       | `false` | `<disabled>yes</disabled>` — keep the command defined but inactive                      |
+| `location`          | string            | No       | `local` | Where it runs: `local`, `server`, `defined-agent`, `all` (`<location>`)                 |
+| `agentID`           | string            | No\*     | -       | Target agent id (`<agent_id>`); required when `location: defined-agent`                 |
+| `level`             | int32             | No\*\*   | -       | Trigger on alerts of at least this severity (`<level>`, 0-16)                           |
+| `rulesID`           | []int32           | No\*\*   | -       | Trigger on these rule IDs (`<rules_id>`, comma-joined)                                  |
+| `rulesGroup`        | string            | No\*\*   | -       | Trigger on this rule group (`<rules_group>`)                                            |
+| `timeout`           | int32             | No       | -       | Seconds before a stateful response reverts (`<timeout>`); requires `timeoutAllowed`     |
+| `repeatedOffenders` | []int32           | No       | -       | Escalating timeout schedule in minutes (`<repeated_offenders>`, e.g. `30,60,120`)       |
+| `targetNodes`       | string            | No       | `all`   | Target manager nodes (master/workers/all)                                              |
+
+\* `agentID` is required when (and only valid when) `location: defined-agent`.
+\*\* At least one trigger is required: set `level`, `rulesID`, or `rulesGroup`.
+
+#### Example
+
+```yaml
+# docs/usage/examples/wazuh-content/wazuhactiveresponse-firewall-drop.yaml
+apiVersion: resources.wazuh.com/v1
+kind: WazuhActiveResponse
+metadata:
+  name: firewall-drop
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  name: firewall-drop
+  scriptExtension: sh          # -> /var/ossec/active-response/bin/firewall-drop.sh
+  timeoutAllowed: true
+  location: local
+  rulesID: [100100, 100101]    # trigger on these custom rule IDs
+  timeout: 600                 # ban for 600s, then revert (stateful)
+  repeatedOffenders: [30, 60, 120]
+  targetNodes: all
+  script: |
+    #!/bin/sh
+    # argv: <add|delete> <user> <ip> <alertid> <rulesid>
+    ACTION=$1
+    IP=$3
+    case "$ACTION" in
+      add)    iptables -I INPUT -s "$IP" -j DROP ;;
+      delete) iptables -D INPUT -s "$IP" -j DROP ;;
+    esac
+    exit 0
+```
+
+This renders into the manager `ossec.conf`:
+
+```xml
+<command>
+  <name>firewall-drop</name>
+  <executable>firewall-drop.sh</executable>
+  <timeout_allowed>yes</timeout_allowed>
+</command>
+<active-response>
+  <command>firewall-drop</command>
+  <location>local</location>
+  <rules_id>100100,100101</rules_id>
+  <timeout>600</timeout>
+  <repeated_offenders>30,60,120</repeated_offenders>
+</active-response>
+```
 
 ### WazuhCertificate
 

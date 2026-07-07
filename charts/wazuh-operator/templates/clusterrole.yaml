@@ -177,6 +177,7 @@ rules:
 - apiGroups:
   - resources.wazuh.com
   resources:
+  - wazuhactiveresponses
   - wazuhagentgroups
   - wazuhcdblists
   - wazuhclusters
@@ -214,6 +215,7 @@ rules:
 - apiGroups:
   - resources.wazuh.com
   resources:
+  - wazuhactiveresponses/finalizers
   - wazuhagentgroups/finalizers
   - wazuhcdblists/finalizers
   - wazuhclusters/finalizers
@@ -245,6 +247,7 @@ rules:
 - apiGroups:
   - resources.wazuh.com
   resources:
+  - wazuhactiveresponses/status
   - wazuhagentgroups/status
   - wazuhcdblists/status
   - wazuhclusters/status

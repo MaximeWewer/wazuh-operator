@@ -111,6 +111,10 @@ const (
 	// This triggers rolling update when CDB lists are added, modified, or deleted
 	AnnotationCDBListHash = "wazuh.com/cdblist-hash"
 
+	// AnnotationActiveResponseHash stores the hash of WazuhActiveResponse scripts and config
+	// for pod restart detection. Triggers rolling update when active responses change.
+	AnnotationActiveResponseHash = "wazuh.com/activeresponse-hash"
+
 	// NOTE: AnnotationCertHash is defined in labels.go as "wazuh.com/cert-hash"
 )
 

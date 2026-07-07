@@ -1,0 +1,40 @@
+# Sample WazuhActiveResponse - firewall-drop: ban an attacker IP for 600s then revert.
+# The operator ships the script to /var/ossec/active-response/bin/firewall-drop.sh
+# (executable, root:wazuh 0750) and injects the <command> + <active-response> blocks
+# into the manager ossec.conf.
+apiVersion: resources.wazuh.com/v1
+kind: WazuhActiveResponse
+metadata:
+  name: firewall-drop
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
+
+  # <command><name> and <active-response><command>
+  name: firewall-drop
+  # -> /var/ossec/active-response/bin/firewall-drop.sh and <executable>firewall-drop.sh
+  scriptExtension: sh
+
+  # Stateful add/delete response reverted after <timeout> seconds
+  timeoutAllowed: true
+  timeout: 600
+  repeatedOffenders: [30, 60, 120]
+
+  # Trigger
+  location: local
+  rulesID: [100100, 100101]
+
+  targetNodes: all
+
+  script: |
+    #!/bin/sh
+    # Wazuh active response: argv = <add|delete> <user> <srcip> <alertid> <rulesid>
+    ACTION="$1"
+    IP="$3"
+    case "$ACTION" in
+      add)    iptables -I INPUT -s "$IP" -j DROP ;;
+      delete) iptables -D INPUT -s "$IP" -j DROP ;;
+    esac
+    exit 0
