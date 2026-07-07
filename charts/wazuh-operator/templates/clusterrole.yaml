@@ -178,6 +178,7 @@ rules:
   - resources.wazuh.com
   resources:
   - wazuhagentgroups
+  - wazuhcdblists
   - wazuhclusters
   - wazuhcertificates
   - wazuhdecoders
@@ -214,6 +215,7 @@ rules:
   - resources.wazuh.com
   resources:
   - wazuhagentgroups/finalizers
+  - wazuhcdblists/finalizers
   - wazuhclusters/finalizers
   - wazuhcertificates/finalizers
   - wazuhdecoders/finalizers
@@ -244,6 +246,7 @@ rules:
   - resources.wazuh.com
   resources:
   - wazuhagentgroups/status
+  - wazuhcdblists/status
   - wazuhclusters/status
   - wazuhcertificates/status
   - wazuhdecoders/status

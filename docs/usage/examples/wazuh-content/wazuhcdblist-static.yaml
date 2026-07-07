@@ -1,0 +1,28 @@
+# Sample WazuhCDBList - static key/value list of malicious domains.
+# The operator writes /var/ossec/etc/lists/malicious-domains and injects
+# <list>etc/lists/malicious-domains</list> into the manager ossec.conf.
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCDBList
+metadata:
+  name: malicious-domains
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
+
+  # File name (no extension) under /var/ossec/etc/lists/
+  listName: malicious-domains
+
+  description: "Known malicious domains used by custom rules"
+
+  # Deploy to all manager nodes (master and workers)
+  targetNodes: all
+
+  # Static inline entries -> "key:value" lines ("key:" when value omitted)
+  entries:
+    - key: bad-domain.com
+      value: "known C2"
+    - key: phishing.example
+    - key: malware.test
+      value: "dropper"

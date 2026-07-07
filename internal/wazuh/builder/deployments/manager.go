@@ -65,6 +65,8 @@ type ManagerStatefulSetBuilder struct {
 	agentGroupFiles []AgentGroupFileRef
 	// Integration script ConfigMaps to mount
 	integrationConfigMaps []IntegrationConfigMapRef
+	// CDB list ConfigMaps to mount
+	cdbListConfigMaps []CDBListConfigMapRef
 	// Extra init containers
 	extraInitContainers []corev1.Container
 	// Extra sidecar containers
@@ -93,6 +95,12 @@ type RuleConfigMapRef struct {
 type DecoderConfigMapRef struct {
 	Name     string // ConfigMap name
 	FileName string // Filename for the decoder (e.g., "my_decoder.xml")
+}
+
+// CDBListConfigMapRef holds information about a CDB list ConfigMap to mount
+type CDBListConfigMapRef struct {
+	Name     string // ConfigMap name
+	FileName string // CDB list filename without extension (e.g., "blocked-ips")
 }
 
 // AgentGroupFileRef holds information about an agent group files ConfigMap to mount
@@ -343,6 +351,25 @@ func (b *ManagerStatefulSetBuilder) WithIntegrationHash(hash string) *ManagerSta
 			b.podAnnotations = make(map[string]string)
 		}
 		b.podAnnotations[constants.AnnotationIntegrationHash] = hash
+	}
+	return b
+}
+
+// WithCDBListConfigMaps sets the CDB list ConfigMaps to mount
+// Each ConfigMap contains a CDB list that will be mounted to /var/ossec/etc/lists/<filename>
+func (b *ManagerStatefulSetBuilder) WithCDBListConfigMaps(refs []CDBListConfigMapRef) *ManagerStatefulSetBuilder {
+	b.cdbListConfigMaps = refs
+	return b
+}
+
+// WithCDBListHash sets the CDB list hash annotation on pods
+// This triggers pod restart when CDB list content changes
+func (b *ManagerStatefulSetBuilder) WithCDBListHash(hash string) *ManagerStatefulSetBuilder {
+	if hash != "" {
+		if b.podAnnotations == nil {
+			b.podAnnotations = make(map[string]string)
+		}
+		b.podAnnotations[constants.AnnotationCDBListHash] = hash
 	}
 	return b
 }
@@ -821,6 +848,20 @@ func (b *ManagerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 		})
 	}
 
+	// Add CDB list ConfigMap volumes
+	for _, ref := range b.cdbListConfigMaps {
+		volumes = append(volumes, corev1.Volume{
+			Name: fmt.Sprintf("wazuh-cdblist-%s", ref.Name),
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: ref.Name,
+					},
+				},
+			},
+		})
+	}
+
 	return volumes
 }
 
@@ -904,6 +945,16 @@ func (b *ManagerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 		})
 	}
 
+	// Add CDB list mounts at /var/ossec/etc/lists/<filename>
+	for _, ref := range b.cdbListConfigMaps {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      fmt.Sprintf("wazuh-cdblist-%s", ref.Name),
+			MountPath: fmt.Sprintf("/var/ossec/etc/lists/%s", ref.FileName),
+			SubPath:   ref.FileName,
+			ReadOnly:  true,
+		})
+	}
+
 	return mounts
 }
 
@@ -962,7 +1013,7 @@ func (b *ManagerStatefulSetBuilder) buildInitContainer() corev1.Container {
 # Create directory structure for ossec.conf (emptyDir)
 mkdir -p /wazuh-config-mount/etc
 # Create required subdirectories on PVC-backed /var/ossec/etc
-mkdir -p /var/ossec/etc/shared /var/ossec/etc/rules /var/ossec/etc/decoders
+mkdir -p /var/ossec/etc/shared /var/ossec/etc/rules /var/ossec/etc/decoders /var/ossec/etc/lists
 # Create ar.conf in shared directory (required by wazuh-analysisd)
 touch /var/ossec/etc/shared/ar.conf
 chown 0:999 /var/ossec/etc/shared/ar.conf

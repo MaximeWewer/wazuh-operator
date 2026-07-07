@@ -107,6 +107,10 @@ const (
 	// This triggers rolling update when custom integrations are added, modified, or deleted
 	AnnotationIntegrationHash = "wazuh.com/integration-hash"
 
+	// AnnotationCDBListHash stores the hash of WazuhCDBList content for pod restart detection
+	// This triggers rolling update when CDB lists are added, modified, or deleted
+	AnnotationCDBListHash = "wazuh.com/cdblist-hash"
+
 	// NOTE: AnnotationCertHash is defined in labels.go as "wazuh.com/cert-hash"
 )
 

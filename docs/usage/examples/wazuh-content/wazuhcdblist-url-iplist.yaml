@@ -1,0 +1,28 @@
+# Sample WazuhCDBList - IP block list fetched from a URL.
+# format: iplist tells the operator to convert the fetched plain IP/CIDR list
+# into CDB list format (Go port of Wazuh's iplist-to-cdblist.py). The URL is
+# fetched by the operator (the Wazuh manager cannot fetch URLs itself) and
+# re-fetched every 6h.
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCDBList
+metadata:
+  name: threat-intel-ips
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
+
+  listName: threat-intel-ips
+  description: "Threat intel IP block list refreshed from an external feed"
+  targetNodes: all
+
+  format: iplist
+  source:
+    url: https://example.com/blocklist.txt
+    refreshInterval: 6h
+    insecureSkipVerify: false
+    # Optional: send auth headers from a Secret in this namespace.
+    # headersSecretRef:
+    #   name: threat-intel-auth
+    #   key: Authorization

@@ -78,6 +78,9 @@ type ClusterReconciler struct {
 	// IntegrationReconciler handles WazuhIntegration resources for mounting integration scripts
 	// and injecting <integration> blocks into ossec.conf on manager pods
 	IntegrationReconciler *IntegrationReconciler
+	// CDBListReconciler handles WazuhCDBList resources for mounting CDB lists to manager pods
+	// and injecting <list> entries into ossec.conf
+	CDBListReconciler *CDBListReconciler
 }
 
 // NewClusterReconciler creates a new ClusterReconciler
@@ -116,6 +119,13 @@ func (r *ClusterReconciler) WithAgentGroupReconciler(agr *AgentGroupReconciler) 
 // and injecting <integration> blocks into ossec.conf on manager pods
 func (r *ClusterReconciler) WithIntegrationReconciler(ir *IntegrationReconciler) *ClusterReconciler {
 	r.IntegrationReconciler = ir
+	return r
+}
+
+// WithCDBListReconciler sets the CDB list reconciler for mounting CDB list ConfigMaps
+// and injecting <list> entries into ossec.conf on manager pods
+func (r *ClusterReconciler) WithCDBListReconciler(cr *CDBListReconciler) *ClusterReconciler {
+	r.CDBListReconciler = cr
 	return r
 }
 
@@ -730,6 +740,20 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		}
 	}
 
+	// Mount CDB list ConfigMaps if CDBListReconciler is configured
+	var cdbListHash string
+	if r.CDBListReconciler != nil {
+		cdbListConfigMaps, hash, err := r.CDBListReconciler.GetCDBListConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace)
+		if err != nil {
+			log.Error(err, "Failed to get CDB list ConfigMaps for cluster, continuing without CDB lists")
+		} else if len(cdbListConfigMaps) > 0 {
+			stsBuilder.WithCDBListConfigMaps(convertCDBListConfigMaps(cdbListConfigMaps))
+			stsBuilder.WithCDBListHash(hash)
+			cdbListHash = hash
+			log.V(1).Info("Mounting CDB list ConfigMaps to master", "count", len(cdbListConfigMaps), "hash", utils.ShortHash(hash))
+		}
+	}
+
 	sts := stsBuilder.Build()
 
 	// Hash the rendered pod template so non-CR template drift still rolls out.
@@ -792,6 +816,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	existingDecoderHash := ""
 	existingAgentGroupFilesHash := ""
 	existingIntegrationHash := ""
+	existingCDBListHash := ""
 	if found.Spec.Template.Annotations != nil {
 		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
 		existingConfigHash = found.Spec.Template.Annotations[constants.AnnotationConfigHash]
@@ -799,6 +824,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		existingDecoderHash = found.Spec.Template.Annotations[constants.AnnotationDecoderHash]
 		existingAgentGroupFilesHash = found.Spec.Template.Annotations[constants.AnnotationAgentGroupFilesHash]
 		existingIntegrationHash = found.Spec.Template.Annotations[constants.AnnotationIntegrationHash]
+		existingCDBListHash = found.Spec.Template.Annotations[constants.AnnotationCDBListHash]
 	}
 	if found.Annotations != nil {
 		existingSpecHash = found.Annotations[constants.AnnotationSpecHash]
@@ -921,6 +947,18 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingIntegrationHash),
 			"newHash", utils.ShortHash(integrationHash))
+	}
+	if cdbListHash != existingCDBListHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+cdblist-change"
+		} else {
+			updateReason = "cdblist-change"
+		}
+		log.Info("Master StatefulSet needs update due to CDB list hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingCDBListHash),
+			"newHash", utils.ShortHash(cdbListHash))
 	}
 
 	if needsUpdate {
@@ -1309,6 +1347,20 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		}
 	}
 
+	// Mount CDB list ConfigMaps if CDBListReconciler is configured
+	var cdbListHash string
+	if r.CDBListReconciler != nil {
+		cdbListConfigMaps, hash, err := r.CDBListReconciler.GetCDBListConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace)
+		if err != nil {
+			log.Error(err, "Failed to get CDB list ConfigMaps for cluster, continuing without CDB lists")
+		} else if len(cdbListConfigMaps) > 0 {
+			stsBuilder.WithCDBListConfigMaps(convertCDBListConfigMaps(cdbListConfigMaps))
+			stsBuilder.WithCDBListHash(hash)
+			cdbListHash = hash
+			log.V(1).Info("Mounting CDB list ConfigMaps to workers", "count", len(cdbListConfigMaps), "hash", utils.ShortHash(hash))
+		}
+	}
+
 	sts := stsBuilder.Build()
 
 	// Hash the rendered pod template so non-CR template drift still rolls out.
@@ -1375,6 +1427,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	existingDecoderHash := ""
 	existingAgentGroupFilesHash := ""
 	existingIntegrationHash := ""
+	existingCDBListHash := ""
 	if found.Spec.Template.Annotations != nil {
 		existingCertHash = found.Spec.Template.Annotations[constants.AnnotationCertHash]
 		existingConfigHash = found.Spec.Template.Annotations[constants.AnnotationConfigHash]
@@ -1382,6 +1435,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		existingDecoderHash = found.Spec.Template.Annotations[constants.AnnotationDecoderHash]
 		existingAgentGroupFilesHash = found.Spec.Template.Annotations[constants.AnnotationAgentGroupFilesHash]
 		existingIntegrationHash = found.Spec.Template.Annotations[constants.AnnotationIntegrationHash]
+		existingCDBListHash = found.Spec.Template.Annotations[constants.AnnotationCDBListHash]
 	}
 	if found.Annotations != nil {
 		existingSpecHash = found.Annotations[constants.AnnotationSpecHash]
@@ -1504,6 +1558,18 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingIntegrationHash),
 			"newHash", utils.ShortHash(integrationHash))
+	}
+	if cdbListHash != existingCDBListHash {
+		needsUpdate = true
+		if updateReason != "" {
+			updateReason += "+cdblist-change"
+		} else {
+			updateReason = "cdblist-change"
+		}
+		log.Info("Worker StatefulSet needs update due to CDB list hash change",
+			"name", sts.Name,
+			"oldHash", utils.ShortHash(existingCDBListHash),
+			"newHash", utils.ShortHash(cdbListHash))
 	}
 
 	if needsUpdate {
@@ -2498,6 +2564,37 @@ func (r *ClusterReconciler) resolveManagerConfig(ctx context.Context, cluster *w
 	return globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, rulesetCfg, authdPassword, nil
 }
 
+// withCDBListEntries injects <list> entries for every WazuhCDBList applied to the
+// cluster into the ruleset configuration, so the manager loads the mounted CDB lists.
+// User-specified lists (manager.config.ruleset.lists) are preserved and de-duplicated.
+func (r *ClusterReconciler) withCDBListEntries(ctx context.Context, cluster *wazuhv1.WazuhCluster, rulesetCfg *config.RulesetConfig) *config.RulesetConfig {
+	if r.CDBListReconciler == nil {
+		return rulesetCfg
+	}
+	names, err := r.CDBListReconciler.GetCDBListNamesForCluster(ctx, cluster.Name, cluster.Namespace)
+	if err != nil {
+		logf.FromContext(ctx).Error(err, "Failed to resolve CDB list entries for ossec.conf, continuing without them")
+		return rulesetCfg
+	}
+	if len(names) == 0 {
+		return rulesetCfg
+	}
+	if rulesetCfg == nil {
+		rulesetCfg = config.DefaultRulesetConfig()
+	}
+	existing := make(map[string]struct{}, len(rulesetCfg.Lists))
+	for _, l := range rulesetCfg.Lists {
+		existing[l] = struct{}{}
+	}
+	for _, n := range names {
+		if _, ok := existing[n]; !ok {
+			rulesetCfg.Lists = append(rulesetCfg.Lists, n)
+			existing[n] = struct{}{}
+		}
+	}
+	return rulesetCfg
+}
+
 // buildMasterOSSECConfig builds ossec.conf for manager master, honoring manager.config and authd secret refs.
 func (r *ClusterReconciler) buildMasterOSSECConfig(ctx context.Context, cluster *wazuhv1.WazuhCluster, extraConfig string) (string, error) {
 	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, rulesetCfg, authdPassword, err := r.resolveManagerConfig(ctx, cluster)
@@ -2506,6 +2603,7 @@ func (r *ClusterReconciler) buildMasterOSSECConfig(ctx context.Context, cluster 
 	}
 
 	extraConfig = r.appendIntegrationBlocks(ctx, cluster, extraConfig, config.NodeTypeMaster)
+	rulesetCfg = r.withCDBListEntries(ctx, cluster, rulesetCfg)
 
 	ossecConfig := config.DefaultOSSECConfig(cluster.Name, cluster.Name+"-manager-master")
 	ossecConfig.Namespace = cluster.Namespace
@@ -2529,6 +2627,7 @@ func (r *ClusterReconciler) buildWorkerOSSECConfig(ctx context.Context, cluster 
 	}
 
 	extraConfig = r.appendIntegrationBlocks(ctx, cluster, extraConfig, config.NodeTypeWorker)
+	rulesetCfg = r.withCDBListEntries(ctx, cluster, rulesetCfg)
 
 	ossecConfig := config.DefaultOSSECConfig(cluster.Name, cluster.Name+"-manager-worker")
 	ossecConfig.NodeType = config.NodeTypeWorker
@@ -3029,6 +3128,18 @@ func convertRuleConfigMaps(infos []RuleConfigMapInfo) []deployments.RuleConfigMa
 	refs := make([]deployments.RuleConfigMapRef, len(infos))
 	for i, info := range infos {
 		refs[i] = deployments.RuleConfigMapRef{
+			Name:     info.ConfigMapName,
+			FileName: info.FileName,
+		}
+	}
+	return refs
+}
+
+// convertCDBListConfigMaps converts CDBListConfigMapInfo from the CDB list reconciler to CDBListConfigMapRef for the builder
+func convertCDBListConfigMaps(infos []CDBListConfigMapInfo) []deployments.CDBListConfigMapRef {
+	refs := make([]deployments.CDBListConfigMapRef, len(infos))
+	for i, info := range infos {
+		refs[i] = deployments.CDBListConfigMapRef{
 			Name:     info.ConfigMapName,
 			FileName: info.FileName,
 		}

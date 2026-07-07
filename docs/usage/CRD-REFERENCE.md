@@ -11,7 +11,7 @@ references are supported.
 
 | Form | CRDs |
 |------|------|
-| `clusterRefs: [{name, namespace}]` (MinItems=1) | WazuhAgentGroup, WazuhRule, WazuhDecoder, WazuhFilebeat, WazuhIntegration, WazuhRole, WazuhUser, OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchTenant, OpenSearchActionGroup, OpenSearchAuthConfig, OpenSearchISMPolicy, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchIndex, OpenSearchSnapshotPolicy, OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore |
+| `clusterRefs: [{name, namespace}]` (MinItems=1) | WazuhAgentGroup, WazuhRule, WazuhDecoder, WazuhFilebeat, WazuhIntegration, WazuhCDBList, WazuhRole, WazuhUser, OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchTenant, OpenSearchActionGroup, OpenSearchAuthConfig, OpenSearchISMPolicy, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchIndex, OpenSearchSnapshotPolicy, OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore |
 | `clusterRef: {name, namespace}` | WazuhBackup, WazuhRestore, WazuhCertificate |
 
 Multi-cluster CRDs report per-target-cluster reconciliation state via
@@ -49,6 +49,7 @@ additional cluster when targeting more than one.
   - [WazuhAgentGroup](#wazuhagentgroup)
   - [WazuhDecoder](#wazuhdecoder)
   - [WazuhIntegration](#wazuhintegration)
+  - [WazuhCDBList](#wazuhcdblist)
   - [WazuhCertificate](#wazuhcertificate)
   - [WazuhFilebeat](#wazuhfilebeat)
 - [Wazuh API RBAC CRDs](#wazuh-api-rbac-crds)
@@ -1189,6 +1190,118 @@ spec:
     # ... forward the alert to the external API ...
     sys.exit(0)
 ```
+
+### WazuhCDBList
+
+Manages [CDB lists](https://documentation.wazuh.com/current/user-manual/ruleset/cdb-list.html): key/value text files stored under `/var/ossec/etc/lists/` and used by rules (`<list>` lookups) for allow/block lists, user lists, etc. The operator resolves the list content, mounts it into the targeted manager pods, **and** automatically injects the matching `<list>etc/lists/<listName></list>` entry into each manager's `ossec.conf` — no manual ruleset edit is required. Adding, changing, or removing a list triggers a rolling restart of the targeted manager pods so `wazuh-analysisd` recompiles the list.
+
+**Short Name:** `wcdb`
+
+The content can come from one of three mutually exclusive sources:
+
+- `entries` — a static, inline list of key/value pairs.
+- `content` — raw inline text (CDB-formatted, or a plain IP list converted by the operator).
+- `source` — a URL the operator fetches (the Wazuh manager cannot fetch URLs itself; the operator performs the GET and bakes the result into the mounted ConfigMap).
+
+The `format` field selects the converter applied to raw `content`/`source` text. Converters run **after** `skipLines` strips any header:
+
+| `format`  | Converter                                                                                             | Use for                                            |
+| --------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `cdb`     | Passthrough — normalizes whitespace, drops blank lines. Content is already `key:value` / `key:` lines. | Hand-written CDB lists                             |
+| `iplist`  | IP/CIDR list → key-only entries, keeping the network prefix for `/8`, `/16`, `/24`, `/32` masks (unsupported masks skipped). Go port of Wazuh's `iplist-to-cdblist.py`. | Firewall / threat-intel IP lists                   |
+| `keylist` | One key per line → key-only entry (`key:`). Lines already containing `:` are kept as-is. | Hash lists (VirusShare MD5 dumps), domain lists, user lists, any newline-separated key set |
+
+`skipLines` drops the first N lines before conversion — e.g. VirusShare hash dumps start with a commented header (their own script skips the first 6 lines).
+
+| Field         | Type              | Required | Default | Description                                                          |
+| ------------- | ----------------- | -------- | ------- | -------------------------------------------------------------------- |
+| `clusterRefs` | []WazuhClusterRef | **Yes**  | -       | Target clusters (cross-namespace)                                    |
+| `listName`    | string            | **Yes**  | -       | List filename (no extension) under `/var/ossec/etc/lists/` (`^[a-zA-Z0-9_-]+$`) |
+| `description` | string            | No       | -       | Description                                                          |
+| `targetNodes` | string            | No       | `all`   | Target manager nodes (master/workers/all)                           |
+| `entries`     | []CDBListEntry    | No\*     | -       | Static inline key/value pairs                                       |
+| `content`     | string            | No\*     | -       | Raw inline list content (interpreted via `format`)                  |
+| `source`      | CDBListSource     | No\*     | -       | Fetch list content from a URL (interpreted via `format`)           |
+| `format`      | string            | No       | `cdb`   | Raw content converter: `cdb`, `iplist`, or `keylist` (ignored for `entries`) |
+| `skipLines`   | int32             | No       | `0`     | Drop the first N lines of raw content before conversion (ignored for `entries`) |
+
+\* Exactly one of `entries`, `content`, or `source` must be set.
+
+#### CDBListEntry
+
+| Field   | Type   | Required | Default | Description                                   |
+| ------- | ------ | -------- | ------- | --------------------------------------------- |
+| `key`   | string | **Yes**  | -       | Lookup key (left of `key:value`)              |
+| `value` | string | No       | -       | Value (right of `key:value`); empty → `key:`  |
+
+#### CDBListSource
+
+| Field                | Type            | Required | Default | Description                                                                 |
+| -------------------- | --------------- | -------- | ------- | --------------------------------------------------------------------------- |
+| `url`                | string          | **Yes**  | -       | http/https URL to fetch                                                     |
+| `refreshInterval`    | Duration        | No       | `1h`    | Re-fetch cadence (e.g. `30m`, `6h`); `0` = fetch once, re-fetch on spec change |
+| `insecureSkipVerify` | bool            | No       | `false` | Skip TLS verification for https URLs                                        |
+| `headersSecretRef`   | SecretReference | No       | -       | Secret whose key/value pairs are sent as HTTP request headers (e.g. `Authorization`) |
+
+#### Status
+
+`status.phase` aggregates per-cluster state (`Pending`/`Applied`/`Failed`/`Updating`); `status.clusterStatuses[]` reports each target. `status.entryCount` and `status.contentHash` reflect the resolved list; `status.lastFetchTime` records the last successful URL fetch.
+
+#### Examples
+
+```yaml
+# Static key/value list
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCDBList
+metadata:
+  name: malicious-domains
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  listName: malicious-domains
+  targetNodes: all
+  entries:
+    - key: bad-domain.com
+      value: "known C2"
+    - key: phishing.example
+---
+# Block list fetched from a URL and converted from a plain IP list
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCDBList
+metadata:
+  name: threat-intel-ips
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  listName: threat-intel-ips
+  format: iplist            # convert the fetched IP/CIDR list to CDB format
+  source:
+    url: https://example.com/blocklist.txt
+    refreshInterval: 6h
+---
+# VirusShare MD5 malware-hash dump: skip the 6-line header, key-only entries
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCDBList
+metadata:
+  name: malware-hashes
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  listName: malware-hashes
+  format: keylist           # each hash line -> "<hash>:"
+  skipLines: 6              # strip the VirusShare header
+  source:
+    url: https://virusshare.com/hashfiles/VirusShare_00000.md5
+    refreshInterval: 24h
+```
+
+Reference the list from a rule with `<list field="...">etc/lists/<listName></list>`.
 
 ### WazuhCertificate
 

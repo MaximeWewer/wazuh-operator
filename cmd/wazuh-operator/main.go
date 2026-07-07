@@ -320,6 +320,8 @@ func main() {
 	agentGroupReconciler := wazuhreconciler.NewAgentGroupReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhAgentGroupRecorder)
 	wazuhIntegrationRecorder := mgr.GetEventRecorderFor("wazuhintegration-controller")
 	integrationReconciler := wazuhreconciler.NewIntegrationReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhIntegrationRecorder)
+	wazuhCDBListRecorder := mgr.GetEventRecorderFor("wazuhcdblist-controller")
+	cdbListReconciler := wazuhreconciler.NewCDBListReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhCDBListRecorder)
 
 	// WazuhCluster Controller (main orchestration)
 	wazuhClusterReconciler := &controllers.WazuhClusterReconciler{
@@ -330,7 +332,8 @@ func main() {
 			WithRuleReconciler(ruleReconciler).
 			WithDecoderReconciler(decoderReconciler).
 			WithAgentGroupReconciler(agentGroupReconciler).
-			WithIntegrationReconciler(integrationReconciler),
+			WithIntegrationReconciler(integrationReconciler).
+			WithCDBListReconciler(cdbListReconciler),
 		CertificateReconciler:   certReconciler,
 		IndexerReconciler:       opensearchreconciler.NewIndexerReconciler(mgr.GetClient(), mgr.GetScheme()).WithClientFactory(osClientFactory).WithSecurityAdminExecutor(securityAdminExecutor),
 		DashboardReconciler:     opensearchreconciler.NewDashboardReconciler(mgr.GetClient(), mgr.GetScheme()),
@@ -371,6 +374,15 @@ func main() {
 		DecoderReconciler: decoderReconciler,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "WazuhDecoder")
+		os.Exit(1)
+	}
+	if err := (&controllers.WazuhCDBListReconciler{
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		Recorder:          wazuhCDBListRecorder,
+		CDBListReconciler: cdbListReconciler,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WazuhCDBList")
 		os.Exit(1)
 	}
 	if err := (&controllers.WazuhCertificateReconciler{

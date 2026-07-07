@@ -172,6 +172,7 @@ rules:
   - opensearchusers
   - wazuhagentgroups
   - wazuhbackups
+  - wazuhcdblists
   - wazuhcertificates
   - wazuhclusters
   - wazuhdecoders
@@ -208,6 +209,7 @@ rules:
   - opensearchusers/finalizers
   - wazuhagentgroups/finalizers
   - wazuhbackups/finalizers
+  - wazuhcdblists/finalizers
   - wazuhcertificates/finalizers
   - wazuhclusters/finalizers
   - wazuhdecoders/finalizers
@@ -238,6 +240,7 @@ rules:
   - opensearchusers/status
   - wazuhagentgroups/status
   - wazuhbackups/status
+  - wazuhcdblists/status
   - wazuhcertificates/status
   - wazuhclusters/status
   - wazuhdecoders/status

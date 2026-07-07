@@ -1,0 +1,23 @@
+# Sample WazuhCDBList - MD5 malware-hash list (VirusShare-style) fetched from a URL.
+# format: keylist turns each line into a key-only CDB entry ("<hash>:") - the generic
+# converter for hash/domain/user lists. skipLines strips the file header (VirusShare
+# dumps start with a 6-line commented header, mirroring Wazuh's own formatting script).
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCDBList
+metadata:
+  name: malware-hashes
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-test
+      namespace: wazuh
+
+  listName: malware-hashes
+  description: "Known malware MD5 hashes (VirusShare feed)"
+  targetNodes: all
+
+  format: keylist
+  skipLines: 6
+  source:
+    url: https://virusshare.com/hashfiles/VirusShare_00000.md5
+    refreshInterval: 24h

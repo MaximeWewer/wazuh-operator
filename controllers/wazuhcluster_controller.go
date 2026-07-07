@@ -2136,6 +2136,21 @@ func (r *WazuhClusterReconciler) findClustersForIntegration(ctx context.Context,
 	return requests
 }
 
+// findClustersForCDBList emits one reconcile request per target cluster of a WazuhCDBList.
+func (r *WazuhClusterReconciler) findClustersForCDBList(ctx context.Context, obj client.Object) []ctrl.Request {
+	list, ok := obj.(*wazuhv1.WazuhCDBList)
+	if !ok {
+		return []ctrl.Request{}
+	}
+	requests := make([]ctrl.Request, 0, len(list.Spec.ClusterRefs))
+	for _, ref := range list.Spec.ClusterRefs {
+		requests = append(requests, ctrl.Request{
+			NamespacedName: types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace},
+		})
+	}
+	return requests
+}
+
 // findClustersForAgentGroup finds every WazuhCluster targeted by a WazuhAgentGroup.
 // Returns one reconcile request per cluster ref so each target STS picks up the
 // new file ConfigMap.
@@ -2302,6 +2317,13 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&wazuhv1.WazuhIntegration{},
 			handler.EnqueueRequestsFromMapFunc(r.findClustersForIntegration),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
+		// Watch WazuhCDBList CRs - reconcile WazuhCluster when a CDB list spec changes
+		// so the manager picks up the new list mount and ossec.conf <list> entry.
+		Watches(
+			&wazuhv1.WazuhCDBList{},
+			handler.EnqueueRequestsFromMapFunc(r.findClustersForCDBList),
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
 		// Watch OpenSearchAuthConfig CRs - reconcile WazuhCluster when auth spec changes
