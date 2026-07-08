@@ -18,6 +18,8 @@ package deployments
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -62,6 +64,7 @@ type baseStatefulSetBuilder[T any] struct {
 	agentGroupFiles          []AgentGroupFileRef
 	integrationConfigMaps    []IntegrationConfigMapRef
 	cdbListConfigMaps        []CDBListConfigMapRef
+	cdbListInitFetches       []CDBListInitFetchRef
 	activeResponseConfigMaps []ActiveResponseConfigMapRef
 
 	extraInitContainers           []corev1.Container
@@ -271,6 +274,14 @@ func (b *baseStatefulSetBuilder[T]) WithIntegrationHash(hash string) T {
 // Each ConfigMap contains a CDB list mounted to /var/ossec/etc/lists/<filename>
 func (b *baseStatefulSetBuilder[T]) WithCDBListConfigMaps(refs []CDBListConfigMapRef) T {
 	b.cdbListConfigMaps = refs
+	return b.self
+}
+
+// WithCDBListInitFetches sets the large CDB lists delivered by the cdb-fetch init
+// container. Each list is fetched from its URL and converted directly into
+// /var/ossec/etc/lists/<listName> on the PVC at pod startup.
+func (b *baseStatefulSetBuilder[T]) WithCDBListInitFetches(refs []CDBListInitFetchRef) T {
+	b.cdbListInitFetches = refs
 	return b.self
 }
 
@@ -637,6 +648,98 @@ func buildConfigInitContainer(certInstall string, mounts []corev1.VolumeMount) c
 		Command:      []string{"/bin/sh", "-c", script},
 		VolumeMounts: mounts,
 	}
+}
+
+// busybox awk programs that reproduce the internal/wazuh/cdblist converters byte-for-byte
+// so an init-fetched large list yields the same CDB content the operator would have baked
+// into a ConfigMap. They avoid POSIX interval regex ({n}) which busybox awk lacks.
+const (
+	// cdbFetchAWKIPList mirrors cdblist.IPListToCDB.
+	cdbFetchAWKIPList = `{ sub(/\r$/,""); if (match($0, "^[0-9][0-9]?[0-9]?\\.[0-9][0-9]?[0-9]?\\.[0-9][0-9]?[0-9]?\\.[0-9][0-9]?[0-9]?(/[0-9][0-9]?)?")) { tok=substr($0,RSTART,RLENGTH); s=index(tok,"/"); if(s>0){ip=substr(tok,1,s-1);mask=substr(tok,s+1)}else{ip=tok;mask=""}; if(mask!=""){keep=0; if(mask=="32")keep=4; else if(mask=="24")keep=3; else if(mask=="16")keep=2; else if(mask=="8")keep=1; if(keep==0)next; m=split(ip,o,"."); if(keep>m)next; ip=o[1]; for(i=2;i<=keep;i++)ip=ip"."o[i]; if(mask!="32")ip=ip"."} print ip":" } }`
+
+	// cdbFetchAWKKeyList mirrors cdblist.KeyListToCDB.
+	cdbFetchAWKKeyList = `{ sub(/^[ \t\r]+/,""); sub(/[ \t\r]+$/,""); if($0==""||substr($0,1,1)=="#")next; if(index($0,":")==0)$0=$0":"; print }`
+
+	// cdbFetchAWKCDB mirrors cdblist.Normalize (the "cdb"/default format).
+	cdbFetchAWKCDB = `{ sub(/^[ \t\r]+/,""); sub(/[ \t\r]+$/,""); if($0!="")print }`
+)
+
+// cdbFetchAWKProgram returns the busybox awk converter for a CDB list format.
+func cdbFetchAWKProgram(format string) string {
+	switch format {
+	case "iplist":
+		return cdbFetchAWKIPList
+	case "keylist":
+		return cdbFetchAWKKeyList
+	default:
+		return cdbFetchAWKCDB
+	}
+}
+
+// shellSingleQuote wraps s in single quotes safe for POSIX sh, escaping embedded quotes.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// buildCDBFetchInitContainer builds the busybox "cdb-fetch" init container that downloads
+// each large CDB list from its URL and converts it directly into the PVC-backed
+// /var/ossec/etc/lists/<listName>. The second return value is false when there are no
+// init-fetch lists (so the caller omits the container). Refs are sorted by ListName for a
+// deterministic script (stable pod hash). A failed fetch leaves any existing file intact.
+func (b *baseStatefulSetBuilder[T]) buildCDBFetchInitContainer() (corev1.Container, bool) {
+	if len(b.cdbListInitFetches) == 0 {
+		return corev1.Container{}, false
+	}
+
+	refs := make([]CDBListInitFetchRef, len(b.cdbListInitFetches))
+	copy(refs, b.cdbListInitFetches)
+	sort.Slice(refs, func(i, j int) bool { return refs[i].ListName < refs[j].ListName })
+
+	var sb strings.Builder
+	sb.WriteString("set -u\n")
+	sb.WriteString("echo 'cdb-fetch: fetching large CDB lists...' >&2\n")
+	for _, ref := range refs {
+		dest := "/var/ossec/etc/lists/" + ref.ListName
+		raw := dest + ".raw"
+		tmp := dest + ".tmp"
+		qDest := shellSingleQuote(dest)
+		qRaw := shellSingleQuote(raw)
+		qTmp := shellSingleQuote(tmp)
+		qURL := shellSingleQuote(ref.URL)
+		insecure := ""
+		if ref.Insecure {
+			insecure = "--no-check-certificate "
+		}
+		awkProg := cdbFetchAWKProgram(ref.Format)
+		skip := ref.SkipLines + 1
+
+		sb.WriteString(fmt.Sprintf("mkdir -p \"$(dirname %s)\"\n", qDest))
+		// Fetch the raw body first; only convert and publish on a successful download so a
+		// failed fetch never clobbers a previously written file with empty content.
+		sb.WriteString(fmt.Sprintf("if wget -q %s-O %s %s; then\n", insecure, qRaw, qURL))
+		sb.WriteString(fmt.Sprintf("  tail -n +%d %s | awk '%s' > %s && mv %s %s\n", skip, qRaw, awkProg, qTmp, qTmp, qDest))
+		sb.WriteString(fmt.Sprintf("  rm -f %s\n", qRaw))
+		sb.WriteString(fmt.Sprintf("  printf 'cdb-fetch: wrote %%s\\n' %s >&2\n", qDest))
+		sb.WriteString("else\n")
+		sb.WriteString(fmt.Sprintf("  rm -f %s\n", qRaw))
+		sb.WriteString(fmt.Sprintf("  printf 'cdb-fetch: failed to fetch %%s, keeping existing file\\n' %s >&2\n", qURL))
+		sb.WriteString("fi\n")
+	}
+
+	return corev1.Container{
+		Name:    constants.InitContainerNameCDBFetch,
+		Image:   constants.ImageBusyboxInit,
+		Command: []string{"/bin/sh", "-c", sb.String()},
+		VolumeMounts: []corev1.VolumeMount{
+			// PVC-backed /var/ossec/etc (writable) so the list files land under etc/lists
+			// and are chowned to 999 by the following fix-ownership init container.
+			{
+				Name:      constants.VolumeNameWazuhData,
+				MountPath: constants.PathWazuhConfig,
+				SubPath:   constants.SubPathWazuhEtc,
+			},
+		},
+	}, true
 }
 
 // wazuhDataBaseMounts returns the main-container volume mounts common to the master and

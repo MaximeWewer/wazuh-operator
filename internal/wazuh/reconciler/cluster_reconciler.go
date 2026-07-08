@@ -753,14 +753,15 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	// Mount CDB list ConfigMaps if CDBListReconciler is configured
 	var cdbListHash string
 	if r.CDBListReconciler != nil {
-		cdbListConfigMaps, hash, err := r.CDBListReconciler.GetCDBListConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace)
+		cdbListInfos, hash, err := r.CDBListReconciler.GetCDBListConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace)
 		if err != nil {
 			log.Error(err, "Failed to get CDB list ConfigMaps for cluster, continuing without CDB lists")
-		} else if len(cdbListConfigMaps) > 0 {
-			stsBuilder.WithCDBListConfigMaps(convertCDBListConfigMaps(cdbListConfigMaps))
+		} else if len(cdbListInfos) > 0 {
+			stsBuilder.WithCDBListConfigMaps(convertCDBListConfigMaps(cdbListInfos))
+			stsBuilder.WithCDBListInitFetches(convertCDBListInitFetches(cdbListInfos))
 			stsBuilder.WithCDBListHash(hash)
 			cdbListHash = hash
-			log.V(1).Info("Mounting CDB list ConfigMaps to master", "count", len(cdbListConfigMaps), "hash", utils.ShortHash(hash))
+			log.V(1).Info("Mounting CDB list content to master", "count", len(cdbListInfos), "hash", utils.ShortHash(hash))
 		}
 	}
 
@@ -1388,14 +1389,15 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	// Mount CDB list ConfigMaps if CDBListReconciler is configured
 	var cdbListHash string
 	if r.CDBListReconciler != nil {
-		cdbListConfigMaps, hash, err := r.CDBListReconciler.GetCDBListConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace)
+		cdbListInfos, hash, err := r.CDBListReconciler.GetCDBListConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace)
 		if err != nil {
 			log.Error(err, "Failed to get CDB list ConfigMaps for cluster, continuing without CDB lists")
-		} else if len(cdbListConfigMaps) > 0 {
-			stsBuilder.WithCDBListConfigMaps(convertCDBListConfigMaps(cdbListConfigMaps))
+		} else if len(cdbListInfos) > 0 {
+			stsBuilder.WithCDBListConfigMaps(convertCDBListConfigMaps(cdbListInfos))
+			stsBuilder.WithCDBListInitFetches(convertCDBListInitFetches(cdbListInfos))
 			stsBuilder.WithCDBListHash(hash)
 			cdbListHash = hash
-			log.V(1).Info("Mounting CDB list ConfigMaps to workers", "count", len(cdbListConfigMaps), "hash", utils.ShortHash(hash))
+			log.V(1).Info("Mounting CDB list content to workers", "count", len(cdbListInfos), "hash", utils.ShortHash(hash))
 		}
 	}
 
@@ -3203,15 +3205,39 @@ func convertRuleConfigMaps(infos []RuleConfigMapInfo) []deployments.RuleConfigMa
 	return refs
 }
 
-// convertCDBListConfigMaps converts CDBListConfigMapInfo from the CDB list reconciler to CDBListConfigMapRef for the builder
+// convertCDBListConfigMaps converts the ConfigMap-delivered CDBListConfigMapInfo entries
+// from the CDB list reconciler to CDBListConfigMapRef for the builder (init-fetch lists,
+// which have no ConfigMap, are skipped).
 func convertCDBListConfigMaps(infos []CDBListConfigMapInfo) []deployments.CDBListConfigMapRef {
-	refs := make([]deployments.CDBListConfigMapRef, len(infos))
-	for i, info := range infos {
-		refs[i] = deployments.CDBListConfigMapRef{
+	var refs []deployments.CDBListConfigMapRef
+	for _, info := range infos {
+		if info.Mode == cdbDeliveryInitFetch {
+			continue
+		}
+		refs = append(refs, deployments.CDBListConfigMapRef{
 			Name:     info.ConfigMapName,
 			FileName: info.FileName,
 			Key:      info.Key,
+		})
+	}
+	return refs
+}
+
+// convertCDBListInitFetches converts the init-fetch CDBListConfigMapInfo entries to
+// CDBListInitFetchRef for the builder (ConfigMap-delivered lists are skipped).
+func convertCDBListInitFetches(infos []CDBListConfigMapInfo) []deployments.CDBListInitFetchRef {
+	var refs []deployments.CDBListInitFetchRef
+	for _, info := range infos {
+		if info.Mode != cdbDeliveryInitFetch {
+			continue
 		}
+		refs = append(refs, deployments.CDBListInitFetchRef{
+			ListName:  info.FileName,
+			URL:       info.URL,
+			Format:    info.Format,
+			SkipLines: info.SkipLines,
+			Insecure:  info.InsecureSkipVerify,
+		})
 	}
 	return refs
 }

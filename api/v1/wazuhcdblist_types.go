@@ -201,6 +201,13 @@ type CDBListClusterStatus struct {
 	// +optional
 	Phase CDBListPhase `json:"phase,omitempty"`
 
+	// DeliveryMode reports how the list is delivered to the manager on this cluster:
+	// "configmap" (content baked into a mounted ConfigMap) or "initFetch" (content over
+	// the ConfigMap size limit, fetched by a busybox init container into the PVC).
+	// +optional
+	// +kubebuilder:validation:Enum=configmap;initFetch
+	DeliveryMode string `json:"deliveryMode,omitempty"`
+
 	// AppliedToNodes lists the nodes where this list has been applied on this cluster.
 	// +optional
 	AppliedToNodes []string `json:"appliedToNodes,omitempty"`

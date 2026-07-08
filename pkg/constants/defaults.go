@@ -30,6 +30,13 @@ const (
 	DefaultWazuhVersion = "4.14.0"
 )
 
+// CDBConfigMapMaxBytes is the maximum resolved CDB list content size that is delivered
+// via a Kubernetes ConfigMap. ConfigMaps (like all etcd objects) are capped at ~1 MiB;
+// this threshold (~950 KiB) leaves margin for metadata. Lists whose content exceeds it
+// are delivered instead by a busybox init container that fetches the source URL and
+// converts it directly into the PVC-backed /var/ossec/etc/lists at pod startup.
+const CDBConfigMapMaxBytes = 950 * 1024
+
 // GetDefaultOpenSearchVersion returns the default OpenSearch version
 // corresponding to the DefaultWazuhVersion
 func GetDefaultOpenSearchVersion() string {

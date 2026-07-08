@@ -178,21 +178,28 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	initContainers := []corev1.Container{
 		buildSeedAPIConfigInitContainer(image),
 		b.buildInitContainer(),
-		{
-			Name:  "fix-ownership",
-			Image: image,
-			Command: []string{
-				"/bin/bash",
-				"-c",
-				// Chown only writable files not already owned by 999: "-writable" skips
-				// read-only mounts (e.g. the authd.pass Secret) that would otherwise fail
-				// the chown on a read-only fs; "! -user 999" skips the already-correct
-				// files so restarts don't re-chown the whole /var/ossec tree.
-				"find /var/ossec -writable ! -user 999 -print0 | xargs -0 -r chown 999:999",
-			},
-			VolumeMounts: b.buildVolumeMounts(),
-		},
 	}
+
+	// Insert the cdb-fetch init container (large CDB lists) after fix-permissions creates
+	// /var/ossec/etc/lists and before fix-ownership chowns the written files to 999.
+	if cdbFetch, ok := b.buildCDBFetchInitContainer(); ok {
+		initContainers = append(initContainers, cdbFetch)
+	}
+
+	initContainers = append(initContainers, corev1.Container{
+		Name:  "fix-ownership",
+		Image: image,
+		Command: []string{
+			"/bin/bash",
+			"-c",
+			// Chown only writable files not already owned by 999: "-writable" skips
+			// read-only mounts (e.g. the authd.pass Secret) that would otherwise fail
+			// the chown on a read-only fs; "! -user 999" skips the already-correct
+			// files so restarts don't re-chown the whole /var/ossec tree.
+			"find /var/ossec -writable ! -user 999 -print0 | xargs -0 -r chown 999:999",
+		},
+		VolumeMounts: b.buildVolumeMounts(),
+	})
 
 	// Append extra init containers
 	initContainers = append(initContainers, b.extraInitContainers...)

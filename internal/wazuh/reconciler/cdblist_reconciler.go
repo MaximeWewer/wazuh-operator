@@ -61,6 +61,11 @@ const (
 	labelCDBListCROwnerName      = "resources.wazuh.com/cdblist-cr"
 	labelCDBListCROwnerNamespace = "resources.wazuh.com/cdblist-cr-namespace"
 
+	// CDB list delivery modes reported in per-cluster status and used to decide how the
+	// list content reaches the manager.
+	cdbDeliveryConfigMap = "configmap" // content baked into a mounted ConfigMap
+	cdbDeliveryInitFetch = "initFetch" // content over the ConfigMap size limit, fetched by an init container
+
 	// defaultCDBListRefreshInterval is used when a source has no explicit interval.
 	defaultCDBListRefreshInterval = time.Hour
 
@@ -409,6 +414,61 @@ func (r *CDBListReconciler) reconcileListForCluster(
 		return err
 	}
 
+	// wasApplied is captured before any Phase mutation to detect the first transition.
+	wasApplied := st.Phase == wazuhv1.CDBListPhaseApplied
+
+	// Hybrid delivery: content over the ConfigMap size limit is delivered by a busybox
+	// init container that fetches the source URL directly into the PVC at pod startup.
+	if len(content) > constants.CDBConfigMapMaxBytes {
+		// Only URL sources can be init-fetched at pod startup.
+		if list.Spec.Source == nil {
+			st.Phase = wazuhv1.CDBListPhaseFailed
+			st.DeliveryMode = ""
+			st.ConfigMapRef = nil
+			st.Message = "inline CDB list exceeds ConfigMap size limit; use a URL source"
+			if r.Recorder != nil {
+				r.Recorder.Event(list, corev1.EventTypeWarning, "ListTooLarge", st.Message)
+			}
+			return nil
+		}
+		// Init-fetch does not support request headers in v1.
+		if list.Spec.Source.HeadersSecretRef != nil {
+			st.Phase = wazuhv1.CDBListPhaseFailed
+			st.DeliveryMode = ""
+			st.ConfigMapRef = nil
+			st.Message = "large CDB lists with HeadersSecretRef are not supported"
+			if r.Recorder != nil {
+				r.Recorder.Event(list, corev1.EventTypeWarning, "ListTooLarge", st.Message)
+			}
+			return nil
+		}
+		// Remove any content ConfigMap previously created for this list (it may have been
+		// small before) so the manager never mounts an over-limit object.
+		if err := r.deleteListConfigMap(ctx, list, ref.Namespace); err != nil {
+			st.Phase = wazuhv1.CDBListPhaseFailed
+			st.Message = fmt.Sprintf("Failed to remove ConfigMap for init-fetch delivery: %v", err)
+			if r.Recorder != nil {
+				r.Recorder.Event(list, corev1.EventTypeWarning, "ConfigMapFailed", err.Error())
+			}
+			return err
+		}
+		st.ConfigMapRef = nil
+		st.DeliveryMode = cdbDeliveryInitFetch
+		st.AppliedToNodes = r.determineAppliedNodes(list, cluster)
+		st.Phase = wazuhv1.CDBListPhaseApplied
+		st.Message = ""
+		if !wasApplied {
+			now := metav1.Now()
+			st.LastAppliedTime = &now
+			if r.Recorder != nil {
+				r.Recorder.Event(list, corev1.EventTypeNormal, "ListApplied",
+					fmt.Sprintf("CDB list %s applied to %s/%s via init-fetch", list.Name, ref.Namespace, ref.Name))
+			}
+		}
+		log.V(1).Info("CDB list applied via init-fetch", "listName", list.Spec.ListName)
+		return nil
+	}
+
 	cmName, err := r.reconcileConfigMap(ctx, list, ref, content)
 	if err != nil {
 		st.Phase = wazuhv1.CDBListPhaseFailed
@@ -420,9 +480,9 @@ func (r *CDBListReconciler) reconcileListForCluster(
 	}
 
 	st.ConfigMapRef = &wazuhv1.ConfigMapReference{Name: cmName, Namespace: ref.Namespace}
+	st.DeliveryMode = cdbDeliveryConfigMap
 	st.AppliedToNodes = r.determineAppliedNodes(list, cluster)
 
-	wasApplied := st.Phase == wazuhv1.CDBListPhaseApplied
 	st.Phase = wazuhv1.CDBListPhaseApplied
 	st.Message = ""
 	if !wasApplied {
@@ -434,6 +494,23 @@ func (r *CDBListReconciler) reconcileListForCluster(
 		}
 	}
 	log.V(1).Info("CDB list applied", "configMap", cmName)
+	return nil
+}
+
+// deleteListConfigMap removes the content ConfigMap for a list in the given namespace,
+// used when a list switches to init-fetch delivery. A missing ConfigMap is not an error.
+func (r *CDBListReconciler) deleteListConfigMap(ctx context.Context, list *wazuhv1.WazuhCDBList, namespace string) error {
+	cmName := cdbListConfigMapName(list.Namespace, list.Name)
+	cm := &corev1.ConfigMap{}
+	if err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: namespace}, cm); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	if err := r.Client.Delete(ctx, cm); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
 	return nil
 }
 
@@ -608,13 +685,22 @@ func (r *CDBListReconciler) ListCDBListsForCluster(ctx context.Context, clusterN
 	return matching, nil
 }
 
-// CDBListConfigMapInfo holds information about a CDB list ConfigMap for mounting.
+// CDBListConfigMapInfo holds information about a CDB list for mounting or init-fetching.
 type CDBListConfigMapInfo struct {
-	ConfigMapName string
+	ConfigMapName string // empty for init-fetch lists
 	FileName      string // list path relative to etc/lists (may contain a subdir), used for the mount path and <list> entry
 	Key           string // ConfigMap data key and mount subPath (basename of FileName)
 	TargetNodes   string
 	ListCRName    string
+
+	// Mode is the delivery mode: "configmap" (baked into ConfigMapName) or "initFetch".
+	Mode string
+	// URL, Format, SkipLines and InsecureSkipVerify are populated only for init-fetch
+	// lists; the cdb-fetch init container uses them to download and convert the content.
+	URL                string
+	Format             string
+	SkipLines          int32
+	InsecureSkipVerify bool
 }
 
 // GetCDBListConfigMapsForCluster returns ConfigMap references and a content hash for
@@ -630,23 +716,56 @@ func (r *CDBListReconciler) GetCDBListConfigMapsForCluster(ctx context.Context, 
 	var hashInputs []string
 
 	for _, l := range lists {
-		applied := false
-		for _, st := range l.Status.ClusterStatuses {
-			if st.Name == clusterName && st.Namespace == namespace && st.Phase == wazuhv1.CDBListPhaseApplied && st.ConfigMapRef != nil {
-				applied = true
+		var status *wazuhv1.CDBListClusterStatus
+		for i := range l.Status.ClusterStatuses {
+			s := &l.Status.ClusterStatuses[i]
+			if s.Name == clusterName && s.Namespace == namespace && s.Phase == wazuhv1.CDBListPhaseApplied {
+				status = s
 				break
 			}
 		}
-		if !applied {
+		if status == nil {
 			continue
 		}
 
+		if status.DeliveryMode == cdbDeliveryInitFetch {
+			var url string
+			insecure := false
+			if l.Spec.Source != nil {
+				url = l.Spec.Source.URL
+				insecure = l.Spec.Source.InsecureSkipVerify
+			}
+			format := string(l.Spec.Format)
+			if format == "" {
+				format = string(wazuhv1.CDBListFormatCDB)
+			}
+			configMaps = append(configMaps, CDBListConfigMapInfo{
+				FileName:           l.Spec.ListName,
+				TargetNodes:        l.Spec.TargetNodes,
+				ListCRName:         l.Name,
+				Mode:               cdbDeliveryInitFetch,
+				URL:                url,
+				Format:             format,
+				SkipLines:          l.Spec.SkipLines,
+				InsecureSkipVerify: insecure,
+			})
+			hashInputs = append(hashInputs, fmt.Sprintf("%s=initfetch:%s:%s:%d:%t:%s",
+				l.Spec.ListName, url, format, l.Spec.SkipLines, insecure, l.Status.ContentHash))
+			continue
+		}
+
+		// ConfigMap-delivered lists (including legacy status with no DeliveryMode set)
+		// require the ConfigMap to have been created.
+		if status.ConfigMapRef == nil {
+			continue
+		}
 		configMaps = append(configMaps, CDBListConfigMapInfo{
 			ConfigMapName: cdbListConfigMapName(l.Namespace, l.Name),
 			FileName:      l.Spec.ListName,
 			Key:           cdbListDataKey(l.Spec.ListName),
 			TargetNodes:   l.Spec.TargetNodes,
 			ListCRName:    l.Name,
+			Mode:          cdbDeliveryConfigMap,
 		})
 		hashInputs = append(hashInputs, l.Spec.ListName+"="+l.Status.ContentHash)
 	}

@@ -45,4 +45,8 @@ const (
 	// InitContainerNameSeedAPIConfig seeds the default Wazuh API configuration
 	// (api.yaml, security/ RBAC dir, ssl/) into an empty PVC before the main container.
 	InitContainerNameSeedAPIConfig = "seed-api-config"
+
+	// InitContainerNameCDBFetch fetches large CDB lists (over the ConfigMap size limit)
+	// directly into the PVC-backed /var/ossec/etc/lists at pod startup.
+	InitContainerNameCDBFetch = "cdb-fetch"
 )

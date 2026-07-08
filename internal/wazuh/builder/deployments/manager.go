@@ -57,6 +57,17 @@ type CDBListConfigMapRef struct {
 	Key      string // ConfigMap data key and mount subPath (basename of FileName)
 }
 
+// CDBListInitFetchRef describes a large CDB list (over the ConfigMap size limit) delivered
+// by the cdb-fetch init container: it downloads URL and converts it (per Format, after
+// dropping SkipLines header lines) directly into /var/ossec/etc/lists/<ListName> on the PVC.
+type CDBListInitFetchRef struct {
+	ListName  string // list path relative to etc/lists (may contain a subdir)
+	URL       string // source URL to fetch at pod startup
+	Format    string // "cdb" | "iplist" | "keylist"
+	SkipLines int32  // header lines dropped before conversion
+	Insecure  bool   // skip TLS certificate verification
+}
+
 // ActiveResponseConfigMapRef holds information about an active response script ConfigMap to mount
 type ActiveResponseConfigMapRef struct {
 	Name     string // ConfigMap name
@@ -231,21 +242,28 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	initContainers := []corev1.Container{
 		buildSeedAPIConfigInitContainer(image),
 		b.buildInitContainer(),
-		{
-			Name:  "fix-ownership",
-			Image: image,
-			Command: []string{
-				"/bin/bash",
-				"-c",
-				// Chown only writable files not already owned by 999: "-writable" skips
-				// read-only mounts (e.g. the authd.pass Secret) that would otherwise fail
-				// the chown on a read-only fs; "! -user 999" skips the already-correct
-				// files so restarts don't re-chown the whole /var/ossec tree.
-				"find /var/ossec -writable ! -user 999 -print0 | xargs -0 -r chown 999:999",
-			},
-			VolumeMounts: b.buildVolumeMounts(),
-		},
 	}
+
+	// Insert the cdb-fetch init container (large CDB lists) after fix-permissions creates
+	// /var/ossec/etc/lists and before fix-ownership chowns the written files to 999.
+	if cdbFetch, ok := b.buildCDBFetchInitContainer(); ok {
+		initContainers = append(initContainers, cdbFetch)
+	}
+
+	initContainers = append(initContainers, corev1.Container{
+		Name:  "fix-ownership",
+		Image: image,
+		Command: []string{
+			"/bin/bash",
+			"-c",
+			// Chown only writable files not already owned by 999: "-writable" skips
+			// read-only mounts (e.g. the authd.pass Secret) that would otherwise fail
+			// the chown on a read-only fs; "! -user 999" skips the already-correct
+			// files so restarts don't re-chown the whole /var/ossec tree.
+			"find /var/ossec -writable ! -user 999 -print0 | xargs -0 -r chown 999:999",
+		},
+		VolumeMounts: b.buildVolumeMounts(),
+	})
 
 	// Append extra init containers
 	initContainers = append(initContainers, b.extraInitContainers...)
