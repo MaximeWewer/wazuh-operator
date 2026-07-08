@@ -171,12 +171,16 @@ func (c *WazuhExporterConfig) BuildExporterContainer() corev1.Container {
 		Env:          env,
 		Resources:    *resources,
 		VolumeMounts: volumeMounts,
-		// Startup probe absorbs a slow Wazuh API: /ready stays 503 until the first
-		// collection succeeds.
+		// Startup probe on /health (the exporter's own HTTP server, up in ~1s and
+		// independent of the Wazuh API). It deliberately does NOT probe /ready:
+		// /ready stays 503 until the first Wazuh API collection succeeds (~60-120s),
+		// and gating "started" on it would keep the whole manager pod NotReady for that
+		// long, stalling rolling restarts. The exporter is a best-effort sidecar and
+		// must not delay the manager's readiness — it scrapes once the API is up.
 		StartupProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path:   "/ready",
+					Path:   "/health",
 					Port:   intstr.FromInt32(c.Port),
 					Scheme: corev1.URISchemeHTTP,
 				},
@@ -184,7 +188,7 @@ func (c *WazuhExporterConfig) BuildExporterContainer() corev1.Container {
 			InitialDelaySeconds: constants.ProbeStartupInitialDelaySeconds,
 			PeriodSeconds:       constants.ProbeStartupPeriodSeconds,
 			TimeoutSeconds:      5,
-			FailureThreshold:    constants.ProbeStartupFailureThreshold, // Allow up to 5 minutes for manager to start
+			FailureThreshold:    constants.ProbeStartupFailureThreshold,
 		},
 		// Liveness: the exporter is serving (independent of the Wazuh API).
 		LivenessProbe: &corev1.Probe{
@@ -200,20 +204,10 @@ func (c *WazuhExporterConfig) BuildExporterContainer() corev1.Container {
 			TimeoutSeconds:      constants.ProbeTimeoutSeconds,
 			FailureThreshold:    constants.ProbeLivenessFailureThreshold,
 		},
-		// Readiness: a collection has succeeded (Wazuh API reachable).
-		ReadinessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path:   "/ready",
-					Port:   intstr.FromInt32(c.Port),
-					Scheme: corev1.URISchemeHTTP,
-				},
-			},
-			InitialDelaySeconds: constants.ProbeLivenessInitialDelaySeconds,
-			PeriodSeconds:       constants.ProbeLivenessPeriodSeconds,
-			TimeoutSeconds:      constants.ProbeTimeoutSeconds,
-			FailureThreshold:    constants.ProbeLivenessFailureThreshold,
-		},
+		// No ReadinessProbe on purpose: the exporter must not gate the manager pod's
+		// Ready condition on Wazuh API reachability. With no readiness probe the
+		// container is Ready as soon as it is running, so pod readiness tracks the
+		// wazuh-manager container alone.
 	}
 }
 
