@@ -154,6 +154,14 @@ func (s *SecurityConfigSynchronizer) SyncUsers(ctx context.Context, cluster *waz
 
 		logger.V(1).Info("Syncing user", "user", user.Name)
 
+		// Presence-only: skip when the user already exists — the per-CR OpenSearchUser
+		// controller owns its content (including password changes). This also avoids an
+		// unnecessary password-secret read.
+		if exists, err := s.securityResourceExists(ctx, osClient, "/_plugins/_security/api/internalusers/"+user.Name); err == nil && exists {
+			result.UsersUpdated++
+			continue
+		}
+
 		// Build the user request
 		secUser, err := s.buildSecurityUser(ctx, &user)
 		if err != nil {
@@ -208,20 +216,59 @@ func (s *SecurityConfigSynchronizer) buildSecurityUser(ctx context.Context, user
 	return secUser, nil
 }
 
+// securityResourceExists reports whether a security resource already exists in OpenSearch.
+// The synchronizer's role is to guarantee presence (bootstrap and recovery after a
+// securityadmin reset); the per-CR controllers own the content and its updates. Skipping
+// the write when the resource already exists avoids redundant writes to the single
+// .opendistro_security config document, which would otherwise make the security plugin
+// reload the whole config on every cluster reconcile. On an unexpected status the check
+// returns an error so the caller falls back to writing (fail safe).
+func (s *SecurityConfigSynchronizer) securityResourceExists(ctx context.Context, osClient *api.Client, path string) (bool, error) {
+	resp, err := osClient.Get(ctx, path)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+	switch resp.StatusCode {
+	case 404:
+		return false, nil
+	case 200:
+		return true, nil
+	default:
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("unexpected status checking %s: HTTP %d: %s", path, resp.StatusCode, string(body))
+	}
+}
+
+// putSecurity performs a PUT to the .opendistro_security config API under the per-cluster
+// security write lock, so the synchronizer's writes serialize with the per-CR controllers'
+// writes (both target the same single config document with optimistic concurrency).
+func (s *SecurityConfigSynchronizer) putSecurity(ctx context.Context, osClient *api.Client, path string, body any) (int, []byte, error) {
+	var status int
+	var respBody []byte
+	err := api.WithSecurityWriteLock(osClient.SecurityKey(), func() error {
+		resp, err := osClient.Put(ctx, path, body)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		status = resp.StatusCode
+		respBody, _ = io.ReadAll(resp.Body)
+		return nil
+	})
+	return status, respBody, err
+}
+
 // createOrUpdateUser creates or updates a user in OpenSearch
 func (s *SecurityConfigSynchronizer) createOrUpdateUser(ctx context.Context, osClient *api.Client, username string, user *adapters.SecurityUser) error {
 	// The OpenSearch API is idempotent - PUT will create or update
-	resp, err := osClient.Put(ctx, "/_plugins/_security/api/internalusers/"+username, user)
+	status, body, err := s.putSecurity(ctx, osClient, "/_plugins/_security/api/internalusers/"+username, user)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 && resp.StatusCode != 201 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to create/update user: HTTP %d: %s", resp.StatusCode, string(body))
+	if status != 200 && status != 201 {
+		return fmt.Errorf("failed to create/update user: HTTP %d: %s", status, string(body))
 	}
-
 	return nil
 }
 
@@ -258,11 +305,21 @@ func (s *SecurityConfigSynchronizer) SyncRoles(ctx context.Context, cluster *waz
 
 		logger.V(1).Info("Syncing role", "role", role.Name)
 
+		rolePath := "/_plugins/_security/api/roles/" + role.Name
+
+		// Presence-only: skip the write when the role already exists — the per-CR
+		// OpenSearchRole controller owns its content. This avoids the redundant writes
+		// that reload the whole security config every reconcile.
+		if exists, err := s.securityResourceExists(ctx, osClient, rolePath); err == nil && exists {
+			result.RolesUpdated++
+			continue
+		}
+
 		// Build the role request
 		secRole := s.buildSecurityRole(&role)
 
-		// Create or update the role in OpenSearch
-		resp, err := osClient.Put(ctx, "/_plugins/_security/api/roles/"+role.Name, secRole)
+		// Create the role in OpenSearch (serialized via the security write lock)
+		status, body, err := s.putSecurity(ctx, osClient, rolePath, secRole)
 		if err != nil {
 			logger.Error(err, "Failed to sync role", "role", role.Name)
 			result.RolesFailed++
@@ -270,16 +327,12 @@ func (s *SecurityConfigSynchronizer) SyncRoles(ctx context.Context, cluster *waz
 			s.updateRoleStatus(ctx, &role, wazuhv1.OpenSearchResourcePhaseFailed, err.Error())
 			continue
 		}
-
-		if resp.StatusCode != 200 && resp.StatusCode != 201 {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+		if status != 200 && status != 201 {
 			result.RolesFailed++
-			errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
+			errMsg := fmt.Sprintf("HTTP %d: %s", status, string(body))
 			s.updateRoleStatus(ctx, &role, wazuhv1.OpenSearchResourcePhaseFailed, errMsg)
 			continue
 		}
-		resp.Body.Close()
 
 		s.updateRoleStatus(ctx, &role, wazuhv1.OpenSearchResourcePhaseReady, "Role synced successfully")
 		result.RolesUpdated++
@@ -347,6 +400,14 @@ func (s *SecurityConfigSynchronizer) SyncRoleMappings(ctx context.Context, clust
 
 		logger.V(1).Info("Syncing role mapping", "mapping", mapping.Name)
 
+		mappingPath := "/_plugins/_security/api/rolesmapping/" + mapping.Name
+
+		// Presence-only: skip when the mapping already exists — the per-CR controller owns content.
+		if exists, err := s.securityResourceExists(ctx, osClient, mappingPath); err == nil && exists {
+			result.MappingsUpdated++
+			continue
+		}
+
 		// Build the mapping request
 		reqBody := map[string]any{
 			"backend_roles": mapping.Spec.BackendRoles,
@@ -354,8 +415,8 @@ func (s *SecurityConfigSynchronizer) SyncRoleMappings(ctx context.Context, clust
 			"users":         mapping.Spec.Users,
 		}
 
-		// Create or update the role mapping in OpenSearch
-		resp, err := osClient.Put(ctx, "/_plugins/_security/api/rolesmapping/"+mapping.Name, reqBody)
+		// Create the role mapping in OpenSearch (serialized via the security write lock)
+		status, body, err := s.putSecurity(ctx, osClient, mappingPath, reqBody)
 		if err != nil {
 			logger.Error(err, "Failed to sync role mapping", "mapping", mapping.Name)
 			result.MappingsFailed++
@@ -363,16 +424,12 @@ func (s *SecurityConfigSynchronizer) SyncRoleMappings(ctx context.Context, clust
 			s.updateRoleMappingStatus(ctx, &mapping, wazuhv1.OpenSearchResourcePhaseFailed, err.Error())
 			continue
 		}
-
-		if resp.StatusCode != 200 && resp.StatusCode != 201 {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+		if status != 200 && status != 201 {
 			result.MappingsFailed++
-			errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
+			errMsg := fmt.Sprintf("HTTP %d: %s", status, string(body))
 			s.updateRoleMappingStatus(ctx, &mapping, wazuhv1.OpenSearchResourcePhaseFailed, errMsg)
 			continue
 		}
-		resp.Body.Close()
 
 		s.updateRoleMappingStatus(ctx, &mapping, wazuhv1.OpenSearchResourcePhaseReady, "Role mapping synced successfully")
 		result.MappingsUpdated++
@@ -414,13 +471,21 @@ func (s *SecurityConfigSynchronizer) SyncTenants(ctx context.Context, cluster *w
 
 		logger.V(1).Info("Syncing tenant", "tenant", tenant.Name)
 
+		tenantPath := "/_plugins/_security/api/tenants/" + tenant.Name
+
+		// Presence-only: skip when the tenant already exists — the per-CR controller owns content.
+		if exists, err := s.securityResourceExists(ctx, osClient, tenantPath); err == nil && exists {
+			result.TenantsUpdated++
+			continue
+		}
+
 		// Build the tenant request
 		reqBody := map[string]any{
 			"description": tenant.Spec.Description,
 		}
 
-		// Create or update the tenant in OpenSearch
-		resp, err := osClient.Put(ctx, "/_plugins/_security/api/tenants/"+tenant.Name, reqBody)
+		// Create the tenant in OpenSearch (serialized via the security write lock)
+		status, body, err := s.putSecurity(ctx, osClient, tenantPath, reqBody)
 		if err != nil {
 			logger.Error(err, "Failed to sync tenant", "tenant", tenant.Name)
 			result.TenantsFailed++
@@ -428,16 +493,12 @@ func (s *SecurityConfigSynchronizer) SyncTenants(ctx context.Context, cluster *w
 			s.updateTenantStatus(ctx, &tenant, wazuhv1.OpenSearchResourcePhaseFailed, err.Error())
 			continue
 		}
-
-		if resp.StatusCode != 200 && resp.StatusCode != 201 {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+		if status != 200 && status != 201 {
 			result.TenantsFailed++
-			errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
+			errMsg := fmt.Sprintf("HTTP %d: %s", status, string(body))
 			s.updateTenantStatus(ctx, &tenant, wazuhv1.OpenSearchResourcePhaseFailed, errMsg)
 			continue
 		}
-		resp.Body.Close()
 
 		s.updateTenantStatus(ctx, &tenant, wazuhv1.OpenSearchResourcePhaseReady, "Tenant synced successfully")
 		result.TenantsUpdated++
@@ -479,13 +540,21 @@ func (s *SecurityConfigSynchronizer) SyncActionGroups(ctx context.Context, clust
 
 		logger.V(1).Info("Syncing action group", "actionGroup", ag.Name)
 
+		agPath := "/_plugins/_security/api/actiongroups/" + ag.Name
+
+		// Presence-only: skip when the action group already exists — the per-CR controller owns content.
+		if exists, err := s.securityResourceExists(ctx, osClient, agPath); err == nil && exists {
+			result.ActionGroupsUpdated++
+			continue
+		}
+
 		// Build the action group request
 		reqBody := map[string]any{
 			"allowed_actions": ag.Spec.AllowedActions,
 		}
 
-		// Create or update the action group in OpenSearch
-		resp, err := osClient.Put(ctx, "/_plugins/_security/api/actiongroups/"+ag.Name, reqBody)
+		// Create the action group in OpenSearch (serialized via the security write lock)
+		status, body, err := s.putSecurity(ctx, osClient, agPath, reqBody)
 		if err != nil {
 			logger.Error(err, "Failed to sync action group", "actionGroup", ag.Name)
 			result.ActionGroupsFailed++
@@ -493,16 +562,12 @@ func (s *SecurityConfigSynchronizer) SyncActionGroups(ctx context.Context, clust
 			s.updateActionGroupStatus(ctx, &ag, wazuhv1.OpenSearchResourcePhaseFailed, err.Error())
 			continue
 		}
-
-		if resp.StatusCode != 200 && resp.StatusCode != 201 {
-			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+		if status != 200 && status != 201 {
 			result.ActionGroupsFailed++
-			errMsg := fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
+			errMsg := fmt.Sprintf("HTTP %d: %s", status, string(body))
 			s.updateActionGroupStatus(ctx, &ag, wazuhv1.OpenSearchResourcePhaseFailed, errMsg)
 			continue
 		}
-		resp.Body.Close()
 
 		s.updateActionGroupStatus(ctx, &ag, wazuhv1.OpenSearchResourcePhaseReady, "Action group synced successfully")
 		result.ActionGroupsUpdated++

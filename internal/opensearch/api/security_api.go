@@ -64,7 +64,7 @@ func NewSecurityAPI(client *Client) *SecurityAPI {
 // CreateRoleMapping creates a role mapping. The write is retried on transient
 // security-index version conflicts caused by a concurrent security CRD sync.
 func (a *SecurityAPI) CreateRoleMapping(ctx context.Context, roleName string, mapping RoleMapping) error {
-	return retryOnSecurityConflict(ctx, func() error {
+	return retryOnSecurityConflict(ctx, a.client.SecurityKey(), func() error {
 		resp, err := a.client.Put(ctx, "/_plugins/_security/api/rolesmapping/"+roleName, mapping)
 		if err != nil {
 			return fmt.Errorf("failed to create role mapping: %w", err)
@@ -128,7 +128,7 @@ func (a *SecurityAPI) DeleteRoleMapping(ctx context.Context, roleName string) er
 // CreateTenant creates a tenant. Retried on transient security-index version
 // conflicts caused by a concurrent security CRD sync.
 func (a *SecurityAPI) CreateTenant(ctx context.Context, tenantName string, tenant Tenant) error {
-	return retryOnSecurityConflict(ctx, func() error {
+	return retryOnSecurityConflict(ctx, a.client.SecurityKey(), func() error {
 		resp, err := a.client.Put(ctx, "/_plugins/_security/api/tenants/"+tenantName, tenant)
 		if err != nil {
 			return fmt.Errorf("failed to create tenant: %w", err)
@@ -192,7 +192,7 @@ func (a *SecurityAPI) DeleteTenant(ctx context.Context, tenantName string) error
 // CreateActionGroup creates an action group. Retried on transient security-index
 // version conflicts caused by a concurrent security CRD sync.
 func (a *SecurityAPI) CreateActionGroup(ctx context.Context, name string, actionGroup ActionGroup) error {
-	return retryOnSecurityConflict(ctx, func() error {
+	return retryOnSecurityConflict(ctx, a.client.SecurityKey(), func() error {
 		resp, err := a.client.Put(ctx, "/_plugins/_security/api/actiongroups/"+name, actionGroup)
 		if err != nil {
 			return fmt.Errorf("failed to create action group: %w", err)

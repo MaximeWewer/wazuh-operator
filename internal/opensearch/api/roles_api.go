@@ -62,7 +62,7 @@ func NewRolesAPI(client *Client) *RolesAPI {
 // Create creates a new role. The write is retried on transient security-index
 // version conflicts caused by a concurrent security CRD sync.
 func (a *RolesAPI) Create(ctx context.Context, roleName string, role Role) error {
-	return retryOnSecurityConflict(ctx, func() error {
+	return retryOnSecurityConflict(ctx, a.client.SecurityKey(), func() error {
 		resp, err := a.client.Put(ctx, "/_plugins/_security/api/roles/"+roleName, role)
 		if err != nil {
 			return fmt.Errorf("failed to create role: %w", err)

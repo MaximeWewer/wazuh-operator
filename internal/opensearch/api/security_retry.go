@@ -37,12 +37,17 @@ func isSecurityVersionConflict(err error) bool {
 		strings.Contains(msg, `"status":409`)
 }
 
-// retryOnSecurityConflict replays fn while it returns a transient security-index
-// version conflict, with a short linear backoff. The security API PUTs are
-// idempotent full-document replaces, so replaying is safe; a fresh PUT makes the
-// plugin re-read the current seqNo, which clears the conflict once the competing
-// write has landed.
-func retryOnSecurityConflict(ctx context.Context, fn func() error) error {
+// retryOnSecurityConflict serializes fn under the per-cluster security write lock
+// (clusterKey) and replays it while it returns a transient security-index version
+// conflict, with a short linear backoff. The lock removes conflicts between the
+// operator's own writers; the retry still covers rare races with external writers
+// (e.g. securityadmin during bootstrap). The security API PUTs are idempotent
+// full-document replaces, so replaying is safe.
+func retryOnSecurityConflict(ctx context.Context, clusterKey string, fn func() error) error {
+	lock := securityWriteLock(clusterKey)
+	lock.Lock()
+	defer lock.Unlock()
+
 	const maxAttempts = 4
 	var err error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {

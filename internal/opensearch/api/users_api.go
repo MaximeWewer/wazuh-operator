@@ -49,7 +49,7 @@ func NewUsersAPI(client *Client) *UsersAPI {
 // Create creates a new user. Retried on transient security-index version
 // conflicts caused by a concurrent security CRD sync.
 func (a *UsersAPI) Create(ctx context.Context, username string, user User) error {
-	return retryOnSecurityConflict(ctx, func() error {
+	return retryOnSecurityConflict(ctx, a.client.SecurityKey(), func() error {
 		resp, err := a.client.Put(ctx, "/_plugins/_security/api/internalusers/"+username, user)
 		if err != nil {
 			return fmt.Errorf("failed to create user: %w", err)
