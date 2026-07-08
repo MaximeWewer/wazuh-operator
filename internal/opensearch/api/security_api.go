@@ -109,20 +109,22 @@ func (a *SecurityAPI) GetRoleMapping(ctx context.Context, roleName string) (*Rol
 	return nil, nil
 }
 
-// DeleteRoleMapping deletes a role mapping
+// DeleteRoleMapping deletes a role mapping. Serialized and retried like the create.
 func (a *SecurityAPI) DeleteRoleMapping(ctx context.Context, roleName string) error {
-	resp, err := a.client.Delete(ctx, "/_plugins/_security/api/rolesmapping/"+roleName)
-	if err != nil {
-		return fmt.Errorf("failed to delete role mapping: %w", err)
-	}
-	defer resp.Body.Close()
+	return retryOnSecurityConflict(ctx, a.client.SecurityKey(), func() error {
+		resp, err := a.client.Delete(ctx, "/_plugins/_security/api/rolesmapping/"+roleName)
+		if err != nil {
+			return fmt.Errorf("failed to delete role mapping: %w", err)
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to delete role mapping: %s", string(body))
-	}
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("failed to delete role mapping: %s", string(body))
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // CreateTenant creates a tenant. Retried on transient security-index version
@@ -173,20 +175,22 @@ func (a *SecurityAPI) GetTenant(ctx context.Context, tenantName string) (*Tenant
 	return nil, nil
 }
 
-// DeleteTenant deletes a tenant
+// DeleteTenant deletes a tenant. Serialized and retried like the create.
 func (a *SecurityAPI) DeleteTenant(ctx context.Context, tenantName string) error {
-	resp, err := a.client.Delete(ctx, "/_plugins/_security/api/tenants/"+tenantName)
-	if err != nil {
-		return fmt.Errorf("failed to delete tenant: %w", err)
-	}
-	defer resp.Body.Close()
+	return retryOnSecurityConflict(ctx, a.client.SecurityKey(), func() error {
+		resp, err := a.client.Delete(ctx, "/_plugins/_security/api/tenants/"+tenantName)
+		if err != nil {
+			return fmt.Errorf("failed to delete tenant: %w", err)
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to delete tenant: %s", string(body))
-	}
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("failed to delete tenant: %s", string(body))
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // CreateActionGroup creates an action group. Retried on transient security-index
@@ -237,18 +241,20 @@ func (a *SecurityAPI) GetActionGroup(ctx context.Context, name string) (*ActionG
 	return nil, nil
 }
 
-// DeleteActionGroup deletes an action group
+// DeleteActionGroup deletes an action group. Serialized and retried like the create.
 func (a *SecurityAPI) DeleteActionGroup(ctx context.Context, name string) error {
-	resp, err := a.client.Delete(ctx, "/_plugins/_security/api/actiongroups/"+name)
-	if err != nil {
-		return fmt.Errorf("failed to delete action group: %w", err)
-	}
-	defer resp.Body.Close()
+	return retryOnSecurityConflict(ctx, a.client.SecurityKey(), func() error {
+		resp, err := a.client.Delete(ctx, "/_plugins/_security/api/actiongroups/"+name)
+		if err != nil {
+			return fmt.Errorf("failed to delete action group: %w", err)
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to delete action group: %s", string(body))
-	}
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("failed to delete action group: %s", string(body))
+		}
 
-	return nil
+		return nil
+	})
 }

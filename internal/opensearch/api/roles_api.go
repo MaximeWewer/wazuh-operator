@@ -107,20 +107,23 @@ func (a *RolesAPI) Get(ctx context.Context, roleName string) (*Role, error) {
 	return nil, nil
 }
 
-// Delete deletes a role
+// Delete deletes a role. Serialized and retried like Create, since deletes also
+// rewrite the shared security config document.
 func (a *RolesAPI) Delete(ctx context.Context, roleName string) error {
-	resp, err := a.client.Delete(ctx, "/_plugins/_security/api/roles/"+roleName)
-	if err != nil {
-		return fmt.Errorf("failed to delete role: %w", err)
-	}
-	defer resp.Body.Close()
+	return retryOnSecurityConflict(ctx, a.client.SecurityKey(), func() error {
+		resp, err := a.client.Delete(ctx, "/_plugins/_security/api/roles/"+roleName)
+		if err != nil {
+			return fmt.Errorf("failed to delete role: %w", err)
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to delete role: %s", string(body))
-	}
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("failed to delete role: %s", string(body))
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // List lists all roles

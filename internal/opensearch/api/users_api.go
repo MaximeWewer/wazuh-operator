@@ -94,20 +94,23 @@ func (a *UsersAPI) Get(ctx context.Context, username string) (*User, error) {
 	return nil, nil
 }
 
-// Delete deletes a user
+// Delete deletes a user. Serialized and retried like Create, since deletes also
+// rewrite the shared security config document.
 func (a *UsersAPI) Delete(ctx context.Context, username string) error {
-	resp, err := a.client.Delete(ctx, "/_plugins/_security/api/internalusers/"+username)
-	if err != nil {
-		return fmt.Errorf("failed to delete user: %w", err)
-	}
-	defer resp.Body.Close()
+	return retryOnSecurityConflict(ctx, a.client.SecurityKey(), func() error {
+		resp, err := a.client.Delete(ctx, "/_plugins/_security/api/internalusers/"+username)
+		if err != nil {
+			return fmt.Errorf("failed to delete user: %w", err)
+		}
+		defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to delete user: %s", string(body))
-	}
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("failed to delete user: %s", string(body))
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // Exists checks if a user exists
