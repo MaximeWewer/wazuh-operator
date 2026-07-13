@@ -66,6 +66,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/storage"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
+	"github.com/MaximeWewer/wazuh-operator/internal/validation"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -266,6 +267,15 @@ func (r *IndexerReconciler) reconcileSecrets(ctx context.Context, cluster *wazuh
 			adminPassword = string(passwordBytes)
 		} else {
 			return fmt.Errorf("password key %s not found in secret %s", passwordKey, credentialsRef.SecretName)
+		}
+
+		// Reject up front what the downstream config substitutions would corrupt silently:
+		// the manager image seds this password into filebeat.yml and it lands in double-quoted
+		// YAML values. Failing here is far better than a manager that quietly stops shipping
+		// alerts because filebeat authenticates with a mangled password.
+		if err := validation.ValidateIndexerPassword(adminPassword); err != nil {
+			return fmt.Errorf("invalid indexer password in secret %s (key %s): %w",
+				credentialsRef.SecretName, passwordKey, err)
 		}
 
 		log.Info("Using external credentials from secret", "secretName", credentialsRef.SecretName, "username", adminUsername)

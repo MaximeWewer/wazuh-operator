@@ -115,6 +115,50 @@ func ValidateWazuhPasswordWithPolicy(password string, policy WazuhPasswordPolicy
 	return nil
 }
 
+// unsafeIndexerPasswordChars are the characters an indexer password must not contain.
+//
+// The indexer password is not only used by the operator: the Wazuh manager image's s6 script
+// /etc/cont-init.d/1-config-filebeat patches /etc/filebeat/filebeat.yml with a sed substitution
+// of $INDEXER_PASSWORD, and the value also lands inside a double-quoted YAML scalar. These
+// characters corrupt that — silently, which is the dangerous part: filebeat then authenticates
+// with a mangled password and the manager stops shipping alerts to the indexer, with no error
+// pointing at the password.
+//
+//   - "&" is "the matched text" in a sed replacement, whatever delimiter the script uses.
+//   - "\" is the sed escape character.
+//   - '"' terminates the YAML double-quoted scalar the password is written into.
+//   - newline / carriage return break the line-oriented config files.
+//
+// "/" is deliberately NOT rejected: it only breaks a sed using "/" as its delimiter, and the
+// upstream script's delimiter is not guaranteed — rejecting it could break clusters whose
+// password already works.
+var unsafeIndexerPasswordChars = map[rune]string{
+	'&':  `"&" (expands to the matched text in the manager image's sed substitution)`,
+	'\\': `"\" (sed escape character)`,
+	'"':  `'"' (terminates the double-quoted YAML value it is written into)`,
+	'\n': "newline",
+	'\r': "carriage return",
+}
+
+// ValidateIndexerPassword checks that an indexer password can survive the config substitutions
+// it goes through before reaching filebeat and the dashboard. Operator-generated passwords are
+// alphanumeric and always pass; this guards passwords supplied through
+// spec.indexer.credentials, which are arbitrary.
+func ValidateIndexerPassword(password string) error {
+	seen := make(map[rune]bool)
+	var reasons []string
+	for _, char := range password {
+		if desc, unsafe := unsafeIndexerPasswordChars[char]; unsafe && !seen[char] {
+			seen[char] = true
+			reasons = append(reasons, "must not contain "+desc)
+		}
+	}
+	if len(reasons) > 0 {
+		return &PasswordValidationError{Reasons: reasons}
+	}
+	return nil
+}
+
 // IsPasswordValidationError checks if an error is a PasswordValidationError
 func IsPasswordValidationError(err error) bool {
 	var pve *PasswordValidationError

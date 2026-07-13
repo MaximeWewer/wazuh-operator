@@ -416,7 +416,7 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 			Command: []string{
 				"sh",
 				"-c",
-				`sed "s/\${INDEXER_USERNAME}/$INDEXER_USERNAME/g; s/\${INDEXER_PASSWORD}/$INDEXER_PASSWORD/g" /config-template/opensearch_dashboards.yml > /config-processed/opensearch_dashboards.yml`,
+				dashboardConfigProcessScript,
 			},
 			Env: env,
 			SecurityContext: &corev1.SecurityContext{
@@ -691,6 +691,46 @@ func (b *DashboardDeploymentBuilder) buildVolumeMounts() []corev1.VolumeMount {
 
 	return mounts
 }
+
+// dashboardConfigProcessScript substitutes ${INDEXER_USERNAME} and ${INDEXER_PASSWORD} in the
+// dashboard config template. The credentials stay in a Secret (never in the ConfigMap), so the
+// placeholders are only resolved here, at pod start.
+//
+// It uses awk with literal (non-regex) replacement instead of sed: sed treats "/" as the s///
+// delimiter and "&" as "the matched text" in the replacement, so a password containing those
+// silently corrupts the config or breaks the substitution outright. Operator-generated passwords
+// are alphanumeric and never hit this, but credentials supplied through spec.indexer.credentials
+// are arbitrary. Values are also escaped for the YAML double-quoted scalar they land in.
+const dashboardConfigProcessScript = `awk '
+function esc(v,   out, i, c) {
+  out = ""
+  for (i = 1; i <= length(v); i++) {
+    c = substr(v, i, 1)
+    if (c == "\\") out = out "\\\\"
+    else if (c == "\"") out = out "\\\""
+    else out = out c
+  }
+  return out
+}
+function rep(s, from, to,   out, p) {
+  out = ""
+  while ((p = index(s, from)) > 0) {
+    out = out substr(s, 1, p - 1) to
+    s = substr(s, p + length(from))
+  }
+  return out s
+}
+BEGIN {
+  u = esc(ENVIRON["INDEXER_USERNAME"])
+  p = esc(ENVIRON["INDEXER_PASSWORD"])
+}
+{
+  line = $0
+  line = rep(line, "${INDEXER_USERNAME}", u)
+  line = rep(line, "${INDEXER_PASSWORD}", p)
+  print line
+}
+' /config-template/opensearch_dashboards.yml > /config-processed/opensearch_dashboards.yml`
 
 // buildEnvVars builds the environment variables
 func (b *DashboardDeploymentBuilder) buildEnvVars() []corev1.EnvVar {
