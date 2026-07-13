@@ -245,6 +245,15 @@ opensearch.requestHeadersAllowlist:
 opensearch.username: "${INDEXER_USERNAME}"
 opensearch.password: "${INDEXER_PASSWORD}"
 
+# Let the kubelet reach the health endpoint without credentials. The security plugin
+# defaults this list to empty, so every route answers 401 to an unauthenticated request
+# — including /api/status, which the pod probes hit. Without this the dashboard can never
+# report healthy under any auth type other than basicauth (where /app/login happens to
+# answer 200 and was used as the probe path instead). This exposes only the dashboard's
+# own status, not any indexed data.
+opensearch_security.auth.unauthenticated_routes:
+  - /api/status
+
 `, b.serverHost, b.serverPort, b.clusterName, indexerHost, b.indexerPort)
 
 	if b.enableSSL {

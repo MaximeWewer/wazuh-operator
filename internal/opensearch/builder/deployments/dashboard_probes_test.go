@@ -29,7 +29,10 @@ import (
 // only answers 200 when opensearch_security.auth.type is basicauth; with an external IdP
 // (OpenSearchAuthConfig with OIDC/SAML/JWT) the security plugin answers 401 to the unauthenticated
 // kube-probe, the probe fails and the dashboard never becomes healthy even though it serves users
-// fine. /api/status is the dashboard health endpoint and is unauthenticated by default.
+// fine. /api/status only answers 200 because the generated config lists it in
+// opensearch_security.auth.unauthenticated_routes (see TestDashboardConfigExposesStatusRoute):
+// the security plugin defaults that list to empty, so the probe path and that setting must stay
+// in sync.
 func TestDashboardProbesUseStatusAPINotLoginPage(t *testing.T) {
 	dns.Initialize()
 	deploy := NewDashboardDeploymentBuilder("cluster", "ns").Build()

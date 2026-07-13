@@ -455,6 +455,13 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 			Env:          env,
 			EnvFrom:      b.envFrom,
 			VolumeMounts: volumeMounts,
+			// Probes hit /api/status, not /app/login. /app/login is the basicauth login page, so
+			// it only answers 200 when auth.type is basicauth; with an external IdP
+			// (OpenSearchAuthConfig with OIDC/SAML/JWT) it answers 401 to the unauthenticated
+			// kubelet, the probe fails and the dashboard never turns healthy even though it serves
+			// real users fine. /api/status answers 200 under every auth type — but only because the
+			// generated config lists it in opensearch_security.auth.unauthenticated_routes, which
+			// the security plugin defaults to empty. The two changes only work together.
 			LivenessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
