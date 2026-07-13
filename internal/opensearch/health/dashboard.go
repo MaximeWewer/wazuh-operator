@@ -96,7 +96,7 @@ func (c *DashboardHealthChecker) Check(ctx context.Context) (*DashboardHealthSta
 	}
 
 	// Check dashboard health by accessing the status endpoint
-	healthURL := fmt.Sprintf("https://%s:%d/api/status", c.host, c.port)
+	healthURL := fmt.Sprintf("https://%s:%d%s", c.host, c.port, constants.PathDashboardStatusAPI)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, http.NoBody)
 	if err != nil {
 		status.Error = fmt.Sprintf("failed to create request: %v", err)

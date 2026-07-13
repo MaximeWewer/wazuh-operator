@@ -123,6 +123,12 @@ const (
 	// PathDashboardData is the data directory
 	PathDashboardData = "/usr/share/wazuh-dashboard/data"
 
+	// PathDashboardStatusAPI is the dashboard's health endpoint. It is used for the pod probes
+	// rather than /app/login: the login page only answers 200 under basicauth, while this route
+	// is in the security plugin's default unauthenticated_routes and so answers whatever auth
+	// type (basicauth, OIDC, SAML, JWT) is configured.
+	PathDashboardStatusAPI = "/api/status"
+
 	// PathDashboardCerts is the certificates directory
 	PathDashboardCerts = "/usr/share/wazuh-dashboard/certs"
 

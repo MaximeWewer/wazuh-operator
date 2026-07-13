@@ -458,7 +458,7 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 			LivenessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
-						Path: "/app/login",
+						Path: constants.PathDashboardStatusAPI,
 						Port: intstr.FromInt(int(constants.PortDashboardHTTP)),
 						Scheme: func() corev1.URIScheme {
 							if b.enableSSL {
@@ -476,7 +476,7 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 			ReadinessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
-						Path: "/app/login",
+						Path: constants.PathDashboardStatusAPI,
 						Port: intstr.FromInt(int(constants.PortDashboardHTTP)),
 						Scheme: func() corev1.URIScheme {
 							if b.enableSSL {
