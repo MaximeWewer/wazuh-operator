@@ -102,6 +102,11 @@ const (
 	// PathIndexerAdminCerts is the admin certificates directory (for securityadmin tool)
 	PathIndexerAdminCerts = "/usr/share/wazuh-indexer/config/certs/admin"
 
+	// PathIndexerKerberos is the directory where the Kerberos krb5.conf and keytab are
+	// mounted (must live under the OpenSearch config dir; the *_filepath settings are
+	// stored relative to it).
+	PathIndexerKerberos = PathIndexerConfig + "/kerberos"
+
 	// PathIndexerPlugins is the plugins directory
 	PathIndexerPlugins = "/usr/share/wazuh-indexer/plugins"
 

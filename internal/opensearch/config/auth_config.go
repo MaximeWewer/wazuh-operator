@@ -177,6 +177,11 @@ func (b *AuthConfigBuilder) buildAuthDomains() []AuthDomainConfig {
 		domains = append(domains, b.buildProxyAuthDomain(b.authConfig.Proxy))
 	}
 
+	// Kerberos (indexer/API-only; validates SPNEGO tokens against the service keytab)
+	if b.authConfig.Kerberos != nil && b.authConfig.Kerberos.Enabled {
+		domains = append(domains, b.buildKerberosAuthDomain(b.authConfig.Kerberos))
+	}
+
 	// Sort by order
 	sort.Slice(domains, func(i, j int) bool {
 		return domains[i].Order < domains[j].Order
@@ -310,6 +315,9 @@ func (b *AuthConfigBuilder) maxNonBasicOrder() (int, bool) {
 	if b.authConfig.Proxy != nil {
 		consider(b.authConfig.Proxy.Enabled, b.authConfig.Proxy.Order)
 	}
+	if b.authConfig.Kerberos != nil {
+		consider(b.authConfig.Kerberos.Enabled, b.authConfig.Kerberos.Order)
+	}
 	return maxOrder, found
 }
 
@@ -437,6 +445,9 @@ func (b *AuthConfigBuilder) GetActiveAuthMethods() []string {
 	}
 	if b.authConfig.Proxy != nil && b.authConfig.Proxy.Enabled {
 		methods = append(methods, "proxy")
+	}
+	if b.authConfig.Kerberos != nil && b.authConfig.Kerberos.Enabled {
+		methods = append(methods, "kerberos")
 	}
 
 	return methods

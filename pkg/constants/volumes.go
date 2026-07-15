@@ -48,6 +48,9 @@ const (
 	// VolumeNameIndexerSecurity is the volume name for Indexer security configuration
 	VolumeNameIndexerSecurity = "indexer-security"
 
+	// VolumeNameIndexerKerberos is the volume name for the Kerberos krb5.conf/keytab
+	VolumeNameIndexerKerberos = "indexer-kerberos"
+
 	// VolumeNameAdminCerts is the volume name for admin certificates (securityadmin)
 	VolumeNameAdminCerts = "admin-certs"
 

@@ -68,7 +68,7 @@ func (v *OpenSearchAuthConfigCustomValidator) validateOpenSearchAuthConfig(authC
 
 	// Rule 1: At least one auth method must be enabled
 	if !v.hasEnabledAuthMethod(spec) {
-		allErrors = append(allErrors, "spec: at least one authentication method must be enabled (basicAuth, oidc, saml, ldap, jwt, or proxy)")
+		allErrors = append(allErrors, "spec: at least one authentication method must be enabled (basicAuth, oidc, saml, ldap, jwt, proxy, or kerberos)")
 	}
 
 	// Rule 2: OIDC enabled → connectURL and clientId required
@@ -133,7 +133,17 @@ func (v *OpenSearchAuthConfigCustomValidator) validateOpenSearchAuthConfig(authC
 		}
 	}
 
-	// Rule 7: Warning if more than one auth domain has challenge=true
+	// Rule 7: Kerberos enabled → acceptorPrincipal and credentialsSecret required
+	if spec.Kerberos != nil && spec.Kerberos.Enabled {
+		if spec.Kerberos.AcceptorPrincipal == "" {
+			allErrors = append(allErrors, "spec.kerberos.acceptorPrincipal: is required when Kerberos is enabled")
+		}
+		if spec.Kerberos.CredentialsSecret == "" {
+			allErrors = append(allErrors, "spec.kerberos.credentialsSecret: is required when Kerberos is enabled")
+		}
+	}
+
+	// Rule 8: Warning if more than one auth domain has challenge=true
 	challengeCount := v.countChallengeDomains(spec)
 	if challengeCount > 1 {
 		warnings = append(warnings, fmt.Sprintf("%d authentication domains have challenge=true; only one should issue challenges to avoid conflicts", challengeCount))
@@ -166,6 +176,9 @@ func (v *OpenSearchAuthConfigCustomValidator) hasEnabledAuthMethod(spec *OpenSea
 	if spec.Proxy != nil && spec.Proxy.Enabled {
 		return true
 	}
+	if spec.Kerberos != nil && spec.Kerberos.Enabled {
+		return true
+	}
 	return false
 }
 
@@ -185,6 +198,9 @@ func (v *OpenSearchAuthConfigCustomValidator) countChallengeDomains(spec *OpenSe
 		count++
 	}
 	if spec.JWT != nil && spec.JWT.Enabled && spec.JWT.Challenge {
+		count++
+	}
+	if spec.Kerberos != nil && spec.Kerberos.Enabled && spec.Kerberos.Challenge {
 		count++
 	}
 	return count

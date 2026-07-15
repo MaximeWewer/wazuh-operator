@@ -64,6 +64,12 @@ type OpenSearchAuthConfigSpec struct {
 	// dashboard sign-in is unaffected (it keeps basic auth).
 	// +optional
 	Proxy *ProxyAuthSpec `json:"proxy,omitempty"`
+
+	// Kerberos configures Kerberos/SPNEGO authentication. This is an indexer/API-layer
+	// backend only; the dashboard sign-in is unaffected (it keeps basic auth). The krb5.conf
+	// and keytab are mounted from a Secret into the indexer config dir.
+	// +optional
+	Kerberos *KerberosAuthSpec `json:"kerberos,omitempty"`
 }
 
 // ============================================================================
@@ -577,6 +583,65 @@ type ProxyXFFSpec struct {
 }
 
 // ============================================================================
+// Kerberos Configuration
+// ============================================================================
+
+// KerberosAuthSpec configures Kerberos/SPNEGO authentication.
+// Reference: https://docs.opensearch.org/latest/security/authentication-backends/kerberos/
+//
+// Kerberos is an indexer/API-layer backend only: the security plugin validates the SPNEGO
+// token in the "Authorization: Negotiate" header against the service keytab. It requires
+// three static settings in opensearch.yml (krb5_filepath, acceptor_keytab_filepath,
+// acceptor_principal) plus the krb5.conf + keytab mounted from a Secret into the indexer
+// config dir. The dashboard sign-in is unaffected (it keeps basic auth).
+type KerberosAuthSpec struct {
+	// Enabled enables Kerberos authentication
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Order determines the evaluation order of this auth domain
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	// +kubebuilder:default=6
+	Order int `json:"order,omitempty"`
+
+	// Challenge sends the SPNEGO "WWW-Authenticate: Negotiate" challenge. Only one auth domain
+	// may challenge; keep this false (the operator's basic domain challenges) unless you switch
+	// basicAuth.challenge to false and want interactive Kerberos.
+	// +kubebuilder:default=false
+	Challenge bool `json:"challenge,omitempty"`
+
+	// KrbDebug logs Kerberos debug output to stdout.
+	// +kubebuilder:default=false
+	KrbDebug bool `json:"krbDebug,omitempty"`
+
+	// StripRealmFromPrincipal strips the realm from the authenticated username. Pointer so the
+	// documented default (true) is only overridden when explicitly set.
+	// +optional
+	StripRealmFromPrincipal *bool `json:"stripRealmFromPrincipal,omitempty"`
+
+	// AcceptorPrincipal is the service principal the plugin uses (must exist in the keytab),
+	// e.g. "HTTP/opensearch.example.com". Required.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	AcceptorPrincipal string `json:"acceptorPrincipal"`
+
+	// CredentialsSecret names a Secret (same namespace as this CR) that holds the krb5.conf and
+	// the keytab. It is mounted as a directory into the indexer config dir; nothing is inlined.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	CredentialsSecret string `json:"credentialsSecret"`
+
+	// Krb5ConfKey is the Secret key holding the krb5.conf.
+	// +kubebuilder:default="krb5.conf"
+	Krb5ConfKey string `json:"krb5ConfKey,omitempty"`
+
+	// KeytabKey is the Secret key holding the keytab.
+	// +kubebuilder:default="opensearch.keytab"
+	KeytabKey string `json:"keytabKey,omitempty"`
+}
+
+// ============================================================================
 // Status
 // ============================================================================
 
@@ -639,6 +704,7 @@ type OpenSearchAuthConfigStatus struct {
 // +kubebuilder:printcolumn:name="LDAP",type=boolean,JSONPath=`.spec.ldap.enabled`
 // +kubebuilder:printcolumn:name="JWT",type=boolean,JSONPath=`.spec.jwt.enabled`
 // +kubebuilder:printcolumn:name="Proxy",type=boolean,JSONPath=`.spec.proxy.enabled`
+// +kubebuilder:printcolumn:name="Kerberos",type=boolean,JSONPath=`.spec.kerberos.enabled`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // OpenSearchAuthConfig is the Schema for the opensearchauthconfigs API

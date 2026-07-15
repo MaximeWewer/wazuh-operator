@@ -754,6 +754,7 @@ Each enabled method becomes a separate `authc` domain ordered by its `order` fie
 | `ldap`       | LDAPAuthSpec          | No       | -       | LDAP config       |
 | `jwt`        | JWTAuthSpec           | No       | -       | JWT config        |
 | `proxy`      | ProxyAuthSpec         | No       | -       | Proxy (trusted front-proxy header) config — indexer/API only |
+| `kerberos`   | KerberosAuthSpec      | No       | -       | Kerberos/SPNEGO config — indexer/API only |
 
 #### BasicAuthSpec
 
@@ -929,6 +930,74 @@ spec:
 
 Map the roles carried in `rolesHeader` to OpenSearch roles with an
 `OpenSearchRoleMapping` (backend roles).
+
+#### KerberosAuthSpec
+
+Kerberos/SPNEGO authentication: the **indexer** validates the SPNEGO token in the
+`Authorization: Negotiate` header against a service keytab. This is an
+**indexer/API-layer backend only** — the dashboard sign-in is unaffected and keeps
+basic auth (like LDAP/proxy).
+
+It needs three parts, all wired by the operator: (1) the `kerberos_auth_domain` in
+`config.yml`; (2) three static settings in `opensearch.yml`
+(`plugins.security.kerberos.krb5_filepath`, `acceptor_keytab_filepath`,
+`acceptor_principal`); (3) the `krb5.conf` and keytab, mounted from
+`credentialsSecret` as a directory into `<config>/kerberos/` (the `*_filepath`
+settings are stored **relative** to the config dir, per OpenSearch's rule that these
+files must live under the config directory).
+
+| Field                     | Type   | Required | Default            | Description                                                                 |
+| ------------------------- | ------ | -------- | ------------------ | --------------------------------------------------------------------------- |
+| `enabled`                 | bool   | No       | `false`            | Enable Kerberos auth domain                                                 |
+| `order`                   | int    | No       | `6`                | Evaluation order among auth domains                                         |
+| `challenge`               | bool   | No       | `false`            | Send the SPNEGO `WWW-Authenticate: Negotiate` challenge (keep `false`)      |
+| `krbDebug`                | bool   | No       | `false`            | Log Kerberos debug output to stdout                                         |
+| `stripRealmFromPrincipal` | bool   | No       | `true`             | Strip the realm from the authenticated username                            |
+| `acceptorPrincipal`       | string | **Yes**  | -                  | Service principal in the keytab, e.g. `HTTP/opensearch.example.com`         |
+| `credentialsSecret`       | string | **Yes**  | -                  | Secret (same namespace) holding the `krb5.conf` and keytab                  |
+| `krb5ConfKey`             | string | No       | `krb5.conf`        | Secret key holding the `krb5.conf`                                          |
+| `keytabKey`               | string | No       | `opensearch.keytab`| Secret key holding the keytab                                               |
+
+Only one auth domain may issue the challenge; the always-present basic domain
+challenges by default, so keep `challenge: false` unless you set
+`basicAuth.challenge: false` and want interactive Kerberos.
+
+**Example — Kerberos/SPNEGO + local basic auth:**
+
+```yaml
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchAuthConfig
+metadata:
+  name: kerberos-auth
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: production
+      namespace: wazuh
+  # Local users stay available (dashboard keeps basic auth).
+  basicAuth:
+    enabled: true
+    order: 0
+    challenge: true
+  kerberos:
+    enabled: true
+    order: 6
+    acceptorPrincipal: "HTTP/opensearch.example.com"
+    credentialsSecret: kerberos-creds
+    krb5ConfKey: krb5.conf
+    keytabKey: opensearch.keytab
+```
+
+Create the Secret from the krb5.conf and the service keytab:
+
+```bash
+kubectl create secret generic kerberos-creds -n wazuh \
+  --from-file=krb5.conf=/etc/krb5.conf \
+  --from-file=opensearch.keytab=/etc/opensearch.keytab
+```
+
+Map the Kerberos principal (or its realm-stripped username) to OpenSearch roles with
+an `OpenSearchRoleMapping`.
 
 See sample files for detailed authentication configurations.
 

@@ -559,6 +559,16 @@ func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *waz
 	if nodesDNOpts != nil {
 		cfg.NodesDN = certificates.NodesDN(*nodesDNOpts)
 	}
+
+	// When an OpenSearchAuthConfig enables Kerberos for this cluster, inject the three static
+	// opensearch.yml settings. The two *_filepath values are relative to the OpenSearch config
+	// dir (the krb5.conf/keytab are mounted under <config>/kerberos by the StatefulSet).
+	if authConfig, err := config.FindAuthConfigForCluster(ctx, r.Client, cluster.Name, cluster.Namespace); err != nil {
+		logf.FromContext(ctx).Error(err, "Failed to list OpenSearchAuthConfigs, indexer opensearch.yml will omit Kerberos settings")
+	} else if kerberos := kerberosSpec(authConfig); kerberos != nil {
+		applyKerberosOpenSearchSettings(cfg, kerberos)
+	}
+
 	opensearchYML := cfg.Build()
 
 	configBuilder := configmaps.NewIndexerConfigMapBuilder(cluster.Name, cluster.Namespace)
@@ -570,6 +580,58 @@ func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *waz
 	}
 
 	return r.createOrUpdate(ctx, configMap)
+}
+
+// kerberosSpec returns the enabled Kerberos auth spec from an OpenSearchAuthConfig, or nil
+// when the config is absent or Kerberos is not enabled.
+func kerberosSpec(authConfig *wazuhv1.OpenSearchAuthConfig) *wazuhv1.KerberosAuthSpec {
+	if authConfig == nil || authConfig.Spec.Kerberos == nil || !authConfig.Spec.Kerberos.Enabled {
+		return nil
+	}
+	return authConfig.Spec.Kerberos
+}
+
+// kerberosKeys returns the Secret keys for the krb5.conf and keytab, applying the CRD defaults
+// when the fields are unset (the operator may build opensearch.yml before the API server has
+// defaulted the object).
+func kerberosKeys(spec *wazuhv1.KerberosAuthSpec) (krb5Key, keytabKey string) {
+	krb5Key, keytabKey = spec.Krb5ConfKey, spec.KeytabKey
+	if krb5Key == "" {
+		krb5Key = "krb5.conf"
+	}
+	if keytabKey == "" {
+		keytabKey = "opensearch.keytab"
+	}
+	return krb5Key, keytabKey
+}
+
+// applyKerberosOpenSearchSettings injects the three static Kerberos settings into opensearch.yml.
+// The two *_filepath values are RELATIVE to the OpenSearch config dir (krb5.conf/keytab are mounted
+// under <config>/kerberos), per OpenSearch's "files must live under the config dir" rule.
+func applyKerberosOpenSearchSettings(cfg *config.OpenSearchConfig, spec *wazuhv1.KerberosAuthSpec) {
+	krb5Key, keytabKey := kerberosKeys(spec)
+	cfg.WithCustomSetting("plugins.security.kerberos.krb5_filepath", "kerberos/"+krb5Key)
+	cfg.WithCustomSetting("plugins.security.kerberos.acceptor_keytab_filepath", "kerberos/"+keytabKey)
+	cfg.WithCustomSetting("plugins.security.kerberos.acceptor_principal", spec.AcceptorPrincipal)
+}
+
+// kerberosVolumeAndMount returns the Secret-backed volume and directory mount for the Kerberos
+// krb5.conf/keytab, mirroring the indexer-certs mount (directory, ReadOnly, no subPath).
+func kerberosVolumeAndMount(spec *wazuhv1.KerberosAuthSpec) (corev1.Volume, corev1.VolumeMount) {
+	vol := corev1.Volume{
+		Name: constants.VolumeNameIndexerKerberos,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: spec.CredentialsSecret,
+			},
+		},
+	}
+	mount := corev1.VolumeMount{
+		Name:      constants.VolumeNameIndexerKerberos,
+		MountPath: constants.PathIndexerKerberos,
+		ReadOnly:  true,
+	}
+	return vol, mount
 }
 
 // dnOptionsFromIndexerCertSecret extracts DN options from the indexer TLS cert secret.
@@ -1060,6 +1122,17 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		extraVolumeMounts = cluster.Spec.Indexer.ExtraVolumeMounts
 		extraInitContainers = cluster.Spec.Indexer.ExtraInitContainers
 		extraContainers = cluster.Spec.Indexer.ExtraContainers
+	}
+
+	// When Kerberos auth is enabled, mount the krb5.conf/keytab Secret as a directory into the
+	// indexer config dir (mirrors the indexer-certs mount). Appended to the same slices handed to
+	// the STS builder so the volume/mount also feed the spec hash and trigger a rollout on change.
+	if authConfig, err := config.FindAuthConfigForCluster(ctx, r.Client, cluster.Name, cluster.Namespace); err != nil {
+		log.Error(err, "Failed to list OpenSearchAuthConfigs, indexer StatefulSet will omit the Kerberos mount")
+	} else if kerberos := kerberosSpec(authConfig); kerberos != nil {
+		vol, mount := kerberosVolumeAndMount(kerberos)
+		extraVolumes = append(extraVolumes, vol)
+		extraVolumeMounts = append(extraVolumeMounts, mount)
 	}
 
 	// Convert repository plugins for hash computation
@@ -2855,6 +2928,20 @@ func (r *IndexerReconciler) reconcileNodePoolConfigMap(
 		InitialMasterNodes: initialMasterNodes,
 		WazuhVersion:       cluster.Spec.Version,
 	}
+
+	// When Kerberos auth is enabled for this cluster, inject the three static opensearch.yml
+	// settings (relative *_filepath values under <config>/kerberos).
+	if authConfig, err := config.FindAuthConfigForCluster(ctx, r.Client, cluster.Name, cluster.Namespace); err != nil {
+		logf.FromContext(ctx).Error(err, "Failed to list OpenSearchAuthConfigs, nodePool opensearch.yml will omit Kerberos settings")
+	} else if kerberos := kerberosSpec(authConfig); kerberos != nil {
+		krb5Key, keytabKey := kerberosKeys(kerberos)
+		params.CustomSettings = map[string]string{
+			"plugins.security.kerberos.krb5_filepath":            "kerberos/" + krb5Key,
+			"plugins.security.kerberos.acceptor_keytab_filepath": "kerberos/" + keytabKey,
+			"plugins.security.kerberos.acceptor_principal":       kerberos.AcceptorPrincipal,
+		}
+	}
+
 	opensearchYML := config.BuildNodePoolConfig(params)
 
 	// Build ConfigMap
@@ -2950,11 +3037,24 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 	}
 
 	// Wire extra volumes, init containers, and sidecar containers from nodePool spec
-	if len(pool.ExtraVolumes) > 0 {
-		stsBuilder.WithVolumes(pool.ExtraVolumes)
+	poolVolumes := pool.ExtraVolumes
+	poolVolumeMounts := pool.ExtraVolumeMounts
+
+	// When Kerberos auth is enabled, mount the krb5.conf/keytab Secret as a directory into the
+	// indexer config dir (mirrors the indexer-certs mount).
+	if authConfig, err := config.FindAuthConfigForCluster(ctx, r.Client, cluster.Name, cluster.Namespace); err != nil {
+		log.Error(err, "Failed to list OpenSearchAuthConfigs, nodePool StatefulSet will omit the Kerberos mount")
+	} else if kerberos := kerberosSpec(authConfig); kerberos != nil {
+		vol, mount := kerberosVolumeAndMount(kerberos)
+		poolVolumes = append(poolVolumes, vol)
+		poolVolumeMounts = append(poolVolumeMounts, mount)
 	}
-	if len(pool.ExtraVolumeMounts) > 0 {
-		stsBuilder.WithVolumeMounts(pool.ExtraVolumeMounts)
+
+	if len(poolVolumes) > 0 {
+		stsBuilder.WithVolumes(poolVolumes)
+	}
+	if len(poolVolumeMounts) > 0 {
+		stsBuilder.WithVolumeMounts(poolVolumeMounts)
 	}
 	if len(pool.ExtraInitContainers) > 0 {
 		stsBuilder.WithExtraInitContainers(pool.ExtraInitContainers)

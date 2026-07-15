@@ -317,6 +317,9 @@ type NodePoolConfigParams struct {
 	DiscoverySeedHosts []string
 	InitialMasterNodes []string
 	WazuhVersion       string
+	// CustomSettings are extra plugins.security.* (or other) opensearch.yml keys injected
+	// verbatim, e.g. the static Kerberos settings when Kerberos auth is enabled.
+	CustomSettings map[string]string
 }
 
 // BuildNodePoolConfig builds opensearch.yml for a specific nodePool
@@ -346,6 +349,11 @@ func BuildNodePoolConfig(params NodePoolConfigParams) string {
 	if params.WazuhVersion != "" {
 		config.WithWazuhVersion(params.WazuhVersion)
 		config.CertPath = constants.IndexerCertsDir(params.WazuhVersion)
+	}
+
+	// Inject any extra opensearch.yml settings (e.g. static Kerberos settings)
+	for k, v := range params.CustomSettings {
+		config.WithCustomSetting(k, v)
 	}
 
 	return config.Build()

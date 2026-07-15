@@ -40,6 +40,9 @@ spec:
     - jsonPath: .spec.proxy.enabled
       name: Proxy
       type: boolean
+    - jsonPath: .spec.kerberos.enabled
+      name: Kerberos
+      type: boolean
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -236,6 +239,63 @@ spec:
                     description: TransportEnabled enables authentication on transport
                       layer
                     type: boolean
+                type: object
+              kerberos:
+                description: |-
+                  Kerberos configures Kerberos/SPNEGO authentication. This is an indexer/API-layer
+                  backend only; the dashboard sign-in is unaffected (it keeps basic auth). The krb5.conf
+                  and keytab are mounted from a Secret into the indexer config dir.
+                properties:
+                  acceptorPrincipal:
+                    description: |-
+                      AcceptorPrincipal is the service principal the plugin uses (must exist in the keytab),
+                      e.g. "HTTP/opensearch.example.com". Required.
+                    minLength: 1
+                    type: string
+                  challenge:
+                    default: false
+                    description: |-
+                      Challenge sends the SPNEGO "WWW-Authenticate: Negotiate" challenge. Only one auth domain
+                      may challenge; keep this false (the operator's basic domain challenges) unless you switch
+                      basicAuth.challenge to false and want interactive Kerberos.
+                    type: boolean
+                  credentialsSecret:
+                    description: |-
+                      CredentialsSecret names a Secret (same namespace as this CR) that holds the krb5.conf and
+                      the keytab. It is mounted as a directory into the indexer config dir; nothing is inlined.
+                    minLength: 1
+                    type: string
+                  enabled:
+                    default: false
+                    description: Enabled enables Kerberos authentication
+                    type: boolean
+                  keytabKey:
+                    default: opensearch.keytab
+                    description: KeytabKey is the Secret key holding the keytab.
+                    type: string
+                  krb5ConfKey:
+                    default: krb5.conf
+                    description: Krb5ConfKey is the Secret key holding the krb5.conf.
+                    type: string
+                  krbDebug:
+                    default: false
+                    description: KrbDebug logs Kerberos debug output to stdout.
+                    type: boolean
+                  order:
+                    default: 6
+                    description: Order determines the evaluation order of this auth
+                      domain
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  stripRealmFromPrincipal:
+                    description: |-
+                      StripRealmFromPrincipal strips the realm from the authenticated username. Pointer so the
+                      documented default (true) is only overridden when explicitly set.
+                    type: boolean
+                required:
+                - acceptorPrincipal
+                - credentialsSecret
                 type: object
               ldap:
                 description: LDAP configures LDAP/Active Directory authentication
