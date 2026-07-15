@@ -100,6 +100,20 @@ func (b *AuthConfigBuilder) BuildSecurityConfig() string {
 	sb.WriteString("    http:\n")
 	sb.WriteString("      anonymous_auth_enabled: false\n")
 
+	// Proxy detection (xff) block. It lives directly under http: (a sibling of
+	// anonymous_auth_enabled and authc), NOT inside an authc domain. Without it the
+	// security plugin ignores the proxy identity headers.
+	if b.authConfig.Proxy != nil && b.authConfig.Proxy.Enabled {
+		remoteIPHeader := b.authConfig.Proxy.XFF.RemoteIPHeader
+		if remoteIPHeader == "" {
+			remoteIPHeader = "x-forwarded-for"
+		}
+		sb.WriteString("      xff:\n")
+		sb.WriteString("        enabled: true\n")
+		fmt.Fprintf(&sb, "        internalProxies: %s\n", yamlSingleQuote(b.authConfig.Proxy.XFF.InternalProxies))
+		fmt.Fprintf(&sb, "        remoteIpHeader: %s\n", yamlSingleQuote(remoteIPHeader))
+	}
+
 	// Build authentication domains
 	domains := b.buildAuthDomains()
 	if len(domains) > 0 {
@@ -156,6 +170,11 @@ func (b *AuthConfigBuilder) buildAuthDomains() []AuthDomainConfig {
 	// JWT
 	if b.authConfig.JWT != nil && b.authConfig.JWT.Enabled {
 		domains = append(domains, b.buildJWTAuthDomain(b.authConfig.JWT))
+	}
+
+	// Proxy (indexer/API-only; trusts identity headers from a front proxy)
+	if b.authConfig.Proxy != nil && b.authConfig.Proxy.Enabled {
+		domains = append(domains, b.buildProxyAuthDomain(b.authConfig.Proxy))
 	}
 
 	// Sort by order
@@ -288,6 +307,9 @@ func (b *AuthConfigBuilder) maxNonBasicOrder() (int, bool) {
 	if b.authConfig.JWT != nil {
 		consider(b.authConfig.JWT.Enabled, b.authConfig.JWT.Order)
 	}
+	if b.authConfig.Proxy != nil {
+		consider(b.authConfig.Proxy.Enabled, b.authConfig.Proxy.Order)
+	}
 	return maxOrder, found
 }
 
@@ -308,6 +330,35 @@ func DefaultBasicAuthDomain() AuthDomainConfig {
 // ============================================================================
 // Helper Functions
 // ============================================================================
+
+// yamlSingleQuote wraps a scalar in single quotes for YAML output. Single-quoting
+// preserves backslashes and pipes verbatim (common in an internalProxies regex), and a
+// literal single quote inside is escaped per the YAML rule by doubling it ('' → ').
+func yamlSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+// startsWithYAMLIndicator reports whether s begins with a character that a YAML
+// plain (unquoted) block scalar may not start with, so it must be quoted instead.
+func startsWithYAMLIndicator(s string) bool {
+	if s == "" {
+		return true
+	}
+	switch s[0] {
+	case ',', '[', ']', '{', '}', '&', '*', '!', '|', '>', '\'', '"', '%', '@', '`', '#', ':', '?', '-', ' ', '\t':
+		return true
+	}
+	return false
+}
+
+// hasEdgeSpace reports whether s has leading or trailing whitespace, which a plain
+// scalar cannot preserve.
+func hasEdgeSpace(s string) bool {
+	if s == "" {
+		return false
+	}
+	return s[0] == ' ' || s[0] == '\t' || s[len(s)-1] == ' ' || s[len(s)-1] == '\t'
+}
 
 // formatConfigMap formats a map for YAML output with proper indentation
 func formatConfigMap(config map[string]any, indent int) string {
@@ -337,6 +388,11 @@ func formatConfigMap(config map[string]any, indent int) string {
 				}
 			case strings.Contains(v, ":") || strings.Contains(v, "#"):
 				fmt.Fprintf(&sb, "%s%s: \"%s\"\n", prefix, key, v)
+			case startsWithYAMLIndicator(v) || hasEdgeSpace(v):
+				// A value whose first character is a YAML indicator (e.g. a "," role
+				// separator, or "|", "*", "!") is not a valid plain scalar and would fail
+				// to parse; single-quote it (which also preserves backslashes/pipes).
+				fmt.Fprintf(&sb, "%s%s: %s\n", prefix, key, yamlSingleQuote(v))
 			default:
 				fmt.Fprintf(&sb, "%s%s: %s\n", prefix, key, v)
 			}
@@ -378,6 +434,9 @@ func (b *AuthConfigBuilder) GetActiveAuthMethods() []string {
 	}
 	if b.authConfig.JWT != nil && b.authConfig.JWT.Enabled {
 		methods = append(methods, "jwt")
+	}
+	if b.authConfig.Proxy != nil && b.authConfig.Proxy.Enabled {
+		methods = append(methods, "proxy")
 	}
 
 	return methods

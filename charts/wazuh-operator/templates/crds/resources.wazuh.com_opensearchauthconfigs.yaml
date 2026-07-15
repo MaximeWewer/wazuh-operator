@@ -37,6 +37,9 @@ spec:
     - jsonPath: .spec.jwt.enabled
       name: JWT
       type: boolean
+    - jsonPath: .spec.proxy.enabled
+      name: Proxy
+      type: boolean
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -528,6 +531,78 @@ spec:
                 required:
                 - clientId
                 - connectURL
+                type: object
+              proxy:
+                description: |-
+                  Proxy configures proxy-based authentication where the indexer trusts identity
+                  headers set by a front proxy. This is an indexer/API-layer backend only; the
+                  dashboard sign-in is unaffected (it keeps basic auth).
+                properties:
+                  attrHeaderPrefix:
+                    default: x-proxy-ext-
+                    description: AttrHeaderPrefix is the header prefix for extended-proxy
+                      user attributes.
+                    type: string
+                  enabled:
+                    default: false
+                    description: |-
+                      Enabled enables proxy-based authentication (the indexer trusts identity headers set by a
+                      front proxy). Applies to the indexer/API layer; the dashboard sign-in is unaffected.
+                    type: boolean
+                  extended:
+                    description: |-
+                      Extended uses the extended-proxy authenticator, which additionally forwards user
+                      attributes (headers prefixed by AttrHeaderPrefix) for document-level security.
+                    type: boolean
+                  httpEnabled:
+                    default: true
+                    description: HTTPEnabled enables the domain on the HTTP layer.
+                    type: boolean
+                  order:
+                    default: 5
+                    description: Order — evaluation order of this auth domain.
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  rolesHeader:
+                    default: x-proxy-roles
+                    description: RolesHeader is the header carrying the comma-separated
+                      backend roles.
+                    type: string
+                  rolesSeparator:
+                    default: ','
+                    description: RolesSeparator separates roles in RolesHeader.
+                    type: string
+                  transportEnabled:
+                    default: false
+                    description: TransportEnabled — proxy identity headers only arrive
+                      over HTTP; leave false.
+                    type: boolean
+                  userHeader:
+                    default: x-proxy-user
+                    description: UserHeader is the header carrying the authenticated
+                      username.
+                    type: string
+                  xff:
+                    description: XFF configures proxy detection (required — without
+                      it the plugin ignores the identity headers).
+                    properties:
+                      internalProxies:
+                        description: |-
+                          InternalProxies is a regular expression matching the IP addresses of all trusted proxies.
+                          Use ".*" to trust every internal proxy. Required.
+                        minLength: 1
+                        type: string
+                      remoteIpHeader:
+                        default: x-forwarded-for
+                        description: RemoteIPHeader is the header carrying the client
+                          IP chain.
+                        type: string
+                    required:
+                    - internalProxies
+                    type: object
+                required:
+                - xff
                 type: object
               saml:
                 description: SAML configures SAML 2.0 authentication

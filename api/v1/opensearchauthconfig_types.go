@@ -58,6 +58,12 @@ type OpenSearchAuthConfigSpec struct {
 	// Teleport application access (Teleport-Jwt-Assertion header).
 	// +optional
 	JWT *JWTAuthSpec `json:"jwt,omitempty"`
+
+	// Proxy configures proxy-based authentication where the indexer trusts identity
+	// headers set by a front proxy. This is an indexer/API-layer backend only; the
+	// dashboard sign-in is unaffected (it keeps basic auth).
+	// +optional
+	Proxy *ProxyAuthSpec `json:"proxy,omitempty"`
 }
 
 // ============================================================================
@@ -514,6 +520,63 @@ type JWTAuthSpec struct {
 }
 
 // ============================================================================
+// Proxy Configuration
+// ============================================================================
+
+// ProxyAuthSpec configures proxy-based authentication (the indexer trusts identity
+// headers set by a front proxy). Applies to the indexer/API layer; the dashboard
+// sign-in is unaffected.
+// Reference: https://docs.opensearch.org/latest/security/authentication-backends/proxy/
+type ProxyAuthSpec struct {
+	// Enabled enables proxy-based authentication (the indexer trusts identity headers set by a
+	// front proxy). Applies to the indexer/API layer; the dashboard sign-in is unaffected.
+	// +kubebuilder:default=false
+	Enabled bool `json:"enabled,omitempty"`
+	// Order — evaluation order of this auth domain.
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	// +kubebuilder:default=5
+	Order int `json:"order,omitempty"`
+	// HTTPEnabled enables the domain on the HTTP layer.
+	// +kubebuilder:default=true
+	HTTPEnabled bool `json:"httpEnabled,omitempty"`
+	// TransportEnabled — proxy identity headers only arrive over HTTP; leave false.
+	// +kubebuilder:default=false
+	TransportEnabled bool `json:"transportEnabled,omitempty"`
+	// UserHeader is the header carrying the authenticated username.
+	// +kubebuilder:default="x-proxy-user"
+	UserHeader string `json:"userHeader,omitempty"`
+	// RolesHeader is the header carrying the comma-separated backend roles.
+	// +kubebuilder:default="x-proxy-roles"
+	RolesHeader string `json:"rolesHeader,omitempty"`
+	// RolesSeparator separates roles in RolesHeader.
+	// +kubebuilder:default=","
+	RolesSeparator string `json:"rolesSeparator,omitempty"`
+	// Extended uses the extended-proxy authenticator, which additionally forwards user
+	// attributes (headers prefixed by AttrHeaderPrefix) for document-level security.
+	// +optional
+	Extended bool `json:"extended,omitempty"`
+	// AttrHeaderPrefix is the header prefix for extended-proxy user attributes.
+	// +kubebuilder:default="x-proxy-ext-"
+	AttrHeaderPrefix string `json:"attrHeaderPrefix,omitempty"`
+	// XFF configures proxy detection (required — without it the plugin ignores the identity headers).
+	// +kubebuilder:validation:Required
+	XFF ProxyXFFSpec `json:"xff"`
+}
+
+// ProxyXFFSpec configures X-Forwarded-For based proxy detection.
+type ProxyXFFSpec struct {
+	// InternalProxies is a regular expression matching the IP addresses of all trusted proxies.
+	// Use ".*" to trust every internal proxy. Required.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	InternalProxies string `json:"internalProxies"`
+	// RemoteIPHeader is the header carrying the client IP chain.
+	// +kubebuilder:default="x-forwarded-for"
+	RemoteIPHeader string `json:"remoteIpHeader,omitempty"`
+}
+
+// ============================================================================
 // Status
 // ============================================================================
 
@@ -575,6 +638,7 @@ type OpenSearchAuthConfigStatus struct {
 // +kubebuilder:printcolumn:name="SAML",type=boolean,JSONPath=`.spec.saml.enabled`
 // +kubebuilder:printcolumn:name="LDAP",type=boolean,JSONPath=`.spec.ldap.enabled`
 // +kubebuilder:printcolumn:name="JWT",type=boolean,JSONPath=`.spec.jwt.enabled`
+// +kubebuilder:printcolumn:name="Proxy",type=boolean,JSONPath=`.spec.proxy.enabled`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // OpenSearchAuthConfig is the Schema for the opensearchauthconfigs API

@@ -753,6 +753,7 @@ Each enabled method becomes a separate `authc` domain ordered by its `order` fie
 | `saml`       | SAMLAuthSpec          | No       | -       | SAML config       |
 | `ldap`       | LDAPAuthSpec          | No       | -       | LDAP config       |
 | `jwt`        | JWTAuthSpec           | No       | -       | JWT config        |
+| `proxy`      | ProxyAuthSpec         | No       | -       | Proxy (trusted front-proxy header) config — indexer/API only |
 
 #### BasicAuthSpec
 
@@ -866,6 +867,68 @@ Static-key variant (works on every version, `type: jwt`):
 ```
 
 Map the `roles` claim to OpenSearch roles with an `OpenSearchRoleMapping` (backend roles).
+
+#### ProxyAuthSpec
+
+Proxy-based authentication: the **indexer** trusts identity headers injected by a
+trusted front proxy (e.g. an authenticating reverse proxy). This is an
+**indexer/API-layer backend only** — it has no verified `opensearch_dashboards.yml`
+`auth.type`, so the dashboard sign-in is unaffected and keeps basic auth (like LDAP).
+
+A companion `xff` (proxy-detection) block is emitted automatically under
+`config.dynamic.http`; without it the security plugin ignores the identity headers,
+so `xff.internalProxies` is **required** when proxy is enabled.
+
+| Field              | Type         | Required | Default        | Description                                                     |
+| ------------------ | ------------ | -------- | -------------- | --------------------------------------------------------------- |
+| `enabled`          | bool         | No       | `false`        | Enable proxy auth domain                                        |
+| `order`            | int          | No       | `5`            | Evaluation order among auth domains                             |
+| `httpEnabled`      | bool         | No       | `true`         | Enable on HTTP layer                                            |
+| `transportEnabled` | bool         | No       | `false`        | Keep `false` — proxy headers only arrive over HTTP             |
+| `userHeader`       | string       | No       | `x-proxy-user` | Header carrying the authenticated username                     |
+| `rolesHeader`      | string       | No       | `x-proxy-roles`| Header carrying the comma-separated backend roles              |
+| `rolesSeparator`   | string       | No       | `,`            | Separator for roles in `rolesHeader`                           |
+| `extended`         | bool         | No       | `false`        | Use `extended-proxy` (forwards user attributes for DLS)        |
+| `attrHeaderPrefix` | string       | No       | `x-proxy-ext-` | Header prefix for extended-proxy user attributes               |
+| `xff`              | ProxyXFFSpec | **Yes**  | -              | Proxy detection settings (see below)                           |
+
+**ProxyXFFSpec**
+
+| Field             | Type   | Required | Default           | Description                                                |
+| ----------------- | ------ | -------- | ----------------- | ---------------------------------------------------------- |
+| `internalProxies` | string | **Yes**  | -                 | Regex matching the IPs of all trusted proxies (`.*` = all) |
+| `remoteIpHeader`  | string | No       | `x-forwarded-for` | Header carrying the client IP chain                        |
+
+**Example — proxy auth (front proxy sets identity headers) + local basic auth:**
+
+```yaml
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchAuthConfig
+metadata:
+  name: proxy-auth
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: production
+      namespace: wazuh
+  # Local users stay available (dashboard keeps basic auth).
+  basicAuth:
+    enabled: true
+    order: 0
+    challenge: true
+  proxy:
+    enabled: true
+    order: 5
+    userHeader: "x-proxy-user"
+    rolesHeader: "x-proxy-roles"
+    rolesSeparator: ","
+    xff:
+      internalProxies: '192\.168\.0\.\d+|10\.0\.0\.1'
+      remoteIpHeader: "x-forwarded-for"
+```
+
+Map the roles carried in `rolesHeader` to OpenSearch roles with an
+`OpenSearchRoleMapping` (backend roles).
 
 See sample files for detailed authentication configurations.
 

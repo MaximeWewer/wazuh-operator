@@ -68,7 +68,7 @@ func (v *OpenSearchAuthConfigCustomValidator) validateOpenSearchAuthConfig(authC
 
 	// Rule 1: At least one auth method must be enabled
 	if !v.hasEnabledAuthMethod(spec) {
-		allErrors = append(allErrors, "spec: at least one authentication method must be enabled (basicAuth, oidc, saml, ldap, or jwt)")
+		allErrors = append(allErrors, "spec: at least one authentication method must be enabled (basicAuth, oidc, saml, ldap, jwt, or proxy)")
 	}
 
 	// Rule 2: OIDC enabled → connectURL and clientId required
@@ -125,7 +125,15 @@ func (v *OpenSearchAuthConfigCustomValidator) validateOpenSearchAuthConfig(authC
 		}
 	}
 
-	// Rule 6: Warning if more than one auth domain has challenge=true
+	// Rule 6: Proxy enabled → xff.internalProxies required (without it the security
+	// plugin ignores the proxy identity headers).
+	if spec.Proxy != nil && spec.Proxy.Enabled {
+		if spec.Proxy.XFF.InternalProxies == "" {
+			allErrors = append(allErrors, "spec.proxy.xff.internalProxies is required when proxy is enabled")
+		}
+	}
+
+	// Rule 7: Warning if more than one auth domain has challenge=true
 	challengeCount := v.countChallengeDomains(spec)
 	if challengeCount > 1 {
 		warnings = append(warnings, fmt.Sprintf("%d authentication domains have challenge=true; only one should issue challenges to avoid conflicts", challengeCount))
@@ -153,6 +161,9 @@ func (v *OpenSearchAuthConfigCustomValidator) hasEnabledAuthMethod(spec *OpenSea
 		return true
 	}
 	if spec.JWT != nil && spec.JWT.Enabled {
+		return true
+	}
+	if spec.Proxy != nil && spec.Proxy.Enabled {
 		return true
 	}
 	return false
