@@ -428,13 +428,16 @@ spec:
                     description: Dashboard configures OIDC-specific dashboard settings
                     properties:
                       additionalCookies:
-                        description: AdditionalCookies defines extra cookies to set
+                        description: |-
+                          AdditionalCookies is the number of extra split cookies opensearch-dashboards may use to
+                          store a large OIDC session (emitted as openid.extra_storage.additional_cookies).
                         items:
                           type: string
                         type: array
                       cookiePasswordRef:
-                        description: CookiePassword is the password for cookie encryption
-                          (auto-generated if not set)
+                        description: |-
+                          CookiePasswordRef references a Secret holding the session-cookie signing password
+                          (auto-generated and persisted if not set).
                         properties:
                           key:
                             default: password
@@ -446,23 +449,14 @@ spec:
                         required:
                         - name
                         type: object
-                      cookiePrefix:
-                        default: security_authentication
-                        description: CookiePrefix is the prefix for OIDC cookies
-                        type: string
-                      loginEndpoint:
-                        default: /auth/openid/login
-                        description: LoginEndpoint is the custom login endpoint path
-                        type: string
-                      logoutEndpoint:
-                        default: /auth/openid/logout
-                        description: LogoutEndpoint is the custom logout endpoint
-                          path
-                        type: string
                       rootUrl:
                         description: |-
-                          RootURL is the base URL of the dashboard for OIDC callbacks
-                          Example: https://dashboard.example.com
+                          RootURL is the dashboard's public base URL (scheme + host, no path). It is emitted as
+                          opensearch_security.openid.base_redirect_url. Set it whenever the dashboard is reached
+                          through a reverse proxy or Ingress: without it the security plugin builds the OIDC
+                          redirect_uri from server.host, so the login flow starts at https://0.0.0.0:5601/auth/openid/login
+                          (the in-pod address) instead of your public URL, and the IdP rejects the callback.
+                          Example: https://wazuh.example.com
                         type: string
                     type: object
                   enabled:

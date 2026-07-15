@@ -58,6 +58,12 @@ spec:
     subjectKey: "preferred_username"
     rolesKey: "groups"          # claim -> backend_roles
     scope: "openid profile email groups"
+    dashboard:
+      # REQUIRED behind a reverse proxy / Ingress. Emitted as
+      # opensearch_security.openid.base_redirect_url. Without it the dashboard builds the OIDC
+      # redirect_uri from server.host and starts the flow at https://0.0.0.0:5601/auth/openid/login
+      # (the in-pod address), which your IdP rejects. Set it to the dashboard's public URL.
+      rootUrl: "https://wazuh.example.com"
 
 # =============================================================================
 # OpenSearch roles (indexer + dashboard) — identical to the internal-user case

@@ -160,30 +160,24 @@ type OIDCAuthSpec struct {
 
 // OIDCDashboardSpec configures OIDC settings for OpenSearch Dashboard
 type OIDCDashboardSpec struct {
-	// RootURL is the base URL of the dashboard for OIDC callbacks
-	// Example: https://dashboard.example.com
+	// RootURL is the dashboard's public base URL (scheme + host, no path). It is emitted as
+	// opensearch_security.openid.base_redirect_url. Set it whenever the dashboard is reached
+	// through a reverse proxy or Ingress: without it the security plugin builds the OIDC
+	// redirect_uri from server.host, so the login flow starts at https://0.0.0.0:5601/auth/openid/login
+	// (the in-pod address) instead of your public URL, and the IdP rejects the callback.
+	// Example: https://wazuh.example.com
 	// +optional
 	RootURL string `json:"rootUrl,omitempty"`
 
-	// LoginEndpoint is the custom login endpoint path
-	// +kubebuilder:default="/auth/openid/login"
-	LoginEndpoint string `json:"loginEndpoint,omitempty"`
-
-	// LogoutEndpoint is the custom logout endpoint path
-	// +kubebuilder:default="/auth/openid/logout"
-	LogoutEndpoint string `json:"logoutEndpoint,omitempty"`
-
-	// CookiePassword is the password for cookie encryption (auto-generated if not set)
+	// CookiePasswordRef references a Secret holding the session-cookie signing password
+	// (auto-generated and persisted if not set).
 	// +optional
 	CookiePasswordRef *SecretKeyRef `json:"cookiePasswordRef,omitempty"`
 
-	// AdditionalCookies defines extra cookies to set
+	// AdditionalCookies is the number of extra split cookies opensearch-dashboards may use to
+	// store a large OIDC session (emitted as openid.extra_storage.additional_cookies).
 	// +optional
 	AdditionalCookies []string `json:"additionalCookies,omitempty"`
-
-	// CookiePrefix is the prefix for OIDC cookies
-	// +kubebuilder:default="security_authentication"
-	CookiePrefix string `json:"cookiePrefix,omitempty"`
 }
 
 // ============================================================================
