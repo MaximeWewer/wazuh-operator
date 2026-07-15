@@ -184,14 +184,14 @@ type IdpTLSSpec struct {
 	// EnableSSL turns on the custom TLS settings below. When false (default) the JDK/system trust
 	// store is used, which is enough for a publicly-trusted IdP certificate.
 	// +optional
-	EnableSSL bool `json:"enableSSL,omitempty"`
+	EnableSSL bool `json:"enableSsl,omitempty"`
 	// VerifyHostnames verifies the IdP certificate hostname. Defaults to true; set false only for
 	// an IdP whose certificate does not match its address.
 	// +optional
 	VerifyHostnames *bool `json:"verifyHostnames,omitempty"`
 	// TrustedCAsSecretRef references a Secret holding the PEM CA bundle to trust for the IdP
 	// connection, emitted inline as pemtrustedcas_content. A CA certificate is not secret; a Secret
-	// just keeps a multi-line bundle out of the CR. Requires enableSSL: true.
+	// just keeps a multi-line bundle out of the CR. Requires enableSsl: true.
 	// +optional
 	TrustedCAsSecretRef *SecretKeyRef `json:"trustedCAsSecretRef,omitempty"`
 }

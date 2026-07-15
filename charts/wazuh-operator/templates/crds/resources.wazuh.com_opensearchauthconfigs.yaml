@@ -539,7 +539,7 @@ spec:
                       discovery endpoint when the IdP presents a certificate signed by a private or
                       otherwise untrusted CA.
                     properties:
-                      enableSSL:
+                      enableSsl:
                         description: |-
                           EnableSSL turns on the custom TLS settings below. When false (default) the JDK/system trust
                           store is used, which is enough for a publicly-trusted IdP certificate.
@@ -548,7 +548,7 @@ spec:
                         description: |-
                           TrustedCAsSecretRef references a Secret holding the PEM CA bundle to trust for the IdP
                           connection, emitted inline as pemtrustedcas_content. A CA certificate is not secret; a Secret
-                          just keeps a multi-line bundle out of the CR. Requires enableSSL: true.
+                          just keeps a multi-line bundle out of the CR. Requires enableSsl: true.
                         properties:
                           key:
                             default: password
@@ -726,7 +726,7 @@ spec:
                       metadata URL when the IdP presents a certificate signed by a private or otherwise
                       untrusted CA.
                     properties:
-                      enableSSL:
+                      enableSsl:
                         description: |-
                           EnableSSL turns on the custom TLS settings below. When false (default) the JDK/system trust
                           store is used, which is enough for a publicly-trusted IdP certificate.
@@ -735,7 +735,7 @@ spec:
                         description: |-
                           TrustedCAsSecretRef references a Secret holding the PEM CA bundle to trust for the IdP
                           connection, emitted inline as pemtrustedcas_content. A CA certificate is not secret; a Secret
-                          just keeps a multi-line bundle out of the CR. Requires enableSSL: true.
+                          just keeps a multi-line bundle out of the CR. Requires enableSsl: true.
                         properties:
                           key:
                             default: password
