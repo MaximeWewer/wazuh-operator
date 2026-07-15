@@ -153,9 +153,35 @@ type OIDCAuthSpec struct {
 	// +optional
 	LogoutURL string `json:"logoutUrl,omitempty"`
 
+	// IdpTLS configures TLS trust for the security plugin's connection to the OIDC
+	// discovery endpoint when the IdP presents a certificate signed by a private or
+	// otherwise untrusted CA.
+	// +optional
+	IdpTLS *IdpTLSSpec `json:"idpTLS,omitempty"`
+
 	// Dashboard configures OIDC-specific dashboard settings
 	// +optional
 	Dashboard *OIDCDashboardSpec `json:"dashboard,omitempty"`
+}
+
+// IdpTLSSpec configures TLS trust for the security plugin's connection to an external IdP
+// (OIDC discovery endpoint / SAML metadata URL) that presents a certificate signed by a private
+// or otherwise untrusted CA. The CA is inlined into the security config, so nothing has to be
+// mounted into the indexer.
+type IdpTLSSpec struct {
+	// EnableSSL turns on the custom TLS settings below. When false (default) the JDK/system trust
+	// store is used, which is enough for a publicly-trusted IdP certificate.
+	// +optional
+	EnableSSL bool `json:"enableSSL,omitempty"`
+	// VerifyHostnames verifies the IdP certificate hostname. Defaults to true; set false only for
+	// an IdP whose certificate does not match its address.
+	// +optional
+	VerifyHostnames *bool `json:"verifyHostnames,omitempty"`
+	// TrustedCAsSecretRef references a Secret holding the PEM CA bundle to trust for the IdP
+	// connection, emitted inline as pemtrustedcas_content. A CA certificate is not secret; a Secret
+	// just keeps a multi-line bundle out of the CR. Requires enableSSL: true.
+	// +optional
+	TrustedCAsSecretRef *SecretKeyRef `json:"trustedCAsSecretRef,omitempty"`
 }
 
 // OIDCDashboardSpec configures OIDC settings for OpenSearch Dashboard
@@ -242,6 +268,12 @@ type SAMLAuthSpec struct {
 	// +optional
 	ExchangeKeyRef *SecretKeyRef `json:"exchangeKeyRef,omitempty"`
 
+	// IdpTLS configures TLS trust for the security plugin's connection to the SAML IdP
+	// metadata URL when the IdP presents a certificate signed by a private or otherwise
+	// untrusted CA.
+	// +optional
+	IdpTLS *IdpTLSSpec `json:"idpTLS,omitempty"`
+
 	// Dashboard configures SAML-specific dashboard settings
 	// +optional
 	Dashboard *SAMLDashboardSpec `json:"dashboard,omitempty"`
@@ -249,10 +281,6 @@ type SAMLAuthSpec struct {
 
 // SAMLDashboardSpec configures SAML settings for OpenSearch Dashboard
 type SAMLDashboardSpec struct {
-	// RequestedAuthnContextRef specifies the authentication context requirements
-	// +optional
-	RequestedAuthnContextRef string `json:"requestedAuthnContextRef,omitempty"`
-
 	// XSRFAllowlist specifies URLs to exclude from XSRF protection
 	// Typically includes the SAML ACS endpoint
 	// +optional
@@ -303,10 +331,6 @@ type LDAPAuthSpec struct {
 	// TLS configures LDAP TLS/SSL settings
 	// +optional
 	TLS *LDAPTLSSpec `json:"tls,omitempty"`
-
-	// ConnectionPool configures connection pooling
-	// +optional
-	ConnectionPool *LDAPConnectionPoolSpec `json:"connectionPool,omitempty"`
 }
 
 // LDAPAuthenticationSpec configures LDAP authentication
@@ -390,19 +414,13 @@ type LDAPTLSSpec struct {
 	// PemTrustedCAsFilepath is the path to trusted CA certificates
 	// +optional
 	PemTrustedCAsFilepath string `json:"pemTrustedCasFilepath,omitempty"`
-}
 
-// LDAPConnectionPoolSpec configures LDAP connection pooling
-type LDAPConnectionPoolSpec struct {
-	// MinSize is the minimum pool size
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:default=3
-	MinSize int `json:"minSize,omitempty"`
-
-	// MaxSize is the maximum pool size
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:default=10
-	MaxSize int `json:"maxSize,omitempty"`
+	// TrustedCAsSecretRef references a Secret holding the PEM CA bundle to trust for the
+	// LDAPS/StartTLS connection, emitted inline as pemtrustedcas_content. A CA certificate
+	// is not secret; a Secret just keeps a multi-line bundle out of the CR. Mutually
+	// exclusive with pemTrustedCAsFilepath per OpenSearch.
+	// +optional
+	TrustedCAsSecretRef *SecretKeyRef `json:"trustedCAsSecretRef,omitempty"`
 }
 
 // ============================================================================

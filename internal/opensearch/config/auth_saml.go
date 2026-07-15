@@ -57,6 +57,18 @@ func (b *AuthConfigBuilder) buildSAMLAuthDomain(spec *v1.SAMLAuthSpec) AuthDomai
 		config["exchange_key"] = secret
 	}
 
+	// Custom/private CA trust for the security plugin's connection to the SAML IdP
+	// metadata URL. The CA bundle is inlined so nothing needs mounting.
+	if spec.IdpTLS != nil && spec.IdpTLS.EnableSSL {
+		config["idp.enable_ssl"] = true
+		if spec.IdpTLS.VerifyHostnames != nil {
+			config["idp.verify_hostnames"] = *spec.IdpTLS.VerifyHostnames
+		}
+		if ca, ok := b.resolvedSecrets[AuthSecretKeySAMLIdpCA]; ok && ca != "" {
+			config["idp.pemtrustedcas_content"] = ca
+		}
+	}
+
 	return AuthDomainConfig{
 		Name:                "saml_auth_domain",
 		Order:               spec.Order,

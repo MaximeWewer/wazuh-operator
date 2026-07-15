@@ -325,20 +325,6 @@ spec:
                       Challenge enables authentication challenge
                       Should typically be false when multiple auth methods are enabled
                     type: boolean
-                  connectionPool:
-                    description: ConnectionPool configures connection pooling
-                    properties:
-                      maxSize:
-                        default: 10
-                        description: MaxSize is the maximum pool size
-                        minimum: 1
-                        type: integer
-                      minSize:
-                        default: 3
-                        description: MinSize is the minimum pool size
-                        minimum: 0
-                        type: integer
-                    type: object
                   enabled:
                     default: false
                     description: Enabled enables LDAP authentication
@@ -380,6 +366,23 @@ spec:
                         description: TrustAllCertificates disables certificate verification
                           (insecure)
                         type: boolean
+                      trustedCAsSecretRef:
+                        description: |-
+                          TrustedCAsSecretRef references a Secret holding the PEM CA bundle to trust for the
+                          LDAPS/StartTLS connection, emitted inline as pemtrustedcas_content. A CA certificate
+                          is not secret; a Secret just keeps a multi-line bundle out of the CR. Mutually
+                          exclusive with pemTrustedCAsFilepath per OpenSearch.
+                        properties:
+                          key:
+                            default: password
+                            description: Key is the key in the secret
+                            type: string
+                          name:
+                            description: Name is the secret name
+                            type: string
+                        required:
+                        - name
+                        type: object
                       verifyHostnames:
                         default: true
                         description: VerifyHostnames enables hostname verification
@@ -467,6 +470,39 @@ spec:
                     default: true
                     description: HTTPEnabled enables authentication on HTTP layer
                     type: boolean
+                  idpTLS:
+                    description: |-
+                      IdpTLS configures TLS trust for the security plugin's connection to the OIDC
+                      discovery endpoint when the IdP presents a certificate signed by a private or
+                      otherwise untrusted CA.
+                    properties:
+                      enableSSL:
+                        description: |-
+                          EnableSSL turns on the custom TLS settings below. When false (default) the JDK/system trust
+                          store is used, which is enough for a publicly-trusted IdP certificate.
+                        type: boolean
+                      trustedCAsSecretRef:
+                        description: |-
+                          TrustedCAsSecretRef references a Secret holding the PEM CA bundle to trust for the IdP
+                          connection, emitted inline as pemtrustedcas_content. A CA certificate is not secret; a Secret
+                          just keeps a multi-line bundle out of the CR. Requires enableSSL: true.
+                        properties:
+                          key:
+                            default: password
+                            description: Key is the key in the secret
+                            type: string
+                          name:
+                            description: Name is the secret name
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      verifyHostnames:
+                        description: |-
+                          VerifyHostnames verifies the IdP certificate hostname. Defaults to true; set false only for
+                          an IdP whose certificate does not match its address.
+                        type: boolean
+                    type: object
                   logoutUrl:
                     description: LogoutURL is the URL to redirect after logout
                     type: string
@@ -505,10 +541,6 @@ spec:
                   dashboard:
                     description: Dashboard configures SAML-specific dashboard settings
                     properties:
-                      requestedAuthnContextRef:
-                        description: RequestedAuthnContextRef specifies the authentication
-                          context requirements
-                        type: string
                       xsrfAllowlist:
                         description: |-
                           XSRFAllowlist specifies URLs to exclude from XSRF protection
@@ -553,6 +585,39 @@ spec:
                       IdpMetadataURL is the URL to fetch IdP metadata from
                       Either IdpMetadataURL or IdpMetadataFile must be specified
                     type: string
+                  idpTLS:
+                    description: |-
+                      IdpTLS configures TLS trust for the security plugin's connection to the SAML IdP
+                      metadata URL when the IdP presents a certificate signed by a private or otherwise
+                      untrusted CA.
+                    properties:
+                      enableSSL:
+                        description: |-
+                          EnableSSL turns on the custom TLS settings below. When false (default) the JDK/system trust
+                          store is used, which is enough for a publicly-trusted IdP certificate.
+                        type: boolean
+                      trustedCAsSecretRef:
+                        description: |-
+                          TrustedCAsSecretRef references a Secret holding the PEM CA bundle to trust for the IdP
+                          connection, emitted inline as pemtrustedcas_content. A CA certificate is not secret; a Secret
+                          just keeps a multi-line bundle out of the CR. Requires enableSSL: true.
+                        properties:
+                          key:
+                            default: password
+                            description: Key is the key in the secret
+                            type: string
+                          name:
+                            description: Name is the secret name
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      verifyHostnames:
+                        description: |-
+                          VerifyHostnames verifies the IdP certificate hostname. Defaults to true; set false only for
+                          an IdP whose certificate does not match its address.
+                        type: boolean
+                    type: object
                   kibanaUrl:
                     description: |-
                       KibanaURL is the base URL of OpenSearch Dashboard

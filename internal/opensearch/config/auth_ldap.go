@@ -48,6 +48,10 @@ func (b *AuthConfigBuilder) buildLDAPAuthDomain(spec *v1.LDAPAuthSpec) AuthDomai
 		if spec.TLS.PemTrustedCAsFilepath != "" {
 			config["pemtrustedcas_filepath"] = spec.TLS.PemTrustedCAsFilepath
 		}
+
+		if ca, ok := b.resolvedSecrets[AuthSecretKeyLDAPCA]; ok && ca != "" {
+			config["pemtrustedcas_content"] = ca
+		}
 	}
 
 	// Hosts
@@ -95,6 +99,10 @@ func (b *AuthConfigBuilder) buildLDAPAuthzDomain(spec *v1.LDAPAuthSpec) AuthDoma
 
 		if spec.TLS.PemTrustedCAsFilepath != "" {
 			config["pemtrustedcas_filepath"] = spec.TLS.PemTrustedCAsFilepath
+		}
+
+		if ca, ok := b.resolvedSecrets[AuthSecretKeyLDAPCA]; ok && ca != "" {
+			config["pemtrustedcas_content"] = ca
 		}
 	}
 

@@ -55,6 +55,18 @@ func (b *AuthConfigBuilder) buildOIDCAuthDomain(spec *v1.OIDCAuthSpec) AuthDomai
 		config["logout_url"] = spec.LogoutURL
 	}
 
+	// Custom/private CA trust for the security plugin's connection to the OIDC
+	// discovery endpoint. The CA bundle is inlined so nothing needs mounting.
+	if spec.IdpTLS != nil && spec.IdpTLS.EnableSSL {
+		config["openid_connect_idp.enable_ssl"] = true
+		if spec.IdpTLS.VerifyHostnames != nil {
+			config["openid_connect_idp.verify_hostnames"] = *spec.IdpTLS.VerifyHostnames
+		}
+		if ca, ok := b.resolvedSecrets[AuthSecretKeyOIDCIdpCA]; ok && ca != "" {
+			config["openid_connect_idp.pemtrustedcas_content"] = ca
+		}
+	}
+
 	return AuthDomainConfig{
 		Name:                "openid_auth_domain",
 		Order:               spec.Order,

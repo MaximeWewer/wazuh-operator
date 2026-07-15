@@ -246,9 +246,9 @@ func (b *DashboardAuthConfigBuilder) buildCookiePassword() (string, error) {
 // buildSAMLDashboardConfig generates SAML-specific dashboard configuration.
 // Reference: https://docs.opensearch.org/2.18/security/authentication-backends/saml/
 // Only keys documented for opensearch_dashboards.yml are emitted. `saml.exchange_key`
-// and `saml.requestedAuthnContextRef` belong to the security backend config.yml
-// (http_authenticator.config.*) and are emitted there by the indexer security
-// builder — writing them to opensearch_dashboards.yml produced ValidationErrors.
+// belongs to the security backend config.yml (http_authenticator.config.*) and is
+// emitted there by the indexer security builder — writing it to
+// opensearch_dashboards.yml produced ValidationErrors.
 // The `server.xsrf.allowlist` entry is a core dashboards setting and remains valid.
 func (b *DashboardAuthConfigBuilder) buildSAMLDashboardConfig() string {
 	var sb strings.Builder

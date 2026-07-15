@@ -79,6 +79,9 @@ func (v *OpenSearchAuthConfigCustomValidator) validateOpenSearchAuthConfig(authC
 		if spec.OIDC.ClientID == "" {
 			allErrors = append(allErrors, "spec.oidc.clientId: is required when OIDC is enabled")
 		}
+		if spec.OIDC.IdpTLS != nil && spec.OIDC.IdpTLS.TrustedCAsSecretRef != nil && !spec.OIDC.IdpTLS.EnableSSL {
+			allErrors = append(allErrors, "spec.oidc.idpTLS.trustedCAsSecretRef: requires enableSSL: true")
+		}
 	}
 
 	// Rule 3: SAML enabled → idpEntityId, spEntityId, kibanaUrl required + idpMetadataUrl or idpMetadataFile
@@ -94,6 +97,9 @@ func (v *OpenSearchAuthConfigCustomValidator) validateOpenSearchAuthConfig(authC
 		}
 		if spec.SAML.IdpMetadataURL == "" && spec.SAML.IdpMetadataFile == "" {
 			allErrors = append(allErrors, "spec.saml: either idpMetadataUrl or idpMetadataFile must be specified when SAML is enabled")
+		}
+		if spec.SAML.IdpTLS != nil && spec.SAML.IdpTLS.TrustedCAsSecretRef != nil && !spec.SAML.IdpTLS.EnableSSL {
+			allErrors = append(allErrors, "spec.saml.idpTLS.trustedCAsSecretRef: requires enableSSL: true")
 		}
 	}
 

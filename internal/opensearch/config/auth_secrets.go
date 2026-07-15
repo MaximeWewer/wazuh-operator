@@ -31,8 +31,11 @@ import (
 const (
 	AuthSecretKeyOIDCClientSecret   = "oidc_client_secret"
 	AuthSecretKeyOIDCCookiePassword = "oidc_cookie_password"
+	AuthSecretKeyOIDCIdpCA          = "oidc_idp_ca"
 	AuthSecretKeySAMLExchangeKey    = "saml_exchange_key"
+	AuthSecretKeySAMLIdpCA          = "saml_idp_ca"
 	AuthSecretKeyLDAPBindPassword   = "ldap_bind_password"
+	AuthSecretKeyLDAPCA             = "ldap_ca"
 	AuthSecretKeyJWTSigningKey      = "jwt_signing_key"
 )
 
@@ -63,6 +66,15 @@ func ResolveAuthSecrets(ctx context.Context, cli client.Client, authConfig *wazu
 		secrets[AuthSecretKeyOIDCCookiePassword] = v
 	}
 
+	if authConfig.Spec.OIDC != nil && authConfig.Spec.OIDC.IdpTLS != nil &&
+		authConfig.Spec.OIDC.IdpTLS.TrustedCAsSecretRef != nil {
+		v, err := getSecretValue(ctx, cli, ns, authConfig.Spec.OIDC.IdpTLS.TrustedCAsSecretRef)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve OIDC IdP CA bundle: %w", err)
+		}
+		secrets[AuthSecretKeyOIDCIdpCA] = v
+	}
+
 	if authConfig.Spec.SAML != nil && authConfig.Spec.SAML.ExchangeKeyRef != nil {
 		v, err := getSecretValue(ctx, cli, ns, authConfig.Spec.SAML.ExchangeKeyRef)
 		if err != nil {
@@ -71,12 +83,30 @@ func ResolveAuthSecrets(ctx context.Context, cli client.Client, authConfig *wazu
 		secrets[AuthSecretKeySAMLExchangeKey] = v
 	}
 
+	if authConfig.Spec.SAML != nil && authConfig.Spec.SAML.IdpTLS != nil &&
+		authConfig.Spec.SAML.IdpTLS.TrustedCAsSecretRef != nil {
+		v, err := getSecretValue(ctx, cli, ns, authConfig.Spec.SAML.IdpTLS.TrustedCAsSecretRef)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve SAML IdP CA bundle: %w", err)
+		}
+		secrets[AuthSecretKeySAMLIdpCA] = v
+	}
+
 	if authConfig.Spec.LDAP != nil && authConfig.Spec.LDAP.Authentication.BindPasswordRef != nil {
 		v, err := getSecretValue(ctx, cli, ns, authConfig.Spec.LDAP.Authentication.BindPasswordRef)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve LDAP bind password: %w", err)
 		}
 		secrets[AuthSecretKeyLDAPBindPassword] = v
+	}
+
+	if authConfig.Spec.LDAP != nil && authConfig.Spec.LDAP.TLS != nil &&
+		authConfig.Spec.LDAP.TLS.TrustedCAsSecretRef != nil {
+		v, err := getSecretValue(ctx, cli, ns, authConfig.Spec.LDAP.TLS.TrustedCAsSecretRef)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve LDAP CA bundle: %w", err)
+		}
+		secrets[AuthSecretKeyLDAPCA] = v
 	}
 
 	if authConfig.Spec.JWT != nil && authConfig.Spec.JWT.SigningKeyRef != nil {
