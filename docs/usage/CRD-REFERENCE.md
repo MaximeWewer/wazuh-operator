@@ -727,8 +727,13 @@ Creates custom action groups.
 
 ### OpenSearchAuthConfig
 
-Manages authentication configuration (Basic, OIDC, SAML, LDAP, JWT).
+Manages authentication configuration (Basic, OIDC, SAML, LDAP, JWT, Proxy, Kerberos).
 Each enabled method becomes a separate `authc` domain ordered by its `order` field.
+
+> **Which config surface each backend drives.** `basic`/`jwt`/`oidc`/`saml`/`ldap`/`proxy`/`kerberos`
+> are all indexer `config.yml` `authc` domains. Additionally `oidc`/`saml`/`jwt` drive the dashboard
+> `opensearch_dashboards.yml` `opensearch_security.auth.type`, so the dashboard sign-in switches to SSO.
+> `ldap`/`proxy`/`kerberos` are indexer/API-only — the dashboard keeps basic auth.
 
 > **Internal basic auth is always kept.** The operator always emits
 > `basic_internal_auth_domain` (HTTP + transport), regardless of `basicAuth`. The
@@ -868,6 +873,142 @@ Static-key variant (works on every version, `type: jwt`):
 ```
 
 Map the `roles` claim to OpenSearch roles with an `OpenSearchRoleMapping` (backend roles).
+
+#### OIDCAuthSpec
+
+OpenID Connect authentication. Drives both the indexer `authc` domain and the
+dashboard `opensearch_security.auth.type: openid`. `connectURL` and `clientId` are
+required.
+
+| Field             | Type              | Required | Default                  | Description                                                             |
+| ----------------- | ----------------- | -------- | ------------------------ | ----------------------------------------------------------------------- |
+| `enabled`         | bool              | No       | `false`                  | Enable OIDC auth domain                                                  |
+| `order`           | int               | No       | `1`                      | Evaluation order among auth domains                                      |
+| `challenge`       | bool              | No       | `false`                  | Issue auth challenge (keep `false` alongside basic)                     |
+| `httpEnabled`     | bool              | No       | `true`                   | Enable on HTTP layer                                                     |
+| `connectURL`      | string            | **Yes**  | -                        | OIDC discovery endpoint (`.well-known/openid-configuration`)            |
+| `clientId`        | string            | **Yes**  | -                        | OAuth 2.0 client ID                                                      |
+| `clientSecretRef` | SecretKeyRef      | No       | -                        | Secret with the OAuth 2.0 client secret                                 |
+| `subjectKey`      | string            | No       | `preferred_username`     | JWT claim used as the username                                          |
+| `rolesKey`        | string            | No       | `roles`                  | JWT claim containing user roles                                         |
+| `scope`           | string            | No       | `openid profile email`   | OAuth 2.0 scope to request                                              |
+| `logoutUrl`       | string            | No       | -                        | URL to redirect to after logout                                        |
+| `idpTLS`          | IdpTLSSpec        | No       | -                        | TLS trust for the plugin→IdP discovery connection (private CA)         |
+| `dashboard`       | OIDCDashboardSpec | No       | -                        | OIDC-specific dashboard settings (see below)                           |
+
+#### OIDCDashboardSpec
+
+| Field               | Type         | Required | Default | Description                                                                       |
+| ------------------- | ------------ | -------- | ------- | --------------------------------------------------------------------------------- |
+| `rootUrl`           | string       | No\*     | -       | Dashboard public base URL (scheme + host, no path); emitted as `opensearch_security.openid.base_redirect_url` |
+| `cookiePasswordRef` | SecretKeyRef | No       | (auto)  | Secret with the session-cookie signing password (auto-generated if unset)         |
+| `additionalCookies` | []string     | No       | -       | Extra split cookies for large OIDC sessions (`openid.extra_storage.additional_cookies`) |
+
+\* `rootUrl` is **required behind a reverse proxy or Ingress**: without it the
+security plugin builds the OIDC `redirect_uri` from `server.host`, so the login flow
+starts at the in-pod address (`https://0.0.0.0:5601/auth/openid/login`) and the IdP
+rejects the callback.
+
+#### SAMLAuthSpec
+
+SAML 2.0 authentication. Drives both the indexer `authc` domain and the dashboard
+`opensearch_security.auth.type: saml`. Supply IdP metadata via `idpMetadataUrl`
+**or** `idpMetadataFile`. `idpEntityId`, `spEntityId` and `kibanaUrl` are required.
+
+| Field             | Type              | Required | Default  | Description                                                             |
+| ----------------- | ----------------- | -------- | -------- | ----------------------------------------------------------------------- |
+| `enabled`         | bool              | No       | `false`  | Enable SAML auth domain                                                  |
+| `order`           | int               | No       | `2`      | Evaluation order among auth domains                                      |
+| `challenge`       | bool              | No       | `false`  | Issue auth challenge (keep `false` alongside basic)                     |
+| `httpEnabled`     | bool              | No       | `true`   | Enable on HTTP layer                                                     |
+| `idpMetadataUrl`  | string            | No\*     | -        | URL to fetch IdP metadata from                                         |
+| `idpMetadataFile` | string            | No\*     | -        | Path to an IdP metadata XML file                                       |
+| `idpEntityId`     | string            | **Yes**  | -        | Entity ID of the Identity Provider                                     |
+| `spEntityId`      | string            | **Yes**  | -        | Entity ID of this Service Provider (usually the dashboard URL)         |
+| `kibanaUrl`       | string            | **Yes**  | -        | Base URL of OpenSearch Dashboard (assertion consumer service URL)      |
+| `subjectKey`      | string            | No       | `NameID` | SAML attribute used as the username                                    |
+| `rolesKey`        | string            | No       | -        | SAML attribute containing user roles                                   |
+| `exchangeKeyRef`  | SecretKeyRef      | No       | -        | Secret with the HMAC256 exchange key (signs/encrypts SAML messages)    |
+| `idpTLS`          | IdpTLSSpec        | No       | -        | TLS trust for the plugin→IdP metadata-URL connection (private CA)      |
+| `dashboard`       | SAMLDashboardSpec | No       | -        | SAML-specific dashboard settings (see below)                           |
+
+\* Provide exactly one of `idpMetadataUrl` or `idpMetadataFile`.
+
+#### SAMLDashboardSpec
+
+| Field           | Type     | Required | Default | Description                                                        |
+| --------------- | -------- | -------- | ------- | ------------------------------------------------------------------ |
+| `xsrfAllowlist` | []string | No       | -       | URLs to exclude from XSRF protection (typically the SAML ACS endpoint) |
+
+#### IdpTLSSpec
+
+Shared by `oidc.idpTLS` and `saml.idpTLS`. Configures TLS trust for the **security
+plugin's** connection to the external IdP (the OIDC discovery endpoint / SAML metadata
+URL) when the IdP presents a certificate signed by a private or otherwise untrusted CA.
+The CA bundle is **inlined** into the security config (emitted as
+`openid_connect_idp.*` / `idp.*` `pemtrustedcas_content`) — nothing is mounted into the
+indexer. A publicly-trusted IdP certificate needs none of this (the JDK/system trust
+store is used).
+
+| Field                 | Type         | Required | Default | Description                                                                 |
+| --------------------- | ------------ | -------- | ------- | --------------------------------------------------------------------------- |
+| `enableSsl`           | bool         | No       | `false` | Turn on the custom TLS settings below (required for `trustedCAsSecretRef`)   |
+| `verifyHostnames`     | \*bool       | No       | `true`  | Verify the IdP certificate hostname                                         |
+| `trustedCAsSecretRef` | SecretKeyRef | No       | -       | Secret holding the PEM CA bundle, emitted inline as `pemtrustedcas_content`; requires `enableSsl: true` |
+
+#### LDAPAuthSpec
+
+LDAP/Active Directory authentication. Indexer/API-only — the dashboard keeps basic
+auth. `hosts` and `authentication` are required.
+
+| Field              | Type                   | Required | Default | Description                                            |
+| ------------------ | ---------------------- | -------- | ------- | ------------------------------------------------------ |
+| `enabled`          | bool                   | No       | `false` | Enable LDAP auth domain                                |
+| `order`            | int                    | No       | `3`     | Evaluation order among auth domains                    |
+| `challenge`        | bool                   | No       | `false` | Issue auth challenge (keep `false` alongside basic)   |
+| `httpEnabled`      | bool                   | No       | `true`  | Enable on HTTP layer                                   |
+| `transportEnabled` | bool                   | No       | `false` | Enable on transport layer                             |
+| `hosts`            | []string               | **Yes**  | -       | LDAP server hostnames or IPs (min 1)                  |
+| `authentication`   | LDAPAuthenticationSpec | **Yes**  | -       | LDAP authentication settings (see below)              |
+| `authorization`    | LDAPAuthorizationSpec  | No       | -       | LDAP authorization / role mapping (see below)         |
+| `tls`              | LDAPTLSSpec            | No       | -       | LDAP TLS/SSL settings (see below)                     |
+
+**LDAPAuthenticationSpec**
+
+| Field               | Type         | Required | Default    | Description                                          |
+| ------------------- | ------------ | -------- | ---------- | ---------------------------------------------------- |
+| `bindDn`            | string       | No       | -          | DN to bind for LDAP searches (e.g. `cn=admin,dc=example,dc=com`) |
+| `bindPasswordRef`   | SecretKeyRef | No       | -          | Secret with the bind password                        |
+| `userBase`          | string       | **Yes**  | -          | Base DN for user searches                            |
+| `userSearch`        | string       | No       | `(uid={0})`| LDAP filter for finding users (`(sAMAccountName={0})` for AD) |
+| `usernameAttribute` | string       | No       | `uid`      | Attribute containing the username                    |
+
+**LDAPAuthorizationSpec**
+
+| Field                | Type   | Required | Default       | Description                                     |
+| -------------------- | ------ | -------- | ------------- | ----------------------------------------------- |
+| `enabled`            | bool   | No       | `true`        | Enable LDAP authorization                       |
+| `roleBase`           | string | **Yes**  | -             | Base DN for role searches                       |
+| `roleSearch`         | string | No       | `(member={0})`| LDAP filter for finding roles                   |
+| `userRoleName`       | string | No       | -             | User attribute for role membership (`memberOf` for AD) |
+| `roleName`           | string | No       | `cn`          | Attribute containing the role name              |
+| `resolveNestedRoles` | bool   | No       | `false`       | Enable nested group resolution                  |
+| `skipUsers`          | bool   | No       | `false`       | Disable user authorization (role-only mode)     |
+
+**LDAPTLSSpec**
+
+`trustedCAsSecretRef` provides the same private-CA trust as the IdP backends: the PEM
+bundle is **inlined** into the security config as `ldap` `pemtrustedcas_content` (no file
+mount), and is mutually exclusive with `pemTrustedCasFilepath` per OpenSearch.
+
+| Field                   | Type         | Required | Default | Description                                                         |
+| ----------------------- | ------------ | -------- | ------- | ------------------------------------------------------------------- |
+| `enableSsl`             | bool         | No       | `false` | Enable LDAPS (port 636)                                             |
+| `enableStartTls`        | bool         | No       | `false` | Enable STARTTLS on the standard port                               |
+| `verifyHostnames`       | bool         | No       | `true`  | Enable hostname verification                                       |
+| `trustAllCertificates`  | bool         | No       | `false` | Disable certificate verification (insecure)                        |
+| `pemTrustedCasFilepath` | string       | No       | -       | Path to trusted CA certificates (mutually exclusive with `trustedCAsSecretRef`) |
+| `trustedCAsSecretRef`   | SecretKeyRef | No       | -       | Secret holding the PEM CA bundle, emitted inline as `pemtrustedcas_content` |
 
 #### ProxyAuthSpec
 
