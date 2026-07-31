@@ -275,6 +275,7 @@ type WazuhVersionInfo struct {
 var wazuhVersionMapping = map[string]WazuhVersionInfo{
 	// BEGIN generated-mapping (managed by hack/version-sync — do not remove markers)
 	// Wazuh 4.14.x - OpenSearch 2.19.3+
+	"4.14.7": {WazuhVersion: "4.14.7", OpenSearchVersion: "2.19.5", PrometheusExporterPluginVersion: "2.19.5.0"},
 	"4.14.6": {WazuhVersion: "4.14.6", OpenSearchVersion: "2.19.5", PrometheusExporterPluginVersion: "2.19.5.0"},
 	"4.14.5": {WazuhVersion: "4.14.5", OpenSearchVersion: "2.19.5", PrometheusExporterPluginVersion: "2.19.5.0"},
 	"4.14.4": {WazuhVersion: "4.14.4", OpenSearchVersion: "2.19.4", PrometheusExporterPluginVersion: "2.19.4.0"},
