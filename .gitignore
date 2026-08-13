@@ -31,3 +31,10 @@ go.work
 
 # Node modules
 node_modules
+
+# Go build output and local tool binaries (Makefile LOCALBIN: controller-gen, envtest, ...)
+bin/
+
+# Test and coverage artifacts
+cover.out
+*.test
