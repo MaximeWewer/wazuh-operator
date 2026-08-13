@@ -1,3 +1,0 @@
-# Ignore everything except chart READMEs
-*
-!charts/*/README.md
