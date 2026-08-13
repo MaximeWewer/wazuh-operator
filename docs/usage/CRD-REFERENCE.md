@@ -47,6 +47,7 @@ additional cluster when targeting more than one.
 - [Wazuh Configuration CRDs](#wazuh-configuration-crds)
   - [WazuhRule](#wazuhrule)
   - [WazuhAgentGroup](#wazuhagentgroup)
+  - [WazuhAgentGroupAssignment](#wazuhagentgroupassignment)
   - [WazuhDecoder](#wazuhdecoder)
   - [WazuhIntegration](#wazuhintegration)
   - [WazuhCDBList](#wazuhcdblist)
