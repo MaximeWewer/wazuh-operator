@@ -31,8 +31,8 @@ spec:
 
 This creates two init containers on every indexer pod:
 
-1. **install-repository-plugins** — Installs the plugin and persists it to the data PVC
-2. **setup-keystore** — Creates the OpenSearch keystore with credentials from the referenced Secret
+1. **install-repository-plugins** - Installs the plugin and persists it to the data PVC
+2. **setup-keystore** - Creates the OpenSearch keystore with credentials from the referenced Secret
 
 No `allow_insecure_settings` or manual init containers needed. See [Repository Plugins & Keystore](repository-plugins.md) for full details.
 
@@ -74,9 +74,9 @@ kubectl create secret generic azure-credentials \
 
 When using MinIO instead of AWS S3, the following settings are required in the SnapshotRepository:
 
-- `pathStyleAccess: true` — MinIO uses path-style URLs instead of virtual-hosted-style
-- `endpoint: http://minio.namespace.svc.cluster.local:9000` — Your MinIO service endpoint
-- `region: us-east-1` — Required for the OpenSearch repository-s3 plugin (the AWS SDK needs a region even for MinIO)
+- `pathStyleAccess: true` - MinIO uses path-style URLs instead of virtual-hosted-style
+- `endpoint: http://minio.namespace.svc.cluster.local:9000` - Your MinIO service endpoint
+- `region: us-east-1` - Required for the OpenSearch repository-s3 plugin (the AWS SDK needs a region even for MinIO)
 
 ### Step 1: Create a Snapshot Repository
 
@@ -108,7 +108,7 @@ spec:
   verify: true # Verify repository after creation
 ```
 
-**AWS S3 Example (keystore-based — recommended):**
+**AWS S3 Example (keystore-based - recommended):**
 
 ```yaml
 apiVersion: resources.wazuh.com/v1
@@ -643,7 +643,7 @@ kubectl create secret generic azure-credentials \
 **Production Recommendations:**
 
 - **AWS:** Use IRSA (IAM Roles for Service Accounts) instead of static credentials
-- **GCS:** Use Workload Identity — omit `credentialsSecret` and the GCS SDK auto-discovers credentials
+- **GCS:** Use Workload Identity - omit `credentialsSecret` and the GCS SDK auto-discovers credentials
 - **Azure:** Use Azure AD Workload Identity where available
 
 ## Monitoring Backup Status

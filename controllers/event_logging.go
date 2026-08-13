@@ -32,7 +32,7 @@ var crEventLog = logf.Log.WithName("cr-events")
 // primary custom resource, then passes every event through unchanged (it never filters).
 //
 // It exists because the controllers reconcile on a 30s resync as well as on real changes,
-// and every reconcile logs the same "Successfully reconciled" line — so there was no way to
+// and every reconcile logs the same "Successfully reconciled" line - so there was no way to
 // tell from the logs when a CR was actually created, modified or deleted. Predicates fire
 // only on watch events, never on the periodic requeue, so logging here yields clean
 // lifecycle logs without the resync noise.

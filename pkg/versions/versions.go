@@ -145,7 +145,7 @@ func WazuhToOpenSearchVersion(wazuhVersion string) (*Version, error) {
 		return &Version{Major: 2, Minor: 6, Patch: 0}, nil
 	case wv.Major >= 5:
 		// Wazuh 5.x ships OpenSearch 3.x. TODO: set the exact OpenSearch version once
-		// the Wazuh 5 release is pinned — it gates JWT-JWKS routing (>= 3.3 uses the
+		// the Wazuh 5 release is pinned - it gates JWT-JWKS routing (>= 3.3 uses the
 		// native jwt authenticator with jwks_uri; < 3.3 uses the openid authenticator).
 		// Until then this conservative 3.0.0 keeps JWKS on the openid authenticator.
 		return &Version{Major: 3, Minor: 0, Patch: 0}, nil
@@ -271,9 +271,9 @@ type WazuhVersionInfo struct {
 // hack/version-sync (run weekly by .github/workflows/version-sync.yml). New rows
 // are appended automatically when a new Wazuh indexer tag ships and its matching
 // OpenSearch prometheus-exporter plugin release exists. Hand-editing inside the
-// markers is fine — the tool only inserts missing rows, it never rewrites yours.
+// markers is fine - the tool only inserts missing rows, it never rewrites yours.
 var wazuhVersionMapping = map[string]WazuhVersionInfo{
-	// BEGIN generated-mapping (managed by hack/version-sync — do not remove markers)
+	// BEGIN generated-mapping (managed by hack/version-sync - do not remove markers)
 	// Wazuh 4.14.x - OpenSearch 2.19.3+
 	"4.14.7": {WazuhVersion: "4.14.7", OpenSearchVersion: "2.19.5", PrometheusExporterPluginVersion: "2.19.5.0"},
 	"4.14.6": {WazuhVersion: "4.14.6", OpenSearchVersion: "2.19.5", PrometheusExporterPluginVersion: "2.19.5.0"},

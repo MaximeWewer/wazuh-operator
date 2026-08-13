@@ -154,7 +154,7 @@ func (s *SecurityConfigSynchronizer) SyncUsers(ctx context.Context, cluster *waz
 
 		logger.V(1).Info("Syncing user", "user", user.Name)
 
-		// Presence-only: skip when the user already exists — the per-CR OpenSearchUser
+		// Presence-only: skip when the user already exists - the per-CR OpenSearchUser
 		// controller owns its content (including password changes). This also avoids an
 		// unnecessary password-secret read.
 		if exists, err := s.securityResourceExists(ctx, osClient, "/_plugins/_security/api/internalusers/"+user.Name); err == nil && exists {
@@ -307,7 +307,7 @@ func (s *SecurityConfigSynchronizer) SyncRoles(ctx context.Context, cluster *waz
 
 		rolePath := "/_plugins/_security/api/roles/" + role.Name
 
-		// Presence-only: skip the write when the role already exists — the per-CR
+		// Presence-only: skip the write when the role already exists - the per-CR
 		// OpenSearchRole controller owns its content. This avoids the redundant writes
 		// that reload the whole security config every reconcile.
 		if exists, err := s.securityResourceExists(ctx, osClient, rolePath); err == nil && exists {
@@ -402,7 +402,7 @@ func (s *SecurityConfigSynchronizer) SyncRoleMappings(ctx context.Context, clust
 
 		mappingPath := "/_plugins/_security/api/rolesmapping/" + mapping.Name
 
-		// Presence-only: skip when the mapping already exists — the per-CR controller owns content.
+		// Presence-only: skip when the mapping already exists - the per-CR controller owns content.
 		if exists, err := s.securityResourceExists(ctx, osClient, mappingPath); err == nil && exists {
 			result.MappingsUpdated++
 			continue
@@ -473,7 +473,7 @@ func (s *SecurityConfigSynchronizer) SyncTenants(ctx context.Context, cluster *w
 
 		tenantPath := "/_plugins/_security/api/tenants/" + tenant.Name
 
-		// Presence-only: skip when the tenant already exists — the per-CR controller owns content.
+		// Presence-only: skip when the tenant already exists - the per-CR controller owns content.
 		if exists, err := s.securityResourceExists(ctx, osClient, tenantPath); err == nil && exists {
 			result.TenantsUpdated++
 			continue
@@ -542,7 +542,7 @@ func (s *SecurityConfigSynchronizer) SyncActionGroups(ctx context.Context, clust
 
 		agPath := "/_plugins/_security/api/actiongroups/" + ag.Name
 
-		// Presence-only: skip when the action group already exists — the per-CR controller owns content.
+		// Presence-only: skip when the action group already exists - the per-CR controller owns content.
 		if exists, err := s.securityResourceExists(ctx, osClient, agPath); err == nil && exists {
 			result.ActionGroupsUpdated++
 			continue

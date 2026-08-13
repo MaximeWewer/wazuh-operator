@@ -120,7 +120,7 @@ Manages Wazuh CDB lists (key/value lookup files) declaratively.
 **Reconciliation**:
 
 1. Validate list name and content source (exactly one of `entries` / `content` / `source`)
-2. Resolve content — render inline entries, or fetch the URL (with `refreshInterval`, auth headers, TLS options) and run the `format` converter (`cdb` / `iplist` / `keylist`) after `skipLines`
+2. Resolve content - render inline entries, or fetch the URL (with `refreshInterval`, auth headers, TLS options) and run the `format` converter (`cdb` / `iplist` / `keylist`) after `skipLines`
 3. Create/update ConfigMap holding `/var/ossec/etc/lists/<listName>`
 4. Mount it read-only into `/var/ossec/etc/lists/` and auto-inject `<list>etc/lists/<listName></list>` into ossec.conf
 5. Roll the targeted manager pods (content hash annotation) so analysisd recompiles the list

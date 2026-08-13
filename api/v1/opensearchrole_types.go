@@ -33,7 +33,7 @@ type OpenSearchRoleSpec struct {
 	ClusterRefs []WazuhClusterRef `json:"clusterRefs"`
 
 	// RoleName is the OpenSearch role name. Defaults to metadata.name.
-	// Set this when the role name is not a valid Kubernetes object name — e.g. it
+	// Set this when the role name is not a valid Kubernetes object name - e.g. it
 	// contains underscores like "all_access".
 	// +optional
 	// +kubebuilder:validation:MaxLength=255

@@ -25,7 +25,7 @@ import (
 
 // The dashboard (kibanaserver), the operator API client (admin) and securityadmin
 // all authenticate via HTTP Basic, so basic_internal_auth_domain must ALWAYS be in
-// the rendered config.yml — even for an SSO-only spec like the one in the GitHub
+// the rendered config.yml - even for an SSO-only spec like the one in the GitHub
 // issue that triggered "Unable to retrieve version information from OpenSearch nodes".
 func TestBuildSecurityConfig_AlwaysIncludesBasicInternalDomain(t *testing.T) {
 	cases := map[string]*v1.OpenSearchAuthConfigSpec{

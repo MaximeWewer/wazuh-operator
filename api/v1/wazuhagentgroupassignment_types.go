@@ -84,7 +84,7 @@ type AgentSelector struct {
 	// OSPlatforms matches the agent's reported os.platform (the controlled short value:
 	// ubuntu, debian, centos, redhat, amzn, windows, darwin, ...). Case-insensitive.
 	// Note: macOS reports as "darwin"; the aliases "macos" and "osx" are accepted and
-	// normalized to "darwin". os.version is intentionally NOT a selector — it is a
+	// normalized to "darwin". os.version is intentionally NOT a selector - it is a
 	// freeform string (e.g. "16.04.6 LTS (Xenial Xerus)") and cannot be matched reliably.
 	// +optional
 	OSPlatforms []string `json:"osPlatforms,omitempty"`

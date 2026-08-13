@@ -36,7 +36,7 @@ import (
 func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *wazuhv1.WazuhCertificate) error {
 	log := logf.FromContext(ctx)
 
-	// Check if the secret already exists and is still valid — skip generation if so.
+	// Check if the secret already exists and is still valid - skip generation if so.
 	// The secret lives in the target cluster's namespace.
 	existingNS := cert.Spec.ClusterRef.Namespace
 	if existingNS == "" {
@@ -44,7 +44,7 @@ func (r *CertificateReconciler) ReconcileStandalone(ctx context.Context, cert *w
 	}
 	existingSecret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cert.Spec.SecretName, Namespace: existingNS}, existingSecret); err == nil {
-		// Secret exists — check if cert is parsable and still valid
+		// Secret exists - check if cert is parsable and still valid
 		if certPEM, ok := existingSecret.Data[constants.SecretKeyTLSCert]; ok {
 			if keyPEM, ok2 := existingSecret.Data[constants.SecretKeyTLSKey]; ok2 {
 				if parsed, parseErr := certificates.ParseNodeCert(certPEM, keyPEM); parseErr == nil {

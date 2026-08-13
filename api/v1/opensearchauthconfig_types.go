@@ -474,7 +474,7 @@ type JWTAuthSpec struct {
 	// verify token signatures. The value is base64-decoded by the security plugin
 	// with a strict decoder (no embedded newlines): for HMAC it is the base64-encoded
 	// shared secret; for RSA/ECDSA it is the base64 of the DER public key on a single
-	// line (the PEM body with headers and line breaks stripped) — a wrapped multi-line
+	// line (the PEM body with headers and line breaks stripped) - a wrapped multi-line
 	// PEM fails to parse. Works on all OpenSearch versions (jwt authenticator).
 	// Either SigningKeyRef or JwksURL must be specified.
 	// +optional
@@ -538,7 +538,7 @@ type ProxyAuthSpec struct {
 	// front proxy). Applies to the indexer/API layer; the dashboard sign-in is unaffected.
 	// +kubebuilder:default=false
 	Enabled bool `json:"enabled,omitempty"`
-	// Order — evaluation order of this auth domain.
+	// Order - evaluation order of this auth domain.
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=100
 	// +kubebuilder:default=5
@@ -546,7 +546,7 @@ type ProxyAuthSpec struct {
 	// HTTPEnabled enables the domain on the HTTP layer.
 	// +kubebuilder:default=true
 	HTTPEnabled bool `json:"httpEnabled,omitempty"`
-	// TransportEnabled — proxy identity headers only arrive over HTTP; leave false.
+	// TransportEnabled - proxy identity headers only arrive over HTTP; leave false.
 	// +kubebuilder:default=false
 	TransportEnabled bool `json:"transportEnabled,omitempty"`
 	// UserHeader is the header carrying the authenticated username.
@@ -565,7 +565,7 @@ type ProxyAuthSpec struct {
 	// AttrHeaderPrefix is the header prefix for extended-proxy user attributes.
 	// +kubebuilder:default="x-proxy-ext-"
 	AttrHeaderPrefix string `json:"attrHeaderPrefix,omitempty"`
-	// XFF configures proxy detection (required — without it the plugin ignores the identity headers).
+	// XFF configures proxy detection (required - without it the plugin ignores the identity headers).
 	// +kubebuilder:validation:Required
 	XFF ProxyXFFSpec `json:"xff"`
 }

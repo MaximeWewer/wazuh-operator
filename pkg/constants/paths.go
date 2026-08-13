@@ -131,7 +131,7 @@ const (
 	// PathDashboardStatusAPI is the dashboard's health endpoint, used for the pod probes rather
 	// than /app/login (which only answers 200 under basicauth). It answers 200 unauthenticated
 	// only because the generated opensearch_dashboards.yml lists it in
-	// opensearch_security.auth.unauthenticated_routes — the security plugin defaults that list
+	// opensearch_security.auth.unauthenticated_routes - the security plugin defaults that list
 	// to empty, so without it every route, this one included, answers 401.
 	PathDashboardStatusAPI = "/api/status"
 

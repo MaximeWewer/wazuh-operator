@@ -176,7 +176,7 @@ func (r *IndexerReconciler) orchestrateNodePoolRollingRestart(ctx context.Contex
 		return nil, nil
 	}
 
-	// All pools complete — only emit event/metrics if status was tracking an active restart
+	// All pools complete - only emit event/metrics if status was tracking an active restart
 	if cluster.Status.RollingRestart != nil && cluster.Status.RollingRestart.Indexer != nil {
 		metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "indexer", metrics.PhaseToValue(constants.DrainPhaseComplete))
 		metrics.ObserveDrainDuration(cluster.Name, cluster.Namespace, "indexer", time.Since(startTime).Seconds())

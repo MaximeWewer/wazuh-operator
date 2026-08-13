@@ -183,7 +183,7 @@ func (b *DashboardAuthConfigBuilder) isMultiAuthEnabled() bool {
 // Reference: https://docs.opensearch.org/2.18/security/authentication-backends/openid-connect/
 // Only keys documented for opensearch_dashboards.yml are emitted here. Prior
 // versions emitted `openid.root_url`, `openid.login_endpoint`, `openid.logout_endpoint`,
-// `openid.cookie.password` and `cookie.prefix` — none of those are recognized by
+// `openid.cookie.password` and `cookie.prefix` - none of those are recognized by
 // opensearch-dashboards and they caused validation failures (FATAL ValidationError
 // on "definition for this key is missing"). Cookie signing is now written under
 // the global `opensearch_security.cookie.password` key by buildCookiePassword().
@@ -247,7 +247,7 @@ func (b *DashboardAuthConfigBuilder) buildCookiePassword() (string, error) {
 // Reference: https://docs.opensearch.org/2.18/security/authentication-backends/saml/
 // Only keys documented for opensearch_dashboards.yml are emitted. `saml.exchange_key`
 // belongs to the security backend config.yml (http_authenticator.config.*) and is
-// emitted there by the indexer security builder — writing it to
+// emitted there by the indexer security builder - writing it to
 // opensearch_dashboards.yml produced ValidationErrors.
 // The `server.xsrf.allowlist` entry is a core dashboards setting and remains valid.
 func (b *DashboardAuthConfigBuilder) buildSAMLDashboardConfig() string {

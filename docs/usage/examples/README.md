@@ -77,7 +77,7 @@ kubectl apply -f production/wazuhcluster-production.yaml
 
 ## GitOps
 
-Deploy the operator and clusters with ArgoCD or Flux — see
+Deploy the operator and clusters with ArgoCD or Flux - see
 [gitops/argocd/README.md](gitops/argocd/README.md) and
 [gitops/flux/README.md](gitops/flux/README.md).
 

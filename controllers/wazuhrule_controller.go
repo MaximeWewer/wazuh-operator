@@ -181,7 +181,7 @@ func (r *WazuhRuleReconciler) findRulesForCluster(ctx context.Context, obj clien
 		return nil
 	}
 
-	// List WazuhRules across all namespaces — they can target any cluster.
+	// List WazuhRules across all namespaces - they can target any cluster.
 	ruleList := &wazuhv1.WazuhRuleList{}
 	if err := r.List(ctx, ruleList); err != nil {
 		log.Error(err, "Failed to list WazuhRules for cluster", "cluster", cluster.Name)

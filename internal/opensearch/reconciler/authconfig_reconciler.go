@@ -305,7 +305,7 @@ func (r *AuthConfigReconciler) updateStatus(ctx context.Context, authConfig *waz
 		}
 
 		// Skip the write only when the persisted status already matches the desired
-		// one — including per-cluster statuses. The earlier version compared only the
+		// one - including per-cluster statuses. The earlier version compared only the
 		// scalar fields, so a corrected ClusterStatuses (e.g. a cluster moving from
 		// Pending to Ready while the overall phase stayed Ready) was never persisted.
 		if latest.Status.Phase == phase && latest.Status.Message == message &&

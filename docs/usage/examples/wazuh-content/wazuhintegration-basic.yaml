@@ -1,4 +1,4 @@
-# WazuhIntegration — custom integration with an external API.
+# WazuhIntegration - custom integration with an external API.
 #
 # A WazuhIntegration provisions BOTH halves of a Wazuh custom integration:
 #   1. the executable script at /var/ossec/integrations/<integrationName>
@@ -54,7 +54,7 @@ spec:
 
   # The integration script. The first line MUST be a shebang. The operator
   # mounts it read-only at /var/ossec/integrations/custom-slack.py as root:wazuh
-  # mode 0750 (DefaultMode + the pod fsGroup) — exactly what Wazuh requires.
+  # mode 0750 (DefaultMode + the pod fsGroup) - exactly what Wazuh requires.
   script: |
     #!/usr/bin/env python3
     import sys

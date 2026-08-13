@@ -10,7 +10,7 @@
 #   OpenSearch  : OpenSearchRoleMapping.backendRoles  -> OpenSearchRole
 #   Wazuh API   : WazuhRole.rules (FIND backend_roles) -> WazuhRole  (via run_as)
 #
-# PREREQUISITE — enable run_as on the dashboard (in the WazuhCluster spec):
+# PREREQUISITE - enable run_as on the dashboard (in the WazuhCluster spec):
 #   spec.dashboard.wazuhPlugin.defaultApiEndpoint.runAs: true
 #
 # Swap "wazuh-cluster"/"wazuh" for your cluster name/namespace.
@@ -41,7 +41,7 @@ spec:
     - name: wazuh-cluster
       namespace: wazuh
   # NOTE: internal basic auth (basic_internal_auth_domain) is ALWAYS kept by the
-  # operator — the dashboard (kibanaserver), the operator and securityadmin need it.
+  # operator - the dashboard (kibanaserver), the operator and securityadmin need it.
   # You do NOT need to declare basicAuth. Add it only to tune order/challenge:
   #   basicAuth:
   #     order: 1          # evaluated after OIDC
@@ -66,7 +66,7 @@ spec:
       rootUrl: "https://wazuh.example.com"
 
 # =============================================================================
-# OpenSearch roles (indexer + dashboard) — identical to the internal-user case
+# OpenSearch roles (indexer + dashboard) - identical to the internal-user case
 # =============================================================================
 ---
 apiVersion: resources.wazuh.com/v1
@@ -110,7 +110,7 @@ spec:
       allowedActions: ["kibana_all_read"]
 
 # =============================================================================
-# OpenSearch role mappings — bind IdP groups (backend_roles) to the roles
+# OpenSearch role mappings - bind IdP groups (backend_roles) to the roles
 # =============================================================================
 ---
 apiVersion: resources.wazuh.com/v1
@@ -153,7 +153,7 @@ spec:
   backendRoles: ["wazuh-admins", "wazuh-viewers"]
 
 # =============================================================================
-# Wazuh Manager API roles (run_as) — rules match backend_roles, not user_name
+# Wazuh Manager API roles (run_as) - rules match backend_roles, not user_name
 # =============================================================================
 ---
 apiVersion: resources.wazuh.com/v1
@@ -266,7 +266,7 @@ spec:
           backend_roles: "wazuh-viewers"
 
 # =============================================================================
-# LDAP / Active Directory ALTERNATIVE — replace the OpenSearchAuthConfig above.
+# LDAP / Active Directory ALTERNATIVE - replace the OpenSearchAuthConfig above.
 # Group cn values (e.g. "wazuh-admins") become backend_roles; everything else
 # (mappings + WazuhRole rules) stays identical.
 # =============================================================================

@@ -122,7 +122,7 @@ func run(file string, dryRun bool, summaryFn string) error {
 
 		osVer, err := fetchOpenSearchVersion("v" + wv)
 		if errors.Is(err, errNotFound) {
-			// Tag has no buildSrc/version.properties (very old layout) — genuinely skippable.
+			// Tag has no buildSrc/version.properties (very old layout) - genuinely skippable.
 			skipped = append(skipped, fmt.Sprintf("%s: no version.properties at this tag", wv))
 			continue
 		}
@@ -145,7 +145,7 @@ func run(file string, dryRun bool, summaryFn string) error {
 		candOSMinor := fmt.Sprintf("%d.%d", osParsed.Major, osParsed.Minor)
 		if known, ok := minorOS[minorKey]; ok && known != candOSMinor {
 			skipped = append(skipped, fmt.Sprintf(
-				"%s: OpenSearch %s conflicts with the %s line's established %s.x — likely a mis-tagged upstream release, needs manual review",
+				"%s: OpenSearch %s conflicts with the %s line's established %s.x - likely a mis-tagged upstream release, needs manual review",
 				wv, osVer, minorKey, known))
 			continue
 		}
@@ -442,7 +442,7 @@ func fetchOpenSearchVersion(tag string) (string, error) {
 
 // exporterCache memoises release lookups: many Wazuh versions share the same
 // OpenSearch (hence plugin) version, so this collapses ~1 call per Wazuh version
-// down to 1 per distinct plugin — keeping a full regeneration well under the
+// down to 1 per distinct plugin - keeping a full regeneration well under the
 // unauthenticated GitHub rate limit.
 var exporterCache = map[string]bool{}
 

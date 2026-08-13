@@ -44,7 +44,7 @@ func NewOrchestrator(c client.Client) *RollingRestartOrchestrator {
 // OrchestrateRestart performs one step of a rolling restart for the given StatefulSet.
 //
 // Algorithm (one pod per call):
-//  1. Compare UpdateRevision vs CurrentRevision — if equal, no restart needed.
+//  1. Compare UpdateRevision vs CurrentRevision - if equal, no restart needed.
 //  2. List pods and compare each pod's controller-revision-hash label to UpdateRevision.
 //  3. If all pods are on target revision → Complete.
 //  4. If any pod is not ready → InProgress (wait for replacement to become ready).

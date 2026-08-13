@@ -734,19 +734,19 @@ Each enabled method becomes a separate `authc` domain ordered by its `order` fie
 > **Which config surface each backend drives.** `basic`/`jwt`/`oidc`/`saml`/`ldap`/`proxy`/`kerberos`
 > are all indexer `config.yml` `authc` domains. Additionally `oidc`/`saml`/`jwt` drive the dashboard
 > `opensearch_dashboards.yml` `opensearch_security.auth.type`, so the dashboard sign-in switches to SSO.
-> `ldap`/`proxy`/`kerberos` are indexer/API-only — the dashboard keeps basic auth.
+> `ldap`/`proxy`/`kerberos` are indexer/API-only - the dashboard keeps basic auth.
 
 > **Internal basic auth is always kept.** The operator always emits
 > `basic_internal_auth_domain` (HTTP + transport), regardless of `basicAuth`. The
 > dashboard (`kibanaserver`), the operator's own API client (`admin`) and
-> `securityadmin` all authenticate via HTTP Basic — removing it locks them out and
+> `securityadmin` all authenticate via HTTP Basic - removing it locks them out and
 > breaks the cluster (symptom: dashboard logs *"Unable to retrieve version
 > information from OpenSearch nodes"*). `basicAuth.enabled: false` is therefore
 > **ignored** (the operator warns); use `basicAuth.order`/`challenge` to tune it.
 >
 > When adding SSO, keep the canonical layout: the SSO domain with `challenge: false`
 > (its default) and basic with `challenge: true` (its default) so local accounts
-> stay reachable — only one domain may issue the challenge. You do **not** need to
+> stay reachable - only one domain may issue the challenge. You do **not** need to
 > declare `basicAuth`; it is injected after the SSO domain automatically.
 
 **Short Names:** `osauthconfig`, `osauth`
@@ -759,8 +759,8 @@ Each enabled method becomes a separate `authc` domain ordered by its `order` fie
 | `saml`       | SAMLAuthSpec          | No       | -       | SAML config       |
 | `ldap`       | LDAPAuthSpec          | No       | -       | LDAP config       |
 | `jwt`        | JWTAuthSpec           | No       | -       | JWT config        |
-| `proxy`      | ProxyAuthSpec         | No       | -       | Proxy (trusted front-proxy header) config — indexer/API only |
-| `kerberos`   | KerberosAuthSpec      | No       | -       | Kerberos/SPNEGO config — indexer/API only |
+| `proxy`      | ProxyAuthSpec         | No       | -       | Proxy (trusted front-proxy header) config - indexer/API only |
+| `kerberos`   | KerberosAuthSpec      | No       | -       | Kerberos/SPNEGO config - indexer/API only |
 
 #### BasicAuthSpec
 
@@ -768,7 +768,7 @@ Tunes the **always-present** internal basic auth domain. All fields are optional
 
 | Field              | Type | Required | Default | Description                                                        |
 | ------------------ | ---- | -------- | ------- | ------------------------------------------------------------------ |
-| `enabled`          | bool | No       | `true`  | Ignored — the domain is always kept (`false` triggers a warning)   |
+| `enabled`          | bool | No       | `true`  | Ignored - the domain is always kept (`false` triggers a warning)   |
 | `order`            | int  | No       | `0`     | Evaluation order; when omitted alongside SSO, basic is placed after it |
 | `challenge`        | bool | No       | `true`  | Keep `true` so local accounts stay reachable                       |
 | `httpEnabled`      | bool | No       | `true`  | Forced on by the operator (no effect)                              |
@@ -816,7 +816,7 @@ target cluster's version (`spec.version` → OpenSearch version):
 > `pkg/versions.WazuhToOpenSearchVersion`.
 
 **Signing key format (`signingKeyRef`).** The value is base64-decoded by the
-security plugin (strict decoder — no embedded newlines):
+security plugin (strict decoder - no embedded newlines):
 
 - **HMAC**: the base64-encoded shared secret.
 - **RSA/ECDSA**: the base64 of the DER public key on a **single line** (i.e. the PEM
@@ -831,7 +831,7 @@ openssl rsa -pubin -in teleport-jwt.pem -outform DER | base64 -w0 > signing_key.
 kubectl create secret generic teleport-jwt-key -n wazuh --from-file=signing_key=signing_key.b64
 ```
 
-**Example — JWT (Teleport JWKS) + local basic auth:**
+**Example - JWT (Teleport JWKS) + local basic auth:**
 
 ```yaml
 apiVersion: resources.wazuh.com/v1
@@ -947,7 +947,7 @@ Shared by `oidc.idpTLS` and `saml.idpTLS`. Configures TLS trust for the **securi
 plugin's** connection to the external IdP (the OIDC discovery endpoint / SAML metadata
 URL) when the IdP presents a certificate signed by a private or otherwise untrusted CA.
 The CA bundle is **inlined** into the security config (emitted as
-`openid_connect_idp.*` / `idp.*` `pemtrustedcas_content`) — nothing is mounted into the
+`openid_connect_idp.*` / `idp.*` `pemtrustedcas_content`) - nothing is mounted into the
 indexer. A publicly-trusted IdP certificate needs none of this (the JDK/system trust
 store is used).
 
@@ -959,7 +959,7 @@ store is used).
 
 #### LDAPAuthSpec
 
-LDAP/Active Directory authentication. Indexer/API-only — the dashboard keeps basic
+LDAP/Active Directory authentication. Indexer/API-only - the dashboard keeps basic
 auth. `hosts` and `authentication` are required.
 
 | Field              | Type                   | Required | Default | Description                                            |
@@ -1015,7 +1015,7 @@ mount), and is mutually exclusive with `pemTrustedCasFilepath` per OpenSearch.
 
 Proxy-based authentication: the **indexer** trusts identity headers injected by a
 trusted front proxy (e.g. an authenticating reverse proxy). This is an
-**indexer/API-layer backend only** — it has no verified `opensearch_dashboards.yml`
+**indexer/API-layer backend only** - it has no verified `opensearch_dashboards.yml`
 `auth.type`, so the dashboard sign-in is unaffected and keeps basic auth (like LDAP).
 
 A companion `xff` (proxy-detection) block is emitted automatically under
@@ -1027,7 +1027,7 @@ so `xff.internalProxies` is **required** when proxy is enabled.
 | `enabled`          | bool         | No       | `false`        | Enable proxy auth domain                                        |
 | `order`            | int          | No       | `5`            | Evaluation order among auth domains                             |
 | `httpEnabled`      | bool         | No       | `true`         | Enable on HTTP layer                                            |
-| `transportEnabled` | bool         | No       | `false`        | Keep `false` — proxy headers only arrive over HTTP             |
+| `transportEnabled` | bool         | No       | `false`        | Keep `false` - proxy headers only arrive over HTTP             |
 | `userHeader`       | string       | No       | `x-proxy-user` | Header carrying the authenticated username                     |
 | `rolesHeader`      | string       | No       | `x-proxy-roles`| Header carrying the comma-separated backend roles              |
 | `rolesSeparator`   | string       | No       | `,`            | Separator for roles in `rolesHeader`                           |
@@ -1042,7 +1042,7 @@ so `xff.internalProxies` is **required** when proxy is enabled.
 | `internalProxies` | string | **Yes**  | -                 | Regex matching the IPs of all trusted proxies (`.*` = all) |
 | `remoteIpHeader`  | string | No       | `x-forwarded-for` | Header carrying the client IP chain                        |
 
-**Example — proxy auth (front proxy sets identity headers) + local basic auth:**
+**Example - proxy auth (front proxy sets identity headers) + local basic auth:**
 
 ```yaml
 apiVersion: resources.wazuh.com/v1
@@ -1077,7 +1077,7 @@ Map the roles carried in `rolesHeader` to OpenSearch roles with an
 
 Kerberos/SPNEGO authentication: the **indexer** validates the SPNEGO token in the
 `Authorization: Negotiate` header against a service keytab. This is an
-**indexer/API-layer backend only** — the dashboard sign-in is unaffected and keeps
+**indexer/API-layer backend only** - the dashboard sign-in is unaffected and keeps
 basic auth (like LDAP/proxy).
 
 It needs three parts, all wired by the operator: (1) the `kerberos_auth_domain` in
@@ -1104,7 +1104,7 @@ Only one auth domain may issue the challenge; the always-present basic domain
 challenges by default, so keep `challenge: false` unless you set
 `basicAuth.challenge: false` and want interactive Kerberos.
 
-**Example — Kerberos/SPNEGO + local basic auth:**
+**Example - Kerberos/SPNEGO + local basic auth:**
 
 ```yaml
 apiVersion: resources.wazuh.com/v1
@@ -1406,7 +1406,7 @@ Assigns Wazuh agents to groups declaratively by matching agent **names**, via th
 | `selector`                 | AgentSelector   | **Yes**  | -       | How agents are matched by name; at least one of its three lists must be non-empty                |
 | `reconcileIntervalSeconds` | int             | No       | `60`    | How often agents are re-scanned so dynamically-registered agents are picked up (Minimum `15`)    |
 
-**AgentSelector** — an agent matches if **any** entry in **any** list matches (at least one list must be non-empty):
+**AgentSelector** - an agent matches if **any** entry in **any** list matches (at least one list must be non-empty):
 
 | Field          | Type     | Required | Default | Description                                                                                       |
 | -------------- | -------- | -------- | ------- | ------------------------------------------------------------------------------------------------ |
@@ -1429,14 +1429,14 @@ Assigns Wazuh agents to groups declaratively by matching agent **names**, via th
 
 #### Behavior
 
-- **Cluster-global authoritative union.** Each agent's group membership equals the **union** of `groups` across **all** `WazuhAgentGroupAssignment` CRs whose selector matches that agent on the same cluster. Two CRs matching the same agent do not fight — their groups are combined.
-- **Exact reconciliation.** A matched agent is reconciled to **exactly** that union: any group not in the union — including groups set manually or from the dashboard UI, and the `default` group — is **removed**. Additions are applied before removals (PUT before DELETE) so the agent always keeps at least one group.
+- **Cluster-global authoritative union.** Each agent's group membership equals the **union** of `groups` across **all** `WazuhAgentGroupAssignment` CRs whose selector matches that agent on the same cluster. Two CRs matching the same agent do not fight - their groups are combined.
+- **Exact reconciliation.** A matched agent is reconciled to **exactly** that union: any group not in the union - including groups set manually or from the dashboard UI, and the `default` group - is **removed**. Additions are applied before removals (PUT before DELETE) so the agent always keeps at least one group.
 - **Unmatched agents are untouched.** An agent matched by no CR is left completely as-is (no groups added or removed).
 - **The manager agent `000` is never touched.**
 - **Delete is union-aware.** Deleting a CR removes its matched agents only from the groups in that CR's `groups` that **no other** matching CR still provides. Groups still requested by another CR are kept.
 - **Dynamic re-scan.** Agents register dynamically, so membership is re-evaluated every `reconcileIntervalSeconds` (default `60`, minimum `15`); `lastAppliedHash` is informational only and never short-circuits a re-scan.
 
-> **Warning:** This CRD is authoritative and destructive for matched agents. Groups assigned manually (CLI or dashboard) on a matched agent will be stripped on the next reconcile unless a CR also lists them. If an agent stops being matched (e.g. its name no longer matches after a pattern change), it keeps its last-applied groups — there is no historical revert; only deleting the CR actively removes this CR's contributions.
+> **Warning:** This CRD is authoritative and destructive for matched agents. Groups assigned manually (CLI or dashboard) on a matched agent will be stripped on the next reconcile unless a CR also lists them. If an agent stops being matched (e.g. its name no longer matches after a pattern change), it keeps its last-applied groups - there is no historical revert; only deleting the CR actively removes this CR's contributions.
 
 #### Example
 
@@ -1510,7 +1510,7 @@ Provisions a Wazuh [custom integration](https://documentation.wazuh.com/current/
 | `options`          | string              | No       | -       | Raw JSON forwarded inside `<options>`                                                                 |
 | `targetNodes`      | string              | No       | `all`   | Target manager nodes (master/workers/all)                                                            |
 
-The generated script filename and the `<integration>` `<name>` tag are both `custom-<name>[.<scriptExtension>]` (kept in sync because `wazuh-integratord` executes the file named exactly like `<name>`). The script is mounted read-only into `/var/ossec/integrations/` as `root:wazuh` with mode `0750` (the ownership Wazuh requires) — the executable bit comes from the ConfigMap DefaultMode and the wazuh group from the pod's fsGroup. Adding, changing, or removing an integration triggers a rolling restart of the targeted manager pods.
+The generated script filename and the `<integration>` `<name>` tag are both `custom-<name>[.<scriptExtension>]` (kept in sync because `wazuh-integratord` executes the file named exactly like `<name>`). The script is mounted read-only into `/var/ossec/integrations/` as `root:wazuh` with mode `0750` (the ownership Wazuh requires) - the executable bit comes from the ConfigMap DefaultMode and the wazuh group from the pod's fsGroup. Adding, changing, or removing an integration triggers a rolling restart of the targeted manager pods.
 
 #### Example
 
@@ -1545,25 +1545,25 @@ spec:
 
 ### WazuhCDBList
 
-Manages [CDB lists](https://documentation.wazuh.com/current/user-manual/ruleset/cdb-list.html): key/value text files stored under `/var/ossec/etc/lists/` and used by rules (`<list>` lookups) for allow/block lists, user lists, etc. The operator resolves the list content, mounts it into the targeted manager pods, **and** automatically injects the matching `<list>etc/lists/<listName></list>` entry into each manager's `ossec.conf` — no manual ruleset edit is required. Adding, changing, or removing a list triggers a rolling restart of the targeted manager pods so `wazuh-analysisd` recompiles the list.
+Manages [CDB lists](https://documentation.wazuh.com/current/user-manual/ruleset/cdb-list.html): key/value text files stored under `/var/ossec/etc/lists/` and used by rules (`<list>` lookups) for allow/block lists, user lists, etc. The operator resolves the list content, mounts it into the targeted manager pods, **and** automatically injects the matching `<list>etc/lists/<listName></list>` entry into each manager's `ossec.conf` - no manual ruleset edit is required. Adding, changing, or removing a list triggers a rolling restart of the targeted manager pods so `wazuh-analysisd` recompiles the list.
 
 **Short Name:** `wcdb`
 
 The content can come from one of three mutually exclusive sources:
 
-- `entries` — a static, inline list of key/value pairs.
-- `content` — raw inline text (CDB-formatted, or a plain IP list converted by the operator).
-- `source` — a URL the operator fetches (the Wazuh manager cannot fetch URLs itself; the operator performs the GET and bakes the result into the mounted ConfigMap).
+- `entries` - a static, inline list of key/value pairs.
+- `content` - raw inline text (CDB-formatted, or a plain IP list converted by the operator).
+- `source` - a URL the operator fetches (the Wazuh manager cannot fetch URLs itself; the operator performs the GET and bakes the result into the mounted ConfigMap).
 
 The `format` field selects the converter applied to raw `content`/`source` text. Converters run **after** `skipLines` strips any header:
 
 | `format`  | Converter                                                                                             | Use for                                            |
 | --------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `cdb`     | Passthrough — normalizes whitespace, drops blank lines. Content is already `key:value` / `key:` lines. | Hand-written CDB lists                             |
+| `cdb`     | Passthrough - normalizes whitespace, drops blank lines. Content is already `key:value` / `key:` lines. | Hand-written CDB lists                             |
 | `iplist`  | IP/CIDR list → key-only entries, keeping the network prefix for `/8`, `/16`, `/24`, `/32` masks (unsupported masks skipped). Go port of Wazuh's `iplist-to-cdblist.py`. | Firewall / threat-intel IP lists                   |
 | `keylist` | One key per line → key-only entry (`key:`). Lines already containing `:` are kept as-is. | Hash lists (VirusShare MD5 dumps), domain lists, user lists, any newline-separated key set |
 
-`skipLines` drops the first N lines before conversion — e.g. VirusShare hash dumps start with a commented header (their own script skips the first 6 lines).
+`skipLines` drops the first N lines before conversion - e.g. VirusShare hash dumps start with a commented header (their own script skips the first 6 lines).
 
 | Field         | Type              | Required | Default | Description                                                          |
 | ------------- | ----------------- | -------- | ------- | -------------------------------------------------------------------- |
@@ -1653,13 +1653,13 @@ spec:
     refreshInterval: 24h
 ```
 
-Reference the list from a rule with `<list field="...">etc/lists/<listName></list>`. Subdirectory list names (e.g. `malicious-ioc/malicious-ip`) let you manage grouped IOC lists as CRs instead of baking them into the image and hand-declaring them in `manager.config.ruleset.lists` — see [`examples/wazuh-content/wazuhcdblist-ioc-subdir.yaml`](examples/wazuh-content/wazuhcdblist-ioc-subdir.yaml) for a full IOC feed example (IPs, domains, and `sha256:family` hashes under one subdirectory).
+Reference the list from a rule with `<list field="...">etc/lists/<listName></list>`. Subdirectory list names (e.g. `malicious-ioc/malicious-ip`) let you manage grouped IOC lists as CRs instead of baking them into the image and hand-declaring them in `manager.config.ruleset.lists` - see [`examples/wazuh-content/wazuhcdblist-ioc-subdir.yaml`](examples/wazuh-content/wazuhcdblist-ioc-subdir.yaml) for a full IOC feed example (IPs, domains, and `sha256:family` hashes under one subdirectory).
 
 ### WazuhActiveResponse
 
 Provisions a Wazuh [custom active response](https://documentation.wazuh.com/current/user-manual/capabilities/active-response/custom-active-response-scripts.html): it ships an executable script to `/var/ossec/active-response/bin/<script>` on the target manager nodes **and** injects the paired `<command>` and `<active-response>` blocks into `ossec.conf` so `wazuh-execd` runs the script when the trigger matches. Adding, changing, or removing an active response triggers a rolling restart of the targeted manager pods.
 
-Each CR is self-contained: one script + one `<command>` + one `<active-response>` trigger. The `<command> <name>` is `spec.name` and the `<executable>` is the script filename (`name[.scriptExtension]`). The script is mounted read-only as `root:wazuh` mode `0750` (what Wazuh requires) — executable bit from the ConfigMap DefaultMode, wazuh group from the pod fsGroup.
+Each CR is self-contained: one script + one `<command>` + one `<active-response>` trigger. The `<command> <name>` is `spec.name` and the `<executable>` is the script filename (`name[.scriptExtension]`). The script is mounted read-only as `root:wazuh` mode `0750` (what Wazuh requires) - executable bit from the ConfigMap DefaultMode, wazuh group from the pod fsGroup.
 
 **Short Name:** `war`
 
@@ -1669,9 +1669,9 @@ Each CR is self-contained: one script + one `<command>` + one `<active-response>
 | `name`              | string            | **Yes**  | -       | Command name (`<command><name>`, `<active-response><command>`); `^[a-zA-Z0-9_-]+$`      |
 | `scriptExtension`   | string            | No       | -       | Optional filename extension (no dot), e.g. `sh`/`py` → `<name>.<ext>` = `<executable>`  |
 | `script`            | string            | **Yes**  | -       | Script content; first line must be a shebang                                            |
-| `timeoutAllowed`    | bool              | No       | `false` | `<timeout_allowed>` — enable the stateful add/delete timeout mechanism                  |
+| `timeoutAllowed`    | bool              | No       | `false` | `<timeout_allowed>` - enable the stateful add/delete timeout mechanism                  |
 | `extraArgs`         | string            | No       | -       | Static arguments passed to the script (`<extra_args>`)                                  |
-| `disabled`          | bool              | No       | `false` | `<disabled>yes</disabled>` — keep the command defined but inactive                      |
+| `disabled`          | bool              | No       | `false` | `<disabled>yes</disabled>` - keep the command defined but inactive                      |
 | `location`          | string            | No       | `local` | Where it runs: `local`, `server`, `defined-agent`, `all` (`<location>`)                 |
 | `agentID`           | string            | No\*     | -       | Target agent id (`<agent_id>`); required when `location: defined-agent`                 |
 | `level`             | int32             | No\*\*   | -       | Trigger on alerts of at least this severity (`<level>`, 0-16)                           |
@@ -1858,7 +1858,7 @@ See [Filebeat Configuration Guide](./features/filebeat-configuration.md) for det
 
 ## Wazuh API RBAC CRDs
 
-Manage Wazuh **Manager API** RBAC (port 55000) — distinct from the OpenSearch
+Manage Wazuh **Manager API** RBAC (port 55000) - distinct from the OpenSearch
 indexer RBAC above. The operator pushes roles, inline policies, auth-context
 rules and API users to the Manager API and reconciles them per target cluster.
 Used with the dashboard `run_as` flow to restrict the API-backed menus
@@ -1868,7 +1868,7 @@ Used with the dashboard `run_as` flow to restrict the API-backed menus
 > Wazuh API resources are **typed per action** (`rules:read`→`rule:file:*`,
 > `security:read`→`user:id:*`/`role:id:*`, `agent:read`→`agent:id:*`/`agent:group:*`).
 > A generic `"*:*:*"` resource is rejected by the dashboard's per-section
-> permission checks — use the typed resource for each action. Reserved Wazuh
+> permission checks - use the typed resource for each action. Reserved Wazuh
 > objects (ID < 100) are immutable: the operator never mutates/deletes them and
 > reports a name collision as `Failed`.
 

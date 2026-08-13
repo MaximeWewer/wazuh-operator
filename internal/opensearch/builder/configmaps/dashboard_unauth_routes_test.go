@@ -24,7 +24,7 @@ import (
 )
 
 // The pod probes hit /api/status, and the security plugin defaults
-// opensearch_security.auth.unauthenticated_routes to an empty list — meaning every route,
+// opensearch_security.auth.unauthenticated_routes to an empty list - meaning every route,
 // /api/status included, answers 401 to the unauthenticated kubelet. The generated config must
 // therefore declare the route explicitly, whatever the auth type: without it the dashboard never
 // reports healthy (verified on a live cluster: /api/status answers 401 without the setting and 200

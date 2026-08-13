@@ -419,7 +419,7 @@ func (b *baseStatefulSetBuilder[T]) configMapVolumes() []corev1.Volume {
 
 	// Add integration script ConfigMap volumes. Mounted read-only via subPath into
 	// /var/ossec/integrations; DefaultMode 0750 + the pod fsGroup (wazuh) yield
-	// root:wazuh 0750 — exactly what Wazuh requires for a custom integration script.
+	// root:wazuh 0750 - exactly what Wazuh requires for a custom integration script.
 	for _, ref := range b.integrationConfigMaps {
 		volumes = append(volumes, corev1.Volume{
 			Name: fmt.Sprintf("wazuh-integration-%s", ref.Name),
@@ -450,7 +450,7 @@ func (b *baseStatefulSetBuilder[T]) configMapVolumes() []corev1.Volume {
 
 	// Add active response script ConfigMap volumes. Mounted executable via subPath into
 	// /var/ossec/active-response/bin; DefaultMode 0750 + the pod fsGroup (wazuh) yield
-	// root:wazuh 0750 — exactly what Wazuh requires for a custom active response script.
+	// root:wazuh 0750 - exactly what Wazuh requires for a custom active response script.
 	for _, ref := range b.activeResponseConfigMaps {
 		volumes = append(volumes, corev1.Volume{
 			Name: fmt.Sprintf("wazuh-activeresponse-%s", ref.Name),
@@ -622,7 +622,7 @@ func (b *baseStatefulSetBuilder[T]) buildInitContainerVolumeMounts() []corev1.Vo
 	mounts := initBaseVolumeMounts()
 	if b.installAPICert {
 		mounts = append(mounts,
-			// Operator-issued cert (signed by the common CA, SAN localhost) — copied into
+			// Operator-issued cert (signed by the common CA, SAN localhost) - copied into
 			// the API ssl dir so the Wazuh API serves a CA-verifiable certificate.
 			corev1.VolumeMount{
 				Name:      constants.VolumeNameWazuhCerts,
@@ -825,7 +825,7 @@ func initBaseVolumeMounts() []corev1.VolumeMount {
 //
 // This init container runs first and restores any missing defaults from the image's
 // permanent-data backup using a no-clobber copy: it seeds a fresh PVC in full AND repairs
-// a cluster that a pre-fix operator left without security/ — all without ever overwriting
+// a cluster that a pre-fix operator left without security/ - all without ever overwriting
 // existing data or the operator-managed API cert in ssl/. A final mkdir guarantees the
 // RBAC directory even if the image backup is absent. Shared by the master and worker
 // builders (both mount api/configuration as a PVC subPath and run wazuh-apid).

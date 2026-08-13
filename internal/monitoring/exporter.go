@@ -176,7 +176,7 @@ func (c *WazuhExporterConfig) BuildExporterContainer() corev1.Container {
 		// /ready stays 503 until the first Wazuh API collection succeeds (~60-120s),
 		// and gating "started" on it would keep the whole manager pod NotReady for that
 		// long, stalling rolling restarts. The exporter is a best-effort sidecar and
-		// must not delay the manager's readiness — it scrapes once the API is up.
+		// must not delay the manager's readiness - it scrapes once the API is up.
 		StartupProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{

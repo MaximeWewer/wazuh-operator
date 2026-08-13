@@ -1,7 +1,7 @@
 # Minimal WazuhCluster - Quick Start Example
 #
 # Single-node deployment for development, testing and learning the operator.
-# Fits on a 2 vCPU / 4GB node (minikube, kind, k3s) — NOT for production
+# Fits on a 2 vCPU / 4GB node (minikube, kind, k3s) - NOT for production
 # (single indexer = no quorum, no HA, self-signed TLS).
 # Footprint: ~0.6 vCPU / ~2.75GiB requests.
 #

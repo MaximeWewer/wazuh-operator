@@ -750,7 +750,7 @@ func (r *WazuhClusterReconciler) checkAndUpdatePendingRollouts(ctx context.Conte
 		}
 
 		if status.Ready {
-			// Rollout completed — log, record metrics, and drop from list
+			// Rollout completed - log, record metrics, and drop from list
 			log.Info("Certificate rollout completed",
 				"component", rollout.Component,
 				"duration", status.Duration,
@@ -865,7 +865,7 @@ func (r *WazuhClusterReconciler) updateRollingRestartStatus(
 		cluster.Status.RollingRestart = &wazuhv1.RollingRestartStatus{}
 	}
 
-	// Only write status for InProgress phase. Idle and Complete are terminal —
+	// Only write status for InProgress phase. Idle and Complete are terminal -
 	// writing Complete with a new LastTransitionTime every cycle causes a hot
 	// reconciliation loop (status update → watch fires → new reconcile → repeat).
 	if indexerRestart != nil && indexerRestart.Phase == rolling.RestartPhaseInProgress {
@@ -1112,7 +1112,7 @@ func (r *WazuhClusterReconciler) cleanupResources(ctx context.Context, cluster *
 func (r *WazuhClusterReconciler) updateCondition(cluster *wazuhv1.WazuhCluster, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	for i, c := range cluster.Status.Conditions {
 		if c.Type == conditionType {
-			// Nothing changed — skip entirely to avoid a no-op status write
+			// Nothing changed - skip entirely to avoid a no-op status write
 			if c.Status == status && c.Reason == reason && c.Message == message && c.ObservedGeneration == cluster.Generation {
 				return
 			}
@@ -1127,7 +1127,7 @@ func (r *WazuhClusterReconciler) updateCondition(cluster *wazuhv1.WazuhCluster, 
 		}
 	}
 
-	// Condition not found — append a new one
+	// Condition not found - append a new one
 	cluster.Status.Conditions = append(cluster.Status.Conditions, metav1.Condition{
 		Type:               conditionType,
 		Status:             status,

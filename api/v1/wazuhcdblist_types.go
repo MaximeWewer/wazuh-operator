@@ -131,8 +131,8 @@ type WazuhCDBListSpec struct {
 
 	// Format controls how raw content (content or source) is interpreted:
 	// "cdb" (already CDB-formatted, default), "iplist" (a plain IP/CIDR list the operator
-	// converts to CDB format), or "keylist" (a plain list of keys — hashes, domains,
-	// users — converted to key-only entries). Ignored when entries is used.
+	// converts to CDB format), or "keylist" (a plain list of keys - hashes, domains,
+	// users - converted to key-only entries). Ignored when entries is used.
 	// +optional
 	// +kubebuilder:default="cdb"
 	Format CDBListFormat `json:"format,omitempty"`

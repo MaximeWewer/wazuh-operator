@@ -48,7 +48,7 @@ kubectl get wazuhcluster -n wazuh
 | Feature          | Documentation                                                                                                                              |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Deployment Mode  | [Inline Mode](usage/features/inline-mode.md)                                                                                                |
-| Detection Content | [Detection Content](usage/features/detection-content.md) — rules, decoders, CDB lists, active response, integrations, agent groups        |
+| Detection Content | [Detection Content](usage/features/detection-content.md) - rules, decoders, CDB lists, active response, integrations, agent groups        |
 | Security         | [Credentials](usage/features/credentials.md), [TLS](usage/features/tls.md)                                                                 |
 | Observability    | [Monitoring](usage/features/monitoring.md), [OpenTelemetry](usage/features/opentelemetry.md)                                               |
 | OpenSearch       | [Security CRDs](usage/features/opensearch-security.md), [Index Management](usage/features/opensearch-indices.md)                           |

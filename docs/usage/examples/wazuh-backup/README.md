@@ -4,7 +4,7 @@ Backup and restore the **Wazuh Manager** configuration/state (`WazuhBackup`,
 `WazuhRestore`). For OpenSearch **indexer data** snapshots, see
 [../opensearch-backup/](../opensearch-backup/).
 
-These CRDs require repository plugins on the cluster — start with
+These CRDs require repository plugins on the cluster - start with
 `wazuhcluster-with-plugins.yaml`.
 
 | File | Kind | Description |

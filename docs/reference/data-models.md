@@ -55,7 +55,7 @@ These CRDs manage Wazuh-specific configuration and operational concerns.
   - `clusterRefs`: Target WazuhClusters (cross-namespace)
   - `listName`: List filename (no extension) under `/var/ossec/etc/lists/`
   - `entries` / `content` / `source`: mutually-exclusive content sources (inline pairs, raw text, or a fetched URL)
-  - `format`: raw-content converter — `cdb`, `iplist`, or `keylist`
+  - `format`: raw-content converter - `cdb`, `iplist`, or `keylist`
   - `skipLines`: drop N header lines before conversion
   - `targetNodes`: Deploy to "all", "master", or "workers"
 - **Behavior**: Writes `/var/ossec/etc/lists/<listName>` and auto-injects `<list>etc/lists/<listName></list>` into ossec.conf

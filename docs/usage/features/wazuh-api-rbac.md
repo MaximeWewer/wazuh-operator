@@ -2,9 +2,9 @@
 
 The Wazuh dashboard talks to two backends:
 
-- the **OpenSearch indexer** — governed by `OpenSearchRole` / `OpenSearchUser`
+- the **OpenSearch indexer** - governed by `OpenSearchRole` / `OpenSearchUser`
   (index reads, dashboard tenants);
-- the **Wazuh Manager API** (port 55000) — governs the management menus
+- the **Wazuh Manager API** (port 55000) - governs the management menus
   (Management, Rules, Decoders, Agents config, Server management, Dev Tools…).
 
 By default the dashboard reaches the Manager API with a single shared admin API
@@ -39,7 +39,7 @@ spec:
         runAs: true          # <- enable run_as
 ```
 
-Toggling this single field is enough — the operator drives the whole flow:
+Toggling this single field is enough - the operator drives the whole flow:
 
 - sets the dashboard container's `RUN_AS` env so the effective `wazuh.yml`
   renders `run_as: true`, and rolls out the dashboard (the value is part of the
@@ -49,7 +49,7 @@ Toggling this single field is enough — the operator drives the whole flow:
   permitted.
 
 Both revert automatically when `runAs` is set back to `false`. (The
-`allowRunAs` field on a `WazuhUser` is unrelated — it governs impersonation for
+`allowRunAs` field on a `WazuhUser` is unrelated - it governs impersonation for
 that *direct* API user, not the dashboard's shared user.)
 
 ## Read-only dashboard user (run_as flow)
@@ -67,7 +67,7 @@ that *direct* API user, not the dashboard's shared user.)
        - name: wazuh-api-viewer-rules
          effect: allow
          actions: [rules:read]
-         resources: ["rule:file:*"]      # typed resource — see note below
+         resources: ["rule:file:*"]      # typed resource - see note below
        - name: wazuh-api-viewer-agents
          effect: allow
          actions: [agent:read]
@@ -79,7 +79,7 @@ that *direct* API user, not the dashboard's shared user.)
    ```
 
 The CR `metadata.name` (or `spec.roleName`) becomes the Wazuh API role name.
-Reserved Wazuh roles/policies/rules (ID < 100) are immutable — the operator
+Reserved Wazuh roles/policies/rules (ID < 100) are immutable - the operator
 never modifies or deletes them, and a name collision with a reserved object is
 reported as `Failed`. Use distinct names.
 
@@ -92,7 +92,7 @@ run_as admins need a dedicated role that enumerates the full typed action set).
 Wazuh API resources are **typed per action**, and the dashboard performs
 per-section permission checks against the *specific* resource. A generic
 `"*:*:*"` resource is accepted by the raw API for some actions but **fails the
-dashboard's section checks** — e.g. `rules:read` is checked against
+dashboard's section checks** - e.g. `rules:read` is checked against
 `rule:file:*`, `security:read` against `user:id:*` and `role:id:*`, `agent:read`
 against `agent:id:*`/`agent:group:*`. Always use the typed resource for each
 action. The viewer/admin examples mirror the built-in `readonly` / `administrator`

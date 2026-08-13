@@ -285,7 +285,7 @@ kubectl exec -n wazuh wazuh-manager-master-0 -c wazuh-manager -- \
 - For a `WazuhCDBList`: confirm the CR is `Applied` (`kubectl get wazuhcdblist -A`)
   and that `entries`/`content`/`source` did not resolve empty (`status.entryCount`).
 - Sub-directory lists (`etc/lists/<dir>/<name>`) shipped outside the operator
-  (bundled rulesets, manual files) are **not** managed by a CRD — fix the source
+  (bundled rulesets, manual files) are **not** managed by a CRD - fix the source
   file or remove the referencing rule.
 
 ### Active Response / Integration Script Doesn't Execute
@@ -304,7 +304,7 @@ If the file is missing, the CR is not `Applied` or does not target this node
 
 `subPath` ConfigMap mounts do not hot-update, and Wazuh loads content at start, so
 the operator rolls the manager on change via a content-hash annotation. If nothing
-rolled, the hash did not change — usually because the CR never reached `Applied`.
+rolled, the hash did not change - usually because the CR never reached `Applied`.
 
 ```bash
 # Content-hash annotations that drive the rollout

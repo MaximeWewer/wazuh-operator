@@ -214,7 +214,7 @@ spec:
                       verify token signatures. The value is base64-decoded by the security plugin
                       with a strict decoder (no embedded newlines): for HMAC it is the base64-encoded
                       shared secret; for RSA/ECDSA it is the base64 of the DER public key on a single
-                      line (the PEM body with headers and line breaks stripped) — a wrapped multi-line
+                      line (the PEM body with headers and line breaks stripped) - a wrapped multi-line
                       PEM fails to parse. Works on all OpenSearch versions (jwt authenticator).
                       Either SigningKeyRef or JwksURL must be specified.
                     properties:
@@ -619,7 +619,7 @@ spec:
                     type: boolean
                   order:
                     default: 5
-                    description: Order — evaluation order of this auth domain.
+                    description: Order - evaluation order of this auth domain.
                     maximum: 100
                     minimum: 0
                     type: integer
@@ -634,7 +634,7 @@ spec:
                     type: string
                   transportEnabled:
                     default: false
-                    description: TransportEnabled — proxy identity headers only arrive
+                    description: TransportEnabled - proxy identity headers only arrive
                       over HTTP; leave false.
                     type: boolean
                   userHeader:
@@ -643,7 +643,7 @@ spec:
                       username.
                     type: string
                   xff:
-                    description: XFF configures proxy detection (required — without
+                    description: XFF configures proxy detection (required - without
                       it the plugin ignores the identity headers).
                     properties:
                       internalProxies:

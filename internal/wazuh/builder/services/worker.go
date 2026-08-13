@@ -130,7 +130,7 @@ func (b *WorkerServiceBuilder) Build() *corev1.Service {
 		}
 	}
 
-	// Ensure cluster port (1516) is always present — it is required for
+	// Ensure cluster port (1516) is always present - it is required for
 	// master↔worker communication and must never be omitted by custom ports.
 	hasClusterPort := false
 	for _, p := range ports {

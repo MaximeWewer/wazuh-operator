@@ -3,8 +3,8 @@
 This guide covers the CRDs that manage **Wazuh Manager content** declaratively:
 custom detection rules, log decoders, CDB lists, active response scripts,
 integrations, and agent group files. It explains the shared model these CRDs
-follow — how content reaches the manager pods and how it is wired into
-`ossec.conf` — so you can reason about all of them at once.
+follow - how content reaches the manager pods and how it is wired into
+`ossec.conf` - so you can reason about all of them at once.
 
 For the exhaustive per-field API, see the [CRD Reference](../CRD-REFERENCE.md).
 Ready-to-apply manifests live in [examples/wazuh-content/](../examples/wazuh-content/).
@@ -25,7 +25,7 @@ Ready-to-apply manifests live in [examples/wazuh-content/](../examples/wazuh-con
 All content CRDs follow the same reconciliation pattern:
 
 1. **Target selection.** Each CR references one or more clusters via
-   `spec.clusterRefs: [{name, namespace}]` (cross-namespace is supported — the CR
+   `spec.clusterRefs: [{name, namespace}]` (cross-namespace is supported - the CR
    can live in any namespace). `spec.targetNodes` (`master` / `workers` / `all`,
    default `all`) narrows which manager nodes receive the content.
 
@@ -39,7 +39,7 @@ All content CRDs follow the same reconciliation pattern:
    StatefulSets (master and/or worker) at the path in the table above, using a
    read-only `subPath` mount. Executable content (active response, integrations)
    is mounted with `DefaultMode` 0750 which, combined with the pod `fsGroup`
-   (`wazuh`), yields `root:wazuh 0750` — exactly what Wazuh requires.
+   (`wazuh`), yields `root:wazuh 0750` - exactly what Wazuh requires.
 
 4. **`ossec.conf` injection.** Rules and decoders are picked up automatically
    because Wazuh scans `etc/rules/` and `etc/decoders/`. CDB lists, active
@@ -81,7 +81,7 @@ skipped), so a transient `Pending` on first apply is normal.
 ### Rules and decoders
 
 `WazuhRule` / `WazuhDecoder` carry XML content in `spec.rules` / `spec.decoders`.
-They are auto-loaded from `etc/rules/` and `etc/decoders/` — no `ossec.conf` edit
+They are auto-loaded from `etc/rules/` and `etc/decoders/` - no `ossec.conf` edit
 needed. Use custom rule IDs in the `100000`–`999999` range; the operator
 validates XML and flags duplicate IDs across CRs on overlapping clusters.
 
@@ -94,9 +94,9 @@ See: [wazuhrule-basic.yaml](../examples/wazuh-content/wazuhrule-basic.yaml),
 (`key:value` files) used by rules for allow/block lookups. Content comes from one
 of three mutually-exclusive sources:
 
-- `entries` — static inline key/value pairs;
-- `content` — raw inline text;
-- `source` — a URL the operator fetches (Wazuh managers cannot fetch URLs
+- `entries` - static inline key/value pairs;
+- `content` - raw inline text;
+- `source` - a URL the operator fetches (Wazuh managers cannot fetch URLs
   themselves) with an optional `refreshInterval`, auth `headersSecretRef`, and
   `insecureSkipVerify`.
 
@@ -158,7 +158,7 @@ sub-directory lists (e.g. `etc/lists/<dir>/<name>`) shipped outside these CRDs
 are **not** managed by the operator.
 
 **Active response / integration script does not run.** Verify ownership and mode
-— Wazuh refuses scripts that are not `root:wazuh 0750`:
+- Wazuh refuses scripts that are not `root:wazuh 0750`:
 
 ```bash
 kubectl exec <manager-pod> -n <ns> -c wazuh-manager -- ls -l /var/ossec/active-response/bin/<script>
@@ -173,11 +173,11 @@ kubectl get sts <cluster>-manager-master -n <ns> \
   -o jsonpath='{.spec.template.metadata.annotations}' | tr ',' '\n' | grep wazuh.com
 ```
 
-If the hash is unchanged, the CR likely did not reach `Applied` — inspect its
+If the hash is unchanged, the CR likely did not reach `Applied` - inspect its
 `status.clusterStatuses`.
 
 ## Related documentation
 
-- [CRD Reference](../CRD-REFERENCE.md) — full field tables for every content CRD
+- [CRD Reference](../CRD-REFERENCE.md) - full field tables for every content CRD
 - [Wazuh Content examples](../examples/wazuh-content/)
 - [Common Issues](../troubleshooting/common-issues.md)

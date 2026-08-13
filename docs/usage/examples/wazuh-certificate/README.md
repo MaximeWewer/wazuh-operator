@@ -1,6 +1,6 @@
 # Wazuh Certificate Examples
 
-`WazuhCertificate` manages a TLS certificate as a standalone resource — an
+`WazuhCertificate` manages a TLS certificate as a standalone resource - an
 alternative to the inline `spec.tls` block on `WazuhCluster`. Useful when you
 want per-certificate lifecycle (auto-renewal, custom SANs) managed separately.
 

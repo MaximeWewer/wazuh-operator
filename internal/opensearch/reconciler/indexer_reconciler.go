@@ -807,8 +807,8 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 	sts := stsBuilder.Build()
 
 	// Stamp a hash of the rendered pod template so drift the cert-hash / replica
-	// checks below don't cover — image tag, init-container plugin version, env,
-	// resources — still rolls out. Without it a versions-table bump rebuilds the
+	// checks below don't cover - image tag, init-container plugin version, env,
+	// resources - still rolls out. Without it a versions-table bump rebuilds the
 	// StatefulSet but never updates it, leaving the live init container stale.
 	templateHash, hashErr := patch.StampPodTemplateHash(&sts.Spec.Template, constants.AnnotationPodTemplateHash)
 	if hashErr != nil {
@@ -1951,8 +1951,8 @@ func (r *IndexerReconciler) updateStatefulSetWithRetry(ctx context.Context, desi
 // toIndexerExporterHashInput converts the cluster's IndexerExporter config to a hash input struct.
 // It records the RESOLVED plugin version (CR override, else the value from the
 // versions table) rather than the raw CR field. Otherwise a bump in the versions
-// table — which changes the init container's installed plugin version without any
-// CR change — would not move the spec hash, and the StatefulSet would never roll out.
+// table - which changes the init container's installed plugin version without any
+// CR change - would not move the spec hash, and the StatefulSet would never roll out.
 func toIndexerExporterHashInput(cluster *wazuhv1.WazuhCluster) *patch.IndexerExporterHashInput {
 	if cluster.Spec.Monitoring == nil || !cluster.Spec.Monitoring.Enabled ||
 		cluster.Spec.Monitoring.IndexerExporter == nil {
@@ -2465,7 +2465,7 @@ func (r *IndexerReconciler) SyncSecurityCRDs(ctx context.Context, cluster *wazuh
 		return fmt.Errorf("failed to sync security CRDs: %w", err)
 	}
 
-	// Update security status with sync results — only update timestamp when counts change
+	// Update security status with sync results - only update timestamp when counts change
 	newUsers := result.UsersUpdated + result.UsersCreated
 	newRoles := result.RolesUpdated + result.RolesCreated
 	newMappings := result.MappingsUpdated + result.MappingsCreated
@@ -3102,8 +3102,8 @@ func (r *IndexerReconciler) reconcileNodePoolStatefulSet(
 	sts := stsBuilder.Build()
 
 	// Stamp a hash of the rendered pod template so drift the replica / config /
-	// annotation checks below don't cover — image tag, init-container plugin
-	// version (TARGET_VERSION), env, resources — still rolls out. Without this a
+	// annotation checks below don't cover - image tag, init-container plugin
+	// version (TARGET_VERSION), env, resources - still rolls out. Without this a
 	// versions-table bump rebuilds the StatefulSet but never updates it.
 	npTemplateHash, hashErr := patch.StampPodTemplateHash(&sts.Spec.Template, constants.AnnotationPodTemplateHash)
 	if hashErr != nil {

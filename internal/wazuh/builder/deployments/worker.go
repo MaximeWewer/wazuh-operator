@@ -95,7 +95,7 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	// Build pod-level security context with defaults, then merge user overrides
 	// Defaults: FSGroup=999 (wazuh group), SeccompProfile=Unconfined (needed for Filebeat)
 	// FSGroupChangePolicy=OnRootMismatch so the kubelet only recursively chowns the
-	// data PVC when its root is not already the fsGroup — without this (default
+	// data PVC when its root is not already the fsGroup - without this (default
 	// "Always") every pod start re-chowns the whole volume, adding minutes.
 	onRootMismatch := corev1.FSGroupChangeOnRootMismatch
 	podSecCtx := &corev1.PodSecurityContext{
@@ -388,7 +388,7 @@ func (b *WorkerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 	volumes = append(volumes, b.volumes...)
 
 	// Add ConfigMap-backed content volumes (rules, decoders, agent-group files,
-	// integrations, CDB lists, active responses) — shared with the master builder.
+	// integrations, CDB lists, active responses) - shared with the master builder.
 	volumes = append(volumes, b.configMapVolumes()...)
 
 	return volumes
@@ -402,7 +402,7 @@ func (b *WorkerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 	mounts = append(mounts, b.volumeMounts...)
 
 	// Add ConfigMap-backed content mounts (rules, decoders, agent-group files,
-	// integrations, CDB lists, active responses) — shared with the master builder.
+	// integrations, CDB lists, active responses) - shared with the master builder.
 	mounts = append(mounts, b.configMapMounts()...)
 
 	return mounts

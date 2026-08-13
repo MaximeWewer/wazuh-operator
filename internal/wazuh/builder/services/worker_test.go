@@ -27,7 +27,7 @@ import (
 
 func TestWorkerServiceBuilder_WithPorts(t *testing.T) {
 	builder := NewWorkerServiceBuilder("test-cluster", "default")
-	// Custom ports without cluster port — it should be auto-injected
+	// Custom ports without cluster port - it should be auto-injected
 	customPorts := []corev1.ServicePort{
 		{
 			Name:       "agents-events",

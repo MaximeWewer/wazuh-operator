@@ -33,7 +33,7 @@ type OpenSearchRoleMappingSpec struct {
 	ClusterRefs []WazuhClusterRef `json:"clusterRefs"`
 
 	// RoleName is the OpenSearch role this mapping targets. Defaults to metadata.name.
-	// Set this when the role name is not a valid Kubernetes object name — e.g. it
+	// Set this when the role name is not a valid Kubernetes object name - e.g. it
 	// contains underscores like "kibana_user" or "all_access".
 	// +optional
 	// +kubebuilder:validation:MaxLength=255

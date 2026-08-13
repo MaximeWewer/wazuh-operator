@@ -376,7 +376,7 @@ flowchart TD
         U["Update status"]
     end
 
-    subgraph Plugin["OpenSearch Security Plugin — /_plugins/_security/api/"]
+    subgraph Plugin["OpenSearch Security Plugin - /_plugins/_security/api/"]
         IU[internalusers]
         R[roles]
         RM[rolesmapping]

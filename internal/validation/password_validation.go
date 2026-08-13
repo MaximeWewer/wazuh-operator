@@ -120,7 +120,7 @@ func ValidateWazuhPasswordWithPolicy(password string, policy WazuhPasswordPolicy
 // The indexer password is not only used by the operator: the Wazuh manager image's s6 script
 // /etc/cont-init.d/1-config-filebeat patches /etc/filebeat/filebeat.yml with a sed substitution
 // of $INDEXER_PASSWORD, and the value also lands inside a double-quoted YAML scalar. These
-// characters corrupt that — silently, which is the dangerous part: filebeat then authenticates
+// characters corrupt that - silently, which is the dangerous part: filebeat then authenticates
 // with a mangled password and the manager stops shipping alerts to the indexer, with no error
 // pointing at the password.
 //
@@ -130,7 +130,7 @@ func ValidateWazuhPasswordWithPolicy(password string, policy WazuhPasswordPolicy
 //   - newline / carriage return break the line-oriented config files.
 //
 // "/" is deliberately NOT rejected: it only breaks a sed using "/" as its delimiter, and the
-// upstream script's delimiter is not guaranteed — rejecting it could break clusters whose
+// upstream script's delimiter is not guaranteed - rejecting it could break clusters whose
 // password already works.
 var unsafeIndexerPasswordChars = map[rune]string{
 	'&':  `"&" (expands to the matched text in the manager image's sed substitution)`,

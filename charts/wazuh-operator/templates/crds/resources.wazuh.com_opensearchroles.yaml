@@ -128,7 +128,7 @@ spec:
               roleName:
                 description: |-
                   RoleName is the OpenSearch role name. Defaults to metadata.name.
-                  Set this when the role name is not a valid Kubernetes object name — e.g. it
+                  Set this when the role name is not a valid Kubernetes object name - e.g. it
                   contains underscores like "all_access".
                 maxLength: 255
                 type: string

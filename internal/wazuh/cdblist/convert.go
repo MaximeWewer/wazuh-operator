@@ -38,7 +38,7 @@ var cidrOctets = map[string]int{"32": 4, "24": 3, "16": 2, "8": 1}
 //
 //   - only lines that start with an IPv4 address are considered;
 //   - a supported CIDR mask (/8, /16, /24, /32) truncates the address to the network
-//     prefix and — for anything other than /32 — leaves a trailing dot so Wazuh matches
+//     prefix and - for anything other than /32 - leaves a trailing dot so Wazuh matches
 //     the whole subnet (e.g. "10.0.0.0/24" -> "10.0.0.");
 //   - unsupported masks skip the line;
 //   - each resulting address becomes a key-only entry ("ip:").

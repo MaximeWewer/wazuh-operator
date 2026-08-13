@@ -145,7 +145,7 @@ func (b *AuthConfigBuilder) BuildSecurityConfig() string {
 func (b *AuthConfigBuilder) buildAuthDomains() []AuthDomainConfig {
 	var domains []AuthDomainConfig
 
-	// Basic Auth — ALWAYS included, regardless of spec. The dashboard
+	// Basic Auth - ALWAYS included, regardless of spec. The dashboard
 	// (kibanaserver), the operator's own API client (admin) and securityadmin all
 	// authenticate via HTTP Basic against the internal users database; dropping
 	// basic_internal_auth_domain would lock them out and break the cluster. SSO
@@ -341,7 +341,7 @@ func DefaultBasicAuthDomain() AuthDomainConfig {
 
 // yamlSingleQuote wraps a scalar in single quotes for YAML output. Single-quoting
 // preserves backslashes and pipes verbatim (common in an internalProxies regex), and a
-// literal single quote inside is escaped per the YAML rule by doubling it ('' → ').
+// literal single quote inside is escaped per the YAML rule by doubling it (” → ').
 func yamlSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }

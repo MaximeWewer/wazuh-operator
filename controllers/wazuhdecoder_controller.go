@@ -181,7 +181,7 @@ func (r *WazuhDecoderReconciler) findDecodersForCluster(ctx context.Context, obj
 		return nil
 	}
 
-	// List WazuhDecoders across all namespaces — they can target any cluster.
+	// List WazuhDecoders across all namespaces - they can target any cluster.
 	decoderList := &wazuhv1.WazuhDecoderList{}
 	if err := r.List(ctx, decoderList); err != nil {
 		log.Error(err, "Failed to list WazuhDecoders for cluster", "cluster", cluster.Name)

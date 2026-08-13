@@ -230,8 +230,8 @@ func ComputeSpecHash(spec any) (string, error) {
 // it into the template's annotations under annoKey, and returns the hash.
 //
 // This detects pod-template drift (image tag, init-container args, env, resources)
-// regardless of its source — including operator-internal values such as the
-// versions table — which CR-field-derived spec hashes miss. Hashing tmpl.Spec
+// regardless of its source - including operator-internal values such as the
+// versions table - which CR-field-derived spec hashes miss. Hashing tmpl.Spec
 // (not the whole template) keeps the comparison desired-vs-desired across
 // reconciles and avoids server-defaulting noise; the annotation itself lives in
 // tmpl.ObjectMeta so it never feeds back into the hash.

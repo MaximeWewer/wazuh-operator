@@ -212,7 +212,7 @@ spec:
 # Production secrets.
 # DO NOT commit real credentials. In production, generate these out-of-band or
 # manage them with a secrets operator (External Secrets, Vault, Sealed Secrets)
-# and remove this block. Values below are placeholders — replace every one.
+# and remove this block. Values below are placeholders - replace every one.
 apiVersion: v1
 kind: Secret
 metadata:

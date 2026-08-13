@@ -26,7 +26,7 @@ The operator supports both RSA and ECDSA key algorithms:
 flowchart TD
     WCC["WazuhCluster Controller<br/>(controllers/wazuhcluster_controller.go)"]
 
-    subgraph CertRecon["1. Certificate Reconciliation — CertificateReconciler.ReconcileWithHashes"]
+    subgraph CertRecon["1. Certificate Reconciliation - CertificateReconciler.ReconcileWithHashes"]
         CA["CA Cert (10 yrs)"] --> IC["Indexer Cert (1 year)"]
         IC --> MC["Manager Cert (1 year)"]
         MC --> DC["Dashboard Cert (1 year)"]

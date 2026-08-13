@@ -20,8 +20,8 @@ import "sync"
 
 // All OpenSearch security config (roles, role mappings, internal users, tenants, action
 // groups) is stored as a single document per type in .opendistro_security, written with
-// optimistic concurrency. Concurrent operator writes — the per-CR controllers
-// (OpenSearchRole/RoleMapping/User/…) and the cluster-level SecurityConfigSynchronizer —
+// optimistic concurrency. Concurrent operator writes - the per-CR controllers
+// (OpenSearchRole/RoleMapping/User/…) and the cluster-level SecurityConfigSynchronizer -
 // therefore race with seqNo/primary-term version conflicts, and each successful write
 // makes the security plugin reload the whole config. Serializing writes per target
 // cluster removes both problems.

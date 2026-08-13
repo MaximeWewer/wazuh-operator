@@ -89,7 +89,7 @@ type IntegrationConfigMapRef struct {
 
 // integrationScriptMode is the file mode applied to mounted integration scripts.
 // Combined with the pod fsGroup (wazuh), a read-only ConfigMap subPath mount with
-// this DefaultMode yields root:wazuh 0750 — exactly what Wazuh requires.
+// this DefaultMode yields root:wazuh 0750 - exactly what Wazuh requires.
 var integrationScriptMode = int32(0o750)
 
 // NewManagerStatefulSetBuilder creates a new ManagerStatefulSetBuilder
@@ -159,7 +159,7 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	// Build pod-level security context with defaults, then merge user overrides
 	// Defaults: FSGroup=999 (wazuh group), SeccompProfile=Unconfined (needed for Filebeat)
 	// FSGroupChangePolicy=OnRootMismatch so the kubelet only recursively chowns the
-	// data PVC when its root is not already the fsGroup — without this (default
+	// data PVC when its root is not already the fsGroup - without this (default
 	// "Always") every pod start re-chowns the whole 10Gi volume, adding minutes.
 	onRootMismatch := corev1.FSGroupChangeOnRootMismatch
 	podSecCtx := &corev1.PodSecurityContext{
@@ -467,7 +467,7 @@ func (b *ManagerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 	volumes = append(volumes, b.volumes...)
 
 	// Add ConfigMap-backed content volumes (rules, decoders, agent-group files,
-	// integrations, CDB lists, active responses) — shared with the worker builder.
+	// integrations, CDB lists, active responses) - shared with the worker builder.
 	volumes = append(volumes, b.configMapVolumes()...)
 
 	return volumes
@@ -481,7 +481,7 @@ func (b *ManagerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
 	mounts = append(mounts, b.volumeMounts...)
 
 	// Add ConfigMap-backed content mounts (rules, decoders, agent-group files,
-	// integrations, CDB lists, active responses) — shared with the worker builder.
+	// integrations, CDB lists, active responses) - shared with the worker builder.
 	mounts = append(mounts, b.configMapMounts()...)
 
 	return mounts

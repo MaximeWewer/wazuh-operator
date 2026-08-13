@@ -19,9 +19,9 @@ The production configuration includes:
 - Kubernetes cluster with sufficient resources (see resource requirements below)
 - A StorageClass named `fast-ssd` (or edit `spec.storageClassName` in the manifest)
 - Dedicated nodes labeled with `node-role.kubernetes.io/wazuh: "true"` (optional)
-- Prometheus Operator CRDs, for the `ServiceMonitor` (optional — disable if absent)
+- Prometheus Operator CRDs, for the `ServiceMonitor` (optional - disable if absent)
 - SMTP server for email alerts (optional)
-- A secrets workflow (External Secrets, Vault, Sealed Secrets) — the inline
+- A secrets workflow (External Secrets, Vault, Sealed Secrets) - the inline
   Secrets in the manifest are placeholders to replace, not commit
 
 ## Resource Requirements
@@ -39,12 +39,12 @@ The production configuration includes:
 
 ## Two example manifests
 
-This directory has two **independent** examples — apply one, not both:
+This directory has two **independent** examples - apply one, not both:
 
-- **`wazuhcluster-production.yaml`** (cluster `wazuh-production`) — the main
+- **`wazuhcluster-production.yaml`** (cluster `wazuh-production`) - the main
   production reference. Self-contained: the cluster plus its placeholder
   Secrets in one file.
-- **`secrets-inline.yaml`** (cluster `wazuh-secure`) — an alternative that
+- **`secrets-inline.yaml`** (cluster `wazuh-secure`) - an alternative that
   demonstrates inline-credential mode (Secrets + OpenSearch users wired into
   the cluster). See [Credentials](../../features/credentials.md).
 
