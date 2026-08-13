@@ -4,39 +4,33 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.0
-  name: opensearchindextemplates.resources.wazuh.com
+  name: wazuhusers.resources.wazuh.com
 spec:
   group: resources.wazuh.com
   names:
-    kind: OpenSearchIndexTemplate
-    listKind: OpenSearchIndexTemplateList
-    plural: opensearchindextemplates
+    kind: WazuhUser
+    listKind: WazuhUserList
+    plural: wazuhusers
     shortNames:
-    - osidxt
-    singular: opensearchindextemplate
+    - wuser
+    singular: wazuhuser
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.indexPatterns
-      name: Patterns
+    - jsonPath: .spec.username
+      name: Username
       type: string
-    - jsonPath: .spec.priority
-      name: Priority
-      type: integer
     - jsonPath: .status.phase
       name: Phase
       type: string
-    - jsonPath: .status.driftDetected
-      name: Drift
-      type: boolean
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
     name: v1
     schema:
       openAPIV3Schema:
-        description: OpenSearchIndexTemplate is the Schema for the opensearchindextemplates
-          API
+        description: WazuhUser is the Schema for the wazuhusers API (internal Wazuh
+          Manager API user).
         properties:
           apiVersion:
             description: |-
@@ -56,15 +50,15 @@ spec:
           metadata:
             type: object
           spec:
-            description: OpenSearchIndexTemplateSpec defines the desired state of
-              OpenSearchIndexTemplate
+            description: spec defines the desired state of WazuhUser
             properties:
-              _meta:
-                description: Metadata about the index template
-                type: object
-                x-kubernetes-preserve-unknown-fields: true
+              allowRunAs:
+                description: AllowRunAs permits this user to be impersonated via run_as
+                  / auth-context.
+                type: boolean
               clusterRefs:
-                description: WazuhCluster reference
+                description: ClusterRefs lists the WazuhCluster instances this user
+                  targets.
                 items:
                   description: |-
                     WazuhClusterRef references a WazuhCluster by name and namespace.
@@ -90,118 +84,170 @@ spec:
                 - name
                 - namespace
                 x-kubernetes-list-type: map
-              composedOf:
-                description: Component templates to be applied
-                items:
-                  type: string
-                type: array
-              dataStream:
-                description: Data stream configuration
+              passwordSecret:
+                description: |-
+                  PasswordSecret references a Secret (in the CR namespace) holding the
+                  user password. Only the password key is used (default "password").
                 properties:
-                  hidden:
-                    description: Hidden flag for data stream
-                    type: boolean
-                  timestamp_field:
-                    description: Timestamp field for data stream
+                  externalSecretRef:
+                    description: |-
+                      ExternalSecretRef references an ExternalSecret from ESO
+                      When specified, the operator will read credentials from the K8s Secret
+                      created by the ExternalSecret controller
                     properties:
                       name:
-                        default: '@timestamp'
-                        description: Name of the timestamp field
+                        description: |-
+                          Name of the ExternalSecret resource that will be created/referenced
+                          The ExternalSecret will sync the secret from the external provider to a K8s Secret
                         type: string
+                      namespace:
+                        description: Namespace of the ExternalSecret (defaults to
+                          same namespace as the parent resource)
+                        type: string
+                      refreshInterval:
+                        default: 1h
+                        description: RefreshInterval is how often to sync the secret
+                          (e.g., "1h", "30m")
+                        type: string
+                      remoteRef:
+                        description: RemoteRef specifies the remote secret location
+                          in the external provider
+                        properties:
+                          key:
+                            description: |-
+                              Key is the key/path in the external secret provider
+                              For Vault: "secret/data/myapp/config"
+                              For AWS SM: "myapp/database-credentials"
+                            type: string
+                          property:
+                            description: |-
+                              Property is the specific property within the secret to extract
+                              If not specified, the entire secret is used
+                            type: string
+                          version:
+                            description: Version is the version of the secret to fetch
+                              (provider-specific)
+                            type: string
+                        required:
+                        - key
+                        type: object
+                      secretStoreRef:
+                        description: SecretStoreRef references the SecretStore or
+                          ClusterSecretStore to use
+                        properties:
+                          kind:
+                            default: SecretStore
+                            description: Kind is the kind of secret store (SecretStore
+                              or ClusterSecretStore)
+                            enum:
+                            - SecretStore
+                            - ClusterSecretStore
+                            type: string
+                          name:
+                            description: Name of the SecretStore or ClusterSecretStore
+                            type: string
+                        required:
+                        - name
+                        type: object
                     required:
                     - name
                     type: object
+                  passwordKey:
+                    default: password
+                    description: PasswordKey is the key in the secret containing the
+                      password
+                    type: string
+                  secretName:
+                    description: SecretName references a native Kubernetes Secret
+                    type: string
+                  usernameKey:
+                    default: username
+                    description: UsernameKey is the key in the secret containing the
+                      username
+                    type: string
                 type: object
-              indexPatterns:
-                description: Index patterns that the template applies to
+              roles:
+                description: |-
+                  Roles are the Wazuh API role names to assign to the user. These should
+                  match the resolved roleName of a WazuhRole (or an existing role).
                 items:
                   type: string
-                minItems: 1
                 type: array
-              priority:
-                description: Priority of the index template
-                format: int32
-                type: integer
-              template:
-                description: Template definition
-                properties:
-                  aliases:
-                    additionalProperties:
-                      description: IndexAlias defines an index alias
-                      properties:
-                        filter:
-                          description: Filter for the alias
-                          type: object
-                          x-kubernetes-preserve-unknown-fields: true
-                        index_routing:
-                          description: Index routing
-                          type: string
-                        is_write_index:
-                          description: Is write index
-                          type: boolean
-                        search_routing:
-                          description: Search routing
-                          type: string
-                      type: object
-                    description: Aliases for the index template
-                    type: object
-                  mappings:
-                    description: Mappings for the index template
-                    type: object
-                    x-kubernetes-preserve-unknown-fields: true
-                  settings:
-                    description: Settings for the index template
-                    type: object
-                    x-kubernetes-preserve-unknown-fields: true
-                type: object
-              version:
-                description: Version of the index template
-                format: int64
-                type: integer
+              username:
+                description: Username for the Wazuh API user. Defaults to metadata.name.
+                maxLength: 64
+                pattern: ^[a-zA-Z0-9._-]+$
+                type: string
             required:
             - clusterRefs
-            - indexPatterns
+            - passwordSecret
             type: object
           status:
-            description: OpenSearchIndexTemplateStatus defines the observed state
-              of OpenSearchIndexTemplate
+            description: status defines the observed state of WazuhUser
             properties:
               clusterStatuses:
                 description: ClusterStatuses reports per-target-cluster reconciliation
                   state.
                 items:
                   description: |-
-                    OpenSearchClusterStatus reports the reconciliation state for one target
-                    OpenSearch cluster of a multi-cluster CR (User, Role, Tenant, etc.).
-                    The aggregate Status.Phase reflects the worst case across entries.
+                    WazuhRBACClusterStatus reports reconciliation state for a single cluster.
+                    Wazuh API object IDs differ per cluster, so they are tracked per entry and
+                    used for unlink/delete on cleanup.
                   properties:
+                    assignedRoleIds:
+                      additionalProperties:
+                        type: integer
+                      description: |-
+                        AssignedRoleIDs maps role name to its resolved Wazuh API role ID for the
+                        roles linked to this user (WazuhUser only). Used to prune removed roles.
+                      type: object
                     lastAppliedHash:
                       description: LastAppliedHash is the hash of the last spec applied
-                        to this cluster
+                        to this cluster.
                       type: string
                     lastSyncTime:
-                      description: LastSyncTime is the last time the resource was
-                        synced to this cluster
+                      description: LastSyncTime is the last time this cluster was
+                        synced with its Wazuh API.
                       format: date-time
                       type: string
                     message:
                       description: Message provides additional information about this
-                        cluster's state
+                        cluster's state.
                       type: string
                     name:
-                      description: Name of the target WazuhCluster
+                      description: Name of the target WazuhCluster.
                       type: string
                     namespace:
-                      description: Namespace of the target WazuhCluster
+                      description: Namespace of the target WazuhCluster.
                       type: string
                     phase:
-                      description: Phase on this cluster (Pending, Ready, Failed,
-                        Conflict)
+                      description: Phase of this cluster's reconciliation (Pending,
+                        Ready, Failed).
                       enum:
                       - Pending
                       - Ready
                       - Failed
                       type: string
+                    policyIds:
+                      additionalProperties:
+                        type: integer
+                      description: PolicyIDs maps policy name to its resolved Wazuh
+                        API ID (WazuhRole only).
+                      type: object
+                    roleId:
+                      description: RoleID is the resolved Wazuh API role ID on this
+                        cluster (WazuhRole only).
+                      type: integer
+                    ruleIds:
+                      additionalProperties:
+                        type: integer
+                      description: RuleIDs maps rule name to its resolved Wazuh API
+                        ID (WazuhRole only).
+                      type: object
+                    userId:
+                      description: UserID is the resolved Wazuh API user ID on this
+                        cluster (WazuhUser only).
+                      type: integer
                   required:
                   - name
                   - namespace
@@ -212,8 +258,7 @@ spec:
                 - namespace
                 x-kubernetes-list-type: map
               conditions:
-                description: Conditions represent the latest available observations
-                  of the index template's state
+                description: Conditions represent the latest aggregate observations.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -272,46 +317,25 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              conflictsWith:
-                description: ConflictsWith is the namespace/name of a conflicting
-                  CRD
-                type: string
-              driftDetected:
-                description: DriftDetected indicates if manual modification was detected
-                type: boolean
-              lastAppliedHash:
-                description: LastAppliedHash is the hash of the last applied spec
-                  for drift detection
-                type: string
-              lastDriftTime:
-                description: LastDriftTime is when drift was last detected
-                format: date-time
-                type: string
-              lastSyncTime:
-                description: LastSyncTime is when the resource was last synced to
-                  OpenSearch
-                format: date-time
-                type: string
               message:
-                description: Message provides additional information about the current
-                  state
+                description: Message provides additional aggregate information about
+                  the current state.
                 type: string
               observedGeneration:
-                description: ObservedGeneration is the last observed generation
+                description: ObservedGeneration reflects the generation of the most
+                  recently observed spec.
                 format: int64
                 type: integer
-              ownershipClaimed:
-                description: OwnershipClaimed indicates if this CRD owns the OpenSearch
-                  resource
-                type: boolean
               phase:
-                description: Phase represents the current phase of the index template
+                description: Phase is the aggregate phase across all target clusters.
                 enum:
                 - Pending
                 - Ready
                 - Failed
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

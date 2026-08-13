@@ -4,34 +4,33 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.0
-  name: opensearchrolemappings.resources.wazuh.com
+  name: wazuhroles.resources.wazuh.com
 spec:
   group: resources.wazuh.com
   names:
-    kind: OpenSearchRoleMapping
-    listKind: OpenSearchRoleMappingList
-    plural: opensearchrolemappings
+    kind: WazuhRole
+    listKind: WazuhRoleList
+    plural: wazuhroles
     shortNames:
-    - osrmap
-    singular: opensearchrolemapping
+    - wrole
+    singular: wazuhrole
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.roleName
+      name: Role
+      type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
-    - jsonPath: .status.driftDetected
-      name: Drift
-      type: boolean
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
     name: v1
     schema:
       openAPIV3Schema:
-        description: |-
-          OpenSearchRoleMapping is the Schema for the opensearchrolemappings API
-          The CR name is used as the role name in OpenSearch
+        description: WazuhRole is the Schema for the wazuhroles API (Wazuh Manager
+          API RBAC role).
         properties:
           apiVersion:
             description: |-
@@ -51,23 +50,13 @@ spec:
           metadata:
             type: object
           spec:
-            description: OpenSearchRoleMappingSpec defines the desired state of OpenSearchRoleMapping
+            description: spec defines the desired state of WazuhRole
             properties:
-              andBackendRoles:
-                description: AndBackendRoles requires all listed backend roles (AND
-                  logic)
-                items:
-                  type: string
-                type: array
-              backendRoles:
-                description: BackendRoles are backend roles to map
-                items:
-                  type: string
-                type: array
               clusterRefs:
                 description: |-
-                  ClusterRefs lists the WazuhCluster instances this resource targets.
-                  Each entry must specify both name and namespace.
+                  ClusterRefs lists the WazuhCluster instances this role targets.
+                  Each entry must specify both name and namespace. The CR itself can live
+                  in any namespace.
                 items:
                   description: |-
                     WazuhClusterRef references a WazuhCluster by name and namespace.
@@ -93,69 +82,153 @@ spec:
                 - name
                 - namespace
                 x-kubernetes-list-type: map
-              description:
-                description: Description is a human-readable description
-                type: string
-              hosts:
-                description: Hosts are host patterns to map
+              policies:
+                description: Policies are RBAC policies created inline and linked
+                  to this role.
                 items:
-                  type: string
+                  description: WazuhRolePolicy is an inline Wazuh API policy definition.
+                  properties:
+                    actions:
+                      description: Actions are the Wazuh API actions (e.g. "agent:read",
+                        "rules:read").
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                    effect:
+                      default: allow
+                      description: Effect is allow or deny.
+                      enum:
+                      - allow
+                      - deny
+                      type: string
+                    name:
+                      description: Name is the Wazuh API policy name.
+                      maxLength: 64
+                      pattern: ^[a-zA-Z0-9._-]+$
+                      type: string
+                    resources:
+                      description: Resources are the targeted resources (e.g. "*:*:*",
+                        "agent:group:default").
+                      items:
+                        type: string
+                      minItems: 1
+                      type: array
+                  required:
+                  - actions
+                  - name
+                  - resources
+                  type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               roleName:
                 description: |-
-                  RoleName is the OpenSearch role this mapping targets. Defaults to metadata.name.
-                  Set this when the role name is not a valid Kubernetes object name — e.g. it
-                  contains underscores like "kibana_user" or "all_access".
-                maxLength: 255
+                  RoleName is the Wazuh API role name. Defaults to metadata.name.
+                  Use a distinct name to avoid colliding with reserved Wazuh roles.
+                maxLength: 64
+                pattern: ^[a-zA-Z0-9._-]+$
                 type: string
-              users:
-                description: Users are the internal users to map to this role
+              rules:
+                description: |-
+                  Rules are auth-context matcher rules created inline and linked to this
+                  role. Used with run_as to map an authenticated dashboard user onto this
+                  role (e.g. body {"FIND":{"user_name":"jdoe"}}).
                 items:
-                  type: string
+                  description: WazuhRoleRule is an inline Wazuh API authentication-context
+                    rule.
+                  properties:
+                    body:
+                      description: |-
+                        Body is the auth-context matcher pushed as the rule definition, e.g.
+                        {"FIND":{"user_name":"jdoe"}} or {"MATCH":{"backend_roles":"admins"}}.
+                        The structure is free-form Wazuh rule syntax (FIND/MATCH/AND/OR) and is
+                        validated by the Wazuh API on apply.
+                      type: object
+                      x-kubernetes-preserve-unknown-fields: true
+                    name:
+                      description: Name is the Wazuh API rule name.
+                      maxLength: 64
+                      pattern: ^[a-zA-Z0-9._-]+$
+                      type: string
+                  required:
+                  - body
+                  - name
+                  type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
             required:
             - clusterRefs
             type: object
           status:
-            description: OpenSearchRoleMappingStatus defines the observed state of
-              OpenSearchRoleMapping
+            description: status defines the observed state of WazuhRole
             properties:
               clusterStatuses:
                 description: ClusterStatuses reports per-target-cluster reconciliation
                   state.
                 items:
                   description: |-
-                    OpenSearchClusterStatus reports the reconciliation state for one target
-                    OpenSearch cluster of a multi-cluster CR (User, Role, Tenant, etc.).
-                    The aggregate Status.Phase reflects the worst case across entries.
+                    WazuhRBACClusterStatus reports reconciliation state for a single cluster.
+                    Wazuh API object IDs differ per cluster, so they are tracked per entry and
+                    used for unlink/delete on cleanup.
                   properties:
+                    assignedRoleIds:
+                      additionalProperties:
+                        type: integer
+                      description: |-
+                        AssignedRoleIDs maps role name to its resolved Wazuh API role ID for the
+                        roles linked to this user (WazuhUser only). Used to prune removed roles.
+                      type: object
                     lastAppliedHash:
                       description: LastAppliedHash is the hash of the last spec applied
-                        to this cluster
+                        to this cluster.
                       type: string
                     lastSyncTime:
-                      description: LastSyncTime is the last time the resource was
-                        synced to this cluster
+                      description: LastSyncTime is the last time this cluster was
+                        synced with its Wazuh API.
                       format: date-time
                       type: string
                     message:
                       description: Message provides additional information about this
-                        cluster's state
+                        cluster's state.
                       type: string
                     name:
-                      description: Name of the target WazuhCluster
+                      description: Name of the target WazuhCluster.
                       type: string
                     namespace:
-                      description: Namespace of the target WazuhCluster
+                      description: Namespace of the target WazuhCluster.
                       type: string
                     phase:
-                      description: Phase on this cluster (Pending, Ready, Failed,
-                        Conflict)
+                      description: Phase of this cluster's reconciliation (Pending,
+                        Ready, Failed).
                       enum:
                       - Pending
                       - Ready
                       - Failed
                       type: string
+                    policyIds:
+                      additionalProperties:
+                        type: integer
+                      description: PolicyIDs maps policy name to its resolved Wazuh
+                        API ID (WazuhRole only).
+                      type: object
+                    roleId:
+                      description: RoleID is the resolved Wazuh API role ID on this
+                        cluster (WazuhRole only).
+                      type: integer
+                    ruleIds:
+                      additionalProperties:
+                        type: integer
+                      description: RuleIDs maps rule name to its resolved Wazuh API
+                        ID (WazuhRole only).
+                      type: object
+                    userId:
+                      description: UserID is the resolved Wazuh API user ID on this
+                        cluster (WazuhUser only).
+                      type: integer
                   required:
                   - name
                   - namespace
@@ -166,7 +239,7 @@ spec:
                 - namespace
                 x-kubernetes-list-type: map
               conditions:
-                description: Conditions represent the latest available observations
+                description: Conditions represent the latest aggregate observations.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -225,46 +298,27 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              conflictsWith:
-                description: ConflictsWith is the namespace/name of a conflicting
-                  CRD
-                type: string
-              driftDetected:
-                description: DriftDetected indicates if manual modification was detected
-                type: boolean
-              lastAppliedHash:
-                description: LastAppliedHash is the hash of the last applied spec
-                  for drift detection
-                type: string
-              lastDriftTime:
-                description: LastDriftTime is when drift was last detected
-                format: date-time
-                type: string
-              lastSyncTime:
-                description: LastSyncTime is when the resource was last synced to
-                  OpenSearch
-                format: date-time
-                type: string
               message:
-                description: Message provides additional information about the current
-                  phase
+                description: Message provides additional aggregate information about
+                  the current state.
                 type: string
               observedGeneration:
-                description: ObservedGeneration is the last observed generation
+                description: ObservedGeneration reflects the generation of the most
+                  recently observed spec.
                 format: int64
                 type: integer
-              ownershipClaimed:
-                description: OwnershipClaimed indicates if this CRD owns the OpenSearch
-                  resource
-                type: boolean
               phase:
-                description: Phase is the current phase (Pending, Ready, Failed, Conflict)
+                description: |-
+                  Phase is the aggregate phase across all target clusters.
+                  Ready when every cluster is Ready; Failed if any is Failed; Pending otherwise.
                 enum:
                 - Pending
                 - Ready
                 - Failed
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

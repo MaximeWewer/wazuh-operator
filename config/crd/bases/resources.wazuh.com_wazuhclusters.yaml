@@ -1060,7 +1060,6 @@ spec:
                           procMount denotes the type of proc mount to use for the containers.
                           The default value is Default which uses the container runtime defaults for
                           readonly paths and masked paths.
-                          This requires the ProcMountType feature flag to be enabled.
                           Note that this field cannot be set when spec.os.name is windows.
                         type: string
                       readOnlyRootFilesystem:
@@ -2500,7 +2499,6 @@ spec:
                                 procMount denotes the type of proc mount to use for the containers.
                                 The default value is Default which uses the container runtime defaults for
                                 readonly paths and masked paths.
-                                This requires the ProcMountType feature flag to be enabled.
                                 Note that this field cannot be set when spec.os.name is windows.
                               type: string
                             readOnlyRootFilesystem:
@@ -4033,7 +4031,6 @@ spec:
                                 procMount denotes the type of proc mount to use for the containers.
                                 The default value is Default which uses the container runtime defaults for
                                 readonly paths and masked paths.
-                                This requires the ProcMountType feature flag to be enabled.
                                 Note that this field cannot be set when spec.os.name is windows.
                               type: string
                             readOnlyRootFilesystem:
@@ -5445,7 +5442,7 @@ spec:
                             A failure to resolve or pull the image during pod startup will block containers from starting and may add significant latency. Failures will be retried using normal volume backoff and will be reported on the pod reason and message.
                             The types of objects that may be mounted by this volume are defined by the container runtime implementation on a host machine and at minimum must include all valid types supported by the container image field.
                             The OCI object gets mounted in a single directory (spec.containers[*].volumeMounts.mountPath) by merging the manifest layers in the same way as for container images.
-                            The volume will be mounted read-only (ro) and non-executable files (noexec).
+                            The volume will be mounted read-only (ro).
                             Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath) before 1.33.
                             The field spec.securityContext.fsGroupChangePolicy has no effect on this volume type.
                           properties:
@@ -5617,8 +5614,7 @@ spec:
                           description: |-
                             portworxVolume represents a portworx volume attached and mounted on kubelets host machine.
                             Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type
-                            are redirected to the pxd.portworx.com CSI driver when the CSIMigrationPortworx feature-gate
-                            is on.
+                            are redirected to the pxd.portworx.com CSI driver.
                           properties:
                             fsType:
                               description: |-
@@ -9118,7 +9114,6 @@ spec:
                           procMount denotes the type of proc mount to use for the containers.
                           The default value is Default which uses the container runtime defaults for
                           readonly paths and masked paths.
-                          This requires the ProcMountType feature flag to be enabled.
                           Note that this field cannot be set when spec.os.name is windows.
                         type: string
                       readOnlyRootFilesystem:
@@ -10634,7 +10629,6 @@ spec:
                                 procMount denotes the type of proc mount to use for the containers.
                                 The default value is Default which uses the container runtime defaults for
                                 readonly paths and masked paths.
-                                This requires the ProcMountType feature flag to be enabled.
                                 Note that this field cannot be set when spec.os.name is windows.
                               type: string
                             readOnlyRootFilesystem:
@@ -12167,7 +12161,6 @@ spec:
                                 procMount denotes the type of proc mount to use for the containers.
                                 The default value is Default which uses the container runtime defaults for
                                 readonly paths and masked paths.
-                                This requires the ProcMountType feature flag to be enabled.
                                 Note that this field cannot be set when spec.os.name is windows.
                               type: string
                             readOnlyRootFilesystem:
@@ -13579,7 +13572,7 @@ spec:
                             A failure to resolve or pull the image during pod startup will block containers from starting and may add significant latency. Failures will be retried using normal volume backoff and will be reported on the pod reason and message.
                             The types of objects that may be mounted by this volume are defined by the container runtime implementation on a host machine and at minimum must include all valid types supported by the container image field.
                             The OCI object gets mounted in a single directory (spec.containers[*].volumeMounts.mountPath) by merging the manifest layers in the same way as for container images.
-                            The volume will be mounted read-only (ro) and non-executable files (noexec).
+                            The volume will be mounted read-only (ro).
                             Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath) before 1.33.
                             The field spec.securityContext.fsGroupChangePolicy has no effect on this volume type.
                           properties:
@@ -13751,8 +13744,7 @@ spec:
                           description: |-
                             portworxVolume represents a portworx volume attached and mounted on kubelets host machine.
                             Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type
-                            are redirected to the pxd.portworx.com CSI driver when the CSIMigrationPortworx feature-gate
-                            is on.
+                            are redirected to the pxd.portworx.com CSI driver.
                           properties:
                             fsType:
                               description: |-
@@ -17134,7 +17126,6 @@ spec:
                                       procMount denotes the type of proc mount to use for the containers.
                                       The default value is Default which uses the container runtime defaults for
                                       readonly paths and masked paths.
-                                      This requires the ProcMountType feature flag to be enabled.
                                       Note that this field cannot be set when spec.os.name is windows.
                                     type: string
                                   readOnlyRootFilesystem:
@@ -18675,7 +18666,6 @@ spec:
                                       procMount denotes the type of proc mount to use for the containers.
                                       The default value is Default which uses the container runtime defaults for
                                       readonly paths and masked paths.
-                                      This requires the ProcMountType feature flag to be enabled.
                                       Note that this field cannot be set when spec.os.name is windows.
                                     type: string
                                   readOnlyRootFilesystem:
@@ -20097,7 +20087,7 @@ spec:
                                   A failure to resolve or pull the image during pod startup will block containers from starting and may add significant latency. Failures will be retried using normal volume backoff and will be reported on the pod reason and message.
                                   The types of objects that may be mounted by this volume are defined by the container runtime implementation on a host machine and at minimum must include all valid types supported by the container image field.
                                   The OCI object gets mounted in a single directory (spec.containers[*].volumeMounts.mountPath) by merging the manifest layers in the same way as for container images.
-                                  The volume will be mounted read-only (ro) and non-executable files (noexec).
+                                  The volume will be mounted read-only (ro).
                                   Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath) before 1.33.
                                   The field spec.securityContext.fsGroupChangePolicy has no effect on this volume type.
                                 properties:
@@ -20270,8 +20260,7 @@ spec:
                                 description: |-
                                   portworxVolume represents a portworx volume attached and mounted on kubelets host machine.
                                   Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type
-                                  are redirected to the pxd.portworx.com CSI driver when the CSIMigrationPortworx feature-gate
-                                  is on.
+                                  are redirected to the pxd.portworx.com CSI driver.
                                 properties:
                                   fsType:
                                     description: |-
@@ -22177,11 +22166,11 @@ spec:
                     type: array
                     x-kubernetes-preserve-unknown-fields: true
                   updateStrategy:
-                    default: OnDelete
+                    default: RollingUpdate
                     description: |-
                       Update strategy for the StatefulSet
-                      "OnDelete" (default) gives the operator control over pod-by-pod restarts
-                      "RollingUpdate" lets Kubernetes handle rolling updates automatically
+                      "RollingUpdate" (default) lets Kubernetes handle rolling updates automatically
+                      "OnDelete" requires manual pod deletion to trigger updates
                     enum:
                     - OnDelete
                     - RollingUpdate
@@ -22400,6 +22389,40 @@ spec:
                               EnabledOnMasterOnly when true, enables authd only on master node
                               When false, authd is enabled on all nodes (master and workers)
                             type: boolean
+                          force:
+                            description: Force controls agent replacement when duplicate
+                              names or IPs are detected
+                            properties:
+                              afterRegistrationTime:
+                                default: 1h
+                                description: |-
+                                  AfterRegistrationTime specifies the minimum time since registration before replacement.
+                                  Uses duration suffixes: s (seconds), m (minutes), h (hours), d (days). Set to "0" to always allow.
+                                type: string
+                              disconnectedTime:
+                                default: 1h
+                                description: |-
+                                  DisconnectedTime specifies the minimum time an agent must be disconnected before replacement.
+                                  Uses duration suffixes: s (seconds), m (minutes), h (hours), d (days). Set to "0" to force
+                                  replacement of any disconnected agent.
+                                type: string
+                              disconnectedTimeEnabled:
+                                default: true
+                                description: DisconnectedTimeEnabled toggles the disconnected_time
+                                  condition
+                                type: boolean
+                              enabled:
+                                default: true
+                                description: Enabled toggles whether to force insertion
+                                  of an agent if there is a duplicate name or IP
+                                type: boolean
+                              keyMismatch:
+                                default: true
+                                description: KeyMismatch forces replacement when the
+                                  agent key differs from the one registered by the
+                                  manager
+                                type: boolean
+                            type: object
                           passwordSecretRef:
                             description: |-
                               PasswordSecretRef references a secret containing the authd password
@@ -22544,6 +22567,40 @@ spec:
                             default: 131072
                             description: QueueSize for the queue
                             type: integer
+                        type: object
+                      ruleset:
+                        description: Ruleset section configuration for ossec.conf
+                        properties:
+                          decoderDirs:
+                            description: DecoderDirs specifies directories to load
+                              decoders from
+                            items:
+                              type: string
+                            type: array
+                          decoderExcludes:
+                            description: DecoderExcludes specifies decoder files to
+                              exclude from loading
+                            items:
+                              type: string
+                            type: array
+                          lists:
+                            description: Lists specifies CDB list files to load (without
+                              extension)
+                            items:
+                              type: string
+                            type: array
+                          ruleDirs:
+                            description: RuleDirs specifies directories to load rules
+                              from
+                            items:
+                              type: string
+                            type: array
+                          ruleExcludes:
+                            description: RuleExcludes specifies rule files to exclude
+                              from loading
+                            items:
+                              type: string
+                            type: array
                         type: object
                     type: object
                   filebeatSSLVerificationMode:
@@ -23628,7 +23685,6 @@ spec:
                               procMount denotes the type of proc mount to use for the containers.
                               The default value is Default which uses the container runtime defaults for
                               readonly paths and masked paths.
-                              This requires the ProcMountType feature flag to be enabled.
                               Note that this field cannot be set when spec.os.name is windows.
                             type: string
                           readOnlyRootFilesystem:
@@ -25074,7 +25130,6 @@ spec:
                                     procMount denotes the type of proc mount to use for the containers.
                                     The default value is Default which uses the container runtime defaults for
                                     readonly paths and masked paths.
-                                    This requires the ProcMountType feature flag to be enabled.
                                     Note that this field cannot be set when spec.os.name is windows.
                                   type: string
                                 readOnlyRootFilesystem:
@@ -26614,7 +26669,6 @@ spec:
                                     procMount denotes the type of proc mount to use for the containers.
                                     The default value is Default which uses the container runtime defaults for
                                     readonly paths and masked paths.
-                                    This requires the ProcMountType feature flag to be enabled.
                                     Note that this field cannot be set when spec.os.name is windows.
                                   type: string
                                 readOnlyRootFilesystem:
@@ -28032,7 +28086,7 @@ spec:
                                 A failure to resolve or pull the image during pod startup will block containers from starting and may add significant latency. Failures will be retried using normal volume backoff and will be reported on the pod reason and message.
                                 The types of objects that may be mounted by this volume are defined by the container runtime implementation on a host machine and at minimum must include all valid types supported by the container image field.
                                 The OCI object gets mounted in a single directory (spec.containers[*].volumeMounts.mountPath) by merging the manifest layers in the same way as for container images.
-                                The volume will be mounted read-only (ro) and non-executable files (noexec).
+                                The volume will be mounted read-only (ro).
                                 Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath) before 1.33.
                                 The field spec.securityContext.fsGroupChangePolicy has no effect on this volume type.
                               properties:
@@ -28204,8 +28258,7 @@ spec:
                               description: |-
                                 portworxVolume represents a portworx volume attached and mounted on kubelets host machine.
                                 Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type
-                                are redirected to the pxd.portworx.com CSI driver when the CSIMigrationPortworx feature-gate
-                                is on.
+                                are redirected to the pxd.portworx.com CSI driver.
                               properties:
                                 fsType:
                                   description: |-
@@ -29798,11 +29851,11 @@ spec:
                         type: array
                         x-kubernetes-preserve-unknown-fields: true
                       updateStrategy:
-                        default: OnDelete
+                        default: RollingUpdate
                         description: |-
                           Update strategy for the StatefulSet
-                          "OnDelete" (default) gives the operator control over pod-by-pod restarts
-                          "RollingUpdate" lets Kubernetes handle rolling updates automatically
+                          "RollingUpdate" (default) lets Kubernetes handle rolling updates automatically
+                          "OnDelete" requires manual pod deletion to trigger updates
                         enum:
                         - OnDelete
                         - RollingUpdate
@@ -31085,7 +31138,6 @@ spec:
                               procMount denotes the type of proc mount to use for the containers.
                               The default value is Default which uses the container runtime defaults for
                               readonly paths and masked paths.
-                              This requires the ProcMountType feature flag to be enabled.
                               Note that this field cannot be set when spec.os.name is windows.
                             type: string
                           readOnlyRootFilesystem:
@@ -32531,7 +32583,6 @@ spec:
                                     procMount denotes the type of proc mount to use for the containers.
                                     The default value is Default which uses the container runtime defaults for
                                     readonly paths and masked paths.
-                                    This requires the ProcMountType feature flag to be enabled.
                                     Note that this field cannot be set when spec.os.name is windows.
                                   type: string
                                 readOnlyRootFilesystem:
@@ -34071,7 +34122,6 @@ spec:
                                     procMount denotes the type of proc mount to use for the containers.
                                     The default value is Default which uses the container runtime defaults for
                                     readonly paths and masked paths.
-                                    This requires the ProcMountType feature flag to be enabled.
                                     Note that this field cannot be set when spec.os.name is windows.
                                   type: string
                                 readOnlyRootFilesystem:
@@ -35489,7 +35539,7 @@ spec:
                                 A failure to resolve or pull the image during pod startup will block containers from starting and may add significant latency. Failures will be retried using normal volume backoff and will be reported on the pod reason and message.
                                 The types of objects that may be mounted by this volume are defined by the container runtime implementation on a host machine and at minimum must include all valid types supported by the container image field.
                                 The OCI object gets mounted in a single directory (spec.containers[*].volumeMounts.mountPath) by merging the manifest layers in the same way as for container images.
-                                The volume will be mounted read-only (ro) and non-executable files (noexec).
+                                The volume will be mounted read-only (ro).
                                 Sub path mounts for containers are not supported (spec.containers[*].volumeMounts.subpath) before 1.33.
                                 The field spec.securityContext.fsGroupChangePolicy has no effect on this volume type.
                               properties:
@@ -35661,8 +35711,7 @@ spec:
                               description: |-
                                 portworxVolume represents a portworx volume attached and mounted on kubelets host machine.
                                 Deprecated: PortworxVolume is deprecated. All operations for the in-tree portworxVolume type
-                                are redirected to the pxd.portworx.com CSI driver when the CSIMigrationPortworx feature-gate
-                                is on.
+                                are redirected to the pxd.portworx.com CSI driver.
                               properties:
                                 fsType:
                                   description: |-
@@ -37357,11 +37406,11 @@ spec:
                         type: array
                         x-kubernetes-preserve-unknown-fields: true
                       updateStrategy:
-                        default: OnDelete
+                        default: RollingUpdate
                         description: |-
                           Update strategy for the StatefulSet
-                          "OnDelete" (default) gives the operator control over pod-by-pod restarts
-                          "RollingUpdate" lets Kubernetes handle rolling updates automatically
+                          "RollingUpdate" (default) lets Kubernetes handle rolling updates automatically
+                          "OnDelete" requires manual pod deletion to trigger updates
                         enum:
                         - OnDelete
                         - RollingUpdate
@@ -37394,7 +37443,7 @@ spec:
                         description: Enable ServiceMonitor creation
                         type: boolean
                       interval:
-                        default: 30s
+                        default: 60s
                         description: Scrape interval
                         type: string
                       labels:
@@ -37410,27 +37459,54 @@ spec:
                   wazuhExporter:
                     description: Wazuh exporter configuration
                     properties:
+                      apiCASecretRef:
+                        description: |-
+                          APICASecretRef references a Secret holding the CA bundle that verifies the
+                          Wazuh API certificate. Only used when apiVerifySSL is true. When omitted, the
+                          operator defaults to the cluster's common CA (the manager certs secret's
+                          ca.crt). The referenced key is mounted into the exporter as WAZUH_API_CA_FILE.
+                        properties:
+                          key:
+                            default: password
+                            description: Key is the key in the secret
+                            type: string
+                          name:
+                            description: Name is the secret name
+                            type: string
+                        required:
+                        - name
+                        type: object
                       apiProtocol:
                         default: https
-                        description: API protocol
+                        description: API protocol (https or http) used to build the
+                          Wazuh API URL
                         type: string
                       apiVerifySSL:
-                        default: false
-                        description: Verify SSL certificates
+                        default: true
+                        description: |-
+                          Verify the Wazuh API TLS certificate. When false, certificate verification
+                          is skipped (WAZUH_API_TLS_SKIP_VERIFY=true). Defaults to true: the operator
+                          issues the Wazuh API certificate from the cluster's common CA, which the
+                          exporter verifies against (mounted as WAZUH_API_CA_FILE).
                         type: boolean
+                      cacheTTL:
+                        description: |-
+                          CacheTTL is how long collected metrics are cached. Keep it >= the Prometheus
+                          scrape interval. Maps to WAZUH_CACHE_TTL (e.g. "30s").
+                        type: string
                       enabled:
                         description: Enable Wazuh exporter sidecar
                         type: boolean
                       image:
-                        default: pytoshka/wazuh-prometheus-exporter:latest
+                        default: ghcr.io/maximewewer/wazuh-prometheus-exporter:latest
                         description: Image for the exporter
                         type: string
                       logLevel:
-                        default: INFO
-                        description: Log level
+                        default: info
+                        description: Log level (trace, debug, info, warn, error)
                         type: string
                       port:
-                        default: 9090
+                        default: 9555
                         description: Port for metrics endpoint
                         format: int32
                         type: integer
@@ -37493,15 +37569,14 @@ spec:
                               More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                             type: object
                         type: object
-                      skipLastLogs:
-                        description: Skip last logs metrics
-                        type: boolean
-                      skipLastRegisteredAgent:
-                        description: Skip last registered agent metrics
-                        type: boolean
-                      skipWazuhAPIInfo:
-                        description: Skip Wazuh API info metrics
-                        type: boolean
+                      startupGrace:
+                        default: 60s
+                        description: |-
+                          StartupGrace is a quiet-startup window (WAZUH_STARTUP_GRACE) during which
+                          collection failures are logged at warn ("waiting for Wazuh API") instead of
+                          error, until the first successful collection. Lets a slow-to-boot Wazuh API
+                          come up without error noise. Range 0 (off) to 10m.
+                        type: string
                     type: object
                 type: object
               storageClassName:

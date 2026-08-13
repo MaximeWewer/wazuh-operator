@@ -58,21 +58,35 @@ spec:
           spec:
             description: OpenSearchRestoreSpec defines the desired state of OpenSearchRestore
             properties:
-              clusterRef:
-                description: ClusterRef references the WazuhCluster this restore belongs
-                  to
-                properties:
-                  name:
-                    description: Name of the WazuhCluster resource
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the WazuhCluster resource
-                      If empty, assumes the same namespace as the referencing resource
-                    type: string
-                required:
+              clusterRefs:
+                description: |-
+                  ClusterRefs lists the WazuhCluster instances this resource targets.
+                  Each entry must specify both name and namespace.
+                items:
+                  description: |-
+                    WazuhClusterRef references a WazuhCluster by name and namespace.
+                    Both fields are mandatory; cross-namespace references are supported and
+                    require the consuming CR to opt into multi-cluster propagation via
+                    ClusterRefs lists.
+                  properties:
+                    name:
+                      description: Name of the WazuhCluster resource
+                      minLength: 1
+                      type: string
+                    namespace:
+                      description: Namespace of the WazuhCluster resource
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
                 - name
-                type: object
+                - namespace
+                x-kubernetes-list-type: map
               ignoreUnavailable:
                 default: true
                 description: IgnoreUnavailable skips missing indices during restore
@@ -122,13 +136,58 @@ spec:
                 description: WaitForCompletion blocks until restore completes
                 type: boolean
             required:
-            - clusterRef
+            - clusterRefs
             - repository
             - snapshot
             type: object
           status:
             description: OpenSearchRestoreStatus defines the observed state of OpenSearchRestore
             properties:
+              clusterStatuses:
+                description: ClusterStatuses reports per-target-cluster reconciliation
+                  state.
+                items:
+                  description: |-
+                    OpenSearchClusterStatus reports the reconciliation state for one target
+                    OpenSearch cluster of a multi-cluster CR (User, Role, Tenant, etc.).
+                    The aggregate Status.Phase reflects the worst case across entries.
+                  properties:
+                    lastAppliedHash:
+                      description: LastAppliedHash is the hash of the last spec applied
+                        to this cluster
+                      type: string
+                    lastSyncTime:
+                      description: LastSyncTime is the last time the resource was
+                        synced to this cluster
+                      format: date-time
+                      type: string
+                    message:
+                      description: Message provides additional information about this
+                        cluster's state
+                      type: string
+                    name:
+                      description: Name of the target WazuhCluster
+                      type: string
+                    namespace:
+                      description: Namespace of the target WazuhCluster
+                      type: string
+                    phase:
+                      description: Phase on this cluster (Pending, Ready, Failed,
+                        Conflict)
+                      enum:
+                      - Pending
+                      - Ready
+                      - Failed
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                - namespace
+                x-kubernetes-list-type: map
               conditions:
                 description: Conditions represent the latest available observations
                 items:

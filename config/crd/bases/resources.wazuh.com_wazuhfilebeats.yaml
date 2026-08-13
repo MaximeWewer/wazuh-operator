@@ -17,9 +17,6 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.clusterRef.name
-      name: Cluster
-      type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
@@ -73,21 +70,36 @@ spec:
                     description: Enabled enables/disables archives shipping
                     type: boolean
                 type: object
-              clusterRef:
-                description: ClusterRef references the WazuhCluster this configuration
-                  belongs to
-                properties:
-                  name:
-                    description: Name of the WazuhCluster resource
-                    type: string
-                  namespace:
-                    description: |-
-                      Namespace of the WazuhCluster resource
-                      If empty, assumes the same namespace as the referencing resource
-                    type: string
-                required:
+              clusterRefs:
+                description: |-
+                  ClusterRefs lists the WazuhCluster instances this configuration applies to.
+                  Each entry must specify both name and namespace. The CR can live in any
+                  namespace; ConfigMaps are created in each target cluster's namespace.
+                items:
+                  description: |-
+                    WazuhClusterRef references a WazuhCluster by name and namespace.
+                    Both fields are mandatory; cross-namespace references are supported and
+                    require the consuming CR to opt into multi-cluster propagation via
+                    ClusterRefs lists.
+                  properties:
+                    name:
+                      description: Name of the WazuhCluster resource
+                      minLength: 1
+                      type: string
+                    namespace:
+                      description: Namespace of the WazuhCluster resource
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
                 - name
-                type: object
+                - namespace
+                x-kubernetes-list-type: map
               logging:
                 description: Logging configures Filebeat logging
                 properties:
@@ -354,13 +366,80 @@ spec:
                     type: integer
                 type: object
             required:
-            - clusterRef
+            - clusterRefs
             type: object
           status:
             description: status defines the observed state of WazuhFilebeat
             properties:
+              clusterStatuses:
+                description: ClusterStatuses reports per-target-cluster reconciliation
+                  state.
+                items:
+                  description: FilebeatClusterStatus reports the reconciliation state
+                    for a single target cluster.
+                  properties:
+                    configHash:
+                      description: ConfigHash is the hash of the configuration applied
+                        to this cluster
+                      type: string
+                    configMapRef:
+                      description: ConfigMapRef references the ConfigMap created in
+                        this cluster's namespace
+                      properties:
+                        key:
+                          description: Key in the ConfigMap
+                          type: string
+                        name:
+                          description: Name of the ConfigMap
+                          type: string
+                        namespace:
+                          description: Namespace of the ConfigMap
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    lastAppliedTime:
+                      description: LastAppliedTime is when the config was last applied
+                        to this cluster
+                      format: date-time
+                      type: string
+                    message:
+                      description: Message provides additional information about this
+                        cluster's state
+                      type: string
+                    name:
+                      description: Name of the target WazuhCluster
+                      type: string
+                    namespace:
+                      description: Namespace of the target WazuhCluster
+                      type: string
+                    phase:
+                      description: Phase on this cluster
+                      enum:
+                      - Pending
+                      - Ready
+                      - Failed
+                      - Updating
+                      type: string
+                    pipelineVersion:
+                      description: PipelineVersion is the version of the applied pipeline
+                        on this cluster
+                      type: string
+                    templateVersion:
+                      description: TemplateVersion is the version of the applied template
+                        on this cluster
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                - namespace
+                x-kubernetes-list-type: map
               conditions:
-                description: Conditions represent the latest available observations
+                description: Conditions represent the latest aggregate observations
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -419,48 +498,20 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              configHash:
-                description: ConfigHash is the hash of the current configuration
-                type: string
-              configMapRef:
-                description: ConfigMapRef references the generated ConfigMap
-                properties:
-                  key:
-                    description: Key in the ConfigMap
-                    type: string
-                  name:
-                    description: Name of the ConfigMap
-                    type: string
-                  namespace:
-                    description: Namespace of the ConfigMap
-                    type: string
-                required:
-                - name
-                type: object
-              lastAppliedTime:
-                description: LastAppliedTime is when the config was last applied
-                format: date-time
-                type: string
               message:
-                description: Message provides additional information
+                description: Message provides additional aggregate information
                 type: string
               observedGeneration:
                 description: ObservedGeneration is the last observed generation
                 format: int64
                 type: integer
               phase:
-                description: Phase represents the current phase
+                description: Phase is the aggregate phase across all target clusters.
                 enum:
                 - Pending
                 - Ready
                 - Failed
                 - Updating
-                type: string
-              pipelineVersion:
-                description: PipelineVersion is the version of the applied pipeline
-                type: string
-              templateVersion:
-                description: TemplateVersion is the version of the applied template
                 type: string
             type: object
         required:

@@ -4,25 +4,28 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.0
-  name: wazuhrules.resources.wazuh.com
+  name: wazuhcdblists.resources.wazuh.com
 spec:
   group: resources.wazuh.com
   names:
-    kind: WazuhRule
-    listKind: WazuhRuleList
-    plural: wazuhrules
+    kind: WazuhCDBList
+    listKind: WazuhCDBListList
+    plural: wazuhcdblists
     shortNames:
-    - wrule
-    singular: wazuhrule
+    - wcdb
+    singular: wazuhcdblist
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.ruleName
-      name: Rule
+    - jsonPath: .spec.listName
+      name: List
       type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
+    - jsonPath: .status.entryCount
+      name: Entries
+      type: integer
     - jsonPath: .spec.targetNodes
       name: Target
       type: string
@@ -32,7 +35,7 @@ spec:
     name: v1
     schema:
       openAPIV3Schema:
-        description: WazuhRule is the Schema for the wazuhrules API
+        description: WazuhCDBList is the Schema for the wazuhcdblists API.
         properties:
           apiVersion:
             description: |-
@@ -52,13 +55,14 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of WazuhRule
+            description: spec defines the desired state of WazuhCDBList
             properties:
               clusterRefs:
                 description: |-
-                  ClusterRefs lists the WazuhCluster instances the rule must be applied to.
+                  ClusterRefs lists the WazuhCluster instances the CDB list must be applied to.
                   Each entry must specify both name and namespace. The CR can live in any
-                  namespace; rule ConfigMaps are created in each target cluster's namespace.
+                  namespace; list ConfigMaps are created in each target cluster's namespace and
+                  the operator injects the matching <list> entry into each manager's ossec.conf.
                 items:
                   description: |-
                     WazuhClusterRef references a WazuhCluster by name and namespace.
@@ -84,59 +88,114 @@ spec:
                 - name
                 - namespace
                 x-kubernetes-list-type: map
+              content:
+                description: |-
+                  Content is raw inline list content. Interpreted according to format
+                  (CDB format as-is, or an IP list converted to CDB). Mutually exclusive with
+                  entries and source.
+                type: string
               description:
-                description: Description of the rule set
+                description: Description of the CDB list.
                 type: string
-              groups:
-                description: Groups are the rule groups this rule set belongs to
+              entries:
+                description: |-
+                  Entries is a static, inline list of key/value pairs. Mutually exclusive with
+                  content and source. The format field is ignored for entries.
                 items:
-                  type: string
+                  description: CDBListEntry is a single key/value pair in a CDB list.
+                  properties:
+                    key:
+                      description: Key is the lookup key (left side of the "key:value"
+                        line). Required.
+                      minLength: 1
+                      type: string
+                    value:
+                      description: |-
+                        Value is the optional value associated with the key (right side of "key:value").
+                        Leave empty for key-only lists (e.g. IP blocklists), which render as "key:".
+                      type: string
+                  required:
+                  - key
+                  type: object
                 type: array
-              ifGroup:
-                description: IfGroup references parent rule groups
-                items:
-                  type: string
-                type: array
-              ifSID:
-                description: IfSID references parent rule IDs
-                items:
-                  format: int32
-                  type: integer
-                type: array
-              level:
-                description: Level specifies the rule level (0-15)
+                x-kubernetes-list-type: atomic
+              format:
+                default: cdb
+                description: |-
+                  Format controls how raw content (content or source) is interpreted:
+                  "cdb" (already CDB-formatted, default), "iplist" (a plain IP/CIDR list the operator
+                  converts to CDB format), or "keylist" (a plain list of keys — hashes, domains,
+                  users — converted to key-only entries). Ignored when entries is used.
+                enum:
+                - cdb
+                - iplist
+                - keylist
+                type: string
+              listName:
+                description: |-
+                  ListName is the CDB list path (without extension) created under
+                  /var/ossec/etc/lists/ on the manager. A single filename (e.g. "blocked-ips")
+                  or a subdirectory path (e.g. "malicious-ioc/malicious-ip") is allowed; the
+                  operator mounts the file at /var/ossec/etc/lists/<listName> and injects the
+                  matching <list>etc/lists/<listName></list> entry. Each path segment must be a
+                  safe name (no ".", "..", leading/trailing/double slash).
+                maxLength: 128
+                pattern: ^[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*$
+                type: string
+              skipLines:
+                description: |-
+                  SkipLines drops the first N lines of raw content (content or source) before
+                  conversion, e.g. to strip a file header (VirusShare hash dumps start with a
+                  commented header). Ignored when entries is used.
                 format: int32
-                maximum: 15
                 minimum: 0
                 type: integer
-              overwrite:
-                description: Overwrite determines if this rule should overwrite existing
-                  rules
-                type: boolean
-              priority:
-                default: 500
-                description: Priority determines the order in which rules are applied
-                  (lower values = higher priority)
-                format: int32
-                maximum: 1000
-                minimum: 0
-                type: integer
-              ruleID:
-                description: RuleID is the starting rule ID for rules in this set
-                format: int32
-                maximum: 999999
-                minimum: 100000
-                type: integer
-              ruleName:
-                description: RuleName is the name of the rule
-                type: string
-              rules:
-                description: Rules contain the actual rule definitions in XML format
-                type: string
+              source:
+                description: |-
+                  Source fetches raw list content from a URL. Interpreted according to format.
+                  Mutually exclusive with entries and content.
+                properties:
+                  headersSecretRef:
+                    description: |-
+                      HeadersSecretRef references a Secret whose key/value pairs are sent as HTTP
+                      request headers (e.g. an "Authorization" key). The Secret must live in the
+                      same namespace as the WazuhCDBList CR.
+                    properties:
+                      key:
+                        description: Key is the key in the secret (defaults to "password")
+                        type: string
+                      name:
+                        description: Name is the secret name
+                        type: string
+                      namespace:
+                        description: Namespace of the secret (defaults to the resource
+                          namespace)
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  insecureSkipVerify:
+                    default: false
+                    description: InsecureSkipVerify disables TLS certificate verification
+                      for https URLs.
+                    type: boolean
+                  refreshInterval:
+                    description: |-
+                      RefreshInterval controls how often the operator re-fetches the URL.
+                      Omit or set to "0" to fetch once (re-fetch only when the CR spec changes).
+                      Format is a Go duration string, e.g. "1h", "30m".
+                    type: string
+                  url:
+                    description: URL to fetch the list content from (http or https).
+                    pattern: ^https?://.+
+                    type: string
+                required:
+                - url
+                type: object
               targetNodes:
                 default: all
-                description: TargetNodes specifies which nodes should receive this
-                  rule (master, workers, or all)
+                description: TargetNodes specifies which manager nodes receive this
+                  list (master, workers, or all).
                 enum:
                 - master
                 - workers
@@ -144,28 +203,27 @@ spec:
                 type: string
             required:
             - clusterRefs
-            - ruleName
-            - rules
+            - listName
             type: object
           status:
-            description: status defines the observed state of WazuhRule
+            description: status defines the observed state of WazuhCDBList
             properties:
               clusterStatuses:
                 description: ClusterStatuses reports per-target-cluster reconciliation
                   state.
                 items:
-                  description: RuleClusterStatus reports the reconciliation state
+                  description: CDBListClusterStatus reports the reconciliation state
                     for a single target cluster.
                   properties:
                     appliedToNodes:
-                      description: AppliedToNodes lists the nodes where this rule
-                        has been applied on this cluster
+                      description: AppliedToNodes lists the nodes where this list
+                        has been applied on this cluster.
                       items:
                         type: string
                       type: array
                     configMapRef:
                       description: ConfigMapRef references the ConfigMap created in
-                        this cluster's namespace
+                        this cluster's namespace.
                       properties:
                         key:
                           description: Key in the ConfigMap
@@ -179,23 +237,32 @@ spec:
                       required:
                       - name
                       type: object
+                    deliveryMode:
+                      description: |-
+                        DeliveryMode reports how the list is delivered to the manager on this cluster:
+                        "configmap" (content baked into a mounted ConfigMap) or "initFetch" (content over
+                        the ConfigMap size limit, fetched by a busybox init container into the PVC).
+                      enum:
+                      - configmap
+                      - initFetch
+                      type: string
                     lastAppliedTime:
-                      description: LastAppliedTime is the last time the rule was applied
-                        to this cluster
+                      description: LastAppliedTime is the last time the list was applied
+                        to this cluster.
                       format: date-time
                       type: string
                     message:
                       description: Message provides additional information about this
-                        cluster's state
+                        cluster's state.
                       type: string
                     name:
-                      description: Name of the target WazuhCluster
+                      description: Name of the target WazuhCluster.
                       type: string
                     namespace:
-                      description: Namespace of the target WazuhCluster
+                      description: Namespace of the target WazuhCluster.
                       type: string
                     phase:
-                      description: Phase on this cluster
+                      description: Phase on this cluster.
                       enum:
                       - Pending
                       - Applied
@@ -212,7 +279,7 @@ spec:
                 - namespace
                 x-kubernetes-list-type: map
               conditions:
-                description: Conditions represent the latest aggregate observations
+                description: Conditions represent the latest aggregate observations.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -271,13 +338,27 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              contentHash:
+                description: ContentHash is a short hash of the resolved list content,
+                  used for change detection.
+                type: string
+              entryCount:
+                description: EntryCount is the number of key/value entries in the
+                  resolved list.
+                format: int32
+                type: integer
+              lastFetchTime:
+                description: LastFetchTime is the last time source content was fetched
+                  from the URL.
+                format: date-time
+                type: string
               message:
                 description: Message provides additional aggregate information about
-                  the current state
+                  the current state.
                 type: string
               observedGeneration:
                 description: ObservedGeneration reflects the generation of the most
-                  recently observed rule
+                  recently observed list.
                 format: int64
                 type: integer
               phase:
@@ -289,7 +370,7 @@ spec:
                 - Updating
                 type: string
               validationErrors:
-                description: ValidationErrors contains any validation errors encountered
+                description: ValidationErrors contains any validation errors encountered.
                 items:
                   type: string
                 type: array

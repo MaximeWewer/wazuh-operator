@@ -56,18 +56,21 @@ spec:
             description: WazuhRestoreSpec defines the desired state of WazuhRestore
             properties:
               clusterRef:
-                description: ClusterRef references the WazuhCluster to restore to
+                description: |-
+                  ClusterRef references the WazuhCluster to restore to.
+                  Both name and namespace are mandatory.
                 properties:
                   name:
                     description: Name of the WazuhCluster resource
+                    minLength: 1
                     type: string
                   namespace:
-                    description: |-
-                      Namespace of the WazuhCluster resource
-                      If empty, assumes the same namespace as the referencing resource
+                    description: Namespace of the WazuhCluster resource
+                    minLength: 1
                     type: string
                 required:
                 - name
+                - namespace
                 type: object
               components:
                 description: |-

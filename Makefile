@@ -21,19 +21,20 @@ help: ## Display this help.
 ##@ Development
 
 CRD_TEMPLATES_DIR := charts/wazuh-operator/templates/crds
-CRD_TMP_DIR := $(shell mktemp -d)
+CRD_RAW_DIR := config/crd/bases
 
 .PHONY: manifests
-manifests: controller-gen ## Generate CRDs and wrap them with Helm conditional into templates/crds.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=$(CRD_TMP_DIR)
+manifests: controller-gen ## Generate raw CRDs (config/crd/bases) and wrap them with the Helm conditional into templates/crds.
+	@mkdir -p $(CRD_RAW_DIR)
+	@rm -f $(CRD_RAW_DIR)/*.yaml
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=$(CRD_RAW_DIR)
 	@mkdir -p $(CRD_TEMPLATES_DIR)
 	@rm -f $(CRD_TEMPLATES_DIR)/*.yaml
-	@for f in $(CRD_TMP_DIR)/*.yaml; do \
+	@for f in $(CRD_RAW_DIR)/*.yaml; do \
 		name=$$(basename $$f); \
 		{ echo '{{- if .Values.crds.install }}'; cat $$f; echo '{{- end }}'; } > $(CRD_TEMPLATES_DIR)/$$name; \
 	done
-	@rm -rf $(CRD_TMP_DIR)
-	@echo "CRDs generated and wrapped in $(CRD_TEMPLATES_DIR)"
+	@echo "CRDs generated in $(CRD_RAW_DIR) and wrapped into $(CRD_TEMPLATES_DIR)"
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.

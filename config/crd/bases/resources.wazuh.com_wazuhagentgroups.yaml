@@ -4,34 +4,32 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.0
-  name: opensearchrolemappings.resources.wazuh.com
+  name: wazuhagentgroups.resources.wazuh.com
 spec:
   group: resources.wazuh.com
   names:
-    kind: OpenSearchRoleMapping
-    listKind: OpenSearchRoleMappingList
-    plural: opensearchrolemappings
+    kind: WazuhAgentGroup
+    listKind: WazuhAgentGroupList
+    plural: wazuhagentgroups
     shortNames:
-    - osrmap
-    singular: opensearchrolemapping
+    - wagentgroup
+    singular: wazuhagentgroup
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.groupName
+      name: Group
+      type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
-    - jsonPath: .status.driftDetected
-      name: Drift
-      type: boolean
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
     name: v1
     schema:
       openAPIV3Schema:
-        description: |-
-          OpenSearchRoleMapping is the Schema for the opensearchrolemappings API
-          The CR name is used as the role name in OpenSearch
+        description: WazuhAgentGroup is the Schema for the wazuhagentgroups API
         properties:
           apiVersion:
             description: |-
@@ -51,23 +49,17 @@ spec:
           metadata:
             type: object
           spec:
-            description: OpenSearchRoleMappingSpec defines the desired state of OpenSearchRoleMapping
+            description: spec defines the desired state of WazuhAgentGroup
             properties:
-              andBackendRoles:
-                description: AndBackendRoles requires all listed backend roles (AND
-                  logic)
-                items:
-                  type: string
-                type: array
-              backendRoles:
-                description: BackendRoles are backend roles to map
-                items:
-                  type: string
-                type: array
+              agentConf:
+                description: AgentConf is the XML content of agent.conf for this group
+                type: string
               clusterRefs:
                 description: |-
-                  ClusterRefs lists the WazuhCluster instances this resource targets.
-                  Each entry must specify both name and namespace.
+                  ClusterRefs lists the WazuhCluster instances the agent group must be
+                  propagated to. Each entry must specify both name and namespace.
+                  The CR itself can live in any namespace; ConfigMaps for files are
+                  created in each target cluster's namespace.
                 items:
                   description: |-
                     WazuhClusterRef references a WazuhCluster by name and namespace.
@@ -94,48 +86,45 @@ spec:
                 - namespace
                 x-kubernetes-list-type: map
               description:
-                description: Description is a human-readable description
+                description: Description of the agent group
                 type: string
-              hosts:
-                description: Hosts are host patterns to map
-                items:
+              files:
+                additionalProperties:
                   type: string
-                type: array
-              roleName:
                 description: |-
-                  RoleName is the OpenSearch role this mapping targets. Defaults to metadata.name.
-                  Set this when the role name is not a valid Kubernetes object name — e.g. it
-                  contains underscores like "kibana_user" or "all_access".
-                maxLength: 255
+                  Files is a map of filename → content to place in /var/ossec/etc/shared/<groupName>/
+                  These files are mounted via ConfigMap (the Wazuh API only supports agent.conf writes).
+                type: object
+              groupName:
+                description: |-
+                  GroupName is the name of the Wazuh agent group.
+                  If empty, defaults to metadata.name.
+                pattern: ^[a-zA-Z0-9._-]+$
                 type: string
-              users:
-                description: Users are the internal users to map to this role
-                items:
-                  type: string
-                type: array
             required:
             - clusterRefs
             type: object
           status:
-            description: OpenSearchRoleMappingStatus defines the observed state of
-              OpenSearchRoleMapping
+            description: status defines the observed state of WazuhAgentGroup
             properties:
               clusterStatuses:
                 description: ClusterStatuses reports per-target-cluster reconciliation
                   state.
                 items:
-                  description: |-
-                    OpenSearchClusterStatus reports the reconciliation state for one target
-                    OpenSearch cluster of a multi-cluster CR (User, Role, Tenant, etc.).
-                    The aggregate Status.Phase reflects the worst case across entries.
+                  description: AgentGroupClusterStatus reports the reconciliation
+                    state for a single target cluster.
                   properties:
+                    agentCount:
+                      description: AgentCount is the number of agents in this group
+                        on this cluster
+                      type: integer
                     lastAppliedHash:
                       description: LastAppliedHash is the hash of the last spec applied
                         to this cluster
                       type: string
                     lastSyncTime:
-                      description: LastSyncTime is the last time the resource was
-                        synced to this cluster
+                      description: LastSyncTime is the last time this cluster was
+                        synced with its Wazuh API
                       format: date-time
                       type: string
                     message:
@@ -149,8 +138,8 @@ spec:
                       description: Namespace of the target WazuhCluster
                       type: string
                     phase:
-                      description: Phase on this cluster (Pending, Ready, Failed,
-                        Conflict)
+                      description: Phase of this cluster's reconciliation (Pending,
+                        Ready, Failed)
                       enum:
                       - Pending
                       - Ready
@@ -166,7 +155,7 @@ spec:
                 - namespace
                 x-kubernetes-list-type: map
               conditions:
-                description: Conditions represent the latest available observations
+                description: Conditions represent the latest aggregate observations
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -225,46 +214,27 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              conflictsWith:
-                description: ConflictsWith is the namespace/name of a conflicting
-                  CRD
-                type: string
-              driftDetected:
-                description: DriftDetected indicates if manual modification was detected
-                type: boolean
-              lastAppliedHash:
-                description: LastAppliedHash is the hash of the last applied spec
-                  for drift detection
-                type: string
-              lastDriftTime:
-                description: LastDriftTime is when drift was last detected
-                format: date-time
-                type: string
-              lastSyncTime:
-                description: LastSyncTime is when the resource was last synced to
-                  OpenSearch
-                format: date-time
-                type: string
               message:
-                description: Message provides additional information about the current
-                  phase
+                description: Message provides additional aggregate information about
+                  the current state
                 type: string
               observedGeneration:
-                description: ObservedGeneration is the last observed generation
+                description: ObservedGeneration reflects the generation of the most
+                  recently observed spec
                 format: int64
                 type: integer
-              ownershipClaimed:
-                description: OwnershipClaimed indicates if this CRD owns the OpenSearch
-                  resource
-                type: boolean
               phase:
-                description: Phase is the current phase (Pending, Ready, Failed, Conflict)
+                description: |-
+                  Phase is the aggregate phase across all target clusters.
+                  Ready when every cluster is Ready; Failed if any is Failed; Pending otherwise.
                 enum:
                 - Pending
                 - Ready
                 - Failed
                 type: string
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

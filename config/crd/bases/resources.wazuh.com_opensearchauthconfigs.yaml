@@ -18,9 +18,6 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.clusterRef.name
-      name: Cluster
-      type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
@@ -36,6 +33,15 @@ spec:
     - jsonPath: .spec.ldap.enabled
       name: LDAP
       type: boolean
+    - jsonPath: .spec.jwt.enabled
+      name: JWT
+      type: boolean
+    - jsonPath: .spec.proxy.enabled
+      name: Proxy
+      type: boolean
+    - jsonPath: .spec.kerberos.enabled
+      name: Kerberos
+      type: boolean
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -45,7 +51,7 @@ spec:
         description: |-
           OpenSearchAuthConfig is the Schema for the opensearchauthconfigs API
           It manages authentication configuration for OpenSearch clusters including
-          basic auth, OIDC, SAML, and LDAP authentication methods.
+          basic auth, OIDC, SAML, LDAP, and JWT authentication methods.
         properties:
           apiVersion:
             description: |-
@@ -74,16 +80,22 @@ spec:
                   challenge:
                     default: true
                     description: |-
-                      Challenge enables WWW-Authenticate challenge header
-                      Only one auth domain should have challenge enabled when multiple are configured
+                      Challenge enables the WWW-Authenticate challenge header. Keep this true (the
+                      default) so local accounts stay reachable; SSO domains must use challenge=false
+                      (their default) since only one domain may issue the challenge.
                     type: boolean
                   enabled:
                     default: true
-                    description: Enabled enables HTTP Basic authentication
+                    description: |-
+                      Enabled is retained for backward compatibility but no longer removes the
+                      internal basic auth domain (it is always kept). Setting it to false is
+                      ignored and the operator emits a warning. Use Order/Challenge to tune behavior.
                     type: boolean
                   httpEnabled:
                     default: true
-                    description: HTTPEnabled enables authentication on HTTP layer
+                    description: |-
+                      HTTPEnabled is forced on by the operator (the basic domain must always be
+                      usable on the HTTP layer for service accounts); this field has no effect.
                     type: boolean
                   order:
                     default: 0
@@ -95,24 +107,194 @@ spec:
                     type: integer
                   transportEnabled:
                     default: true
+                    description: TransportEnabled is forced on by the operator; this
+                      field has no effect.
+                    type: boolean
+                type: object
+              clusterRefs:
+                description: |-
+                  ClusterRefs lists the WazuhCluster instances this resource targets.
+                  Each entry must specify both name and namespace.
+                items:
+                  description: |-
+                    WazuhClusterRef references a WazuhCluster by name and namespace.
+                    Both fields are mandatory; cross-namespace references are supported and
+                    require the consuming CR to opt into multi-cluster propagation via
+                    ClusterRefs lists.
+                  properties:
+                    name:
+                      description: Name of the WazuhCluster resource
+                      minLength: 1
+                      type: string
+                    namespace:
+                      description: Namespace of the WazuhCluster resource
+                      minLength: 1
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                minItems: 1
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                - namespace
+                x-kubernetes-list-type: map
+              jwt:
+                description: |-
+                  JWT configures JSON Web Token (bearer token) authentication.
+                  Tokens are validated against a static signing key or a remote JWKS
+                  endpoint, making this suitable for proxy-injected tokens such as
+                  Teleport application access (Teleport-Jwt-Assertion header).
+                properties:
+                  challenge:
+                    default: false
+                    description: |-
+                      Challenge enables authentication challenge
+                      JWT is non-interactive; this should stay false when other domains are enabled
+                    type: boolean
+                  clockSkewToleranceSeconds:
+                    description: |-
+                      ClockSkewToleranceSeconds is the allowed leeway when validating the
+                      "exp" and "nbf" claims, to absorb clock drift between issuer and cluster.
+                    minimum: 0
+                    type: integer
+                  enabled:
+                    default: false
+                    description: Enabled enables JWT authentication
+                    type: boolean
+                  httpEnabled:
+                    default: true
+                    description: HTTPEnabled enables authentication on HTTP layer
+                    type: boolean
+                  jwksUrl:
+                    description: |-
+                      JwksURL is the JSON Web Key Set endpoint used to fetch public keys for
+                      signature verification. Use this for issuers that rotate keys, such as
+                      Teleport (e.g. https://teleport.example.com/.well-known/jwks.json).
+                      Routed automatically to the authenticator the target OpenSearch version
+                      supports: the openid authenticator on < 3.3, the native jwt authenticator on
+                      >= 3.3 (which is the first version whose jwt authenticator accepts jwks_uri).
+                      Either SigningKeyRef or JwksURL must be specified.
+                    type: string
+                  jwtHeader:
+                    default: Authorization
+                    description: |-
+                      JwtHeader is the HTTP header carrying the bearer token.
+                      Defaults to "Authorization" (expects a "Bearer <token>" value).
+                      Teleport application access injects "Teleport-Jwt-Assertion".
+                    type: string
+                  jwtUrlParameter:
+                    description: |-
+                      JwtURLParameter reads the token from a URL query parameter instead of a
+                      header. Mutually exclusive with header-based extraction in practice.
+                    type: string
+                  order:
+                    default: 4
+                    description: Order determines the evaluation order of this auth
+                      domain
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  requiredAudience:
+                    description: RequiredAudience rejects tokens whose "aud" claim
+                      does not match.
+                    type: string
+                  requiredIssuer:
+                    description: RequiredIssuer rejects tokens whose "iss" claim does
+                      not match.
+                    type: string
+                  rolesKey:
+                    description: RolesKey is the JWT claim containing the user's backend
+                      roles.
+                    type: string
+                  signingKeyRef:
+                    description: |-
+                      SigningKeyRef references a Secret containing the JWT signing key used to
+                      verify token signatures. The value is base64-decoded by the security plugin
+                      with a strict decoder (no embedded newlines): for HMAC it is the base64-encoded
+                      shared secret; for RSA/ECDSA it is the base64 of the DER public key on a single
+                      line (the PEM body with headers and line breaks stripped) — a wrapped multi-line
+                      PEM fails to parse. Works on all OpenSearch versions (jwt authenticator).
+                      Either SigningKeyRef or JwksURL must be specified.
+                    properties:
+                      key:
+                        default: password
+                        description: Key is the key in the secret
+                        type: string
+                      name:
+                        description: Name is the secret name
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  subjectKey:
+                    description: |-
+                      SubjectKey is the JWT claim to use as the username.
+                      When empty, OpenSearch falls back to the standard "sub" claim.
+                    type: string
+                  transportEnabled:
+                    default: false
                     description: TransportEnabled enables authentication on transport
                       layer
                     type: boolean
                 type: object
-              clusterRef:
-                description: ClusterRef references the WazuhCluster this auth config
-                  belongs to
+              kerberos:
+                description: |-
+                  Kerberos configures Kerberos/SPNEGO authentication. This is an indexer/API-layer
+                  backend only; the dashboard sign-in is unaffected (it keeps basic auth). The krb5.conf
+                  and keytab are mounted from a Secret into the indexer config dir.
                 properties:
-                  name:
-                    description: Name of the WazuhCluster resource
-                    type: string
-                  namespace:
+                  acceptorPrincipal:
                     description: |-
-                      Namespace of the WazuhCluster resource
-                      If empty, assumes the same namespace as the referencing resource
+                      AcceptorPrincipal is the service principal the plugin uses (must exist in the keytab),
+                      e.g. "HTTP/opensearch.example.com". Required.
+                    minLength: 1
                     type: string
+                  challenge:
+                    default: false
+                    description: |-
+                      Challenge sends the SPNEGO "WWW-Authenticate: Negotiate" challenge. Only one auth domain
+                      may challenge; keep this false (the operator's basic domain challenges) unless you switch
+                      basicAuth.challenge to false and want interactive Kerberos.
+                    type: boolean
+                  credentialsSecret:
+                    description: |-
+                      CredentialsSecret names a Secret (same namespace as this CR) that holds the krb5.conf and
+                      the keytab. It is mounted as a directory into the indexer config dir; nothing is inlined.
+                    minLength: 1
+                    type: string
+                  enabled:
+                    default: false
+                    description: Enabled enables Kerberos authentication
+                    type: boolean
+                  keytabKey:
+                    default: opensearch.keytab
+                    description: KeytabKey is the Secret key holding the keytab.
+                    type: string
+                  krb5ConfKey:
+                    default: krb5.conf
+                    description: Krb5ConfKey is the Secret key holding the krb5.conf.
+                    type: string
+                  krbDebug:
+                    default: false
+                    description: KrbDebug logs Kerberos debug output to stdout.
+                    type: boolean
+                  order:
+                    default: 6
+                    description: Order determines the evaluation order of this auth
+                      domain
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  stripRealmFromPrincipal:
+                    description: |-
+                      StripRealmFromPrincipal strips the realm from the authenticated username. Pointer so the
+                      documented default (true) is only overridden when explicitly set.
+                    type: boolean
                 required:
-                - name
+                - acceptorPrincipal
+                - credentialsSecret
                 type: object
               ldap:
                 description: LDAP configures LDAP/Active Directory authentication
@@ -205,20 +387,6 @@ spec:
                       Challenge enables authentication challenge
                       Should typically be false when multiple auth methods are enabled
                     type: boolean
-                  connectionPool:
-                    description: ConnectionPool configures connection pooling
-                    properties:
-                      maxSize:
-                        default: 10
-                        description: MaxSize is the maximum pool size
-                        minimum: 1
-                        type: integer
-                      minSize:
-                        default: 3
-                        description: MinSize is the minimum pool size
-                        minimum: 0
-                        type: integer
-                    type: object
                   enabled:
                     default: false
                     description: Enabled enables LDAP authentication
@@ -260,6 +428,23 @@ spec:
                         description: TrustAllCertificates disables certificate verification
                           (insecure)
                         type: boolean
+                      trustedCAsSecretRef:
+                        description: |-
+                          TrustedCAsSecretRef references a Secret holding the PEM CA bundle to trust for the
+                          LDAPS/StartTLS connection, emitted inline as pemtrustedcas_content. A CA certificate
+                          is not secret; a Secret just keeps a multi-line bundle out of the CR. Mutually
+                          exclusive with pemTrustedCAsFilepath per OpenSearch.
+                        properties:
+                          key:
+                            default: password
+                            description: Key is the key in the secret
+                            type: string
+                          name:
+                            description: Name is the secret name
+                            type: string
+                        required:
+                        - name
+                        type: object
                       verifyHostnames:
                         default: true
                         description: VerifyHostnames enables hostname verification
@@ -308,13 +493,16 @@ spec:
                     description: Dashboard configures OIDC-specific dashboard settings
                     properties:
                       additionalCookies:
-                        description: AdditionalCookies defines extra cookies to set
+                        description: |-
+                          AdditionalCookies is the number of extra split cookies opensearch-dashboards may use to
+                          store a large OIDC session (emitted as openid.extra_storage.additional_cookies).
                         items:
                           type: string
                         type: array
                       cookiePasswordRef:
-                        description: CookiePassword is the password for cookie encryption
-                          (auto-generated if not set)
+                        description: |-
+                          CookiePasswordRef references a Secret holding the session-cookie signing password
+                          (auto-generated and persisted if not set).
                         properties:
                           key:
                             default: password
@@ -326,23 +514,14 @@ spec:
                         required:
                         - name
                         type: object
-                      cookiePrefix:
-                        default: security_authentication
-                        description: CookiePrefix is the prefix for OIDC cookies
-                        type: string
-                      loginEndpoint:
-                        default: /auth/openid/login
-                        description: LoginEndpoint is the custom login endpoint path
-                        type: string
-                      logoutEndpoint:
-                        default: /auth/openid/logout
-                        description: LogoutEndpoint is the custom logout endpoint
-                          path
-                        type: string
                       rootUrl:
                         description: |-
-                          RootURL is the base URL of the dashboard for OIDC callbacks
-                          Example: https://dashboard.example.com
+                          RootURL is the dashboard's public base URL (scheme + host, no path). It is emitted as
+                          opensearch_security.openid.base_redirect_url. Set it whenever the dashboard is reached
+                          through a reverse proxy or Ingress: without it the security plugin builds the OIDC
+                          redirect_uri from server.host, so the login flow starts at https://0.0.0.0:5601/auth/openid/login
+                          (the in-pod address) instead of your public URL, and the IdP rejects the callback.
+                          Example: https://wazuh.example.com
                         type: string
                     type: object
                   enabled:
@@ -353,6 +532,39 @@ spec:
                     default: true
                     description: HTTPEnabled enables authentication on HTTP layer
                     type: boolean
+                  idpTLS:
+                    description: |-
+                      IdpTLS configures TLS trust for the security plugin's connection to the OIDC
+                      discovery endpoint when the IdP presents a certificate signed by a private or
+                      otherwise untrusted CA.
+                    properties:
+                      enableSsl:
+                        description: |-
+                          EnableSSL turns on the custom TLS settings below. When false (default) the JDK/system trust
+                          store is used, which is enough for a publicly-trusted IdP certificate.
+                        type: boolean
+                      trustedCAsSecretRef:
+                        description: |-
+                          TrustedCAsSecretRef references a Secret holding the PEM CA bundle to trust for the IdP
+                          connection, emitted inline as pemtrustedcas_content. A CA certificate is not secret; a Secret
+                          just keeps a multi-line bundle out of the CR. Requires enableSsl: true.
+                        properties:
+                          key:
+                            default: password
+                            description: Key is the key in the secret
+                            type: string
+                          name:
+                            description: Name is the secret name
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      verifyHostnames:
+                        description: |-
+                          VerifyHostnames verifies the IdP certificate hostname. Defaults to true; set false only for
+                          an IdP whose certificate does not match its address.
+                        type: boolean
+                    type: object
                   logoutUrl:
                     description: LogoutURL is the URL to redirect after logout
                     type: string
@@ -379,6 +591,78 @@ spec:
                 - clientId
                 - connectURL
                 type: object
+              proxy:
+                description: |-
+                  Proxy configures proxy-based authentication where the indexer trusts identity
+                  headers set by a front proxy. This is an indexer/API-layer backend only; the
+                  dashboard sign-in is unaffected (it keeps basic auth).
+                properties:
+                  attrHeaderPrefix:
+                    default: x-proxy-ext-
+                    description: AttrHeaderPrefix is the header prefix for extended-proxy
+                      user attributes.
+                    type: string
+                  enabled:
+                    default: false
+                    description: |-
+                      Enabled enables proxy-based authentication (the indexer trusts identity headers set by a
+                      front proxy). Applies to the indexer/API layer; the dashboard sign-in is unaffected.
+                    type: boolean
+                  extended:
+                    description: |-
+                      Extended uses the extended-proxy authenticator, which additionally forwards user
+                      attributes (headers prefixed by AttrHeaderPrefix) for document-level security.
+                    type: boolean
+                  httpEnabled:
+                    default: true
+                    description: HTTPEnabled enables the domain on the HTTP layer.
+                    type: boolean
+                  order:
+                    default: 5
+                    description: Order — evaluation order of this auth domain.
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                  rolesHeader:
+                    default: x-proxy-roles
+                    description: RolesHeader is the header carrying the comma-separated
+                      backend roles.
+                    type: string
+                  rolesSeparator:
+                    default: ','
+                    description: RolesSeparator separates roles in RolesHeader.
+                    type: string
+                  transportEnabled:
+                    default: false
+                    description: TransportEnabled — proxy identity headers only arrive
+                      over HTTP; leave false.
+                    type: boolean
+                  userHeader:
+                    default: x-proxy-user
+                    description: UserHeader is the header carrying the authenticated
+                      username.
+                    type: string
+                  xff:
+                    description: XFF configures proxy detection (required — without
+                      it the plugin ignores the identity headers).
+                    properties:
+                      internalProxies:
+                        description: |-
+                          InternalProxies is a regular expression matching the IP addresses of all trusted proxies.
+                          Use ".*" to trust every internal proxy. Required.
+                        minLength: 1
+                        type: string
+                      remoteIpHeader:
+                        default: x-forwarded-for
+                        description: RemoteIPHeader is the header carrying the client
+                          IP chain.
+                        type: string
+                    required:
+                    - internalProxies
+                    type: object
+                required:
+                - xff
+                type: object
               saml:
                 description: SAML configures SAML 2.0 authentication
                 properties:
@@ -391,10 +675,6 @@ spec:
                   dashboard:
                     description: Dashboard configures SAML-specific dashboard settings
                     properties:
-                      requestedAuthnContextRef:
-                        description: RequestedAuthnContextRef specifies the authentication
-                          context requirements
-                        type: string
                       xsrfAllowlist:
                         description: |-
                           XSRFAllowlist specifies URLs to exclude from XSRF protection
@@ -439,6 +719,39 @@ spec:
                       IdpMetadataURL is the URL to fetch IdP metadata from
                       Either IdpMetadataURL or IdpMetadataFile must be specified
                     type: string
+                  idpTLS:
+                    description: |-
+                      IdpTLS configures TLS trust for the security plugin's connection to the SAML IdP
+                      metadata URL when the IdP presents a certificate signed by a private or otherwise
+                      untrusted CA.
+                    properties:
+                      enableSsl:
+                        description: |-
+                          EnableSSL turns on the custom TLS settings below. When false (default) the JDK/system trust
+                          store is used, which is enough for a publicly-trusted IdP certificate.
+                        type: boolean
+                      trustedCAsSecretRef:
+                        description: |-
+                          TrustedCAsSecretRef references a Secret holding the PEM CA bundle to trust for the IdP
+                          connection, emitted inline as pemtrustedcas_content. A CA certificate is not secret; a Secret
+                          just keeps a multi-line bundle out of the CR. Requires enableSsl: true.
+                        properties:
+                          key:
+                            default: password
+                            description: Key is the key in the secret
+                            type: string
+                          name:
+                            description: Name is the secret name
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      verifyHostnames:
+                        description: |-
+                          VerifyHostnames verifies the IdP certificate hostname. Defaults to true; set false only for
+                          an IdP whose certificate does not match its address.
+                        type: boolean
+                    type: object
                   kibanaUrl:
                     description: |-
                       KibanaURL is the base URL of OpenSearch Dashboard
@@ -469,7 +782,7 @@ spec:
                 - spEntityId
                 type: object
             required:
-            - clusterRef
+            - clusterRefs
             type: object
           status:
             description: OpenSearchAuthConfigStatus defines the observed state of
@@ -481,6 +794,51 @@ spec:
                 items:
                   type: string
                 type: array
+              clusterStatuses:
+                description: ClusterStatuses reports per-target-cluster reconciliation
+                  state.
+                items:
+                  description: |-
+                    OpenSearchClusterStatus reports the reconciliation state for one target
+                    OpenSearch cluster of a multi-cluster CR (User, Role, Tenant, etc.).
+                    The aggregate Status.Phase reflects the worst case across entries.
+                  properties:
+                    lastAppliedHash:
+                      description: LastAppliedHash is the hash of the last spec applied
+                        to this cluster
+                      type: string
+                    lastSyncTime:
+                      description: LastSyncTime is the last time the resource was
+                        synced to this cluster
+                      format: date-time
+                      type: string
+                    message:
+                      description: Message provides additional information about this
+                        cluster's state
+                      type: string
+                    name:
+                      description: Name of the target WazuhCluster
+                      type: string
+                    namespace:
+                      description: Namespace of the target WazuhCluster
+                      type: string
+                    phase:
+                      description: Phase on this cluster (Pending, Ready, Failed,
+                        Conflict)
+                      enum:
+                      - Pending
+                      - Ready
+                      - Failed
+                      type: string
+                  required:
+                  - name
+                  - namespace
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                - namespace
+                x-kubernetes-list-type: map
               conditions:
                 description: Conditions represent the latest available observations
                 items:

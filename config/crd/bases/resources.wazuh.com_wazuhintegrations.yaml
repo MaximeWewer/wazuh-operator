@@ -4,21 +4,21 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.0
-  name: wazuhrules.resources.wazuh.com
+  name: wazuhintegrations.resources.wazuh.com
 spec:
   group: resources.wazuh.com
   names:
-    kind: WazuhRule
-    listKind: WazuhRuleList
-    plural: wazuhrules
+    kind: WazuhIntegration
+    listKind: WazuhIntegrationList
+    plural: wazuhintegrations
     shortNames:
-    - wrule
-    singular: wazuhrule
+    - wintegration
+    singular: wazuhintegration
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.ruleName
-      name: Rule
+    - jsonPath: .spec.name
+      name: Integration
       type: string
     - jsonPath: .status.phase
       name: Phase
@@ -32,7 +32,7 @@ spec:
     name: v1
     schema:
       openAPIV3Schema:
-        description: WazuhRule is the Schema for the wazuhrules API
+        description: WazuhIntegration is the Schema for the wazuhintegrations API.
         properties:
           apiVersion:
             description: |-
@@ -52,13 +52,55 @@ spec:
           metadata:
             type: object
           spec:
-            description: spec defines the desired state of WazuhRule
+            description: |-
+              WazuhIntegrationSpec defines the desired state of WazuhIntegration.
+
+              A WazuhIntegration provisions a Wazuh "custom integration": it ships an
+              executable script to /var/ossec/integrations/<integrationName> on the target
+              manager nodes AND injects the matching <integration> block into ossec.conf so
+              wazuh-integratord forwards alerts to the script.
+              See https://documentation.wazuh.com/current/user-manual/manager/manual-integration.html
             properties:
+              alertFormat:
+                default: json
+                description: |-
+                  AlertFormat controls the format of the alert handed to the script (<alert_format>).
+                  "json" passes a JSON alert file (recommended for custom scripts).
+                enum:
+                - json
+                - full_log
+                type: string
+              apiKeySecretRef:
+                description: |-
+                  APIKeySecretRef reads the integration API key from a Secret in the target
+                  cluster's namespace. The resolved value is rendered as <api_key> in
+                  ossec.conf and passed to the script (argv[2]).
+                properties:
+                  key:
+                    description: The key of the secret to select from.  Must be a
+                      valid secret key.
+                    type: string
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  optional:
+                    description: Specify whether the Secret or its key must be defined
+                    type: boolean
+                required:
+                - key
+                type: object
+                x-kubernetes-map-type: atomic
               clusterRefs:
                 description: |-
-                  ClusterRefs lists the WazuhCluster instances the rule must be applied to.
+                  ClusterRefs lists the WazuhCluster instances the integration must be applied to.
                   Each entry must specify both name and namespace. The CR can live in any
-                  namespace; rule ConfigMaps are created in each target cluster's namespace.
+                  namespace; the script ConfigMap is created in each target cluster's namespace.
                 items:
                   description: |-
                     WazuhClusterRef references a WazuhCluster by name and namespace.
@@ -84,59 +126,92 @@ spec:
                 - name
                 - namespace
                 x-kubernetes-list-type: map
-              description:
-                description: Description of the rule set
+              eventLocation:
+                description: EventLocation filters alerts by their source location
+                  (<location>).
                 type: string
-              groups:
-                description: Groups are the rule groups this rule set belongs to
-                items:
-                  type: string
-                type: array
-              ifGroup:
-                description: IfGroup references parent rule groups
-                items:
-                  type: string
-                type: array
-              ifSID:
-                description: IfSID references parent rule IDs
+              group:
+                description: Group filters alerts by rule group (<group>). Comma-separated
+                  groups are allowed.
+                type: string
+              hookURL:
+                description: |-
+                  HookURL is the endpoint passed to the script (argv[3]) and rendered as
+                  <hook_url>. Use HookURLSecretRef instead when the URL is sensitive.
+                type: string
+              hookURLSecretRef:
+                description: |-
+                  HookURLSecretRef reads the hook URL from a Secret in the target cluster's
+                  namespace. When set, it overrides HookURL.
+                properties:
+                  key:
+                    description: The key of the secret to select from.  Must be a
+                      valid secret key.
+                    type: string
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                  optional:
+                    description: Specify whether the Secret or its key must be defined
+                    type: boolean
+                required:
+                - key
+                type: object
+                x-kubernetes-map-type: atomic
+              level:
+                description: Level filters alerts by minimum severity level before
+                  they reach the integration.
+                format: int32
+                maximum: 16
+                minimum: 0
+                type: integer
+              name:
+                description: |-
+                  Name is the integration's logical name WITHOUT the "custom-" prefix
+                  (e.g. "jira"). The operator forces the Wazuh custom-integration convention:
+                  the script filename and the <integration> <name> tag are both derived as
+                  custom-<name>[.<scriptExtension>] (see ScriptName).
+                maxLength: 50
+                pattern: ^[a-zA-Z0-9_-]+$
+                type: string
+              options:
+                description: |-
+                  Options is an optional raw JSON string rendered inside <options>...</options>,
+                  forwarded verbatim to the integration.
+                type: string
+              ruleID:
+                description: RuleID filters alerts so only the listed rule IDs are
+                  forwarded (<rule_id>).
                 items:
                   format: int32
                   type: integer
                 type: array
-              level:
-                description: Level specifies the rule level (0-15)
-                format: int32
-                maximum: 15
-                minimum: 0
-                type: integer
-              overwrite:
-                description: Overwrite determines if this rule should overwrite existing
-                  rules
-                type: boolean
-              priority:
-                default: 500
-                description: Priority determines the order in which rules are applied
-                  (lower values = higher priority)
-                format: int32
-                maximum: 1000
-                minimum: 0
-                type: integer
-              ruleID:
-                description: RuleID is the starting rule ID for rules in this set
-                format: int32
-                maximum: 999999
-                minimum: 100000
-                type: integer
-              ruleName:
-                description: RuleName is the name of the rule
+              script:
+                description: |-
+                  Script is the content of the integration executable. It is mounted with
+                  mode 0750 at /var/ossec/integrations/<integrationName>. The first line
+                  must be a shebang (e.g. "#!/usr/bin/env python3" or "#!/bin/sh").
                 type: string
-              rules:
-                description: Rules contain the actual rule definitions in XML format
+              scriptExtension:
+                description: |-
+                  ScriptExtension is the optional file extension (without the leading dot)
+                  appended to the generated script filename, e.g. "py" → custom-<name>.py,
+                  "sh" → custom-<name>.sh. When empty the script is named custom-<name>.
+                  wazuh-integratord executes the file named exactly like the <name> tag, so
+                  the operator keeps both in sync.
+                maxLength: 10
+                pattern: ^[a-zA-Z0-9]+$
                 type: string
               targetNodes:
                 default: all
-                description: TargetNodes specifies which nodes should receive this
-                  rule (master, workers, or all)
+                description: TargetNodes selects which manager nodes receive the integration
+                  (master, workers, or all).
                 enum:
                 - master
                 - workers
@@ -144,28 +219,28 @@ spec:
                 type: string
             required:
             - clusterRefs
-            - ruleName
-            - rules
+            - name
+            - script
             type: object
           status:
-            description: status defines the observed state of WazuhRule
+            description: WazuhIntegrationStatus defines the observed state of WazuhIntegration.
             properties:
               clusterStatuses:
                 description: ClusterStatuses reports per-target-cluster reconciliation
                   state.
                 items:
-                  description: RuleClusterStatus reports the reconciliation state
-                    for a single target cluster.
+                  description: IntegrationClusterStatus reports the reconciliation
+                    state for a single target cluster.
                   properties:
                     appliedToNodes:
-                      description: AppliedToNodes lists the nodes where this rule
-                        has been applied on this cluster
+                      description: AppliedToNodes lists the nodes where this integration
+                        has been applied on this cluster.
                       items:
                         type: string
                       type: array
                     configMapRef:
-                      description: ConfigMapRef references the ConfigMap created in
-                        this cluster's namespace
+                      description: ConfigMapRef references the script ConfigMap created
+                        in this cluster's namespace.
                       properties:
                         key:
                           description: Key in the ConfigMap
@@ -180,22 +255,22 @@ spec:
                       - name
                       type: object
                     lastAppliedTime:
-                      description: LastAppliedTime is the last time the rule was applied
-                        to this cluster
+                      description: LastAppliedTime is the last time the integration
+                        was applied to this cluster.
                       format: date-time
                       type: string
                     message:
                       description: Message provides additional information about this
-                        cluster's state
+                        cluster's state.
                       type: string
                     name:
-                      description: Name of the target WazuhCluster
+                      description: Name of the target WazuhCluster.
                       type: string
                     namespace:
-                      description: Namespace of the target WazuhCluster
+                      description: Namespace of the target WazuhCluster.
                       type: string
                     phase:
-                      description: Phase on this cluster
+                      description: Phase on this cluster.
                       enum:
                       - Pending
                       - Applied
@@ -212,7 +287,7 @@ spec:
                 - namespace
                 x-kubernetes-list-type: map
               conditions:
-                description: Conditions represent the latest aggregate observations
+                description: Conditions represent the latest aggregate observations.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -273,11 +348,11 @@ spec:
                 x-kubernetes-list-type: map
               message:
                 description: Message provides additional aggregate information about
-                  the current state
+                  the current state.
                 type: string
               observedGeneration:
                 description: ObservedGeneration reflects the generation of the most
-                  recently observed rule
+                  recently observed integration.
                 format: int64
                 type: integer
               phase:
@@ -289,13 +364,11 @@ spec:
                 - Updating
                 type: string
               validationErrors:
-                description: ValidationErrors contains any validation errors encountered
+                description: ValidationErrors contains any validation errors encountered.
                 items:
                   type: string
                 type: array
             type: object
-        required:
-        - spec
         type: object
     served: true
     storage: true
