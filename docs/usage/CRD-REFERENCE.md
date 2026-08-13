@@ -1392,6 +1392,83 @@ spec:
 
 ---
 
+### WazuhAgentGroupAssignment
+
+Assigns Wazuh agents to groups declaratively by matching agent **names**, via the Manager API. Unlike `WazuhAgentGroup` (which defines a group's shared configuration), this CRD controls **which agents belong to which groups**. Membership is authoritative and cluster-global (see **Behavior** below).
+
+**Short Name:** `waga`
+
+| Field                      | Type            | Required | Default | Description                                                                                      |
+| -------------------------- | --------------- | -------- | ------- | ------------------------------------------------------------------------------------------------ |
+| `clusterRefs`              | []WazuhClusterRef | **Yes**  | -       | Target clusters (MinItems=1); each entry requires both `name` and `namespace`                    |
+| `groups`                   | []string        | **Yes**  | -       | The set of groups every matched agent must belong to (MinItems=1). Contributes to the union      |
+| `selector`                 | AgentSelector   | **Yes**  | -       | How agents are matched by name; at least one of its three lists must be non-empty                |
+| `reconcileIntervalSeconds` | int             | No       | `60`    | How often agents are re-scanned so dynamically-registered agents are picked up (Minimum `15`)    |
+
+**AgentSelector** — an agent matches if **any** entry in **any** list matches (at least one list must be non-empty):
+
+| Field          | Type     | Required | Default | Description                                                                                       |
+| -------------- | -------- | -------- | ------- | ------------------------------------------------------------------------------------------------ |
+| `agentNames`   | []string | No       | -       | Exact agent names                                                                                |
+| `namePatterns` | []string | No       | -       | Shell glob patterns (Go `path.Match` semantics), e.g. `web-*`                                    |
+| `nameRegex`    | []string | No       | -       | RE2 regular expressions, e.g. `^web-\d+$`                                                        |
+| `osPlatforms`  | []string | No       | -       | Match the agent's reported `os.platform` short value (`ubuntu`, `debian`, `centos`, `redhat`, `amzn`, `windows`, `darwin`, …). Case-insensitive. macOS reports as `darwin`; the aliases `macos`/`osx` are accepted and normalized to `darwin`. Agents with an empty `os.platform` (e.g. never-connected) are skipped for this check but can still match by name. |
+
+> **Note:** `os.version` is intentionally **not** a selector. It is a freeform string (e.g. `16.04.6 LTS (Xenial Xerus)`) and cannot be matched reliably; use `osPlatforms` for OS targeting.
+
+#### Status Fields
+
+| Field                | Type                                  | Description                                                                 |
+| -------------------- | ------------------------------------- | --------------------------------------------------------------------------- |
+| `phase`              | string                                | Aggregate phase (Pending/Ready/Failed)                                      |
+| `conditions`         | []Condition                           | Standard conditions                                                         |
+| `observedGeneration` | int64                                 | Last observed generation                                                    |
+| `message`            | string                                | Additional information                                                      |
+| `clusterStatuses`    | []AgentGroupAssignmentClusterStatus   | Per-cluster state incl. `matchedAgentCount`, `managedAgentIds`, `lastAppliedHash` |
+
+#### Behavior
+
+- **Cluster-global authoritative union.** Each agent's group membership equals the **union** of `groups` across **all** `WazuhAgentGroupAssignment` CRs whose selector matches that agent on the same cluster. Two CRs matching the same agent do not fight — their groups are combined.
+- **Exact reconciliation.** A matched agent is reconciled to **exactly** that union: any group not in the union — including groups set manually or from the dashboard UI, and the `default` group — is **removed**. Additions are applied before removals (PUT before DELETE) so the agent always keeps at least one group.
+- **Unmatched agents are untouched.** An agent matched by no CR is left completely as-is (no groups added or removed).
+- **The manager agent `000` is never touched.**
+- **Delete is union-aware.** Deleting a CR removes its matched agents only from the groups in that CR's `groups` that **no other** matching CR still provides. Groups still requested by another CR are kept.
+- **Dynamic re-scan.** Agents register dynamically, so membership is re-evaluated every `reconcileIntervalSeconds` (default `60`, minimum `15`); `lastAppliedHash` is informational only and never short-circuits a re-scan.
+
+> **Warning:** This CRD is authoritative and destructive for matched agents. Groups assigned manually (CLI or dashboard) on a matched agent will be stripped on the next reconcile unless a CR also lists them. If an agent stops being matched (e.g. its name no longer matches after a pattern change), it keeps its last-applied groups — there is no historical revert; only deleting the CR actively removes this CR's contributions.
+
+#### Example
+
+```yaml
+# docs/usage/examples/wazuh-content/wazuhagentgroupassignment-basic.yaml
+apiVersion: resources.wazuh.com/v1
+kind: WazuhAgentGroupAssignment
+metadata:
+  name: web-prod-agents
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  # Every matched agent is pinned to exactly these groups (unioned with any
+  # other CR that also matches it). Groups not listed here are removed.
+  groups:
+    - web
+    - prod
+  selector:
+    agentNames:
+      - web-gateway-01        # exact name
+    namePatterns:
+      - "web-*"               # glob (path.Match)
+    nameRegex:
+      - "^web-[0-9]+$"        # RE2 regex
+    osPlatforms:
+      - windows               # match all Windows agents (case-insensitive; macos/osx -> darwin)
+  reconcileIntervalSeconds: 60
+```
+
+---
+
 ### WazuhDecoder
 
 Manages custom log decoders.

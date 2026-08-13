@@ -1,0 +1,41 @@
+apiVersion: resources.wazuh.com/v1
+kind: WazuhAgentGroupAssignment
+metadata:
+  name: web-prod-agents
+  # The CR can live in any namespace; it targets clusters via clusterRefs.
+  namespace: wazuh
+spec:
+  # One or more target clusters. Both name and namespace are mandatory.
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+    # - name: wazuh-cluster-dr
+    #   namespace: wazuh-dr
+
+  # Authoritative membership: every matched agent is reconciled to EXACTLY the
+  # UNION of `groups` across all WazuhAgentGroupAssignment CRs that match it.
+  # Groups not in that union (including default / manually-set groups) are
+  # removed. An agent matched by no CR is left untouched; the manager (agent
+  # "000") is never touched.
+  groups:
+    - web
+    - prod
+
+  # An agent matches if ANY entry in ANY of the lists matches (by name or by OS).
+  selector:
+    agentNames:
+      - web-gateway-01          # exact agent name
+    namePatterns:
+      - "web-*"                 # shell glob (Go path.Match), e.g. web-01, web-app
+    nameRegex:
+      - "^web-[0-9]+$"          # RE2 regular expression, e.g. web-42
+    osPlatforms:
+      # Match the agent's reported os.platform (short value: ubuntu, debian,
+      # centos, redhat, amzn, windows, darwin, ...). Case-insensitive; macOS
+      # reports as "darwin" and the aliases "macos"/"osx" are accepted.
+      # os.version is intentionally not selectable (freeform string).
+      - windows                 # target all Windows agents
+
+  # Agents register dynamically, so membership is re-scanned on this interval
+  # (default 60, minimum 15) to pick up newly-registered matching agents.
+  reconcileIntervalSeconds: 60

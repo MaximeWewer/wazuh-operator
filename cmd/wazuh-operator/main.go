@@ -454,6 +454,16 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "WazuhUser")
 		os.Exit(1)
 	}
+	wazuhAgentGroupAssignmentRecorder := mgr.GetEventRecorderFor("wazuhagentgroupassignment-controller")
+	if err := (&controllers.WazuhAgentGroupAssignmentReconciler{
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		Recorder:             wazuhAgentGroupAssignmentRecorder,
+		AssignmentReconciler: wazuhreconciler.NewWazuhAPIAgentGroupAssignmentReconciler(mgr.GetClient(), mgr.GetScheme(), wazuhAgentGroupAssignmentRecorder),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "WazuhAgentGroupAssignment")
+		os.Exit(1)
+	}
 
 	// OpenSearch Security Controllers
 	if err := (&controllers.OpenSearchUserReconciler{
@@ -609,6 +619,10 @@ func main() {
 		}
 		if err := wazuhv1.SetupOpenSearchAuthConfigWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "OpenSearchAuthConfig")
+			os.Exit(1)
+		}
+		if err := wazuhv1.SetupWazuhAgentGroupAssignmentWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "WazuhAgentGroupAssignment")
 			os.Exit(1)
 		}
 	}

@@ -15,6 +15,7 @@ the manager pods and injects the matching `ossec.conf` blocks. See the
 | [wazuhcdblist-url-keylist.yaml](wazuhcdblist-url-keylist.yaml) | WazuhCDBList | MD5 hash list fetched from a URL (`keylist` + `skipLines`) |
 | [wazuhactiveresponse-firewall-drop.yaml](wazuhactiveresponse-firewall-drop.yaml) | WazuhActiveResponse | Firewall-drop stateful active response |
 | [wazuhagentgroup-basic.yaml](wazuhagentgroup-basic.yaml) | WazuhAgentGroup | Agent group (`linux-servers`) |
+| [wazuhagentgroupassignment-basic.yaml](wazuhagentgroupassignment-basic.yaml) | WazuhAgentGroupAssignment | Authoritative agent-to-group assignment by name (union) |
 | [wazuhintegration-basic.yaml](wazuhintegration-basic.yaml) | Secret + WazuhIntegration | Integration with an external API (Slack) |
 
 ## Related Documentation

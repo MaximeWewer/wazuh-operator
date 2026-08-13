@@ -13,7 +13,7 @@ examples/
 ├── gitops/               # GitOps deployment (ArgoCD, Flux)
 │
 ├── wazuh-cluster/        # WazuhCluster feature variants (TLS, drain, monitoring, gateway)
-├── wazuh-content/        # WazuhRule, WazuhDecoder, WazuhCDBList, WazuhActiveResponse, WazuhIntegration, WazuhAgentGroup
+├── wazuh-content/        # WazuhRule, WazuhDecoder, WazuhCDBList, WazuhActiveResponse, WazuhIntegration, WazuhAgentGroup, WazuhAgentGroupAssignment
 ├── wazuh-certificate/    # WazuhCertificate
 ├── filebeat/             # WazuhFilebeat
 ├── wazuh-rbac/           # WazuhRole, WazuhUser (+ external IdP)
@@ -38,6 +38,7 @@ Every CRD has at least one example. Find the example for a given CRD here:
 | WazuhActiveResponse | [wazuh-content/wazuhactiveresponse-firewall-drop.yaml](wazuh-content/wazuhactiveresponse-firewall-drop.yaml) |
 | WazuhIntegration | [wazuh-content/wazuhintegration-basic.yaml](wazuh-content/wazuhintegration-basic.yaml) |
 | WazuhAgentGroup | [wazuh-content/wazuhagentgroup-basic.yaml](wazuh-content/wazuhagentgroup-basic.yaml) |
+| WazuhAgentGroupAssignment | [wazuh-content/wazuhagentgroupassignment-basic.yaml](wazuh-content/wazuhagentgroupassignment-basic.yaml) |
 | WazuhFilebeat | [filebeat/](filebeat/) |
 | WazuhRole | [wazuh-rbac/wazuhrole-admin.yaml](wazuh-rbac/wazuhrole-admin.yaml), [wazuh-rbac/wazuhrole-viewer.yaml](wazuh-rbac/wazuhrole-viewer.yaml) |
 | WazuhUser | [wazuh-rbac/wazuhuser-basic.yaml](wazuh-rbac/wazuhuser-basic.yaml) |

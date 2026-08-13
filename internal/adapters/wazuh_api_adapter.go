@@ -630,6 +630,116 @@ func (a *WazuhAPIAdapter) DeleteGroup(ctx context.Context, groupName string) err
 	return nil
 }
 
+// WazuhAgent is a minimal view of a Wazuh agent used for group assignment.
+type WazuhAgent struct {
+	ID         string
+	Name       string
+	Groups     []string
+	OSPlatform string
+}
+
+// ListAgents returns all registered agents (id, name, groups, os.platform),
+// paginating over the Wazuh API.
+// API: GET /agents?select=id,name,group,os.platform with limit/offset.
+func (a *WazuhAPIAdapter) ListAgents(ctx context.Context) ([]WazuhAgent, error) {
+	const pageLimit = 500
+	var agents []WazuhAgent
+	offset := 0
+
+	for {
+		path := fmt.Sprintf("/agents?select=id,name,group,os.platform&limit=%d&offset=%d", pageLimit, offset)
+		resp, err := a.doRequest(ctx, "GET", path, nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to list agents: %w", err)
+		}
+		raw, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("failed to list agents (status %d): %s", resp.StatusCode, string(raw))
+		}
+
+		var result struct {
+			Data struct {
+				AffectedItems []struct {
+					ID    string   `json:"id"`
+					Name  string   `json:"name"`
+					Group []string `json:"group"`
+					Os    struct {
+						Platform string `json:"platform"`
+					} `json:"os"`
+				} `json:"affected_items"`
+				TotalAffectedItems int `json:"total_affected_items"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(raw, &result); err != nil {
+			return nil, fmt.Errorf("failed to decode agents response: %w", err)
+		}
+
+		if len(result.Data.AffectedItems) == 0 {
+			break
+		}
+		for _, it := range result.Data.AffectedItems {
+			agents = append(agents, WazuhAgent{ID: it.ID, Name: it.Name, Groups: it.Group, OSPlatform: it.Os.Platform})
+		}
+
+		offset += len(result.Data.AffectedItems)
+		if offset >= result.Data.TotalAffectedItems {
+			break
+		}
+	}
+
+	return agents, nil
+}
+
+// AssignAgentToGroup adds an agent to a group. Idempotent: an agent that already
+// belongs to the group (error 1751) is treated as success.
+// API: PUT /agents/{agent_id}/group/{group_id}
+func (a *WazuhAPIAdapter) AssignAgentToGroup(ctx context.Context, agentID, group string) error {
+	path := fmt.Sprintf("/agents/%s/group/%s", agentID, group)
+	resp, err := a.doRequest(ctx, "PUT", path, nil)
+	if err != nil {
+		return fmt.Errorf("failed to assign agent %s to group %s: %w", agentID, group, err)
+	}
+	defer resp.Body.Close()
+
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	// Tolerate "already belongs to group" (error 1751) for idempotency.
+	low := strings.ToLower(string(raw))
+	if strings.Contains(low, "already belong") || strings.Contains(low, "1751") {
+		return nil
+	}
+	return fmt.Errorf("failed to assign agent %s to group %s (status %d): %s", agentID, group, resp.StatusCode, string(raw))
+}
+
+// RemoveAgentFromGroup removes an agent from a group. Idempotent: an agent that
+// is not a member of the group is treated as success.
+// API: DELETE /agents/{agent_id}/group/{group_id}
+func (a *WazuhAPIAdapter) RemoveAgentFromGroup(ctx context.Context, agentID, group string) error {
+	path := fmt.Sprintf("/agents/%s/group/%s", agentID, group)
+	resp, err := a.doRequest(ctx, "DELETE", path, nil)
+	if err != nil {
+		return fmt.Errorf("failed to remove agent %s from group %s: %w", agentID, group, err)
+	}
+	defer resp.Body.Close()
+
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	// Tolerate "agent is not a member" / group-not-found for idempotency.
+	low := strings.ToLower(string(raw))
+	if strings.Contains(low, "not belong") || strings.Contains(low, "is not") ||
+		strings.Contains(low, "does not exist") || strings.Contains(low, "1734") ||
+		strings.Contains(low, "1755") {
+		return nil
+	}
+	return fmt.Errorf("failed to remove agent %s from group %s (status %d): %s", agentID, group, resp.StatusCode, string(raw))
+}
+
 // UpdateGroupConfiguration updates the agent.conf for a group
 // API: PUT /groups/{group_id}/configuration with Content-Type: application/xml
 func (a *WazuhAPIAdapter) UpdateGroupConfiguration(ctx context.Context, groupName, agentConf string) error {

@@ -56,6 +56,26 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
+      path: /validate-resources-wazuh-com-v1-wazuhagentgroupassignment
+  failurePolicy: Fail
+  name: vwazuhagentgroupassignment.kb.io
+  rules:
+  - apiGroups:
+    - resources.wazuh.com
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - wazuhagentgroupassignments
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
       path: /validate-resources-wazuh-com-v1-wazuhcluster
   failurePolicy: Fail
   name: vwazuhcluster.kb.io
