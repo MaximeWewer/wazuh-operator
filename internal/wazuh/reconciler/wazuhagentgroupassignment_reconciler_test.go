@@ -88,6 +88,82 @@ func TestCompileSelectorErrors(t *testing.T) {
 	if _, err := compileSelector(wazuhv1.AgentSelector{NamePatterns: []string{"[a-"}}); err == nil {
 		t.Error("expected error for invalid glob")
 	}
+	// Errors inside the exclusion block must surface too.
+	if _, err := compileSelector(wazuhv1.AgentSelector{
+		NamePatterns: []string{"web-*"},
+		Exclude:      &wazuhv1.AgentSelectorExclude{NameRegex: []string{"("}},
+	}); err == nil {
+		t.Error("expected error for invalid exclude regex")
+	}
+}
+
+func TestMatchAgent_Exclude(t *testing.T) {
+	sel := mustCompile(t, wazuhv1.AgentSelector{
+		NamePatterns: []string{"web-*"},
+		Exclude: &wazuhv1.AgentSelectorExclude{
+			AgentNames:  []string{"web-canary"},
+			OSPlatforms: []string{"windows"},
+		},
+	})
+
+	tests := []struct {
+		name       string
+		agent      string
+		osPlatform string
+		want       bool
+	}{
+		{"included, not excluded", "web-1", "ubuntu", true},
+		{"excluded by exact name", "web-canary", "ubuntu", false},
+		{"excluded by os.platform", "web-2", "windows", false},
+		{"not included at all", "db-1", "ubuntu", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := matchAgent(tt.agent, tt.osPlatform, sel); got != tt.want {
+				t.Errorf("matchAgent(%q, %q) = %v, want %v", tt.agent, tt.osPlatform, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMatchAgent_RequireOSPlatform(t *testing.T) {
+	// Restrictive: "web-* but only on linux (ubuntu/debian)".
+	sel := mustCompile(t, wazuhv1.AgentSelector{
+		NamePatterns:      []string{"web-*"},
+		OSPlatforms:       []string{"ubuntu", "debian"},
+		RequireOSPlatform: true,
+	})
+
+	tests := []struct {
+		name       string
+		agent      string
+		osPlatform string
+		want       bool
+	}{
+		{"name and os both match", "web-1", "ubuntu", true},
+		{"name matches but os does not", "web-2", "windows", false},
+		{"os matches but name does not", "db-1", "ubuntu", false},
+		{"name matches but os empty", "web-3", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := matchAgent(tt.agent, tt.osPlatform, sel); got != tt.want {
+				t.Errorf("matchAgent(%q, %q) = %v, want %v", tt.agent, tt.osPlatform, got, tt.want)
+			}
+		})
+	}
+
+	// With no name terms, requireOsPlatform selects purely by os.platform.
+	osOnly := mustCompile(t, wazuhv1.AgentSelector{
+		OSPlatforms:       []string{"ubuntu"},
+		RequireOSPlatform: true,
+	})
+	if !matchAgent("anything", "ubuntu", osOnly) {
+		t.Error("requireOsPlatform with no name terms should match any ubuntu agent")
+	}
+	if matchAgent("anything", "windows", osOnly) {
+		t.Error("requireOsPlatform should reject a non-ubuntu agent")
+	}
 }
 
 func TestComputeAddRemove(t *testing.T) {

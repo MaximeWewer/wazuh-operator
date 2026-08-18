@@ -112,6 +112,35 @@ spec:
                     items:
                       type: string
                     type: array
+                  exclude:
+                    description: |-
+                      Exclude removes agents from the match. An agent matching ANY entry in ANY of
+                      the exclude lists is never assigned, even if it matched the lists above.
+                    properties:
+                      agentNames:
+                        description: AgentNames excludes agents by exact name.
+                        items:
+                          type: string
+                        type: array
+                      namePatterns:
+                        description: NamePatterns excludes agents by shell glob (Go
+                          path.Match semantics).
+                        items:
+                          type: string
+                        type: array
+                      nameRegex:
+                        description: NameRegex excludes agents by RE2 regular expression.
+                        items:
+                          type: string
+                        type: array
+                      osPlatforms:
+                        description: |-
+                          OSPlatforms excludes agents by reported os.platform (same controlled values
+                          and aliases as the positive selector).
+                        items:
+                          type: string
+                        type: array
+                    type: object
                   namePatterns:
                     description: |-
                       NamePatterns matches agents by shell glob (Go path.Match semantics),
@@ -135,6 +164,14 @@ spec:
                     items:
                       type: string
                     type: array
+                  requireOsPlatform:
+                    description: |-
+                      RequireOSPlatform turns osPlatforms into a restrictive filter (AND) instead
+                      of an additive list (OR). When false (default), an agent matches if its name
+                      OR its os.platform matches. When true, an agent must match osPlatforms and,
+                      if any name list is set, a name entry too - e.g. "web-* but only on linux".
+                      Requires osPlatforms to be non-empty (enforced by the validating webhook).
+                    type: boolean
                 type: object
             required:
             - clusterRefs

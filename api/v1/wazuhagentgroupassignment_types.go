@@ -88,6 +88,42 @@ type AgentSelector struct {
 	// freeform string (e.g. "16.04.6 LTS (Xenial Xerus)") and cannot be matched reliably.
 	// +optional
 	OSPlatforms []string `json:"osPlatforms,omitempty"`
+
+	// RequireOSPlatform turns osPlatforms into a restrictive filter (AND) instead
+	// of an additive list (OR). When false (default), an agent matches if its name
+	// OR its os.platform matches. When true, an agent must match osPlatforms and,
+	// if any name list is set, a name entry too - e.g. "web-* but only on linux".
+	// Requires osPlatforms to be non-empty (enforced by the validating webhook).
+	// +optional
+	RequireOSPlatform bool `json:"requireOsPlatform,omitempty"`
+
+	// Exclude removes agents from the match. An agent matching ANY entry in ANY of
+	// the exclude lists is never assigned, even if it matched the lists above.
+	// +optional
+	Exclude *AgentSelectorExclude `json:"exclude,omitempty"`
+}
+
+// AgentSelectorExclude lists agents to remove from a selector's match. An agent
+// matching ANY entry in ANY list is excluded (OR semantics). Fields mirror the
+// positive selector; there is no requireOsPlatform here - matching any excluded
+// name or os.platform is enough to drop the agent.
+type AgentSelectorExclude struct {
+	// AgentNames excludes agents by exact name.
+	// +optional
+	AgentNames []string `json:"agentNames,omitempty"`
+
+	// NamePatterns excludes agents by shell glob (Go path.Match semantics).
+	// +optional
+	NamePatterns []string `json:"namePatterns,omitempty"`
+
+	// NameRegex excludes agents by RE2 regular expression.
+	// +optional
+	NameRegex []string `json:"nameRegex,omitempty"`
+
+	// OSPlatforms excludes agents by reported os.platform (same controlled values
+	// and aliases as the positive selector).
+	// +optional
+	OSPlatforms []string `json:"osPlatforms,omitempty"`
 }
 
 // WazuhAgentGroupAssignmentStatus defines the observed state.

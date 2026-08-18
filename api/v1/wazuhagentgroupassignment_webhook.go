@@ -118,6 +118,25 @@ func (v *WazuhAgentGroupAssignmentCustomValidator) validate(assignment *WazuhAge
 		}
 	}
 
+	// requireOsPlatform is meaningless without osPlatforms to filter on.
+	if sel.RequireOSPlatform && len(sel.OSPlatforms) == 0 {
+		allErrors = append(allErrors, "spec.selector.requireOsPlatform: requires osPlatforms to be non-empty")
+	}
+
+	// The exclusion block's glob and regex entries must also be valid.
+	if sel.Exclude != nil {
+		for i, p := range sel.Exclude.NamePatterns {
+			if _, err := path.Match(p, "probe"); err != nil {
+				allErrors = append(allErrors, fmt.Sprintf("spec.selector.exclude.namePatterns[%d]: invalid glob %q: %v", i, p, err))
+			}
+		}
+		for i, re := range sel.Exclude.NameRegex {
+			if _, err := regexp.Compile(re); err != nil {
+				allErrors = append(allErrors, fmt.Sprintf("spec.selector.exclude.nameRegex[%d]: invalid regex %q: %v", i, re, err))
+			}
+		}
+	}
+
 	if len(allErrors) > 0 {
 		return nil, fmt.Errorf("validation failed: %v", allErrors)
 	}

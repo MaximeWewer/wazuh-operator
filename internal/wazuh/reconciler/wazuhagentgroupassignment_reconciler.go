@@ -440,12 +440,57 @@ func (r *WazuhAPIAgentGroupAssignmentReconciler) listAssignmentsForCluster(ctx c
 
 // ---- pure helpers (unit-tested) ----
 
-// compiledSelector is a compiled AgentSelector ready for matching.
-type compiledSelector struct {
+// compiledMatcher is a compiled set of name/os.platform terms ready for matching.
+// It is used both for the positive selector and for its exclusion block.
+type compiledMatcher struct {
 	exact     map[string]struct{}
 	globs     []string
 	regexps   []*regexp.Regexp
 	platforms map[string]struct{} // normalized lowercase os.platform values
+}
+
+// hasNameTerms reports whether any name-based term (exact/glob/regex) is set.
+func (m compiledMatcher) hasNameTerms() bool {
+	return len(m.exact) > 0 || len(m.globs) > 0 || len(m.regexps) > 0
+}
+
+// matchesName reports whether the agent name matches any name-based term.
+func (m compiledMatcher) matchesName(name string) bool {
+	if _, ok := m.exact[name]; ok {
+		return true
+	}
+	for _, g := range m.globs {
+		if ok, _ := path.Match(g, name); ok {
+			return true
+		}
+	}
+	for _, re := range m.regexps {
+		if re.MatchString(name) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchesOS reports whether the agent os.platform is in the platform set. An
+// empty os.platform never matches.
+func (m compiledMatcher) matchesOS(osPlatform string) bool {
+	if len(m.platforms) == 0 || osPlatform == "" {
+		return false
+	}
+	_, ok := m.platforms[normalizePlatform(osPlatform)]
+	return ok
+}
+
+// compiledSelector is a compiled AgentSelector ready for matching.
+type compiledSelector struct {
+	include compiledMatcher
+	// requireOS makes the platform set a restrictive filter (AND) rather than
+	// additive (OR): an agent must match osPlatforms and, if any name term is
+	// set, a name term too.
+	requireOS bool
+	// exclude removes agents from the match; nil when no exclusion is configured.
+	exclude *compiledMatcher
 }
 
 // normalizePlatform lowercases and applies known aliases (macOS reports as
@@ -460,58 +505,77 @@ func normalizePlatform(p string) string {
 	}
 }
 
-// compileSelector validates and compiles an AgentSelector. Glob patterns are
-// validated with path.Match and regexes with regexp.Compile.
-func compileSelector(sel wazuhv1.AgentSelector) (compiledSelector, error) {
-	cs := compiledSelector{exact: make(map[string]struct{}, len(sel.AgentNames))}
-	for _, n := range sel.AgentNames {
-		cs.exact[n] = struct{}{}
+// compileMatcher validates and compiles a set of name/os.platform terms. Glob
+// patterns are validated with path.Match and regexes with regexp.Compile.
+func compileMatcher(agentNames, namePatterns, nameRegex, osPlatforms []string) (compiledMatcher, error) {
+	m := compiledMatcher{exact: make(map[string]struct{}, len(agentNames))}
+	for _, n := range agentNames {
+		m.exact[n] = struct{}{}
 	}
-	for _, p := range sel.NamePatterns {
+	for _, p := range namePatterns {
 		if _, err := path.Match(p, "probe"); err != nil {
-			return compiledSelector{}, fmt.Errorf("invalid glob pattern %q: %w", p, err)
+			return compiledMatcher{}, fmt.Errorf("invalid glob pattern %q: %w", p, err)
 		}
-		cs.globs = append(cs.globs, p)
+		m.globs = append(m.globs, p)
 	}
-	for _, re := range sel.NameRegex {
+	for _, re := range nameRegex {
 		compiled, err := regexp.Compile(re)
 		if err != nil {
-			return compiledSelector{}, fmt.Errorf("invalid regex %q: %w", re, err)
+			return compiledMatcher{}, fmt.Errorf("invalid regex %q: %w", re, err)
 		}
-		cs.regexps = append(cs.regexps, compiled)
+		m.regexps = append(m.regexps, compiled)
 	}
-	if len(sel.OSPlatforms) > 0 {
-		cs.platforms = make(map[string]struct{}, len(sel.OSPlatforms))
-		for _, p := range sel.OSPlatforms {
-			cs.platforms[normalizePlatform(p)] = struct{}{}
+	if len(osPlatforms) > 0 {
+		m.platforms = make(map[string]struct{}, len(osPlatforms))
+		for _, p := range osPlatforms {
+			m.platforms[normalizePlatform(p)] = struct{}{}
 		}
+	}
+	return m, nil
+}
+
+// compileSelector validates and compiles an AgentSelector, including its
+// optional exclusion block.
+func compileSelector(sel wazuhv1.AgentSelector) (compiledSelector, error) {
+	include, err := compileMatcher(sel.AgentNames, sel.NamePatterns, sel.NameRegex, sel.OSPlatforms)
+	if err != nil {
+		return compiledSelector{}, err
+	}
+	cs := compiledSelector{include: include, requireOS: sel.RequireOSPlatform}
+	if sel.Exclude != nil {
+		exclude, err := compileMatcher(sel.Exclude.AgentNames, sel.Exclude.NamePatterns, sel.Exclude.NameRegex, sel.Exclude.OSPlatforms)
+		if err != nil {
+			return compiledSelector{}, fmt.Errorf("exclude: %w", err)
+		}
+		cs.exclude = &exclude
 	}
 	return cs, nil
 }
 
-// matchAgent reports whether the agent's name or os.platform matches any entry
-// in any of the selector's lists. An agent with an empty os.platform can still
-// match by name.
+// matchAgent reports whether the agent is selected: it must match the positive
+// selector and must not match the exclusion block.
+//
+// Positive match, additive mode (requireOS false): name OR os.platform matches.
+// Positive match, restrictive mode (requireOS true): os.platform must match and,
+// if any name term is set, a name term must match too.
+// An agent with an empty os.platform can still match by name in additive mode.
 func matchAgent(name, osPlatform string, sel compiledSelector) bool {
-	if _, ok := sel.exact[name]; ok {
-		return true
+	var included bool
+	if sel.requireOS {
+		nameOK := !sel.include.hasNameTerms() || sel.include.matchesName(name)
+		included = sel.include.matchesOS(osPlatform) && nameOK
+	} else {
+		included = sel.include.matchesName(name) || sel.include.matchesOS(osPlatform)
 	}
-	for _, g := range sel.globs {
-		if ok, _ := path.Match(g, name); ok {
-			return true
+	if !included {
+		return false
+	}
+	if sel.exclude != nil {
+		if sel.exclude.matchesName(name) || sel.exclude.matchesOS(osPlatform) {
+			return false
 		}
 	}
-	for _, re := range sel.regexps {
-		if re.MatchString(name) {
-			return true
-		}
-	}
-	if len(sel.platforms) > 0 && osPlatform != "" {
-		if _, ok := sel.platforms[normalizePlatform(osPlatform)]; ok {
-			return true
-		}
-	}
-	return false
+	return true
 }
 
 // matchedAgentIDs returns the sorted IDs of agents matched by sel, skipping the

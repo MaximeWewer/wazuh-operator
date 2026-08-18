@@ -1403,19 +1403,32 @@ Assigns Wazuh agents to groups declaratively by matching agent **names**, via th
 | -------------------------- | --------------- | -------- | ------- | ------------------------------------------------------------------------------------------------ |
 | `clusterRefs`              | []WazuhClusterRef | **Yes**  | -       | Target clusters (MinItems=1); each entry requires both `name` and `namespace`                    |
 | `groups`                   | []string        | **Yes**  | -       | The set of groups every matched agent must belong to (MinItems=1). Contributes to the union      |
-| `selector`                 | AgentSelector   | **Yes**  | -       | How agents are matched by name; at least one of its three lists must be non-empty                |
+| `selector`                 | AgentSelector   | **Yes**  | -       | How agents are matched; at least one of its four lists must be non-empty                         |
 | `reconcileIntervalSeconds` | int             | No       | `60`    | How often agents are re-scanned so dynamically-registered agents are picked up (Minimum `15`)    |
 
-**AgentSelector** - an agent matches if **any** entry in **any** list matches (at least one list must be non-empty):
+**AgentSelector** - by default an agent matches if **any** entry in **any** list matches (at least one list must be non-empty). `requireOsPlatform` and `exclude` refine this:
 
-| Field          | Type     | Required | Default | Description                                                                                       |
-| -------------- | -------- | -------- | ------- | ------------------------------------------------------------------------------------------------ |
-| `agentNames`   | []string | No       | -       | Exact agent names                                                                                |
-| `namePatterns` | []string | No       | -       | Shell glob patterns (Go `path.Match` semantics), e.g. `web-*`                                    |
-| `nameRegex`    | []string | No       | -       | RE2 regular expressions, e.g. `^web-\d+$`                                                        |
-| `osPlatforms`  | []string | No       | -       | Match the agent's reported `os.platform` short value (`ubuntu`, `debian`, `centos`, `redhat`, `amzn`, `windows`, `darwin`, …). Case-insensitive. macOS reports as `darwin`; the aliases `macos`/`osx` are accepted and normalized to `darwin`. Agents with an empty `os.platform` (e.g. never-connected) are skipped for this check but can still match by name. |
+| Field               | Type                 | Required | Default | Description                                                                                       |
+| ------------------- | -------------------- | -------- | ------- | ------------------------------------------------------------------------------------------------ |
+| `agentNames`        | []string             | No       | -       | Exact agent names                                                                                |
+| `namePatterns`      | []string             | No       | -       | Shell glob patterns (Go `path.Match` semantics), e.g. `web-*`                                    |
+| `nameRegex`         | []string             | No       | -       | RE2 regular expressions, e.g. `^web-\d+$`                                                        |
+| `osPlatforms`       | []string             | No       | -       | Match the agent's reported `os.platform` short value (`ubuntu`, `debian`, `centos`, `redhat`, `amzn`, `windows`, `darwin`, …). Case-insensitive. macOS reports as `darwin`; the aliases `macos`/`osx` are accepted and normalized to `darwin`. Agents with an empty `os.platform` (e.g. never-connected) are skipped for this check but can still match by name. |
+| `requireOsPlatform` | bool                 | No       | `false` | Make `osPlatforms` a **restrictive** filter (AND) instead of additive (OR). When `true`, an agent must match `osPlatforms` **and**, if any name list is set, a name entry too (e.g. `web-*` **only on** linux). Requires `osPlatforms` to be non-empty. |
+| `exclude`           | AgentSelectorExclude | No       | -       | Remove agents from the match. An agent matching **any** exclude entry is never assigned, even if it matched the lists above. |
+
+**AgentSelectorExclude** - an agent matching **any** entry in **any** list is excluded (OR semantics; there is no `requireOsPlatform` here):
+
+| Field          | Type     | Required | Default | Description                                        |
+| -------------- | -------- | -------- | ------- | -------------------------------------------------- |
+| `agentNames`   | []string | No       | -       | Exclude by exact agent name                        |
+| `namePatterns` | []string | No       | -       | Exclude by shell glob (Go `path.Match`)            |
+| `nameRegex`    | []string | No       | -       | Exclude by RE2 regular expression                  |
+| `osPlatforms`  | []string | No       | -       | Exclude by reported `os.platform` (same values/aliases as above) |
 
 > **Note:** `os.version` is intentionally **not** a selector. It is a freeform string (e.g. `16.04.6 LTS (Xenial Xerus)`) and cannot be matched reliably; use `osPlatforms` for OS targeting.
+>
+> **Note:** RE2 (Go regexp) has **no negative lookahead**, so `nameRegex` cannot express exclusion. Use `exclude` to drop agents by name or `os.platform`.
 
 #### Status Fields
 
@@ -1466,6 +1479,25 @@ spec:
     osPlatforms:
       - windows               # match all Windows agents (case-insensitive; macos/osx -> darwin)
   reconcileIntervalSeconds: 60
+```
+
+Restrictive `osPlatforms` (AND) with an exclusion - "all `web-*`, but only on Linux, minus the canary and any Windows host":
+
+```yaml
+spec:
+  groups: [web, linux]
+  selector:
+    namePatterns:
+      - "web-*"
+    osPlatforms:
+      - ubuntu
+      - debian
+    requireOsPlatform: true    # AND: name matches AND os.platform is ubuntu/debian
+    exclude:
+      agentNames:
+        - web-canary           # never assign this host
+      osPlatforms:
+        - windows              # belt-and-suspenders; excluded even if it slipped in
 ```
 
 ---
