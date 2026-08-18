@@ -24,7 +24,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
@@ -286,22 +285,14 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			EnvFrom:      b.envFrom,
 			VolumeMounts: volumeMounts,
 			LivenessProbe: &corev1.Probe{
-				ProbeHandler: corev1.ProbeHandler{
-					TCPSocket: &corev1.TCPSocketAction{
-						Port: intstr.FromInt(int(constants.PortManagerAPI)),
-					},
-				},
+				ProbeHandler:        managerAPIProbeHandler(),
 				InitialDelaySeconds: 90,
 				PeriodSeconds:       30,
 				TimeoutSeconds:      5,
 				FailureThreshold:    3,
 			},
 			ReadinessProbe: &corev1.Probe{
-				ProbeHandler: corev1.ProbeHandler{
-					TCPSocket: &corev1.TCPSocketAction{
-						Port: intstr.FromInt(int(constants.PortManagerAPI)),
-					},
-				},
+				ProbeHandler:        managerAPIProbeHandler(),
 				InitialDelaySeconds: 30,
 				PeriodSeconds:       10,
 				TimeoutSeconds:      5,

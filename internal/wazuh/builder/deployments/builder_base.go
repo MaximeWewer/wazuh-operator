@@ -116,6 +116,25 @@ func (b *baseStatefulSetBuilder[T]) WithStorageClassName(className string) T {
 	return b.self
 }
 
+// managerAPIProbeHandler returns a probe handler that verifies the Wazuh Manager
+// API is actually serving HTTP, not merely accepting TCP. A wedged apid (or a
+// broken wazuh-db that leaves apid accepting TCP) keeps a plain TCPSocket probe
+// green while the manager no longer serves; this catches that.
+//
+// It deliberately treats HTTP 401 (auth required) as healthy: every real API
+// endpoint needs a token, so this check does NOT depend on wazuh-db and cannot
+// crash-loop the pod on database corruption. That signal is surfaced through
+// metrics/conditions (wazuh_api_reachable, AgentsReporting) instead.
+func managerAPIProbeHandler() corev1.ProbeHandler {
+	return corev1.ProbeHandler{
+		Exec: &corev1.ExecAction{
+			Command: []string{"sh", "-c", fmt.Sprintf(
+				`code=$(curl -sk -o /dev/null -m 3 -w '%%{http_code}' https://127.0.0.1:%d/ 2>/dev/null); [ "$code" = "200" ] || [ "$code" = "401" ]`,
+				constants.PortManagerAPI)},
+		},
+	}
+}
+
 // WithResources sets the resource requirements
 func (b *baseStatefulSetBuilder[T]) WithResources(resources *corev1.ResourceRequirements) T {
 	b.resources = resources
