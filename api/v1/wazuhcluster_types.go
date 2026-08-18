@@ -1237,6 +1237,10 @@ const (
 	ConditionTypeDegraded      = "Degraded"
 	ConditionTypeAvailable     = "Available"
 	ConditionTypeSecurityReady = "SecurityReady"
+	// ConditionTypeAgentsReporting reflects whether the operator can reach the
+	// Manager API agent summary. False means agent connection status cannot be
+	// tracked (e.g. a wazuh-db problem), which the TCP-only pod probes miss.
+	ConditionTypeAgentsReporting = "AgentsReporting"
 )
 
 // Security status source constants

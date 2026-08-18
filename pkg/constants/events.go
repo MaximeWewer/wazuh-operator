@@ -280,3 +280,12 @@ const (
 	// EventReasonPodCertSyncFailed indicates some pods failed to sync certificates
 	EventReasonPodCertSyncFailed = "PodCertSyncFailed"
 )
+
+// Manager API / database health event reasons
+const (
+	// EventReasonManagerAPIUnreachable indicates the Manager API agent summary could not be fetched
+	EventReasonManagerAPIUnreachable = "ManagerAPIUnreachable"
+
+	// EventReasonManagerAPIRecovered indicates the Manager API agent summary became reachable again
+	EventReasonManagerAPIRecovered = "ManagerAPIRecovered"
+)

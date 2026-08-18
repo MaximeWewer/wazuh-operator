@@ -129,6 +129,18 @@ type WazuhClusterReconciler struct {
 
 	// agentMetricsInFlight prevents concurrent agent metrics goroutines
 	agentMetricsInFlight atomic.Bool
+
+	// agentHealth caches the result of the last agent-summary scrape so that
+	// updateStatus can reflect it as the AgentsReporting condition without doing
+	// a (retry-looped) API call itself. Written by collectWazuhAgentMetrics.
+	agentHealth atomic.Pointer[agentHealthSnapshot]
+}
+
+// agentHealthSnapshot is the outcome of the last Manager API agent-summary scrape.
+type agentHealthSnapshot struct {
+	reachable    bool
+	disconnected int
+	total        int
 }
 
 // +kubebuilder:rbac:groups=resources.wazuh.com,resources=wazuhclusters,verbs=get;list;watch;create;update;patch;delete
@@ -1303,6 +1315,21 @@ func (r *WazuhClusterReconciler) updateStatus(ctx context.Context, cluster *wazu
 			r.updateCondition(latestCluster, wazuhv1.ConditionTypeAvailable, metav1.ConditionTrue, "ClusterAvailable", "Cluster is available")
 			// Record cluster ready metric
 			metrics.SetWazuhClusterStatus(latestCluster.Name, latestCluster.Namespace, true)
+			// Reflect the last agent-summary scrape as the AgentsReporting condition.
+			// The scrape itself runs asynchronously below, so this reflects the
+			// previous pass (eventually consistent); the Warning event fires
+			// immediately from the collector on the transition.
+			if snap := r.agentHealth.Load(); snap != nil {
+				if snap.reachable {
+					r.updateCondition(latestCluster, wazuhv1.ConditionTypeAgentsReporting, metav1.ConditionTrue,
+						"ManagerAPIReachable",
+						fmt.Sprintf("Manager API reachable; %d of %d agents disconnected", snap.disconnected, snap.total))
+				} else {
+					r.updateCondition(latestCluster, wazuhv1.ConditionTypeAgentsReporting, metav1.ConditionFalse,
+						"ManagerAPIUnreachable",
+						"Manager API agent summary unreachable; agent status cannot be tracked (possible wazuh-db problem)")
+				}
+			}
 			// Collect agent metrics when cluster is ready (non-blocking, best-effort)
 			go r.collectWazuhAgentMetrics(latestCluster)
 		} else {
@@ -1399,6 +1426,11 @@ func (r *WazuhClusterReconciler) collectWazuhAgentMetrics(cluster *wazuhv1.Wazuh
 		// the TCP-only pod probes cannot give (apid may accept TCP while wazuh-db
 		// is broken).
 		metrics.SetWazuhAPIReachable(cluster.Name, cluster.Namespace, false)
+		// Emit a Warning event only on the transition to unreachable to avoid spam.
+		if prev := r.agentHealth.Swap(&agentHealthSnapshot{reachable: false}); prev == nil || prev.reachable {
+			r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonManagerAPIUnreachable,
+				"Wazuh Manager API agent summary is unreachable; agent connection status cannot be tracked (possible wazuh-db problem)")
+		}
 		return
 	}
 
@@ -1409,6 +1441,17 @@ func (r *WazuhClusterReconciler) collectWazuhAgentMetrics(cluster *wazuhv1.Wazuh
 	metrics.SetWazuhAgentsPending(cluster.Name, cluster.Namespace, summary.Pending)
 	metrics.SetWazuhAgentsTotal(cluster.Name, cluster.Namespace, summary.Total)
 	metrics.SetWazuhAPIReachable(cluster.Name, cluster.Namespace, true)
+
+	// Cache the outcome for updateStatus (AgentsReporting condition) and emit a
+	// recovery event on the transition back to reachable.
+	if prev := r.agentHealth.Swap(&agentHealthSnapshot{
+		reachable:    true,
+		disconnected: summary.Disconnected,
+		total:        summary.Total,
+	}); prev != nil && !prev.reachable {
+		r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonManagerAPIRecovered,
+			"Wazuh Manager API agent summary is reachable again")
+	}
 }
 
 func (r *WazuhClusterReconciler) resolveAPICredentialsRef(cluster *wazuhv1.WazuhCluster) (secretName, usernameKey, passwordKey string) {
