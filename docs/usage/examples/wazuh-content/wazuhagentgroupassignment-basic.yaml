@@ -21,7 +21,8 @@ spec:
     - web
     - prod
 
-  # An agent matches if ANY entry in ANY of the lists matches (by name or by OS).
+  # By default an agent matches if ANY entry in ANY of the lists matches (by name
+  # or by OS). `requireOsPlatform` and `exclude` (below) refine this.
   selector:
     agentNames:
       - web-gateway-01          # exact agent name
@@ -35,6 +36,22 @@ spec:
       # reports as "darwin" and the aliases "macos"/"osx" are accepted.
       # os.version is intentionally not selectable (freeform string).
       - windows                 # target all Windows agents
+
+    # Make osPlatforms a restrictive filter (AND) instead of additive (OR): when
+    # true, an agent must match osPlatforms AND (if any name list is set) a name
+    # entry too - e.g. "web-* but only on linux". Requires osPlatforms non-empty.
+    # requireOsPlatform: false
+
+    # Remove agents from the match. An agent matching ANY exclude entry is never
+    # assigned, even if it matched the lists above. RE2 has no negative lookahead,
+    # so this is the way to express exclusion by name or os.platform.
+    # exclude:
+    #   agentNames:
+    #     - web-canary
+    #   namePatterns:
+    #     - "web-test-*"
+    #   osPlatforms:
+    #     - windows
 
   # Agents register dynamically, so membership is re-scanned on this interval
   # (default 60, minimum 15) to pick up newly-registered matching agents.
