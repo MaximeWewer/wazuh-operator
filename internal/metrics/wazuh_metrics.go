@@ -49,13 +49,74 @@ var (
 		[]string{"cluster", "namespace", "role", "status"},
 	)
 
-	// WazuhAgentsConnected tracks connected agents (placeholder for future)
+	// WazuhAgentsConnected tracks connected (active) agents
 	WazuhAgentsConnected = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: MetricsNamespace,
 			Subsystem: MetricsSubsystemWazuh,
 			Name:      "agents_connected",
 			Help:      "Number of connected Wazuh agents",
+		},
+		[]string{"cluster", "namespace"},
+	)
+
+	// WazuhAgentsDisconnected tracks agents in the disconnected state.
+	// A sudden jump here while the manager pods stay Ready is the signature of a
+	// wazuh-db problem (e.g. corrupt global.db): agents keep-alive but their status
+	// can no longer be recorded/synchronised.
+	WazuhAgentsDisconnected = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: MetricsNamespace,
+			Subsystem: MetricsSubsystemWazuh,
+			Name:      "agents_disconnected",
+			Help:      "Number of disconnected Wazuh agents",
+		},
+		[]string{"cluster", "namespace"},
+	)
+
+	// WazuhAgentsNeverConnected tracks agents that never connected
+	WazuhAgentsNeverConnected = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: MetricsNamespace,
+			Subsystem: MetricsSubsystemWazuh,
+			Name:      "agents_never_connected",
+			Help:      "Number of Wazuh agents that never connected",
+		},
+		[]string{"cluster", "namespace"},
+	)
+
+	// WazuhAgentsPending tracks agents in the pending state
+	WazuhAgentsPending = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: MetricsNamespace,
+			Subsystem: MetricsSubsystemWazuh,
+			Name:      "agents_pending",
+			Help:      "Number of Wazuh agents in the pending state",
+		},
+		[]string{"cluster", "namespace"},
+	)
+
+	// WazuhAgentsTotal tracks the total number of enrolled agents
+	WazuhAgentsTotal = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: MetricsNamespace,
+			Subsystem: MetricsSubsystemWazuh,
+			Name:      "agents_total",
+			Help:      "Total number of enrolled Wazuh agents",
+		},
+		[]string{"cluster", "namespace"},
+	)
+
+	// WazuhAPIReachable tracks whether the operator could query the Manager API
+	// agent summary on the last scrape (1=reachable, 0=unreachable). A value of 0
+	// means the manager API/wazuh-db did not answer, which is invisible to the
+	// TCP-only pod probes.
+	WazuhAPIReachable = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: MetricsNamespace,
+			Subsystem: MetricsSubsystemWazuh,
+			Name:      "api_reachable",
+			Help:      "Whether the Wazuh Manager API agent summary was reachable on the last scrape (1=yes, 0=no)",
 		},
 		[]string{"cluster", "namespace"},
 	)
@@ -100,6 +161,11 @@ func RegisterWazuhMetrics() {
 		WazuhClusterStatus,
 		WazuhManagerNodes,
 		WazuhAgentsConnected,
+		WazuhAgentsDisconnected,
+		WazuhAgentsNeverConnected,
+		WazuhAgentsPending,
+		WazuhAgentsTotal,
+		WazuhAPIReachable,
 		WazuhRulesTotal,
 		WazuhDecodersTotal,
 		WazuhCertificateExpiry,
@@ -123,6 +189,35 @@ func SetWazuhManagerNodes(cluster, namespace, role, status string, count int) {
 // SetWazuhAgentsConnected sets the connected agents count
 func SetWazuhAgentsConnected(cluster, namespace string, count int) {
 	WazuhAgentsConnected.WithLabelValues(cluster, namespace).Set(float64(count))
+}
+
+// SetWazuhAgentsDisconnected sets the disconnected agents count
+func SetWazuhAgentsDisconnected(cluster, namespace string, count int) {
+	WazuhAgentsDisconnected.WithLabelValues(cluster, namespace).Set(float64(count))
+}
+
+// SetWazuhAgentsNeverConnected sets the never-connected agents count
+func SetWazuhAgentsNeverConnected(cluster, namespace string, count int) {
+	WazuhAgentsNeverConnected.WithLabelValues(cluster, namespace).Set(float64(count))
+}
+
+// SetWazuhAgentsPending sets the pending agents count
+func SetWazuhAgentsPending(cluster, namespace string, count int) {
+	WazuhAgentsPending.WithLabelValues(cluster, namespace).Set(float64(count))
+}
+
+// SetWazuhAgentsTotal sets the total enrolled agents count
+func SetWazuhAgentsTotal(cluster, namespace string, count int) {
+	WazuhAgentsTotal.WithLabelValues(cluster, namespace).Set(float64(count))
+}
+
+// SetWazuhAPIReachable sets whether the Manager API agent summary was reachable
+func SetWazuhAPIReachable(cluster, namespace string, reachable bool) {
+	var value float64
+	if reachable {
+		value = 1
+	}
+	WazuhAPIReachable.WithLabelValues(cluster, namespace).Set(value)
 }
 
 // SetWazuhRulesTotal sets the total rules count

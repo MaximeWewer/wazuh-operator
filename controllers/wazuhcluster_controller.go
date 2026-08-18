@@ -1395,11 +1395,20 @@ func (r *WazuhClusterReconciler) collectWazuhAgentMetrics(cluster *wazuhv1.Wazuh
 	summary, err := wazuhClient.GetAgentsSummary(ctx)
 	if err != nil {
 		log.V(1).Info("Failed to get agent summary for metrics", "error", err)
+		// API/wazuh-db did not answer: surface it as a metric. This is the signal
+		// the TCP-only pod probes cannot give (apid may accept TCP while wazuh-db
+		// is broken).
+		metrics.SetWazuhAPIReachable(cluster.Name, cluster.Namespace, false)
 		return
 	}
 
 	// Record agent metrics
 	metrics.SetWazuhAgentsConnected(cluster.Name, cluster.Namespace, summary.Active)
+	metrics.SetWazuhAgentsDisconnected(cluster.Name, cluster.Namespace, summary.Disconnected)
+	metrics.SetWazuhAgentsNeverConnected(cluster.Name, cluster.Namespace, summary.NeverConn)
+	metrics.SetWazuhAgentsPending(cluster.Name, cluster.Namespace, summary.Pending)
+	metrics.SetWazuhAgentsTotal(cluster.Name, cluster.Namespace, summary.Total)
+	metrics.SetWazuhAPIReachable(cluster.Name, cluster.Namespace, true)
 }
 
 func (r *WazuhClusterReconciler) resolveAPICredentialsRef(cluster *wazuhv1.WazuhCluster) (secretName, usernameKey, passwordKey string) {
