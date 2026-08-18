@@ -288,4 +288,7 @@ const (
 
 	// EventReasonManagerAPIRecovered indicates the Manager API agent summary became reachable again
 	EventReasonManagerAPIRecovered = "ManagerAPIRecovered"
+
+	// EventReasonUnsafeManagerStorage indicates the manager data volume uses network/non-block storage unsafe for SQLite
+	EventReasonUnsafeManagerStorage = "UnsafeManagerStorage"
 )

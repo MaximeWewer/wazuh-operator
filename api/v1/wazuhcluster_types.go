@@ -1241,6 +1241,10 @@ const (
 	// Manager API agent summary. False means agent connection status cannot be
 	// tracked (e.g. a wazuh-db problem), which the TCP-only pod probes miss.
 	ConditionTypeAgentsReporting = "AgentsReporting"
+	// ConditionTypeStorageSafe is False when the manager data volume is backed by
+	// network/non-block storage (NFS and friends), which corrupts the SQLite
+	// databases the manager keeps on it (global.db).
+	ConditionTypeStorageSafe = "StorageSafe"
 )
 
 // Security status source constants

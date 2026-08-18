@@ -58,6 +58,7 @@ import (
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/validation"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/rolling"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/storage"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
@@ -519,6 +520,10 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, managerResult.Error
 	}
 	newPendingRollouts = append(newPendingRollouts, managerResult.PendingRollouts...)
+
+	// Warn (non-fatal) when the manager data volume is backed by network/non-block
+	// storage, which corrupts the SQLite databases the manager keeps on it.
+	r.validateManagerStorageSafety(ctx, cluster)
 
 	// 7. Reconcile Log Rotation CronJob (if enabled)
 	if err := r.ClusterReconciler.ReconcileLogRotation(ctx, cluster); err != nil {
@@ -1451,6 +1456,77 @@ func (r *WazuhClusterReconciler) collectWazuhAgentMetrics(cluster *wazuhv1.Wazuh
 	}); prev != nil && !prev.reachable {
 		r.Recorder.Event(cluster, corev1.EventTypeNormal, constants.EventReasonManagerAPIRecovered,
 			"Wazuh Manager API agent summary is reachable again")
+	}
+}
+
+// validateManagerStorageSafety warns when the manager data volume is provisioned
+// by network/non-block storage (NFS and friends). SQLite databases such as
+// global.db corrupt on those. The StorageSafe condition is only set when the
+// provisioner can be determined, and a Warning event is emitted on the
+// transition to unsafe to avoid per-reconcile spam.
+func (r *WazuhClusterReconciler) validateManagerStorageSafety(ctx context.Context, cluster *wazuhv1.WazuhCluster) {
+	log := logf.FromContext(ctx)
+
+	// Effective storage class for the master and worker data volumes (per-role
+	// override, else cluster-level). Nil resolves to the cluster default class.
+	refs := []*string{cluster.Spec.StorageClassName, cluster.Spec.StorageClassName}
+	if cluster.Spec.Manager != nil {
+		if sc := cluster.Spec.Manager.Master.StorageClass; sc != nil && *sc != "" {
+			refs[0] = sc
+		}
+		if sc := cluster.Spec.Manager.Workers.StorageClass; sc != nil && *sc != "" {
+			refs[1] = sc
+		}
+	}
+
+	type scEntry struct{ name, provisioner string }
+	var unsafe []scEntry
+	determinedSafe := false
+	seen := make(map[string]bool)
+	for _, ref := range refs {
+		scName, provisioner, err := storage.GetStorageClassProvisioner(ctx, r.Client, ref)
+		if err != nil {
+			// Provisioner unknown (no default class, SC missing, ...): do not flip
+			// the condition on incomplete information.
+			log.V(1).Info("Cannot determine manager storage class provisioner", "error", err)
+			continue
+		}
+		if seen[scName] {
+			continue
+		}
+		seen[scName] = true
+		if storage.IsNetworkStorageProvisioner(provisioner) {
+			unsafe = append(unsafe, scEntry{name: scName, provisioner: provisioner})
+		} else {
+			determinedSafe = true
+		}
+	}
+
+	switch {
+	case len(unsafe) > 0:
+		parts := make([]string, 0, len(unsafe))
+		for _, e := range unsafe {
+			parts = append(parts, fmt.Sprintf("%s (%s)", e.name, e.provisioner))
+		}
+		msg := fmt.Sprintf("Manager data volume uses network/non-block storage %s; "+
+			"SQLite databases (global.db) corrupt on it. Use block/local storage for the manager data volume.",
+			strings.Join(parts, ", "))
+
+		wasUnsafe := false
+		for i := range cluster.Status.Conditions {
+			c := &cluster.Status.Conditions[i]
+			if c.Type == wazuhv1.ConditionTypeStorageSafe && c.Status == metav1.ConditionFalse {
+				wasUnsafe = true
+				break
+			}
+		}
+		r.updateCondition(cluster, wazuhv1.ConditionTypeStorageSafe, metav1.ConditionFalse, "NetworkStorageProvisioner", msg)
+		if !wasUnsafe {
+			r.Recorder.Event(cluster, corev1.EventTypeWarning, constants.EventReasonUnsafeManagerStorage, msg)
+		}
+	case determinedSafe:
+		r.updateCondition(cluster, wazuhv1.ConditionTypeStorageSafe, metav1.ConditionTrue, "BlockStorage",
+			"Manager data volume uses block/local storage")
 	}
 }
 

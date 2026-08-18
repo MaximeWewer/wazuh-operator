@@ -19,6 +19,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -29,6 +30,45 @@ const (
 	// DefaultStorageClassAnnotation is the annotation key for marking a StorageClass as default
 	DefaultStorageClassAnnotation = "storageclass.kubernetes.io/is-default-class"
 )
+
+// networkStorageProvisionerPatterns are substrings of provisioner names that
+// provision network/shared filesystems (NFS and friends). The Wazuh manager
+// keeps SQLite databases (global.db, ...) on its data volume, and SQLite
+// corrupts on these because their file locking over the network is unreliable,
+// so the manager data volume should use block/local storage instead.
+// Patterns must match Azure File (file.csi.azure.com / kubernetes.io/azure-file)
+// without matching block Azure Disk (disk.csi.azure.com), hence "file.csi.azure"
+// rather than a bare "azure".
+var networkStorageProvisionerPatterns = []string{
+	"nfs", "smb", "cifs", "efs", "azure-file", "file.csi.azure", "gluster", "cephfs",
+}
+
+// IsNetworkStorageProvisioner reports whether a StorageClass provisioner name
+// looks like network/shared-file storage that is unsafe for SQLite databases.
+func IsNetworkStorageProvisioner(provisioner string) bool {
+	p := strings.ToLower(provisioner)
+	for _, pat := range networkStorageProvisionerPatterns {
+		if strings.Contains(p, pat) {
+			return true
+		}
+	}
+	return false
+}
+
+// GetStorageClassProvisioner resolves a StorageClass name (falling back to the
+// cluster default when the pointer is nil/empty) and returns its provisioner.
+func GetStorageClassProvisioner(ctx context.Context, c client.Client, storageClassName *string) (scName, provisioner string, err error) {
+	scName, err = GetStorageClassName(ctx, c, storageClassName)
+	if err != nil {
+		return "", "", err
+	}
+
+	sc := &storagev1.StorageClass{}
+	if err := c.Get(ctx, types.NamespacedName{Name: scName}, sc); err != nil {
+		return scName, "", fmt.Errorf("failed to get StorageClass %s: %w", scName, err)
+	}
+	return scName, sc.Provisioner, nil
+}
 
 // CanStorageClassExpand checks if a StorageClass supports volume expansion.
 // Returns true if the StorageClass has AllowVolumeExpansion set to true.
