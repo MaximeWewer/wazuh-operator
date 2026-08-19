@@ -429,6 +429,22 @@ cluster:
         # -- Image for log rotation job
         image: "bitnami/kubectl:latest"
 
+      # @extra cluster.spec.manager.agentPurge Agent purge CronJob configuration (deletes old disconnected agents)
+      agentPurge:
+        # -- Enable agent purge (WARNING: purged agents must re-enroll)
+        enabled: false
+        # -- Agent purge cron schedule
+        schedule: "0 3 * * *"
+        # -- Delete agents disconnected for more than this many days
+        disconnectedDays: 30
+        # -- Agent statuses to target: disconnected, never_connected
+        statuses:
+          - disconnected
+        # -- Dry-run: list matching agents without deleting them
+        dryRun: true
+        # -- Image for agent purge job
+        image: "curlimages/curl:latest"
+
       # @extra cluster.spec.manager.podDisruptionBudget Manager PodDisruptionBudget
       podDisruptionBudget:
         # -- Enable PDB for manager

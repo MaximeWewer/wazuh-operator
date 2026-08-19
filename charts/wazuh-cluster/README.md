@@ -168,6 +168,12 @@ kubectl delete -f <(helm template my-wazuh-cluster ./charts/wazuh-cluster --name
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
+| cluster.spec.manager.agentPurge.disconnectedDays | int | `30` | Delete agents disconnected for more than this many days |
+| cluster.spec.manager.agentPurge.dryRun | bool | `true` | Dry-run: list matching agents without deleting them |
+| cluster.spec.manager.agentPurge.enabled | bool | `false` | Enable agent purge (WARNING: purged agents must re-enroll) |
+| cluster.spec.manager.agentPurge.image | string | `"curlimages/curl:latest"` | Image for agent purge job |
+| cluster.spec.manager.agentPurge.schedule | string | `"0 3 * * *"` | Agent purge cron schedule |
+| cluster.spec.manager.agentPurge.statuses | list | `["disconnected"]` | Agent statuses to target: disconnected, never_connected |
 | cluster.spec.manager.antiAffinity.enabled | bool | `false` | Enable pod anti-affinity for manager |
 | cluster.spec.manager.antiAffinity.topologyKey | string | `"kubernetes.io/hostname"` | Topology key for anti-affinity |
 | cluster.spec.manager.antiAffinity.type | string | `"preferred"` | Anti-affinity type: "preferred" or "required" |
@@ -416,7 +422,7 @@ kubectl delete -f <(helm template my-wazuh-cluster ./charts/wazuh-cluster --name
 | cluster.spec.monitoring.wazuhExporter.image | string | `"ghcr.io/maximewewer/wazuh-prometheus-exporter:latest"` | Wazuh exporter image |
 | cluster.spec.monitoring.wazuhExporter.logLevel | string | `"info"` | Exporter log level (trace, debug, info, warn, error) |
 | cluster.spec.monitoring.wazuhExporter.port | int | `9555` | Wazuh exporter metrics port |
-| cluster.spec.monitoring.wazuhExporter.startupGrace | string | `"60s"` | Quiet-startup window (WAZUH_STARTUP_GRACE): collection failures log as warn instead of error until the first success, letting a slow Wazuh API boot without noise. 0 (off) to 10m. |
+| cluster.spec.monitoring.wazuhExporter.startupGrace | string | `"60s"` | Quiet-startup window (WAZUH_STARTUP_GRACE): collection failures log as    warn instead of error until the first success, letting a slow Wazuh API    boot without noise. 0 (off) to 10m. |
 
 ### Drain Configuration
 
