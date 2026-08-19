@@ -235,8 +235,8 @@ func (r *ClusterReconciler) getManagerMasterPVCs(ctx context.Context, cluster *w
 	listOpts := []client.ListOption{
 		client.InNamespace(cluster.Namespace),
 		client.MatchingLabels{
-			constants.LabelInstance:  cluster.Name,
-			constants.LabelComponent: constants.ComponentManagerMaster,
+			constants.LabelInstance:        cluster.Name,
+			constants.LabelManagerNodeType: constants.NodeRoleMaster,
 		},
 	}
 
@@ -254,8 +254,8 @@ func (r *ClusterReconciler) getManagerWorkerPVCs(ctx context.Context, cluster *w
 	listOpts := []client.ListOption{
 		client.InNamespace(cluster.Namespace),
 		client.MatchingLabels{
-			constants.LabelInstance:  cluster.Name,
-			constants.LabelComponent: constants.ComponentManagerWorker,
+			constants.LabelInstance:        cluster.Name,
+			constants.LabelManagerNodeType: constants.NodeRoleWorker,
 		},
 	}
 

@@ -126,8 +126,8 @@ func TestGetManagerMasterPVCs(t *testing.T) {
 			Name:      "data-test-cluster-manager-master-0",
 			Namespace: "default",
 			Labels: map[string]string{
-				constants.LabelInstance:  "test-cluster",
-				constants.LabelComponent: constants.ComponentManagerMaster,
+				constants.LabelInstance:        "test-cluster",
+				constants.LabelManagerNodeType: constants.NodeRoleMaster,
 			},
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
@@ -145,8 +145,8 @@ func TestGetManagerMasterPVCs(t *testing.T) {
 			Name:      "data-test-cluster-manager-workers-0",
 			Namespace: "default",
 			Labels: map[string]string{
-				constants.LabelInstance:  "test-cluster",
-				constants.LabelComponent: constants.ComponentManagerWorker,
+				constants.LabelInstance:        "test-cluster",
+				constants.LabelManagerNodeType: constants.NodeRoleWorker,
 			},
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
@@ -196,8 +196,8 @@ func TestGetManagerWorkerPVCs(t *testing.T) {
 			Name:      "data-test-cluster-manager-workers-0",
 			Namespace: "default",
 			Labels: map[string]string{
-				constants.LabelInstance:  "test-cluster",
-				constants.LabelComponent: constants.ComponentManagerWorker,
+				constants.LabelInstance:        "test-cluster",
+				constants.LabelManagerNodeType: constants.NodeRoleWorker,
 			},
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
@@ -214,8 +214,8 @@ func TestGetManagerWorkerPVCs(t *testing.T) {
 			Name:      "data-test-cluster-manager-workers-1",
 			Namespace: "default",
 			Labels: map[string]string{
-				constants.LabelInstance:  "test-cluster",
-				constants.LabelComponent: constants.ComponentManagerWorker,
+				constants.LabelInstance:        "test-cluster",
+				constants.LabelManagerNodeType: constants.NodeRoleWorker,
 			},
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
