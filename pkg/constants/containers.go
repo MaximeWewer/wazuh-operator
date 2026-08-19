@@ -49,4 +49,8 @@ const (
 	// InitContainerNameCDBFetch fetches large CDB lists (over the ConfigMap size limit)
 	// directly into the PVC-backed /var/ossec/etc/lists at pod startup.
 	InitContainerNameCDBFetch = "cdb-fetch"
+
+	// InitContainerNameMigrateData copies existing data from the default wazuh-data volume
+	// into newly-introduced per-path PVCs, once, on first roll-out of a split volume.
+	InitContainerNameMigrateData = "migrate-data"
 )

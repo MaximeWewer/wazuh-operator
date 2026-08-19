@@ -23,6 +23,8 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -57,6 +59,10 @@ type baseStatefulSetBuilder[T any] struct {
 	envFrom                   []corev1.EnvFromSource
 	volumes                   []corev1.Volume
 	volumeMounts              []corev1.VolumeMount
+
+	// volumeClaims declares additional per-path PVCs carved out of the default
+	// wazuh-data volume (see ManagerVolumeClaimRef).
+	volumeClaims []ManagerVolumeClaimRef
 
 	// ConfigMap-backed content mounted into the manager pods.
 	ruleConfigMaps           []RuleConfigMapRef
@@ -113,6 +119,22 @@ func (b *baseStatefulSetBuilder[T]) WithStorageSize(size string) T {
 // WithStorageClassName sets the storage class name
 func (b *baseStatefulSetBuilder[T]) WithStorageClassName(className string) T {
 	b.storageClassName = &className
+	return b.self
+}
+
+// ManagerVolumeClaimRef is a per-path dedicated PVC for a manager StatefulSet, carved out
+// of the default wazuh-data volume. Path is an absolute directory under /var/ossec mounted
+// as the whole PVC (no subPath). StorageClass nil falls back to the builder's default class.
+type ManagerVolumeClaimRef struct {
+	Path         string
+	Size         string
+	StorageClass *string
+	AccessMode   corev1.PersistentVolumeAccessMode
+}
+
+// WithVolumeClaims sets the per-path dedicated PVCs.
+func (b *baseStatefulSetBuilder[T]) WithVolumeClaims(vcs []ManagerVolumeClaimRef) T {
+	b.volumeClaims = vcs
 	return b.self
 }
 
@@ -877,4 +899,168 @@ chown -R 999:999 "$DEST"`,
 			{Name: constants.VolumeNameWazuhData, MountPath: "/wazuh-data"},
 		},
 	}
+}
+
+// splitVolumeName returns the deterministic VolumeClaimTemplate/volume name for a split
+// path, e.g. /var/ossec/queue/db -> "wazuh-data-queue-db". Lowercase DNS-1123.
+func splitVolumeName(path string) string {
+	rel := strings.ToLower(strings.TrimPrefix(path, constants.PathWazuhBase+"/"))
+	var sb strings.Builder
+	prevDash := false
+	for _, r := range rel {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			sb.WriteRune(r)
+			prevDash = false
+		} else if !prevDash {
+			sb.WriteByte('-')
+			prevDash = true
+		}
+	}
+	slug := strings.Trim(sb.String(), "-")
+	if slug == "" {
+		slug = "vol"
+	}
+	return constants.VolumeNameWazuhData + "-" + slug
+}
+
+// oldSubPathForPath maps a declared path to the subPath under wazuh-data where its data
+// currently lives, so the migration init container knows the source. It uses the base-mount
+// table (closest ancestor subPath mount), else the wazuh/<relative> convention.
+func oldSubPathForPath(path string) string {
+	bestMount, bestSub := "", ""
+	for _, m := range wazuhDataBaseMounts() {
+		if m.Name != constants.VolumeNameWazuhData || m.SubPath == "" {
+			continue
+		}
+		if path == m.MountPath || strings.HasPrefix(path, m.MountPath+"/") {
+			if len(m.MountPath) > len(bestMount) {
+				bestMount, bestSub = m.MountPath, m.SubPath
+			}
+		}
+	}
+	if bestMount != "" {
+		return bestSub + strings.TrimPrefix(path, bestMount) // e.g. wazuh/queue + /db
+	}
+	return "wazuh/" + strings.TrimPrefix(path, constants.PathWazuhBase+"/")
+}
+
+// sortedVolumeClaims returns a copy of the volume claims sorted by path for deterministic
+// output (stable VCT order and script, hence stable pod-spec hash).
+func sortedVolumeClaims(vcs []ManagerVolumeClaimRef) []ManagerVolumeClaimRef {
+	out := make([]ManagerVolumeClaimRef, len(vcs))
+	copy(out, vcs)
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
+}
+
+// buildManagerVolumeClaimTemplates returns the default wazuh-data VCT plus one VCT per
+// declared split path. selectorLabels MUST be applied to every VCT so the volume-expansion
+// reconciler's label selector matches all of them.
+func (b *baseStatefulSetBuilder[T]) buildManagerVolumeClaimTemplates(selectorLabels map[string]string) []corev1.PersistentVolumeClaim {
+	vcts := []corev1.PersistentVolumeClaim{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: constants.VolumeNameWazuhData, Labels: selectorLabels},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+				StorageClassName: b.storageClassName,
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(b.storageSize)},
+				},
+			},
+		},
+	}
+	for _, vc := range sortedVolumeClaims(b.volumeClaims) {
+		accessMode := vc.AccessMode
+		if accessMode == "" {
+			accessMode = corev1.ReadWriteOnce
+		}
+		sc := vc.StorageClass
+		if sc == nil {
+			sc = b.storageClassName
+		}
+		vcts = append(vcts, corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{Name: splitVolumeName(vc.Path), Labels: selectorLabels},
+			Spec: corev1.PersistentVolumeClaimSpec{
+				AccessModes:      []corev1.PersistentVolumeAccessMode{accessMode},
+				StorageClassName: sc,
+				Resources: corev1.VolumeResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(vc.Size)},
+				},
+			},
+		})
+	}
+	return vcts
+}
+
+// applyVolumeClaimMounts rewrites the wazuh-data subPath mounts against the declared split
+// paths: an exact-match base path has its subPath mount replaced by the dedicated PVC (no
+// subPath); a nested/independent path gets an appended dedicated mount. Appended mounts are
+// ordered by path length ascending so a parent mount always precedes its child.
+func (b *baseStatefulSetBuilder[T]) applyVolumeClaimMounts(base []corev1.VolumeMount) []corev1.VolumeMount {
+	if len(b.volumeClaims) == 0 {
+		return base
+	}
+	dedicated := make(map[string]string, len(b.volumeClaims))
+	for _, vc := range b.volumeClaims {
+		dedicated[vc.Path] = splitVolumeName(vc.Path)
+	}
+	out := make([]corev1.VolumeMount, 0, len(base)+len(b.volumeClaims))
+	replaced := make(map[string]bool)
+	for _, m := range base {
+		if m.Name == constants.VolumeNameWazuhData {
+			if vol, ok := dedicated[m.MountPath]; ok {
+				out = append(out, corev1.VolumeMount{Name: vol, MountPath: m.MountPath})
+				replaced[m.MountPath] = true
+				continue
+			}
+		}
+		out = append(out, m)
+	}
+	var pending []ManagerVolumeClaimRef
+	for _, vc := range b.volumeClaims {
+		if !replaced[vc.Path] {
+			pending = append(pending, vc)
+		}
+	}
+	sort.Slice(pending, func(i, j int) bool { return len(pending[i].Path) < len(pending[j].Path) })
+	for _, vc := range pending {
+		out = append(out, corev1.VolumeMount{Name: splitVolumeName(vc.Path), MountPath: vc.Path})
+	}
+	return out
+}
+
+// buildMigrationInitContainer copies existing data from the old wazuh-data subdirectories
+// into freshly-introduced split PVCs, exactly once (idempotent via a .migrated marker and an
+// emptiness guard). The source in wazuh-data is never deleted. Returns false when no split
+// volume is declared.
+func (b *baseStatefulSetBuilder[T]) buildMigrationInitContainer() (corev1.Container, bool) {
+	if len(b.volumeClaims) == 0 {
+		return corev1.Container{}, false
+	}
+	mounts := []corev1.VolumeMount{{Name: constants.VolumeNameWazuhData, MountPath: "/wazuh-data"}}
+	var sb strings.Builder
+	sb.WriteString("set -eu\n")
+	for _, vc := range sortedVolumeClaims(b.volumeClaims) {
+		vol := splitVolumeName(vc.Path)
+		src := "/wazuh-data/" + oldSubPathForPath(vc.Path)
+		dst := "/migrate/" + vol
+		mounts = append(mounts, corev1.VolumeMount{Name: vol, MountPath: dst})
+		fmt.Fprintf(&sb, `
+DST=%q; SRC=%q
+if [ ! -f "$DST/.migrated" ]; then
+  if [ -d "$SRC" ] && [ -z "$(ls -A "$DST" 2>/dev/null)" ]; then
+    echo "migrate-data: copying $SRC -> $DST"
+    cp -a "$SRC/." "$DST/" 2>/dev/null || true
+  fi
+  chown -R 999:999 "$DST" || true
+  touch "$DST/.migrated"
+fi
+`, dst, src)
+	}
+	return corev1.Container{
+		Name:         constants.InitContainerNameMigrateData,
+		Image:        b.image,
+		Command:      []string{"/bin/sh", "-c", sb.String()},
+		VolumeMounts: mounts,
+	}, true
 }

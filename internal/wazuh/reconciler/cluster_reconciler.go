@@ -32,6 +32,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -406,6 +407,23 @@ func (r *ClusterReconciler) ReconcileManagerNonBlocking(ctx context.Context, clu
 
 // reconcileMasterNonBlocking reconciles the master without blocking on rollout
 // Returns a PendingRollout if a rollout was initiated, nil otherwise
+// toVolumeClaimRefs converts the CRD per-path volume claims into the builder's ref type.
+func toVolumeClaimRefs(vcs []wazuhv1.ManagerVolumeClaim) []deployments.ManagerVolumeClaimRef {
+	if len(vcs) == 0 {
+		return nil
+	}
+	refs := make([]deployments.ManagerVolumeClaimRef, 0, len(vcs))
+	for _, vc := range vcs {
+		refs = append(refs, deployments.ManagerVolumeClaimRef{
+			Path:         vc.Path,
+			Size:         vc.Size,
+			StorageClass: vc.StorageClass,
+			AccessMode:   vc.AccessMode,
+		})
+	}
+	return refs
+}
+
 func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, cluster *wazuhv1.WazuhCluster, certHash string) (*utils.PendingRollout, error) {
 	log := logf.FromContext(ctx)
 
@@ -609,6 +627,9 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		stsBuilder.WithStorageClassName(*cluster.Spec.Manager.Master.StorageClass)
 	} else if cluster.Spec.StorageClassName != nil && *cluster.Spec.StorageClassName != "" {
 		stsBuilder.WithStorageClassName(*cluster.Spec.StorageClassName)
+	}
+	if cluster.Spec.Manager != nil {
+		stsBuilder.WithVolumeClaims(toVolumeClaimRefs(cluster.Spec.Manager.Master.VolumeClaims))
 	}
 	if nodeSelector != nil {
 		stsBuilder.WithNodeSelector(nodeSelector)
@@ -817,11 +838,13 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 			"name", sts.Name,
 			"reason", recreationReason)
 
-		if err := r.Delete(ctx, found); err != nil && !errors.IsNotFound(err) {
+		// Foreground delete, then let the next reconcile's NotFound path recreate it. This
+		// avoids an AlreadyExists race with an immediate Create. The wazuh-data PVC (and any
+		// per-path PVCs) are NOT owned by the StatefulSet, so they are preserved across the
+		// delete and re-adopted by the recreated StatefulSet.
+		propagation := metav1.DeletePropagationForeground
+		if err := r.Delete(ctx, found, &client.DeleteOptions{PropagationPolicy: &propagation}); err != nil && !errors.IsNotFound(err) {
 			return nil, fmt.Errorf("failed to delete master statefulset for recreation: %w", err)
-		}
-		if err := r.Create(ctx, sts); err != nil {
-			return nil, fmt.Errorf("failed to create master statefulset after recreation: %w", err)
 		}
 		return &utils.PendingRollout{
 			Component: "manager-master",
@@ -1247,6 +1270,9 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	} else if cluster.Spec.StorageClassName != nil && *cluster.Spec.StorageClassName != "" {
 		stsBuilder.WithStorageClassName(*cluster.Spec.StorageClassName)
 	}
+	if cluster.Spec.Manager != nil {
+		stsBuilder.WithVolumeClaims(toVolumeClaimRefs(cluster.Spec.Manager.Workers.VolumeClaims))
+	}
 	if nodeSelector != nil {
 		stsBuilder.WithNodeSelector(nodeSelector)
 	}
@@ -1453,14 +1479,12 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 			"name", sts.Name,
 			"reason", recreationReason)
 
-		// Delete the old StatefulSet (PVCs will be preserved)
-		if err := r.Delete(ctx, found); err != nil && !errors.IsNotFound(err) {
+		// Foreground delete, then let the next reconcile's NotFound path recreate it (avoids
+		// an AlreadyExists race). PVCs are not owned by the StatefulSet, so they are preserved
+		// and re-adopted by the recreated StatefulSet.
+		propagation := metav1.DeletePropagationForeground
+		if err := r.Delete(ctx, found, &client.DeleteOptions{PropagationPolicy: &propagation}); err != nil && !errors.IsNotFound(err) {
 			return nil, fmt.Errorf("failed to delete worker statefulset for recreation: %w", err)
-		}
-
-		// Create the new StatefulSet
-		if err := r.Create(ctx, sts); err != nil {
-			return nil, fmt.Errorf("failed to create worker statefulset after recreation: %w", err)
 		}
 
 		return &utils.PendingRollout{

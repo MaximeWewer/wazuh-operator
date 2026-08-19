@@ -237,11 +237,16 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		}
 	}
 
-	// Build init containers
-	initContainers := []corev1.Container{
+	// Build init containers. The migrate-data container (present only when per-path PVCs
+	// are declared) runs first so all later steps see already-migrated volumes.
+	initContainers := []corev1.Container{}
+	if mig, ok := b.buildMigrationInitContainer(); ok {
+		initContainers = append(initContainers, mig)
+	}
+	initContainers = append(initContainers,
 		buildSeedAPIConfigInitContainer(image),
 		b.buildInitContainer(),
-	}
+	)
 
 	// Insert the cdb-fetch init container (large CDB lists) after fix-permissions creates
 	// /var/ossec/etc/lists and before fix-ownership chowns the written files to 999.
@@ -352,25 +357,7 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 					Volumes:                       volumes,
 				},
 			},
-			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
-				{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:   constants.VolumeNameWazuhData,
-						Labels: selectorLabels,
-					},
-					Spec: corev1.PersistentVolumeClaimSpec{
-						AccessModes: []corev1.PersistentVolumeAccessMode{
-							corev1.ReadWriteOnce,
-						},
-						StorageClassName: b.storageClassName,
-						Resources: corev1.VolumeResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceStorage: resource.MustParse(b.storageSize),
-							},
-						},
-					},
-				},
-			},
+			VolumeClaimTemplates: b.buildManagerVolumeClaimTemplates(selectorLabels),
 		},
 	}
 
@@ -466,7 +453,7 @@ func (b *ManagerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 
 // buildVolumeMounts builds the volume mount list for the main container
 func (b *ManagerStatefulSetBuilder) buildVolumeMounts() []corev1.VolumeMount {
-	mounts := wazuhDataBaseMounts()
+	mounts := b.applyVolumeClaimMounts(wazuhDataBaseMounts())
 
 	// Add custom volume mounts
 	mounts = append(mounts, b.volumeMounts...)

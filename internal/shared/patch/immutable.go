@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 )
 
@@ -193,7 +194,55 @@ func NeedsStatefulSetRecreation(current, desired *appsv1.StatefulSet) (bool, str
 		return true, "SecurityContext changed"
 	}
 
+	// volumeClaimTemplates are immutable in place: a VCT added/removed, or a change to an
+	// existing VCT's storageClass or accessModes, requires recreating the StatefulSet.
+	if changed, reason := volumeClaimTemplatesNeedRecreation(current, desired); changed {
+		return true, reason
+	}
+
 	return false, ""
+}
+
+// volumeClaimTemplatesNeedRecreation reports whether the VCT set changed in a way that is
+// immutable in place. Storage SIZE differences are intentionally ignored - they are applied
+// by the PVC-expansion reconciler, not by recreating the StatefulSet.
+func volumeClaimTemplatesNeedRecreation(current, desired *appsv1.StatefulSet) (bool, string) {
+	currentByName := make(map[string]corev1.PersistentVolumeClaim, len(current.Spec.VolumeClaimTemplates))
+	for _, vct := range current.Spec.VolumeClaimTemplates {
+		currentByName[vct.Name] = vct
+	}
+	desiredByName := make(map[string]corev1.PersistentVolumeClaim, len(desired.Spec.VolumeClaimTemplates))
+	for _, vct := range desired.Spec.VolumeClaimTemplates {
+		desiredByName[vct.Name] = vct
+	}
+
+	for name, dv := range desiredByName {
+		cv, ok := currentByName[name]
+		if !ok {
+			return true, fmt.Sprintf("volumeClaimTemplate %q added", name)
+		}
+		if !storageClassEqual(cv.Spec.StorageClassName, dv.Spec.StorageClassName) {
+			return true, fmt.Sprintf("volumeClaimTemplate %q storageClass changed", name)
+		}
+		if !equality.Semantic.DeepEqual(cv.Spec.AccessModes, dv.Spec.AccessModes) {
+			return true, fmt.Sprintf("volumeClaimTemplate %q accessModes changed", name)
+		}
+	}
+	for name := range currentByName {
+		if _, ok := desiredByName[name]; !ok {
+			return true, fmt.Sprintf("volumeClaimTemplate %q removed", name)
+		}
+	}
+	return false, ""
+}
+
+// storageClassEqual compares two *string storage class names. A nil (cluster default) and an
+// explicit name are treated as different classes.
+func storageClassEqual(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 // CanUpdateDeployment checks if a Deployment can be updated without recreation
