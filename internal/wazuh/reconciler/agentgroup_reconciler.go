@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -297,19 +298,25 @@ func (r *AgentGroupReconciler) Delete(ctx context.Context, group *wazuhv1.WazuhA
 	log := logf.FromContext(ctx)
 	groupName := group.ResolveGroupName()
 
+	var cleanupErrs []string
 	for _, ref := range group.Spec.ClusterRefs {
-		// Best-effort API DeleteGroup
+		// Delete the group via the Manager API. Failures are propagated (see below) so the
+		// finalizer is kept and the delete is retried, instead of silently leaking the group.
 		if groupName != "default" {
 			cluster := &wazuhv1.WazuhCluster{}
 			clusterKeyNN := types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace}
 			if err := r.Get(ctx, clusterKeyNN, cluster); err != nil {
-				log.Info("Cluster not found during delete, skipping API cleanup", "cluster", clusterKeyNN)
+				if errors.IsNotFound(err) {
+					// The cluster itself is gone, so the group went with it: nothing to delete.
+					log.Info("Cluster not found during delete, skipping API cleanup", "cluster", clusterKeyNN)
+				} else {
+					cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s: get cluster: %v", clusterKeyNN, err))
+				}
 			} else if apiClient, err := r.buildAPIClient(ctx, cluster); err != nil {
-				log.Info("Wazuh API unavailable during delete, skipping API cleanup",
-					"cluster", clusterKeyNN, "error", err)
+				// API temporarily unavailable: retry rather than leak the group.
+				cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s: build API client: %v", clusterKeyNN, err))
 			} else if err := apiClient.DeleteGroup(ctx, groupName); err != nil {
-				log.Error(err, "Failed to delete agent group from Wazuh API, continuing",
-					"cluster", clusterKeyNN, "group", groupName)
+				cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s: delete group %q: %v", clusterKeyNN, groupName, err))
 			} else {
 				log.Info("Agent group deleted from Wazuh API",
 					"cluster", clusterKeyNN, "group", groupName)
@@ -331,6 +338,12 @@ func (r *AgentGroupReconciler) Delete(ctx context.Context, group *wazuhv1.WazuhA
 			log.Error(err, "Failed to lookup agent group files ConfigMap",
 				"configMap", cmName, "namespace", ref.Namespace)
 		}
+	}
+
+	if len(cleanupErrs) > 0 {
+		// Keep the finalizer and retry: the group must actually be removed from Wazuh, not
+		// silently leaked when the API is unavailable or the delete fails.
+		return fmt.Errorf("agent group %q cleanup incomplete, will retry: %s", groupName, strings.Join(cleanupErrs, "; "))
 	}
 
 	if r.Recorder != nil {
