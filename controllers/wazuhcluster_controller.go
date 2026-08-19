@@ -532,6 +532,12 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		// Non-fatal, continue - log rotation is an optional feature
 	}
 
+	// 7b. Reconcile Agent Purge CronJob (if enabled)
+	if err := r.ClusterReconciler.ReconcileAgentPurge(ctx, cluster); err != nil {
+		log.Error(err, "Failed to reconcile agent purge")
+		// Non-fatal, continue - agent purge is an optional feature
+	}
+
 	// 8. Reconcile Dashboard with certificate hash for pod restart on cert renewal
 	dashboardCertHash := ""
 	if certHashes != nil {

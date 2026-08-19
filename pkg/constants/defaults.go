@@ -276,6 +276,24 @@ const (
 	DefaultLogRotationImage = "bitnami/kubectl:latest"
 )
 
+// Agent purge defaults
+// These configure the CronJob that deletes stale agents via the Wazuh Manager API
+const (
+	// DefaultAgentPurgeSchedule is the cron expression for the agent purge
+	// Default: daily at 03:00
+	DefaultAgentPurgeSchedule = "0 3 * * *"
+
+	// DefaultAgentPurgeDisconnectedDays is the minimum age (in days) an agent must
+	// have been stale before it is purged (older_than filter)
+	DefaultAgentPurgeDisconnectedDays int32 = 30
+
+	// DefaultAgentPurgeImage is the curl-capable image used for the CronJob
+	DefaultAgentPurgeImage = "curlimages/curl:latest"
+)
+
+// DefaultAgentPurgeStatuses are the agent states purged by default
+var DefaultAgentPurgeStatuses = []string{"disconnected"}
+
 // Filebeat defaults
 // These configure the Filebeat sidecar in Manager pods
 const (

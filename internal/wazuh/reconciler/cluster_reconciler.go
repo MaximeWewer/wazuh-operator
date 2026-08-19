@@ -3143,6 +3143,89 @@ func (r *ClusterReconciler) cleanupLogRotationResources(ctx context.Context, clu
 	return nil
 }
 
+// ReconcileAgentPurge reconciles the stale-agent purge CronJob.
+// Creates or updates the CronJob when agent purge is enabled; deletes it when disabled.
+// The CronJob curls the manager master API directly and reads API credentials from the
+// operator-managed secret, so it needs no extra ServiceAccount/Role/RoleBinding.
+func (r *ClusterReconciler) ReconcileAgentPurge(ctx context.Context, cluster *wazuhv1.WazuhCluster) (err error) {
+	ctx, span := telemetry.Tracer().Start(ctx, "ClusterReconciler.ReconcileAgentPurge",
+		telemetry.WithAttributes(
+			attribute.String("resource.name", cluster.Name),
+			attribute.String("resource.namespace", cluster.Namespace),
+		))
+	defer span.End()
+	defer func() {
+		if err != nil {
+			telemetry.RecordError(span, err)
+		}
+	}()
+
+	log := logf.FromContext(ctx)
+
+	// Check if agent purge is enabled
+	if cluster.Spec.Manager == nil || cluster.Spec.Manager.AgentPurge == nil || !cluster.Spec.Manager.AgentPurge.Enabled {
+		// Agent purge is disabled - clean up any existing resources
+		return r.cleanupAgentPurgeResources(ctx, cluster)
+	}
+
+	log.Info("Reconciling agent purge resources")
+
+	// Build the CronJob builder with configuration from spec
+	builder := cronjobs.NewAgentPurgeCronJobBuilder(cluster.Name, cluster.Namespace)
+
+	// Apply configuration from spec
+	agentPurge := cluster.Spec.Manager.AgentPurge
+	builder.WithSchedule(agentPurge.Schedule)
+	if agentPurge.DisconnectedDays != nil {
+		builder.WithDisconnectedDays(*agentPurge.DisconnectedDays)
+	}
+	builder.WithStatuses(agentPurge.Statuses)
+	builder.WithDryRun(agentPurge.DryRun)
+	builder.WithImage(agentPurge.Image)
+
+	// Use a custom API-credentials secret when configured
+	if cluster.Spec.Manager.APICredentials != nil {
+		if customSecret := cluster.Spec.Manager.APICredentials.GetSecretName(); customSecret != "" {
+			builder.WithCredentialSecret(customSecret)
+		}
+	}
+
+	if cluster.Spec.Version != "" {
+		builder.WithVersion(cluster.Spec.Version)
+	}
+
+	// Reconcile CronJob
+	cronJob := builder.Build()
+	if err := controllerutil.SetControllerReference(cluster, cronJob, r.Scheme); err != nil {
+		return fmt.Errorf("failed to set controller reference for agent purge cronjob: %w", err)
+	}
+	if err := r.createOrUpdateCronJob(ctx, cronJob); err != nil {
+		return fmt.Errorf("failed to reconcile agent purge cronjob: %w", err)
+	}
+
+	log.Info("Agent purge resources reconciled successfully")
+	return nil
+}
+
+// cleanupAgentPurgeResources removes the agent purge CronJob when the feature is disabled
+func (r *ClusterReconciler) cleanupAgentPurgeResources(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	log := logf.FromContext(ctx)
+
+	builder := cronjobs.NewAgentPurgeCronJobBuilder(cluster.Name, cluster.Namespace)
+	cronJobName := builder.GetResourceNames()
+
+	// Delete CronJob if exists
+	cronJob := &batchv1.CronJob{}
+	if err := r.Get(ctx, types.NamespacedName{Name: cronJobName, Namespace: cluster.Namespace}, cronJob); err == nil {
+		log.Info("Deleting agent purge CronJob", "name", cronJobName)
+		if err := r.Delete(ctx, cronJob); err != nil && !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to delete agent purge cronjob: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // createOrUpdateRole creates or updates a Role resource
 func (r *ClusterReconciler) createOrUpdateRole(ctx context.Context, role *rbacv1.Role) error {
 	log := logf.FromContext(ctx)

@@ -281,6 +281,18 @@ func validateManagerSpec(spec *WazuhManagerClusterSpec) ([]string, admission.War
 		}
 	}
 
+	// Validate agent purge configuration if enabled
+	if spec.AgentPurge != nil && spec.AgentPurge.Enabled {
+		if spec.AgentPurge.DisconnectedDays != nil && *spec.AgentPurge.DisconnectedDays < 1 {
+			errors = append(errors, "spec.manager.agentPurge.disconnectedDays: must be at least 1")
+		}
+		for i, st := range spec.AgentPurge.Statuses {
+			if st != "disconnected" && st != "never_connected" {
+				errors = append(errors, fmt.Sprintf("spec.manager.agentPurge.statuses[%d]: %q must be one of disconnected, never_connected", i, st))
+			}
+		}
+	}
+
 	// Validate GatewayAPI/Ingress mutual exclusion for master
 	masterGatewayErrors := validateGatewayAPIConfig(spec.Master.GatewayAPI, spec.Master.Ingress, "spec.manager.master")
 	errors = append(errors, masterGatewayErrors...)

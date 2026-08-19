@@ -106,6 +106,10 @@ type WazuhManagerClusterSpec struct {
 	// +optional
 	LogRotation *LogRotationSpec `json:"logRotation,omitempty"`
 
+	// Agent purge configuration for cleaning up stale agents via the Wazuh Manager API
+	// +optional
+	AgentPurge *AgentPurgeSpec `json:"agentPurge,omitempty"`
+
 	// Pod Disruption Budget for manager pods
 	// +optional
 	PodDisruptionBudget *PodDisruptionBudgetSpec `json:"podDisruptionBudget,omitempty"`
@@ -179,6 +183,46 @@ type LogRotationSpec struct {
 
 	// Image is the kubectl image to use for the CronJob
 	// Default: "bitnami/kubectl:latest"
+	// +optional
+	Image string `json:"image,omitempty"`
+}
+
+// AgentPurgeSpec defines the configuration for the stale-agent purge CronJob.
+// The CronJob periodically deletes agents that have been in one of the given
+// statuses for longer than DisconnectedDays via the Wazuh Manager API.
+// This operation is destructive: a purged agent must re-enroll to return.
+type AgentPurgeSpec struct {
+	// Enabled enables the scheduled purge of stale agents
+	// +optional
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Schedule is a cron expression for when to run the agent purge
+	// Default: "0 3 * * *" (daily at 03:00)
+	// +optional
+	// +kubebuilder:default="0 3 * * *"
+	Schedule string `json:"schedule,omitempty"`
+
+	// DisconnectedDays is the minimum age (in days) an agent must have been in
+	// one of the configured statuses before it is purged (older_than filter)
+	// Default: 30
+	// +optional
+	// +kubebuilder:default=30
+	// +kubebuilder:validation:Minimum=1
+	DisconnectedDays *int32 `json:"disconnectedDays,omitempty"`
+
+	// Statuses is the list of agent states to purge
+	// Default: ["disconnected"]
+	// +optional
+	// +kubebuilder:default={"disconnected"}
+	// +kubebuilder:validation:items:Enum=disconnected;never_connected
+	Statuses []string `json:"statuses,omitempty"`
+
+	// DryRun lists the agents that WOULD be deleted without deleting anything
+	// +optional
+	DryRun bool `json:"dryRun,omitempty"`
+
+	// Image is the curl-capable image to use for the CronJob
+	// Default: "curlimages/curl:latest"
 	// +optional
 	Image string `json:"image,omitempty"`
 }

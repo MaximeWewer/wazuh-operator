@@ -204,6 +204,7 @@ Configuration for safe scale-down operations. See [Drain Strategy](features/drai
 | `filebeatSSLVerificationMode` | string                                        | No       | `full`  | SSL mode (full/none/certificate) |
 | `config`                      | [WazuhConfigSpec](#wazuhconfigspec)           | No       | -       | OSSEC configuration              |
 | `logRotation`                 | [LogRotationSpec](#logrotationspec)           | No       | -       | Log rotation CronJob             |
+| `agentPurge`                  | [AgentPurgeSpec](#agentpurgespec)             | No       | -       | Stale-agent purge CronJob        |
 | `master`                      | [MasterSpec](#masterspec)                     | **Yes**  | -       | Master node config               |
 | `workers`                     | [WorkerSpec](#workerspec)                     | **Yes**  | -       | Worker nodes config              |
 
@@ -218,6 +219,21 @@ Configuration for safe scale-down operations. See [Drain Strategy](features/drai
 | `combinationMode` | string   | No       | `or`                     | How age/size filters combine: `or` (delete if old OR large), `and` (both) |
 | `paths`           | []string | No       | alerts/, archives/       | Log paths to clean                                                        |
 | `image`           | string   | No       | `bitnami/kubectl:latest` | kubectl image for CronJob                                                 |
+
+### AgentPurgeSpec
+
+Configures a CronJob (managed by the operator) that periodically deletes stale agents via the Wazuh Manager API (`DELETE /agents?agents_list=all&status=<status>&older_than=<X>d`). The job curls the manager master service directly and reads the API credentials from the operator-managed secret, so no extra RBAC is required.
+
+> **Destructive:** purging deletes an agent's registration on the manager. A purged agent must **re-enroll** to reappear. Always run with `dryRun: true` first to review which agents match before enabling real deletion. The manager itself (agent id `000`) is never matched by the status/`older_than` filters.
+
+| Field              | Type     | Required | Default                | Description                                                                          |
+| ------------------ | -------- | -------- | ---------------------- | ------------------------------------------------------------------------------------ |
+| `enabled`          | bool     | No       | `false`                | Enable the stale-agent purge CronJob                                                  |
+| `schedule`         | string   | No       | `0 3 * * *`            | Cron schedule (default: daily at 03:00)                                               |
+| `disconnectedDays` | int32    | No       | `30`                   | Minimum age in days (`older_than`) an agent must be stale before being purged (min 1) |
+| `statuses`         | []string | No       | `["disconnected"]`     | Agent states to purge: `disconnected`, `never_connected`                              |
+| `dryRun`           | bool     | No       | `false`                | List agents that WOULD be deleted without deleting anything                           |
+| `image`            | string   | No       | `curlimages/curl:latest` | curl-capable image for the CronJob                                                  |
 
 ### WazuhConfigSpec
 

@@ -22183,6 +22183,51 @@ spec:
               manager:
                 description: Manager configuration
                 properties:
+                  agentPurge:
+                    description: Agent purge configuration for cleaning up stale agents
+                      via the Wazuh Manager API
+                    properties:
+                      disconnectedDays:
+                        default: 30
+                        description: |-
+                          DisconnectedDays is the minimum age (in days) an agent must have been in
+                          one of the configured statuses before it is purged (older_than filter)
+                          Default: 30
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      dryRun:
+                        description: DryRun lists the agents that WOULD be deleted
+                          without deleting anything
+                        type: boolean
+                      enabled:
+                        description: Enabled enables the scheduled purge of stale
+                          agents
+                        type: boolean
+                      image:
+                        description: |-
+                          Image is the curl-capable image to use for the CronJob
+                          Default: "curlimages/curl:latest"
+                        type: string
+                      schedule:
+                        default: 0 3 * * *
+                        description: |-
+                          Schedule is a cron expression for when to run the agent purge
+                          Default: "0 3 * * *" (daily at 03:00)
+                        type: string
+                      statuses:
+                        default:
+                        - disconnected
+                        description: |-
+                          Statuses is the list of agent states to purge
+                          Default: ["disconnected"]
+                        items:
+                          enum:
+                          - disconnected
+                          - never_connected
+                          type: string
+                        type: array
+                    type: object
                   antiAffinity:
                     description: |-
                       AntiAffinity configures pod anti-affinity rules for manager pods
