@@ -33,6 +33,11 @@ const (
 	// AnnotationSecurityConfigUpdated indicates when security config was last synced
 	AnnotationSecurityConfigUpdated = "wazuh.com/security-config-updated"
 
+	// AnnotationVolumeSubPath records, on a per-path dedicated PVC, the subPath under the
+	// default wazuh-data volume where its data lives. Used by the reverse migration to copy
+	// the data back into wazuh-data when the per-path PVC is removed.
+	AnnotationVolumeSubPath = "wazuh.com/volume-subpath"
+
 	// AnnotationCertificateExpiry stores certificate expiration timestamp
 	AnnotationCertificateExpiry = "wazuh.com/certificate-expiry"
 

@@ -815,6 +815,23 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	found := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
+		// Before (re)creating: migrate any orphaned per-path PVC (a path removed from the
+		// spec) back into wazuh-data and delete it. Gate creation until that is done so the
+		// migration Job can mount the now-detached PVCs.
+		if pvcList, lerr := r.getManagerMasterPVCs(ctx, cluster); lerr != nil {
+			return nil, lerr
+		} else if done, merr := r.reconcileReverseMigration(ctx, cluster, sts.Name, vctNameSet(sts), pvcList); merr != nil {
+			return nil, merr
+		} else if !done {
+			return &utils.PendingRollout{
+				Component: "manager-master",
+				Namespace: sts.Namespace,
+				Name:      sts.Name,
+				Type:      utils.RolloutTypeStatefulSet,
+				StartTime: time.Now(),
+				Reason:    "reverse-migration",
+			}, nil
+		}
 		log.Info("Creating Master StatefulSet", "name", sts.Name, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash), "ruleHash", utils.ShortHash(ruleHash), "decoderHash", utils.ShortHash(decoderHash), "agentGroupFilesHash", utils.ShortHash(agentGroupFilesHash), "integrationHash", utils.ShortHash(integrationHash))
 		if err := r.Create(ctx, sts); err != nil {
 			return nil, fmt.Errorf("failed to create master statefulset: %w", err)
@@ -1456,6 +1473,22 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	found := &appsv1.StatefulSet{}
 	err = r.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
+		// Reverse-migrate + delete any orphaned per-path PVCs before (re)creating (see the
+		// master branch for details). Runs per worker ordinal.
+		if pvcList, lerr := r.getManagerWorkerPVCs(ctx, cluster); lerr != nil {
+			return nil, lerr
+		} else if done, merr := r.reconcileReverseMigration(ctx, cluster, sts.Name, vctNameSet(sts), pvcList); merr != nil {
+			return nil, merr
+		} else if !done {
+			return &utils.PendingRollout{
+				Component: "manager-worker",
+				Namespace: sts.Namespace,
+				Name:      sts.Name,
+				Type:      utils.RolloutTypeStatefulSet,
+				StartTime: time.Now(),
+				Reason:    "reverse-migration",
+			}, nil
+		}
 		log.Info("Creating Worker StatefulSet", "name", sts.Name, "replicas", replicas, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash), "ruleHash", utils.ShortHash(ruleHash), "decoderHash", utils.ShortHash(decoderHash), "agentGroupFilesHash", utils.ShortHash(agentGroupFilesHash), "integrationHash", utils.ShortHash(integrationHash))
 		if err := r.Create(ctx, sts); err != nil {
 			return nil, fmt.Errorf("failed to create worker statefulset: %w", err)

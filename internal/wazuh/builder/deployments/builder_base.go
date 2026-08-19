@@ -979,7 +979,11 @@ func (b *baseStatefulSetBuilder[T]) buildManagerVolumeClaimTemplates(selectorLab
 			sc = b.storageClassName
 		}
 		vcts = append(vcts, corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{Name: SplitVolumeName(vc.Path), Labels: selectorLabels},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        SplitVolumeName(vc.Path),
+				Labels:      selectorLabels,
+				Annotations: map[string]string{constants.AnnotationVolumeSubPath: oldSubPathForPath(vc.Path)},
+			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes:      []corev1.PersistentVolumeAccessMode{accessMode},
 				StorageClassName: sc,

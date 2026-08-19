@@ -291,4 +291,10 @@ const (
 
 	// EventReasonUnsafeManagerStorage indicates the manager data volume uses network/non-block storage unsafe for SQLite
 	EventReasonUnsafeManagerStorage = "UnsafeManagerStorage"
+
+	// EventReasonReverseMigration indicates a removed per-path PVC was migrated back into wazuh-data and deleted
+	EventReasonReverseMigration = "ReverseMigration"
+
+	// EventReasonReverseMigrationFailed indicates the reverse migration job failed and the orphaned PVC was kept
+	EventReasonReverseMigrationFailed = "ReverseMigrationFailed"
 )
