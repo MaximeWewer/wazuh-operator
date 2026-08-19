@@ -81,8 +81,19 @@ func reverseMigrationJobName(pvcName string) string {
 // wazuh-data volume, then deletes the orphaned PVC. It runs while the StatefulSet is absent
 // (during a recreation window) so the PVCs are detached and a migration Job can mount them.
 // Returns done=true only when no orphaned PVC remains to process.
-func (r *ClusterReconciler) reconcileReverseMigration(ctx context.Context, cluster *wazuhv1.WazuhCluster, stsName string, desiredVCTs map[string]struct{}, pvcList *corev1.PersistentVolumeClaimList) (bool, error) {
+func (r *ClusterReconciler) reconcileReverseMigration(ctx context.Context, cluster *wazuhv1.WazuhCluster, stsName string, desiredVCTs map[string]struct{}) (bool, error) {
 	log := logf.FromContext(ctx)
+
+	// List PVCs by the instance label and filter by name (<vct>-<stsName>-<ordinal>). This is
+	// robust to the component-label variations across manager PVCs.
+	pvcList := &corev1.PersistentVolumeClaimList{}
+	if err := r.List(ctx, pvcList,
+		client.InNamespace(cluster.Namespace),
+		client.MatchingLabels{constants.LabelInstance: cluster.Name},
+	); err != nil {
+		return false, fmt.Errorf("list PVCs for reverse migration: %w", err)
+	}
+
 	allDone := true
 
 	for i := range pvcList.Items {

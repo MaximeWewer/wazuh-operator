@@ -818,9 +818,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		// Before (re)creating: migrate any orphaned per-path PVC (a path removed from the
 		// spec) back into wazuh-data and delete it. Gate creation until that is done so the
 		// migration Job can mount the now-detached PVCs.
-		if pvcList, lerr := r.getManagerMasterPVCs(ctx, cluster); lerr != nil {
-			return nil, lerr
-		} else if done, merr := r.reconcileReverseMigration(ctx, cluster, sts.Name, vctNameSet(sts), pvcList); merr != nil {
+		if done, merr := r.reconcileReverseMigration(ctx, cluster, sts.Name, vctNameSet(sts)); merr != nil {
 			return nil, merr
 		} else if !done {
 			return &utils.PendingRollout{
@@ -1475,9 +1473,7 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 	if err != nil && errors.IsNotFound(err) {
 		// Reverse-migrate + delete any orphaned per-path PVCs before (re)creating (see the
 		// master branch for details). Runs per worker ordinal.
-		if pvcList, lerr := r.getManagerWorkerPVCs(ctx, cluster); lerr != nil {
-			return nil, lerr
-		} else if done, merr := r.reconcileReverseMigration(ctx, cluster, sts.Name, vctNameSet(sts), pvcList); merr != nil {
+		if done, merr := r.reconcileReverseMigration(ctx, cluster, sts.Name, vctNameSet(sts)); merr != nil {
 			return nil, merr
 		} else if !done {
 			return &utils.PendingRollout{
