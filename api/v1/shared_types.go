@@ -43,6 +43,36 @@ type ServiceAccountConfig struct {
 	Labels map[string]string `json:"labels,omitempty"`
 }
 
+// ManagerVolumeClaim declares a dedicated PVC for a specific path under /var/ossec,
+// carved out of the default wazuh-data volume. The path is mounted as the whole volume
+// (no subPath). On first introduction the operator copies existing data from wazuh-data
+// into the new PVC once (see the migrate-data init container). Changing the storageClass
+// or accessMode, or adding/removing a path, recreates the manager StatefulSet (PVCs are
+// preserved); size changes are applied in place by the volume-expansion reconciler.
+type ManagerVolumeClaim struct {
+	// Path is the absolute directory under /var/ossec to back with a dedicated PVC,
+	// e.g. "/var/ossec/queue/db" (SQLite databases) or "/var/ossec/logs".
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern=`^/var/ossec/.+`
+	Path string `json:"path"`
+
+	// Size is the requested storage size for this PVC (e.g. "10Gi").
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern=`^[0-9]+(\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|k)?$`
+	Size string `json:"size"`
+
+	// StorageClass overrides the storage class for this PVC. If empty, falls back to the
+	// master/worker StorageClass, then the cluster-level storageClassName.
+	// +optional
+	StorageClass *string `json:"storageClass,omitempty"`
+
+	// AccessMode is the PVC access mode for this path.
+	// +optional
+	// +kubebuilder:default="ReadWriteOnce"
+	// +kubebuilder:validation:Enum=ReadWriteOnce;ReadWriteMany;ReadWriteOncePod
+	AccessMode corev1.PersistentVolumeAccessMode `json:"accessMode,omitempty"`
+}
+
 // WazuhMasterSpec defines the master node configuration
 type WazuhMasterSpec struct {
 	// Resources for the master node
@@ -58,6 +88,14 @@ type WazuhMasterSpec struct {
 	// If not specified, uses cluster-level storageClassName
 	// +optional
 	StorageClass *string `json:"storageClass,omitempty"`
+
+	// VolumeClaims declares additional per-path PVCs carved out of the default wazuh-data
+	// volume, each with its own size, storageClass and accessMode. Use it to place e.g.
+	// /var/ossec/queue/db (SQLite) on block storage while the rest stays on the default class.
+	// +optional
+	// +listType=map
+	// +listMapKey=path
+	VolumeClaims []ManagerVolumeClaim `json:"volumeClaims,omitempty"`
 
 	// Service configuration
 	// +optional
@@ -187,6 +225,14 @@ type WazuhWorkerSpec struct {
 	// If not specified, uses cluster-level storageClassName
 	// +optional
 	StorageClass *string `json:"storageClass,omitempty"`
+
+	// VolumeClaims declares additional per-path PVCs carved out of the default wazuh-data
+	// volume, each with its own size, storageClass and accessMode. Use it to place e.g.
+	// /var/ossec/queue/db (SQLite) on block storage while the rest stays on the default class.
+	// +optional
+	// +listType=map
+	// +listMapKey=path
+	VolumeClaims []ManagerVolumeClaim `json:"volumeClaims,omitempty"`
 
 	// Service configuration
 	// +optional

@@ -29861,6 +29861,53 @@ spec:
                         - OnDelete
                         - RollingUpdate
                         type: string
+                      volumeClaims:
+                        description: |-
+                          VolumeClaims declares additional per-path PVCs carved out of the default wazuh-data
+                          volume, each with its own size, storageClass and accessMode. Use it to place e.g.
+                          /var/ossec/queue/db (SQLite) on block storage while the rest stays on the default class.
+                        items:
+                          description: |-
+                            ManagerVolumeClaim declares a dedicated PVC for a specific path under /var/ossec,
+                            carved out of the default wazuh-data volume. The path is mounted as the whole volume
+                            (no subPath). On first introduction the operator copies existing data from wazuh-data
+                            into the new PVC once (see the migrate-data init container). Changing the storageClass
+                            or accessMode, or adding/removing a path, recreates the manager StatefulSet (PVCs are
+                            preserved); size changes are applied in place by the volume-expansion reconciler.
+                          properties:
+                            accessMode:
+                              default: ReadWriteOnce
+                              description: AccessMode is the PVC access mode for this
+                                path.
+                              enum:
+                              - ReadWriteOnce
+                              - ReadWriteMany
+                              - ReadWriteOncePod
+                              type: string
+                            path:
+                              description: |-
+                                Path is the absolute directory under /var/ossec to back with a dedicated PVC,
+                                e.g. "/var/ossec/queue/db" (SQLite databases) or "/var/ossec/logs".
+                              pattern: ^/var/ossec/.+
+                              type: string
+                            size:
+                              description: Size is the requested storage size for
+                                this PVC (e.g. "10Gi").
+                              pattern: ^[0-9]+(\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|k)?$
+                              type: string
+                            storageClass:
+                              description: |-
+                                StorageClass overrides the storage class for this PVC. If empty, falls back to the
+                                master/worker StorageClass, then the cluster-level storageClassName.
+                              type: string
+                          required:
+                          - path
+                          - size
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - path
+                        x-kubernetes-list-type: map
                     type: object
                   networkPolicy:
                     description: Network policy for manager pods
@@ -37416,6 +37463,53 @@ spec:
                         - OnDelete
                         - RollingUpdate
                         type: string
+                      volumeClaims:
+                        description: |-
+                          VolumeClaims declares additional per-path PVCs carved out of the default wazuh-data
+                          volume, each with its own size, storageClass and accessMode. Use it to place e.g.
+                          /var/ossec/queue/db (SQLite) on block storage while the rest stays on the default class.
+                        items:
+                          description: |-
+                            ManagerVolumeClaim declares a dedicated PVC for a specific path under /var/ossec,
+                            carved out of the default wazuh-data volume. The path is mounted as the whole volume
+                            (no subPath). On first introduction the operator copies existing data from wazuh-data
+                            into the new PVC once (see the migrate-data init container). Changing the storageClass
+                            or accessMode, or adding/removing a path, recreates the manager StatefulSet (PVCs are
+                            preserved); size changes are applied in place by the volume-expansion reconciler.
+                          properties:
+                            accessMode:
+                              default: ReadWriteOnce
+                              description: AccessMode is the PVC access mode for this
+                                path.
+                              enum:
+                              - ReadWriteOnce
+                              - ReadWriteMany
+                              - ReadWriteOncePod
+                              type: string
+                            path:
+                              description: |-
+                                Path is the absolute directory under /var/ossec to back with a dedicated PVC,
+                                e.g. "/var/ossec/queue/db" (SQLite databases) or "/var/ossec/logs".
+                              pattern: ^/var/ossec/.+
+                              type: string
+                            size:
+                              description: Size is the requested storage size for
+                                this PVC (e.g. "10Gi").
+                              pattern: ^[0-9]+(\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|k)?$
+                              type: string
+                            storageClass:
+                              description: |-
+                                StorageClass overrides the storage class for this PVC. If empty, falls back to the
+                                master/worker StorageClass, then the cluster-level storageClassName.
+                              type: string
+                          required:
+                          - path
+                          - size
+                          type: object
+                        type: array
+                        x-kubernetes-list-map-keys:
+                        - path
+                        x-kubernetes-list-type: map
                     type: object
                 required:
                 - master
