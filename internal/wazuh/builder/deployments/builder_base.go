@@ -17,6 +17,8 @@ limitations under the License.
 package deployments
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -419,7 +421,7 @@ func (b *baseStatefulSetBuilder[T]) configMapVolumes() []corev1.Volume {
 	// Add rule ConfigMap volumes
 	for _, ref := range b.ruleConfigMaps {
 		volumes = append(volumes, corev1.Volume{
-			Name: fmt.Sprintf("wazuh-rule-%s", ref.Name),
+			Name: boundedVolumeName("wazuh-rule", ref.Name),
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -433,7 +435,7 @@ func (b *baseStatefulSetBuilder[T]) configMapVolumes() []corev1.Volume {
 	// Add decoder ConfigMap volumes
 	for _, ref := range b.decoderConfigMaps {
 		volumes = append(volumes, corev1.Volume{
-			Name: fmt.Sprintf("wazuh-decoder-%s", ref.Name),
+			Name: boundedVolumeName("wazuh-decoder", ref.Name),
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -447,7 +449,7 @@ func (b *baseStatefulSetBuilder[T]) configMapVolumes() []corev1.Volume {
 	// Add agent group file ConfigMap volumes
 	for _, ref := range b.agentGroupFiles {
 		volumes = append(volumes, corev1.Volume{
-			Name: fmt.Sprintf("agentgroup-files-%s", ref.ConfigMapName),
+			Name: boundedVolumeName("agentgroup-files", ref.ConfigMapName),
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -463,7 +465,7 @@ func (b *baseStatefulSetBuilder[T]) configMapVolumes() []corev1.Volume {
 	// root:wazuh 0750 - exactly what Wazuh requires for a custom integration script.
 	for _, ref := range b.integrationConfigMaps {
 		volumes = append(volumes, corev1.Volume{
-			Name: fmt.Sprintf("wazuh-integration-%s", ref.Name),
+			Name: boundedVolumeName("wazuh-integration", ref.Name),
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -478,7 +480,7 @@ func (b *baseStatefulSetBuilder[T]) configMapVolumes() []corev1.Volume {
 	// Add CDB list ConfigMap volumes
 	for _, ref := range b.cdbListConfigMaps {
 		volumes = append(volumes, corev1.Volume{
-			Name: fmt.Sprintf("wazuh-cdblist-%s", ref.Name),
+			Name: boundedVolumeName("wazuh-cdblist", ref.Name),
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -494,7 +496,7 @@ func (b *baseStatefulSetBuilder[T]) configMapVolumes() []corev1.Volume {
 	// root:wazuh 0750 - exactly what Wazuh requires for a custom active response script.
 	for _, ref := range b.activeResponseConfigMaps {
 		volumes = append(volumes, corev1.Volume{
-			Name: fmt.Sprintf("wazuh-activeresponse-%s", ref.Name),
+			Name: boundedVolumeName("wazuh-activeresponse", ref.Name),
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -517,7 +519,7 @@ func (b *baseStatefulSetBuilder[T]) configMapMounts() []corev1.VolumeMount {
 	// Add rule ConfigMap mounts at /var/ossec/etc/rules/
 	for _, ref := range b.ruleConfigMaps {
 		mounts = append(mounts, corev1.VolumeMount{
-			Name:      fmt.Sprintf("wazuh-rule-%s", ref.Name),
+			Name:      boundedVolumeName("wazuh-rule", ref.Name),
 			MountPath: fmt.Sprintf("/var/ossec/etc/rules/%s", ref.FileName),
 			SubPath:   ref.FileName,
 			ReadOnly:  true,
@@ -527,7 +529,7 @@ func (b *baseStatefulSetBuilder[T]) configMapMounts() []corev1.VolumeMount {
 	// Add decoder ConfigMap mounts at /var/ossec/etc/decoders/
 	for _, ref := range b.decoderConfigMaps {
 		mounts = append(mounts, corev1.VolumeMount{
-			Name:      fmt.Sprintf("wazuh-decoder-%s", ref.Name),
+			Name:      boundedVolumeName("wazuh-decoder", ref.Name),
 			MountPath: fmt.Sprintf("/var/ossec/etc/decoders/%s", ref.FileName),
 			SubPath:   ref.FileName,
 			ReadOnly:  true,
@@ -538,7 +540,7 @@ func (b *baseStatefulSetBuilder[T]) configMapMounts() []corev1.VolumeMount {
 	for _, ref := range b.agentGroupFiles {
 		for _, fileName := range ref.FileNames {
 			mounts = append(mounts, corev1.VolumeMount{
-				Name:      fmt.Sprintf("agentgroup-files-%s", ref.ConfigMapName),
+				Name:      boundedVolumeName("agentgroup-files", ref.ConfigMapName),
 				MountPath: fmt.Sprintf("/var/ossec/etc/shared/%s/%s", ref.GroupName, fileName),
 				SubPath:   fileName,
 				ReadOnly:  true,
@@ -550,7 +552,7 @@ func (b *baseStatefulSetBuilder[T]) configMapMounts() []corev1.VolumeMount {
 	// Read-only subPath mount; DefaultMode 0750 + fsGroup give root:wazuh 0750.
 	for _, ref := range b.integrationConfigMaps {
 		mounts = append(mounts, corev1.VolumeMount{
-			Name:      fmt.Sprintf("wazuh-integration-%s", ref.Name),
+			Name:      boundedVolumeName("wazuh-integration", ref.Name),
 			MountPath: fmt.Sprintf("%s/%s", constants.PathWazuhIntegrations, ref.FileName),
 			SubPath:   ref.FileName,
 			ReadOnly:  true,
@@ -562,7 +564,7 @@ func (b *baseStatefulSetBuilder[T]) configMapMounts() []corev1.VolumeMount {
 	// intermediate directory of the mount path.
 	for _, ref := range b.cdbListConfigMaps {
 		mounts = append(mounts, corev1.VolumeMount{
-			Name:      fmt.Sprintf("wazuh-cdblist-%s", ref.Name),
+			Name:      boundedVolumeName("wazuh-cdblist", ref.Name),
 			MountPath: fmt.Sprintf("/var/ossec/etc/lists/%s", ref.FileName),
 			SubPath:   ref.Key,
 			ReadOnly:  true,
@@ -573,7 +575,7 @@ func (b *baseStatefulSetBuilder[T]) configMapMounts() []corev1.VolumeMount {
 	// Read-only subPath mount; DefaultMode 0750 + fsGroup give root:wazuh 0750.
 	for _, ref := range b.activeResponseConfigMaps {
 		mounts = append(mounts, corev1.VolumeMount{
-			Name:      fmt.Sprintf("wazuh-activeresponse-%s", ref.Name),
+			Name:      boundedVolumeName("wazuh-activeresponse", ref.Name),
 			MountPath: fmt.Sprintf("%s/%s", constants.PathWazuhActiveResponse, ref.FileName),
 			SubPath:   ref.FileName,
 			ReadOnly:  true,
@@ -899,6 +901,29 @@ chown -R 999:999 "$DEST"`,
 			{Name: constants.VolumeNameWazuhData, MountPath: "/wazuh-data"},
 		},
 	}
+}
+
+// boundedVolumeName builds "<prefix>-<key>" as a Kubernetes volume name, capped at the
+// 63-char DNS-1123 limit. When the concatenation is too long (e.g. a long cluster name plus
+// a long active-response/agent-group name) it truncates the key and appends a short hash of
+// the full key so distinct keys keep distinct, stable names. The same (prefix,key) always
+// yields the same name, so a Volume and its VolumeMount stay in sync.
+func boundedVolumeName(prefix, key string) string {
+	name := prefix + "-" + key
+	if len(name) <= 63 {
+		return name
+	}
+	sum := sha256.Sum256([]byte(key))
+	suffix := "-" + hex.EncodeToString(sum[:])[:8] // 9 chars, alphanumeric end
+	budget := 63 - len(prefix) - 1 - len(suffix)
+	if budget < 1 {
+		budget = 1
+	}
+	trimmed := key
+	if len(trimmed) > budget {
+		trimmed = strings.TrimRight(trimmed[:budget], "-")
+	}
+	return prefix + "-" + trimmed + suffix
 }
 
 // SplitVolumeName returns the deterministic VolumeClaimTemplate/volume name for a split

@@ -160,3 +160,28 @@ func TestVolumeClaims_SplitExactBase(t *testing.T) {
 		t.Errorf("logs mount = %+v, want dedicated PVC with no subPath (subPath replaced)", m)
 	}
 }
+
+func TestBoundedVolumeName(t *testing.T) {
+	// Short name: unchanged.
+	if got := boundedVolumeName("wazuh-activeresponse", "firewall-drop"); got != "wazuh-activeresponse-firewall-drop" {
+		t.Errorf("short name changed: %q", got)
+	}
+	// Long name (the prod case): must be <=63 and stay DNS-1123.
+	long := boundedVolumeName("wazuh-activeresponse", "wazuh-cluster-prod-ar-block-dest-ip-activeresponse")
+	if len(long) > 63 {
+		t.Errorf("bounded name too long (%d): %q", len(long), long)
+	}
+	if strings.HasSuffix(long, "-") {
+		t.Errorf("name ends with dash: %q", long)
+	}
+	// Deterministic + distinct keys -> distinct names.
+	k1 := boundedVolumeName("agentgroup-files", "wazuh-cluster-prod-machine-admin-agentgroup-files")
+	k2 := boundedVolumeName("agentgroup-files", "wazuh-cluster-prod-machine-admin-agentgroup-files")
+	k3 := boundedVolumeName("agentgroup-files", "wazuh-cluster-prod-other-group-name-longlong-agentgroup-files")
+	if k1 != k2 {
+		t.Error("not deterministic")
+	}
+	if k1 == k3 || len(k3) > 63 {
+		t.Errorf("collision or too long: %q vs %q", k1, k3)
+	}
+}
