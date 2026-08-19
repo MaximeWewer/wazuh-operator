@@ -19,8 +19,12 @@ package v1
 import (
 	"context"
 	"fmt"
+	"path"
 	"regexp"
+	"strings"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -192,7 +196,53 @@ func (v *WazuhClusterCustomValidator) validateUpdate(oldCluster, newCluster *Waz
 		}
 	}
 
+	// Warn when the manager per-path PVC layout changes: adding/removing a path or changing a
+	// storageClass/accessMode recreates the manager StatefulSet (downtime); removing a path
+	// orphans its PVC.
+	if oldCluster.Spec.Manager != nil && newCluster.Spec.Manager != nil {
+		warnings = append(warnings, volumeClaimsChangeWarnings(oldCluster.Spec.Manager.Master.VolumeClaims, newCluster.Spec.Manager.Master.VolumeClaims, "master")...)
+		warnings = append(warnings, volumeClaimsChangeWarnings(oldCluster.Spec.Manager.Workers.VolumeClaims, newCluster.Spec.Manager.Workers.VolumeClaims, "workers")...)
+	}
+
 	return warnings, nil
+}
+
+// volumeClaimsChangeWarnings warns about per-path PVC layout changes that recreate the
+// manager StatefulSet or orphan a PVC.
+func volumeClaimsChangeWarnings(oldVCs, newVCs []ManagerVolumeClaim, role string) admission.Warnings {
+	var warnings admission.Warnings
+	oldByPath := make(map[string]ManagerVolumeClaim, len(oldVCs))
+	for _, vc := range oldVCs {
+		oldByPath[vc.Path] = vc
+	}
+	newByPath := make(map[string]ManagerVolumeClaim, len(newVCs))
+	for _, vc := range newVCs {
+		newByPath[vc.Path] = vc
+	}
+	for p, nv := range newByPath {
+		ov, ok := oldByPath[p]
+		if !ok {
+			warnings = append(warnings, fmt.Sprintf("spec.manager.%s.volumeClaims: adding %q recreates the manager StatefulSet (downtime)", role, p))
+			continue
+		}
+		if !stringPtrEqual(ov.StorageClass, nv.StorageClass) || ov.AccessMode != nv.AccessMode {
+			warnings = append(warnings, fmt.Sprintf("spec.manager.%s.volumeClaims: changing storageClass/accessMode of %q recreates the manager StatefulSet (downtime)", role, p))
+		}
+	}
+	for p := range oldByPath {
+		if _, ok := newByPath[p]; !ok {
+			warnings = append(warnings, fmt.Sprintf("spec.manager.%s.volumeClaims: removing %q recreates the manager StatefulSet and orphans its PVC (data becomes unreachable)", role, p))
+		}
+	}
+	return warnings
+}
+
+// stringPtrEqual reports whether two *string values are equal (nil == nil).
+func stringPtrEqual(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 // versionRegex validates semver format
@@ -239,7 +289,64 @@ func validateManagerSpec(spec *WazuhManagerClusterSpec) ([]string, admission.War
 	workerGatewayErrors := validateGatewayAPIConfig(spec.Workers.GatewayAPI, spec.Workers.Ingress, "spec.manager.workers")
 	errors = append(errors, workerGatewayErrors...)
 
+	// Validate per-path dedicated PVC declarations
+	mErrs, mWarns := validateManagerVolumeClaims(spec.Master.VolumeClaims, "spec.manager.master.volumeClaims")
+	errors = append(errors, mErrs...)
+	warnings = append(warnings, mWarns...)
+	wErrs, wWarns := validateManagerVolumeClaims(spec.Workers.VolumeClaims, "spec.manager.workers.volumeClaims")
+	errors = append(errors, wErrs...)
+	warnings = append(warnings, wWarns...)
+
 	return errors, warnings
+}
+
+// validateManagerVolumeClaims validates the per-path dedicated PVC declarations: absolute,
+// clean paths under /var/ossec, unique, a derived PVC name within the 63-char limit, a valid
+// positive size, and a supported access mode. It also warns about layouts that are risky
+// (RWX on SQLite paths) or partially unsupported (splitting etc / api/configuration).
+func validateManagerVolumeClaims(vcs []ManagerVolumeClaim, prefix string) ([]string, admission.Warnings) {
+	var errs []string
+	var warnings admission.Warnings
+	seen := make(map[string]bool)
+	for i := range vcs {
+		vc := vcs[i]
+		field := fmt.Sprintf("%s[%d]", prefix, i)
+
+		if !strings.HasPrefix(vc.Path, "/var/ossec/") || path.Clean(vc.Path) != vc.Path || vc.Path == "/var/ossec" {
+			errs = append(errs, fmt.Sprintf("%s.path: %q must be a clean absolute path under /var/ossec", field, vc.Path))
+		}
+		if seen[vc.Path] {
+			errs = append(errs, fmt.Sprintf("%s.path: %q is declared more than once", field, vc.Path))
+		}
+		seen[vc.Path] = true
+		// Conservative bound: derived name = "wazuh-data-" (11) + slug (<= len(rel)) <= 63.
+		if rel := strings.TrimPrefix(vc.Path, "/var/ossec/"); len(rel) > 52 {
+			errs = append(errs, fmt.Sprintf("%s.path: %q is too long; the derived PVC name would exceed 63 characters", field, vc.Path))
+		}
+
+		if q, err := resource.ParseQuantity(vc.Size); err != nil {
+			errs = append(errs, fmt.Sprintf("%s.size: %q is not a valid quantity: %v", field, vc.Size, err))
+		} else if q.Sign() <= 0 {
+			errs = append(errs, fmt.Sprintf("%s.size: %q must be greater than zero", field, vc.Size))
+		}
+
+		switch vc.AccessMode {
+		case "", corev1.ReadWriteOnce, corev1.ReadWriteMany, corev1.ReadWriteOncePod:
+		default:
+			errs = append(errs, fmt.Sprintf("%s.accessMode: %q is not supported", field, vc.AccessMode))
+		}
+
+		if vc.AccessMode == corev1.ReadWriteMany && (vc.Path == "/var/ossec/queue" || strings.HasPrefix(vc.Path, "/var/ossec/queue/db")) {
+			warnings = append(warnings, fmt.Sprintf("%s: ReadWriteMany on a SQLite path (%s) risks database corruption; use ReadWriteOnce block storage", field, vc.Path))
+		}
+		if vc.Path == "/var/ossec/etc" {
+			warnings = append(warnings, fmt.Sprintf("%s: splitting /var/ossec/etc moves client.keys onto a dedicated PVC; ensure it uses reliable storage", field))
+		}
+		if vc.Path == "/var/ossec/api/configuration" {
+			warnings = append(warnings, fmt.Sprintf("%s: /var/ossec/api/configuration is seeded into the default wazuh-data volume; a dedicated PVC here is not seeded and is unsupported", field))
+		}
+	}
+	return errs, warnings
 }
 
 // validateIndexerSpec validates indexer specification
