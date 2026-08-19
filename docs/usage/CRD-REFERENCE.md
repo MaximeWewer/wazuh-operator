@@ -309,7 +309,9 @@ Configures the `<ruleset>` section of `ossec.conf`, which tells Wazuh where to l
 
 | Field                      | Type                              | Required | Default | Description             |
 | -------------------------- | --------------------------------- | -------- | ------- | ----------------------- |
-| `storageSize`              | string                            | No       | `50Gi`  | Storage size            |
+| `storageSize`              | string                            | No       | `50Gi`  | Storage size of the default `wazuh-data` PVC |
+| `storageClass`             | \*string                          | No       | -       | StorageClass for the default `wazuh-data` PVC (else cluster-level `storageClassName`) |
+| `volumeClaims`             | [][ManagerVolumeClaim](#managervolumeclaim) | No | -    | Per-path dedicated PVCs (e.g. put `queue/db` SQLite on block storage) |
 | `resources`                | ResourceRequirements              | No       | -       | Resources               |
 | `service`                  | [ServiceSpec](#servicespec)       | No       | -       | Service config          |
 | `nodeSelector`             | map[string]string                 | No       | -       | Node selector           |
@@ -349,6 +351,45 @@ Includes all fields from [MasterSpec](#masterspec) (including `extraVolumes`, `e
 | `index`       | int32  | **Yes**  | -       | Worker index (0-based)       |
 | `extraConfig` | string | No       | -       | Extra config for this worker |
 | `description` | string | No       | -       | Description                  |
+
+### ManagerVolumeClaim
+
+Declares a dedicated PVC for a specific path under `/var/ossec`, carved out of the default `wazuh-data` volume. Available on both `manager.master.volumeClaims` and `manager.workers.volumeClaims`. The primary use case is placing the Wazuh SQLite databases (`/var/ossec/queue/db` — `global.db` and per-agent DBs) on **block/local** storage while the rest stays on the default class, because SQLite corrupts on network filesystems (NFS and friends).
+
+| Field          | Type     | Required | Default         | Description                                                              |
+| -------------- | -------- | -------- | --------------- | ------------------------------------------------------------------------ |
+| `path`         | string   | **Yes**  | -               | Absolute directory under `/var/ossec` mounted as the whole PVC (no subPath), e.g. `/var/ossec/queue/db` |
+| `size`         | string   | **Yes**  | -               | Requested storage size (e.g. `5Gi`)                                      |
+| `storageClass` | \*string | No       | -               | StorageClass for this PVC (else the master/worker `storageClass`, then cluster-level) |
+| `accessMode`   | string   | No       | `ReadWriteOnce` | One of `ReadWriteOnce`, `ReadWriteMany`, `ReadWriteOncePod`              |
+
+**Behavior**
+
+- **Default volume unchanged.** Everything not explicitly split stays on the `wazuh-data` PVC (`storageSize`/`storageClass`). An empty `volumeClaims` is the current single-PVC behavior (backward compatible).
+- **Automatic in-cluster migration.** On first introduction of a split path, a `migrate-data` init container copies the existing data from `wazuh-data` into the new PVC once (idempotent via a `.migrated` marker). The source is **never deleted** (implicit backup); the `wazuh-data` volume does not shrink.
+- **Recreation on layout change.** Adding/removing a path, or changing a `storageClass`/`accessMode`, recreates the manager StatefulSet (VolumeClaimTemplates are immutable). PVCs are **preserved** (orphaned, then re-adopted) — including `wazuh-data` which holds `client.keys`. This causes **downtime** for the master (single replica); workers roll per replica. Size-only changes are applied in place (no recreation).
+- **Caveats.** Splitting `/var/ossec/etc` moves `client.keys` onto the dedicated PVC (use reliable storage). `/var/ossec/api/configuration` is seeded into `wazuh-data` and is not supported as a dedicated PVC (webhook warns).
+
+**Example** — put SQLite on block storage, keep the rest on NFS:
+
+```yaml
+spec:
+  storageClassName: nfs           # default class for the bulk of /var/ossec
+  manager:
+    master:
+      storageSize: 10Gi
+      volumeClaims:
+        - path: /var/ossec/queue/db  # SQLite (global.db, per-agent DBs)
+          size: 5Gi
+          storageClass: block        # reliable block/local storage
+          accessMode: ReadWriteOnce
+    workers:
+      storageSize: 10Gi
+      volumeClaims:
+        - path: /var/ossec/queue/db
+          size: 5Gi
+          storageClass: block
+```
 
 ### IndexerSpec
 
