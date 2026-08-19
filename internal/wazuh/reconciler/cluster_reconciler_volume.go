@@ -19,6 +19,7 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,6 +27,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/storage"
+	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/builder/deployments"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -33,10 +35,17 @@ import (
 func (r *ClusterReconciler) reconcileMasterVolumeExpansion(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
-	// Get requested storage size from spec
+	// Get requested storage size from spec (the default wazuh-data PVC), plus the per-path
+	// PVC sizes so each split PVC is expanded to its own declared size.
 	requestedSize := constants.DefaultManagerStorageSize
 	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Master.StorageSize != "" {
 		requestedSize = cluster.Spec.Manager.Master.StorageSize
+	}
+	sizeByVCT := map[string]string{constants.VolumeNameWazuhData: requestedSize}
+	if cluster.Spec.Manager != nil {
+		for _, vc := range cluster.Spec.Manager.Master.VolumeClaims {
+			sizeByVCT[deployments.SplitVolumeName(vc.Path)] = vc.Size
+		}
 	}
 
 	// List all manager master PVCs
@@ -50,7 +59,7 @@ func (r *ClusterReconciler) reconcileMasterVolumeExpansion(ctx context.Context, 
 		return nil
 	}
 
-	pvcsExpanded, pvcsPending, expansionNeeded, expansionError := r.processVolumeExpansion(ctx, cluster, pvcList, requestedSize, "manager-master")
+	pvcsExpanded, pvcsPending, expansionNeeded, expansionError := r.processVolumeExpansion(ctx, cluster, pvcList, sizeByVCT, "manager-master")
 	r.updateManagerMasterExpansionStatus(ctx, cluster, requestedSize, pvcsExpanded, pvcsPending, expansionError)
 
 	if len(pvcsPending) == 0 && len(pvcsExpanded) > 0 && expansionNeeded {
@@ -67,10 +76,17 @@ func (r *ClusterReconciler) reconcileMasterVolumeExpansion(ctx context.Context, 
 func (r *ClusterReconciler) reconcileWorkerVolumeExpansion(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	log := logf.FromContext(ctx)
 
-	// Get requested storage size from spec
+	// Get requested storage size from spec (the default wazuh-data PVC), plus the per-path
+	// PVC sizes so each split PVC is expanded to its own declared size.
 	requestedSize := constants.DefaultManagerStorageSize
 	if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.StorageSize != "" {
 		requestedSize = cluster.Spec.Manager.Workers.StorageSize
+	}
+	sizeByVCT := map[string]string{constants.VolumeNameWazuhData: requestedSize}
+	if cluster.Spec.Manager != nil {
+		for _, vc := range cluster.Spec.Manager.Workers.VolumeClaims {
+			sizeByVCT[deployments.SplitVolumeName(vc.Path)] = vc.Size
+		}
 	}
 
 	// List all manager worker PVCs
@@ -84,7 +100,7 @@ func (r *ClusterReconciler) reconcileWorkerVolumeExpansion(ctx context.Context, 
 		return nil
 	}
 
-	pvcsExpanded, pvcsPending, expansionNeeded, expansionError := r.processVolumeExpansion(ctx, cluster, pvcList, requestedSize, "manager-worker")
+	pvcsExpanded, pvcsPending, expansionNeeded, expansionError := r.processVolumeExpansion(ctx, cluster, pvcList, sizeByVCT, "manager-worker")
 	r.updateManagerWorkerExpansionStatus(ctx, cluster, requestedSize, pvcsExpanded, pvcsPending, expansionError)
 
 	if len(pvcsPending) == 0 && len(pvcsExpanded) > 0 && expansionNeeded {
@@ -97,13 +113,35 @@ func (r *ClusterReconciler) reconcileWorkerVolumeExpansion(ctx context.Context, 
 	return nil
 }
 
-// processVolumeExpansion handles the common PVC expansion logic for a list of PVCs.
+// resolveSizeForPVC returns the requested size for a PVC by matching the longest VCT name
+// that prefixes the PVC name (PVC name = <vctName>-<statefulset>-<ordinal>, so a split VCT
+// name like "wazuh-data-queue-db" wins over "wazuh-data"). Empty when the PVC is not owned
+// by any known VCT.
+func resolveSizeForPVC(pvcName string, sizeByVCT map[string]string) string {
+	best, bestSize := "", ""
+	for vct, size := range sizeByVCT {
+		if strings.HasPrefix(pvcName, vct+"-") && len(vct) > len(best) {
+			best, bestSize = vct, size
+		}
+	}
+	return bestSize
+}
+
+// processVolumeExpansion handles the common PVC expansion logic for a list of PVCs. Each PVC
+// is resized to the size of its owning VolumeClaimTemplate (sizeByVCT), so the default
+// wazuh-data PVC and every per-path PVC grow to their own declared size.
 // Returns lists of expanded/pending PVCs, whether expansion was needed, and any error.
-func (r *ClusterReconciler) processVolumeExpansion(ctx context.Context, cluster *wazuhv1.WazuhCluster, pvcList *corev1.PersistentVolumeClaimList, requestedSize, componentName string) (pvcsExpanded, pvcsPending []string, expansionNeeded bool, expansionError error) {
+func (r *ClusterReconciler) processVolumeExpansion(ctx context.Context, cluster *wazuhv1.WazuhCluster, pvcList *corev1.PersistentVolumeClaimList, sizeByVCT map[string]string, componentName string) (pvcsExpanded, pvcsPending []string, expansionNeeded bool, expansionError error) {
 	log := logf.FromContext(ctx)
 
 	for i := range pvcList.Items {
 		pvc := &pvcList.Items[i]
+
+		requestedSize := resolveSizeForPVC(pvc.Name, sizeByVCT)
+		if requestedSize == "" {
+			// PVC not owned by a known VolumeClaimTemplate; leave it untouched.
+			continue
+		}
 
 		validationResult, err := storage.ValidateExpansion(ctx, r.Client, pvc, requestedSize)
 		if err != nil {

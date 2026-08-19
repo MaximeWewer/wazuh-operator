@@ -901,9 +901,9 @@ chown -R 999:999 "$DEST"`,
 	}
 }
 
-// splitVolumeName returns the deterministic VolumeClaimTemplate/volume name for a split
+// SplitVolumeName returns the deterministic VolumeClaimTemplate/volume name for a split
 // path, e.g. /var/ossec/queue/db -> "wazuh-data-queue-db". Lowercase DNS-1123.
-func splitVolumeName(path string) string {
+func SplitVolumeName(path string) string {
 	rel := strings.ToLower(strings.TrimPrefix(path, constants.PathWazuhBase+"/"))
 	var sb strings.Builder
 	prevDash := false
@@ -979,7 +979,7 @@ func (b *baseStatefulSetBuilder[T]) buildManagerVolumeClaimTemplates(selectorLab
 			sc = b.storageClassName
 		}
 		vcts = append(vcts, corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{Name: splitVolumeName(vc.Path), Labels: selectorLabels},
+			ObjectMeta: metav1.ObjectMeta{Name: SplitVolumeName(vc.Path), Labels: selectorLabels},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes:      []corev1.PersistentVolumeAccessMode{accessMode},
 				StorageClassName: sc,
@@ -1002,7 +1002,7 @@ func (b *baseStatefulSetBuilder[T]) applyVolumeClaimMounts(base []corev1.VolumeM
 	}
 	dedicated := make(map[string]string, len(b.volumeClaims))
 	for _, vc := range b.volumeClaims {
-		dedicated[vc.Path] = splitVolumeName(vc.Path)
+		dedicated[vc.Path] = SplitVolumeName(vc.Path)
 	}
 	out := make([]corev1.VolumeMount, 0, len(base)+len(b.volumeClaims))
 	replaced := make(map[string]bool)
@@ -1024,7 +1024,7 @@ func (b *baseStatefulSetBuilder[T]) applyVolumeClaimMounts(base []corev1.VolumeM
 	}
 	sort.Slice(pending, func(i, j int) bool { return len(pending[i].Path) < len(pending[j].Path) })
 	for _, vc := range pending {
-		out = append(out, corev1.VolumeMount{Name: splitVolumeName(vc.Path), MountPath: vc.Path})
+		out = append(out, corev1.VolumeMount{Name: SplitVolumeName(vc.Path), MountPath: vc.Path})
 	}
 	return out
 }
@@ -1041,7 +1041,7 @@ func (b *baseStatefulSetBuilder[T]) buildMigrationInitContainer() (corev1.Contai
 	var sb strings.Builder
 	sb.WriteString("set -eu\n")
 	for _, vc := range sortedVolumeClaims(b.volumeClaims) {
-		vol := splitVolumeName(vc.Path)
+		vol := SplitVolumeName(vc.Path)
 		src := "/wazuh-data/" + oldSubPathForPath(vc.Path)
 		dst := "/migrate/" + vol
 		mounts = append(mounts, corev1.VolumeMount{Name: vol, MountPath: dst})
