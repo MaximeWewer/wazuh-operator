@@ -19,9 +19,11 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -292,10 +294,10 @@ func (r *RoleReconciler) updateStatus(ctx context.Context, role *wazuhv1.OpenSea
 
 // handleDeletion handles role cleanup on deletion
 func (r *RoleReconciler) handleDeletion(ctx context.Context, role *wazuhv1.OpenSearchRole) error {
-	log := logf.FromContext(ctx)
-
 	if err := r.Delete(ctx, role); err != nil {
-		log.Error(err, "Failed to delete role from OpenSearch, proceeding with finalizer removal")
+		// Keep the finalizer and let the controller requeue: never remove it while the
+		// OpenSearch object may still exist, or it would be leaked.
+		return err
 	}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -311,20 +313,32 @@ func (r *RoleReconciler) handleDeletion(ctx context.Context, role *wazuhv1.OpenS
 // Delete handles cleanup when a role is deleted (best-effort across every cluster ref).
 func (r *RoleReconciler) Delete(ctx context.Context, role *wazuhv1.OpenSearchRole) error {
 	log := logf.FromContext(ctx)
+	var cleanupErrs []string
 	for _, ref := range role.Spec.ClusterRefs {
 		osClient, err := r.getOpenSearchClientForRef(ctx, ref)
 		if err != nil {
-			log.Info("Skipping role deletion on cluster - failed to get client",
-				"cluster", ref.Name, "clusterNamespace", ref.Namespace, "error", err)
+			if errors.IsNotFound(err) {
+				// The cluster itself is gone, so the role went with it: nothing to delete.
+				log.Info("Cluster not found during delete, skipping OpenSearch cleanup",
+					"cluster", ref.Name, "clusterNamespace", ref.Namespace)
+				continue
+			}
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: connect: %v", ref.Namespace, ref.Name, err))
 			continue
 		}
 		if err := osClient.DeleteRole(ctx, role.ResolveRoleName()); err != nil {
 			r.recordEvent(role, corev1.EventTypeWarning, "DeleteFailed",
 				fmt.Sprintf("Failed to delete role from %s/%s: %v", ref.Namespace, ref.Name, err))
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: delete role: %v", ref.Namespace, ref.Name, err))
 			continue
 		}
 		log.Info("Deleted OpenSearch role on cluster",
 			"name", role.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+	}
+	if len(cleanupErrs) > 0 {
+		// Keep the finalizer and retry: the role must actually be removed from OpenSearch,
+		// not silently leaked when the API is unavailable or the delete fails.
+		return fmt.Errorf("role %q cleanup incomplete, will retry: %s", role.ResolveRoleName(), strings.Join(cleanupErrs, "; "))
 	}
 	r.recordEvent(role, corev1.EventTypeNormal, "Deleted", "Role deletion processed on all target clusters")
 	return nil

@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
@@ -338,40 +339,57 @@ func (r *WazuhAPIRoleReconciler) Delete(ctx context.Context, role *wazuhv1.Wazuh
 		byKey[clusterKey(s.Name, s.Namespace)] = s
 	}
 
+	var cleanupErrs []string
 	for _, ref := range role.Spec.ClusterRefs {
 		st := byKey[clusterKey(ref.Name, ref.Namespace)]
 		cluster := &wazuhv1.WazuhCluster{}
 		if err := r.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace}, cluster); err != nil {
-			log.Info("Cluster not found during delete, skipping API cleanup", "cluster", ref.Name)
+			if errors.IsNotFound(err) {
+				// The cluster itself is gone, so the role went with it: nothing to delete.
+				log.Info("Cluster not found during delete, skipping API cleanup", "cluster", ref.Name)
+				continue
+			}
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: get cluster: %v", ref.Namespace, ref.Name, err))
 			continue
 		}
 		apiClient, err := buildWazuhAPIClient(ctx, r.Client, cluster)
 		if err != nil {
-			log.Info("Wazuh API unavailable during delete, skipping API cleanup", "cluster", ref.Name, "error", err)
+			// API temporarily unavailable: retry rather than leak the role.
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: build API client: %v", ref.Namespace, ref.Name, err))
 			continue
 		}
 
 		if st.RoleID >= adapters.ReservedRBACIDThreshold {
-			_ = apiClient.UnlinkRoleRules(ctx, st.RoleID, mapValues(st.RuleIDs))
-			_ = apiClient.UnlinkRolePolicies(ctx, st.RoleID, mapValues(st.PolicyIDs))
+			if err := apiClient.UnlinkRoleRules(ctx, st.RoleID, mapValues(st.RuleIDs)); err != nil {
+				cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: unlink role rules: %v", ref.Namespace, ref.Name, err))
+			}
+			if err := apiClient.UnlinkRolePolicies(ctx, st.RoleID, mapValues(st.PolicyIDs)); err != nil {
+				cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: unlink role policies: %v", ref.Namespace, ref.Name, err))
+			}
 			if err := apiClient.DeleteRoles(ctx, st.RoleID); err != nil {
-				log.Error(err, "Failed to delete role from Wazuh API, continuing", "cluster", ref.Name)
+				cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: delete role: %v", ref.Namespace, ref.Name, err))
 			}
 		}
 		for name, id := range st.PolicyIDs {
 			if id >= adapters.ReservedRBACIDThreshold {
 				if err := apiClient.DeletePolicies(ctx, id); err != nil {
-					log.Error(err, "Failed to delete policy from Wazuh API, continuing", "policy", name, "id", id)
+					cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: delete policy %q (id %d): %v", ref.Namespace, ref.Name, name, id, err))
 				}
 			}
 		}
 		for name, id := range st.RuleIDs {
 			if id >= adapters.ReservedRBACIDThreshold {
 				if err := apiClient.DeleteRules(ctx, id); err != nil {
-					log.Error(err, "Failed to delete rule from Wazuh API, continuing", "rule", name, "id", id)
+					cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: delete rule %q (id %d): %v", ref.Namespace, ref.Name, name, id, err))
 				}
 			}
 		}
+	}
+
+	if len(cleanupErrs) > 0 {
+		// Keep the finalizer and retry: the role must actually be removed from Wazuh, not
+		// silently leaked when the API is unavailable or the delete fails.
+		return fmt.Errorf("role %q cleanup incomplete, will retry: %s", role.ResolveRoleName(), strings.Join(cleanupErrs, "; "))
 	}
 
 	r.event(role, corev1.EventTypeNormal, "Deleted",

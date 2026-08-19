@@ -19,9 +19,11 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -258,10 +260,10 @@ func (r *PolicyReconciler) updateStatus(ctx context.Context, policy *wazuhv1.Ope
 
 // handleDeletion handles ISM policy cleanup on deletion
 func (r *PolicyReconciler) handleDeletion(ctx context.Context, policy *wazuhv1.OpenSearchISMPolicy) error {
-	log := logf.FromContext(ctx)
-
 	if err := r.Delete(ctx, policy); err != nil {
-		log.Error(err, "Failed to delete ISM policy from OpenSearch, proceeding with finalizer removal")
+		// Keep the finalizer and let the controller requeue: never remove it while the
+		// OpenSearch object may still exist, or it would be leaked.
+		return err
 	}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -282,21 +284,33 @@ func (r *PolicyReconciler) Delete(ctx context.Context, policy *wazuhv1.OpenSearc
 		log.Info("Skipping ISM policy deletion - no client factory available")
 		return nil
 	}
+	var cleanupErrs []string
 	for _, ref := range policy.Spec.ClusterRefs {
 		apiClient, err := r.ClientFactory.GetClientForClusterRef(ctx, ref)
 		if err != nil {
-			log.Info("Skipping ISM policy deletion on cluster - failed to get client",
-				"cluster", ref.Name, "clusterNamespace", ref.Namespace, "error", err)
+			if errors.IsNotFound(err) {
+				// The cluster itself is gone, so the ISM policy went with it: nothing to delete.
+				log.Info("Cluster not found during delete, skipping OpenSearch cleanup",
+					"cluster", ref.Name, "clusterNamespace", ref.Namespace)
+				continue
+			}
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: connect: %v", ref.Namespace, ref.Name, err))
 			continue
 		}
 		ismAPI := api.NewISMAPI(apiClient)
 		if err := ismAPI.Delete(ctx, policy.Name); err != nil {
 			r.recordEvent(policy, corev1.EventTypeWarning, "DeleteFailed",
 				fmt.Sprintf("Failed to delete ISM policy from %s/%s: %v", ref.Namespace, ref.Name, err))
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: delete ISM policy: %v", ref.Namespace, ref.Name, err))
 			continue
 		}
 		log.Info("Deleted OpenSearch ISM policy on cluster",
 			"name", policy.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+	}
+	if len(cleanupErrs) > 0 {
+		// Keep the finalizer and retry: the ISM policy must actually be removed from OpenSearch,
+		// not silently leaked when the API is unavailable or the delete fails.
+		return fmt.Errorf("ISM policy %q cleanup incomplete, will retry: %s", policy.Name, strings.Join(cleanupErrs, "; "))
 	}
 	r.recordEvent(policy, corev1.EventTypeNormal, "Deleted", "ISM policy deletion processed on all target clusters")
 	return nil

@@ -19,9 +19,11 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -315,10 +317,10 @@ func (r *UserReconciler) updateStatus(ctx context.Context, user *wazuhv1.OpenSea
 
 // handleDeletion handles user cleanup on deletion
 func (r *UserReconciler) handleDeletion(ctx context.Context, user *wazuhv1.OpenSearchUser) error {
-	log := logf.FromContext(ctx)
-
 	if err := r.Delete(ctx, user); err != nil {
-		log.Error(err, "Failed to delete user from OpenSearch, proceeding with finalizer removal")
+		// Keep the finalizer and let the controller requeue: never remove it while the
+		// OpenSearch object may still exist, or it would be leaked.
+		return err
 	}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -336,19 +338,33 @@ func (r *UserReconciler) Delete(ctx context.Context, user *wazuhv1.OpenSearchUse
 	log := logf.FromContext(ctx)
 	username := user.Name
 
+	var cleanupErrs []string
 	for _, ref := range user.Spec.ClusterRefs {
 		osClient, err := r.getOpenSearchClientForRef(ctx, ref)
 		if err != nil {
+			if errors.IsNotFound(err) {
+				// The cluster itself is gone, so the user went with it: nothing to delete.
+				log.Info("Cluster not found during delete, skipping OpenSearch cleanup",
+					"cluster", ref.Name, "clusterNamespace", ref.Namespace)
+				continue
+			}
 			r.recordEvent(user, corev1.EventTypeWarning, "DeleteFailed",
 				fmt.Sprintf("Failed to connect to %s/%s for deletion: %v", ref.Namespace, ref.Name, err))
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: connect: %v", ref.Namespace, ref.Name, err))
 			continue
 		}
 		if err := osClient.DeleteUser(ctx, username); err != nil {
 			r.recordEvent(user, corev1.EventTypeWarning, "DeleteFailed",
 				fmt.Sprintf("Failed to delete user from %s/%s: %v", ref.Namespace, ref.Name, err))
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: delete user: %v", ref.Namespace, ref.Name, err))
 			continue
 		}
 		log.Info("Deleted OpenSearch user", "username", username, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+	}
+	if len(cleanupErrs) > 0 {
+		// Keep the finalizer and retry: the user must actually be removed from OpenSearch,
+		// not silently leaked when the API is unavailable or the delete fails.
+		return fmt.Errorf("user %q cleanup incomplete, will retry: %s", username, strings.Join(cleanupErrs, "; "))
 	}
 	r.recordEvent(user, corev1.EventTypeNormal, "Deleted", "User deletion processed on all target clusters")
 	return nil

@@ -19,9 +19,11 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -200,10 +202,10 @@ func (r *ActionGroupReconciler) updateStatus(ctx context.Context, ag *wazuhv1.Op
 
 // handleDeletion handles action group cleanup on deletion
 func (r *ActionGroupReconciler) handleDeletion(ctx context.Context, ag *wazuhv1.OpenSearchActionGroup) error {
-	log := logf.FromContext(ctx)
-
 	if err := r.Delete(ctx, ag); err != nil {
-		log.Error(err, "Failed to delete action group from OpenSearch, proceeding with finalizer removal")
+		// Keep the finalizer and let the controller requeue: never remove it while the
+		// OpenSearch object may still exist, or it would be leaked.
+		return err
 	}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -225,12 +227,18 @@ func (r *ActionGroupReconciler) Delete(ctx context.Context, ag *wazuhv1.OpenSear
 		return nil
 	}
 
-	// Delete on every target cluster (best-effort).
+	// Delete on every target cluster.
+	var cleanupErrs []string
 	for _, ref := range ag.Spec.ClusterRefs {
 		apiClient, err := r.ClientFactory.GetClientForClusterRef(ctx, ref)
 		if err != nil {
-			log.Info("Skipping action group deletion on cluster - failed to get OpenSearch client",
-				"cluster", ref.Name, "clusterNamespace", ref.Namespace, "error", err)
+			if errors.IsNotFound(err) {
+				// The cluster itself is gone, so the action group went with it: nothing to delete.
+				log.Info("Cluster not found during delete, skipping OpenSearch cleanup",
+					"cluster", ref.Name, "clusterNamespace", ref.Namespace)
+				continue
+			}
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: connect: %v", ref.Namespace, ref.Name, err))
 			continue
 		}
 		securityAPI := api.NewSecurityAPI(apiClient)
@@ -238,10 +246,16 @@ func (r *ActionGroupReconciler) Delete(ctx context.Context, ag *wazuhv1.OpenSear
 			r.recordEvent(ag, corev1.EventTypeWarning, "DeleteFailed",
 				fmt.Sprintf("Failed to delete action group on %s/%s: %v", ref.Namespace, ref.Name, err))
 			log.Error(err, "Failed to delete action group", "cluster", ref.Name)
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: delete action group: %v", ref.Namespace, ref.Name, err))
 			continue
 		}
 		log.Info("Deleted OpenSearch action group on cluster",
 			"name", ag.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+	}
+	if len(cleanupErrs) > 0 {
+		// Keep the finalizer and retry: the action group must actually be removed from OpenSearch,
+		// not silently leaked when the API is unavailable or the delete fails.
+		return fmt.Errorf("action group %q cleanup incomplete, will retry: %s", ag.Name, strings.Join(cleanupErrs, "; "))
 	}
 	r.recordEvent(ag, corev1.EventTypeNormal, "Deleted", "Action group deletion processed on all target clusters")
 	return nil

@@ -19,9 +19,11 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -210,10 +212,10 @@ func (r *RoleMappingReconciler) updateStatus(ctx context.Context, mapping *wazuh
 
 // handleDeletion handles role mapping cleanup on deletion
 func (r *RoleMappingReconciler) handleDeletion(ctx context.Context, mapping *wazuhv1.OpenSearchRoleMapping) error {
-	log := logf.FromContext(ctx)
-
 	if err := r.Delete(ctx, mapping); err != nil {
-		log.Error(err, "Failed to delete role mapping from OpenSearch, proceeding with finalizer removal")
+		// Keep the finalizer and let the controller requeue: never remove it while the
+		// OpenSearch object may still exist, or it would be leaked.
+		return err
 	}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -234,21 +236,33 @@ func (r *RoleMappingReconciler) Delete(ctx context.Context, mapping *wazuhv1.Ope
 		log.Info("Skipping role mapping deletion - no client factory available")
 		return nil
 	}
+	var cleanupErrs []string
 	for _, ref := range mapping.Spec.ClusterRefs {
 		apiClient, err := r.ClientFactory.GetClientForClusterRef(ctx, ref)
 		if err != nil {
-			log.Info("Skipping role mapping deletion on cluster - failed to get client",
-				"cluster", ref.Name, "clusterNamespace", ref.Namespace, "error", err)
+			if errors.IsNotFound(err) {
+				// The cluster itself is gone, so the role mapping went with it: nothing to delete.
+				log.Info("Cluster not found during delete, skipping OpenSearch cleanup",
+					"cluster", ref.Name, "clusterNamespace", ref.Namespace)
+				continue
+			}
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: connect: %v", ref.Namespace, ref.Name, err))
 			continue
 		}
 		securityAPI := api.NewSecurityAPI(apiClient)
 		if err := securityAPI.DeleteRoleMapping(ctx, mapping.ResolveRoleName()); err != nil {
 			r.recordEvent(mapping, corev1.EventTypeWarning, "DeleteFailed",
 				fmt.Sprintf("Failed to delete role mapping from %s/%s: %v", ref.Namespace, ref.Name, err))
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: delete role mapping: %v", ref.Namespace, ref.Name, err))
 			continue
 		}
 		log.Info("Deleted OpenSearch role mapping on cluster",
 			"name", mapping.Name, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+	}
+	if len(cleanupErrs) > 0 {
+		// Keep the finalizer and retry: the role mapping must actually be removed from OpenSearch,
+		// not silently leaked when the API is unavailable or the delete fails.
+		return fmt.Errorf("role mapping %q cleanup incomplete, will retry: %s", mapping.ResolveRoleName(), strings.Join(cleanupErrs, "; "))
 	}
 	r.recordEvent(mapping, corev1.EventTypeNormal, "Deleted", "Role mapping deletion processed on all target clusters")
 	return nil

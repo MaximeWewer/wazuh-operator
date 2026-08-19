@@ -19,9 +19,11 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -336,10 +338,10 @@ func (r *IndexReconciler) updateStatus(ctx context.Context, index *wazuhv1.OpenS
 
 // handleDeletion handles index cleanup on deletion
 func (r *IndexReconciler) handleDeletion(ctx context.Context, index *wazuhv1.OpenSearchIndex) error {
-	log := logf.FromContext(ctx)
-
 	if err := r.Delete(ctx, index); err != nil {
-		log.Error(err, "Failed to delete index from OpenSearch, proceeding with finalizer removal")
+		// Keep the finalizer and let the controller requeue: never remove it while the
+		// OpenSearch object may still exist, or it would be leaked.
+		return err
 	}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -356,20 +358,34 @@ func (r *IndexReconciler) handleDeletion(ctx context.Context, index *wazuhv1.Ope
 func (r *IndexReconciler) Delete(ctx context.Context, index *wazuhv1.OpenSearchIndex) error {
 	log := logf.FromContext(ctx)
 	indexName := index.Name
+	var cleanupErrs []string
 	for _, ref := range index.Spec.ClusterRefs {
 		osClient, err := r.getOpenSearchClientForRef(ctx, ref)
 		if err != nil {
+			if errors.IsNotFound(err) {
+				// The cluster itself is gone, so the index went with it: nothing to delete.
+				log.Info("Cluster not found during delete, skipping OpenSearch cleanup",
+					"cluster", ref.Name, "clusterNamespace", ref.Namespace)
+				continue
+			}
 			r.recordEvent(index, corev1.EventTypeWarning, "DeleteFailed",
 				fmt.Sprintf("Failed to connect to %s/%s for deletion: %v", ref.Namespace, ref.Name, err))
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: connect: %v", ref.Namespace, ref.Name, err))
 			continue
 		}
 		if err := osClient.DeleteIndex(ctx, indexName); err != nil {
 			r.recordEvent(index, corev1.EventTypeWarning, "DeleteFailed",
 				fmt.Sprintf("Failed to delete index from %s/%s: %v", ref.Namespace, ref.Name, err))
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: delete index: %v", ref.Namespace, ref.Name, err))
 			continue
 		}
 		log.Info("Deleted OpenSearch index on cluster",
 			"name", indexName, "cluster", ref.Name, "clusterNamespace", ref.Namespace)
+	}
+	if len(cleanupErrs) > 0 {
+		// Keep the finalizer and retry: the index must actually be removed from OpenSearch,
+		// not silently leaked when the API is unavailable or the delete fails.
+		return fmt.Errorf("index %q cleanup incomplete, will retry: %s", indexName, strings.Join(cleanupErrs, "; "))
 	}
 	r.recordEvent(index, corev1.EventTypeNormal, "Deleted", "Index deletion processed on all target clusters")
 	return nil

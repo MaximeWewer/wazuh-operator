@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 	corev1 "k8s.io/api/core/v1"
@@ -302,6 +303,7 @@ func (r *WazuhAPIUserReconciler) Delete(ctx context.Context, user *wazuhv1.Wazuh
 		byKey[clusterKey(s.Name, s.Namespace)] = s
 	}
 
+	var cleanupErrs []string
 	for _, ref := range user.Spec.ClusterRefs {
 		st := byKey[clusterKey(ref.Name, ref.Namespace)]
 		if st.UserID < adapters.ReservedRBACIDThreshold {
@@ -309,18 +311,32 @@ func (r *WazuhAPIUserReconciler) Delete(ctx context.Context, user *wazuhv1.Wazuh
 		}
 		cluster := &wazuhv1.WazuhCluster{}
 		if err := r.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace}, cluster); err != nil {
-			log.Info("Cluster not found during delete, skipping API cleanup", "cluster", ref.Name)
+			if errors.IsNotFound(err) {
+				// The cluster itself is gone, so the user went with it: nothing to delete.
+				log.Info("Cluster not found during delete, skipping API cleanup", "cluster", ref.Name)
+				continue
+			}
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: get cluster: %v", ref.Namespace, ref.Name, err))
 			continue
 		}
 		apiClient, err := buildWazuhAPIClient(ctx, r.Client, cluster)
 		if err != nil {
-			log.Info("Wazuh API unavailable during delete, skipping API cleanup", "cluster", ref.Name, "error", err)
+			// API temporarily unavailable: retry rather than leak the user.
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: build API client: %v", ref.Namespace, ref.Name, err))
 			continue
 		}
-		_ = apiClient.UnlinkUserRoles(ctx, st.UserID, mapValues(st.AssignedRoleIDs))
-		if err := apiClient.DeleteUsers(ctx, st.UserID); err != nil {
-			log.Error(err, "Failed to delete user from Wazuh API, continuing", "cluster", ref.Name)
+		if err := apiClient.UnlinkUserRoles(ctx, st.UserID, mapValues(st.AssignedRoleIDs)); err != nil {
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: unlink user roles: %v", ref.Namespace, ref.Name, err))
 		}
+		if err := apiClient.DeleteUsers(ctx, st.UserID); err != nil {
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("%s/%s: delete user: %v", ref.Namespace, ref.Name, err))
+		}
+	}
+
+	if len(cleanupErrs) > 0 {
+		// Keep the finalizer and retry: the user must actually be removed from Wazuh, not
+		// silently leaked when the API is unavailable or the delete fails.
+		return fmt.Errorf("user %q cleanup incomplete, will retry: %s", user.ResolveUsername(), strings.Join(cleanupErrs, "; "))
 	}
 
 	r.event(user, corev1.EventTypeNormal, "Deleted",
