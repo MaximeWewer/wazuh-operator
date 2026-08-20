@@ -73,6 +73,11 @@ const (
 	cdbListFetchTimeout = 30 * time.Second
 )
 
+// errCDBListRefreshSkipped signals that resolveContent intentionally skipped re-fetching a
+// URL source that is not due for refresh and has no operator-delivered content to reuse
+// (init-fetch delivery). It is a control signal, not a failure.
+var errCDBListRefreshSkipped = fmt.Errorf("cdb list refresh skipped (not due)")
+
 // CDBListReconciler handles reconciliation of Wazuh CDB lists.
 type CDBListReconciler struct {
 	client.Client
@@ -136,6 +141,11 @@ func (r *CDBListReconciler) Reconcile(ctx context.Context, list *wazuhv1.WazuhCD
 
 	// Resolve the desired list content (fetches the URL when a source is due for refresh).
 	content, fetched, err := r.resolveContent(ctx, list)
+	if err == errCDBListRefreshSkipped {
+		// Not due for refresh and nothing for the operator to deliver (init-fetch list).
+		// Leave the existing status untouched and requeue for the next periodic refresh.
+		return r.refreshInterval(list), nil
+	}
 	if err != nil {
 		list.Status.Phase = wazuhv1.CDBListPhaseFailed
 		list.Status.Message = err.Error()
@@ -243,6 +253,12 @@ func (r *CDBListReconciler) resolveContent(ctx context.Context, list *wazuhv1.Wa
 			if existing, ok := r.readExistingContent(ctx, list); ok {
 				return existing, false, nil
 			}
+			// No operator-stored ConfigMap to reuse: this is an init-fetch list whose
+			// content is delivered by a pod init-container at startup, not by the operator.
+			// Since the source is not due for a refresh, skip re-fetching entirely —
+			// otherwise we would rewrite LastFetchTime on every reconcile, hot-loop the
+			// controller, and hammer the upstream feed.
+			return "", false, errCDBListRefreshSkipped
 		}
 		raw, err := r.fetch(ctx, list)
 		if err != nil {
@@ -749,8 +765,13 @@ func (r *CDBListReconciler) GetCDBListConfigMapsForCluster(ctx context.Context, 
 				SkipLines:          l.Spec.SkipLines,
 				InsecureSkipVerify: insecure,
 			})
-			hashInputs = append(hashInputs, fmt.Sprintf("%s=initfetch:%s:%s:%d:%t:%s",
-				l.Spec.ListName, url, format, l.Spec.SkipLines, insecure, l.Status.ContentHash))
+			// initFetch content is pulled at pod start by the init-container, so a change
+			// in the upstream feed does not require a rolling restart: the pod re-fetches on
+			// its next start. Only the fetch *config* (url/format/skiplines/insecure) belongs
+			// in the restart hash. Including the volatile ContentHash here caused perpetual
+			// manager rollouts whenever a threat-intel feed changed.
+			hashInputs = append(hashInputs, fmt.Sprintf("%s=initfetch:%s:%s:%d:%t",
+				l.Spec.ListName, url, format, l.Spec.SkipLines, insecure))
 			continue
 		}
 
