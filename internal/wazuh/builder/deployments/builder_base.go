@@ -599,6 +599,18 @@ chown 0:999 /var/ossec/etc/shared/ar.conf
 chmod 660 /var/ossec/etc/shared/ar.conf
 chown 0:999 /var/ossec/etc/shared
 chmod 770 /var/ossec/etc/shared
+# Seed the built-in "default" agent group. /var/ossec/etc is PVC-backed, so on a fresh
+# volume the default group shipped in the image is shadowed by the empty mount; without it
+# wazuh-db logs "Unable to find the id of the group 'default'" and every agent stays
+# permanently unassigned. Only create agent.conf when missing so existing groups (and their
+# generated merged.mg) are never clobbered on restart.
+mkdir -p /var/ossec/etc/shared/default
+if [ ! -f /var/ossec/etc/shared/default/agent.conf ]; then
+    touch /var/ossec/etc/shared/default/agent.conf
+fi
+chown 0:999 /var/ossec/etc/shared/default /var/ossec/etc/shared/default/agent.conf
+chmod 770 /var/ossec/etc/shared/default
+chmod 660 /var/ossec/etc/shared/default/agent.conf
 # Copy ossec.conf if it exists
 if [ -f /config-source/ossec.conf ]; then
     cp /config-source/ossec.conf /wazuh-config-mount/etc/ossec.conf
