@@ -192,7 +192,7 @@ func NewNodeConfigMap(clusterName, namespace string, workerReplicas int) *NodeCo
 		Workers: make(map[int]*ClusterNodeConfig),
 	}
 
-	for i := 0; i < workerReplicas; i++ {
+	for i := range workerReplicas {
 		ncm.Workers[i] = DefaultWorkerNodeConfig(clusterName, namespace, i)
 	}
 

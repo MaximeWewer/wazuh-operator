@@ -69,8 +69,7 @@ func TestInitialize(t *testing.T) {
 
 			// Set environment variable
 			if tt.envValue != "" {
-				os.Setenv(EnvVMMaxMapCount, tt.envValue)
-				defer os.Unsetenv(EnvVMMaxMapCount)
+				t.Setenv(EnvVMMaxMapCount, tt.envValue)
 			} else {
 				os.Unsetenv(EnvVMMaxMapCount)
 			}

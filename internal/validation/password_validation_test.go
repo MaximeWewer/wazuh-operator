@@ -108,8 +108,7 @@ func TestValidateWazuhPassword(t *testing.T) {
 			}
 
 			if tt.wantErr && err != nil {
-				var pve *PasswordValidationError
-				if errors.As(err, &pve) {
+				if pve, ok := errors.AsType[*PasswordValidationError](err); ok {
 					if len(pve.Reasons) != tt.errCount {
 						t.Errorf("ValidateWazuhPassword() got %d errors, want %d errors. Errors: %v",
 							len(pve.Reasons), tt.errCount, pve.Reasons)

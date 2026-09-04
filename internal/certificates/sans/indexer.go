@@ -38,7 +38,7 @@ func GenerateIndexerNodeSANs(clusterName, namespace string, replicas int32) []st
 	}
 
 	// Add individual pod names
-	for i := int32(0); i < replicas; i++ {
+	for i := range replicas {
 		podName := fmt.Sprintf("%s-indexer-%d", clusterName, i)
 		sans = append(sans, podName, dns.PodFQDN(podName, headlessService, namespace))
 	}

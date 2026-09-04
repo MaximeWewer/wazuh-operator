@@ -127,7 +127,7 @@ func TestVolumeClaims_SplitNested(t *testing.T) {
 	if child.SubPath != "" || child.Name != "wazuh-data-queue-db" {
 		t.Errorf("queue/db mount = %+v, want dedicated PVC with no subPath", child)
 	}
-	if !(pi < ci) {
+	if pi >= ci {
 		t.Errorf("parent /var/ossec/queue (idx %d) must precede child /var/ossec/queue/db (idx %d)", pi, ci)
 	}
 	_ = parent

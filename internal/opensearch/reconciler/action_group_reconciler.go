@@ -214,7 +214,7 @@ func (r *ActionGroupReconciler) handleDeletion(ctx context.Context, ag *wazuhv1.
 			return err
 		}
 		controllerutil.RemoveFinalizer(latest, constants.ActionGroupFinalizer)
-		return r.Client.Update(ctx, latest)
+		return r.Update(ctx, latest)
 	})
 }
 

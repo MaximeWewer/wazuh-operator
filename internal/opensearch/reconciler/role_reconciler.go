@@ -232,14 +232,6 @@ func (r *RoleReconciler) buildRole(role *wazuhv1.OpenSearchRole) adapters.Securi
 	return osRole
 }
 
-// getOpenSearchClient (legacy) returns a client for the first cluster ref.
-func (r *RoleReconciler) getOpenSearchClient(ctx context.Context, role *wazuhv1.OpenSearchRole) (*adapters.OpenSearchHTTPAdapter, error) {
-	if len(role.Spec.ClusterRefs) == 0 {
-		return nil, fmt.Errorf("no cluster references configured")
-	}
-	return r.getOpenSearchClientForRef(ctx, role.Spec.ClusterRefs[0])
-}
-
 // getOpenSearchClientForRef builds an HTTP adapter for the given cluster ref.
 func (r *RoleReconciler) getOpenSearchClientForRef(ctx context.Context, ref wazuhv1.WazuhClusterRef) (*adapters.OpenSearchHTTPAdapter, error) {
 	if r.ClientFactory == nil {
@@ -306,7 +298,7 @@ func (r *RoleReconciler) handleDeletion(ctx context.Context, role *wazuhv1.OpenS
 			return err
 		}
 		controllerutil.RemoveFinalizer(latest, constants.RoleFinalizer)
-		return r.Client.Update(ctx, latest)
+		return r.Update(ctx, latest)
 	})
 }
 

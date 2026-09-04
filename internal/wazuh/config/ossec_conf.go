@@ -994,16 +994,35 @@ func RulesetConfigFromSpec(spec *v1.OSSECRulesetSpec) *RulesetConfig {
 	return config
 }
 
+// WazuhConfigSections bundles the ossec.conf sections derived from a WazuhConfigSpec.
+type WazuhConfigSections struct {
+	Global  *GlobalConfig
+	Alerts  *AlertsConfig
+	Logging *LoggingConfig
+	Remote  *RemoteConfig
+	Auth    *AuthConfig
+	Ruleset *RulesetConfig
+}
+
 // WazuhConfigFromSpec converts WazuhConfigSpec to all config structs
 // This is a convenience function that converts all config sections at once
-func WazuhConfigFromSpec(spec *v1.WazuhConfigSpec) (global *GlobalConfig, alerts *AlertsConfig, logging *LoggingConfig, remote *RemoteConfig, auth *AuthConfig, ruleset *RulesetConfig) {
+func WazuhConfigFromSpec(spec *v1.WazuhConfigSpec) WazuhConfigSections {
 	if spec == nil {
-		return DefaultGlobalConfig(), DefaultAlertsConfig(), DefaultLoggingConfig(), DefaultRemoteConfig(), DefaultAuthConfig(), DefaultRulesetConfig()
+		return WazuhConfigSections{
+			Global:  DefaultGlobalConfig(),
+			Alerts:  DefaultAlertsConfig(),
+			Logging: DefaultLoggingConfig(),
+			Remote:  DefaultRemoteConfig(),
+			Auth:    DefaultAuthConfig(),
+			Ruleset: DefaultRulesetConfig(),
+		}
 	}
-	return GlobalConfigFromSpec(spec.Global),
-		AlertsConfigFromSpec(spec.Alerts),
-		LoggingConfigFromSpec(spec.Logging),
-		RemoteConfigFromSpec(spec.Remote),
-		AuthConfigFromSpec(spec.Auth),
-		RulesetConfigFromSpec(spec.Ruleset)
+	return WazuhConfigSections{
+		Global:  GlobalConfigFromSpec(spec.Global),
+		Alerts:  AlertsConfigFromSpec(spec.Alerts),
+		Logging: LoggingConfigFromSpec(spec.Logging),
+		Remote:  RemoteConfigFromSpec(spec.Remote),
+		Auth:    AuthConfigFromSpec(spec.Auth),
+		Ruleset: RulesetConfigFromSpec(spec.Ruleset),
+	}
 }

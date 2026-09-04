@@ -268,7 +268,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			r.emitDrainEvent(cluster, constants.DrainComponentIndexer, "ValidationFailed",
 				fmt.Sprintf("NodePool validation failed: %s", validationResult.Errors[0].Message))
 
-			r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing,
+			r.persistProgressingFailure(ctx, cluster,
 				"NodePoolValidationFailed", validationResult.Errors[0].Message)
 
 			// Don't proceed with reconciliation if validation fails
@@ -343,14 +343,14 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		certHashes, certErr = r.CertificateReconciler.ReconcileWithHashes(ctx, cluster)
 		if certErr != nil {
 			log.Error(certErr, "Failed to reconcile certificates with CertificateReconciler")
-			r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "CertificatesFailed", certErr.Error())
+			r.persistProgressingFailure(ctx, cluster, "CertificatesFailed", certErr.Error())
 			return ctrl.Result{}, certErr
 		}
 	} else {
 		// Fallback to ClusterReconciler for basic certificate creation
 		if err := r.ClusterReconciler.ReconcileCertificates(ctx, cluster); err != nil {
 			log.Error(err, "Failed to reconcile certificates")
-			r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "CertificatesFailed", err.Error())
+			r.persistProgressingFailure(ctx, cluster, "CertificatesFailed", err.Error())
 			return ctrl.Result{}, err
 		}
 	}
@@ -445,7 +445,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	indexerResult := r.IndexerReconciler.ReconcileNonBlocking(ctx, cluster, indexerCertHash)
 	if indexerResult.Error != nil {
 		log.Error(indexerResult.Error, "Failed to reconcile Indexer")
-		r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "IndexerFailed", indexerResult.Error.Error())
+		r.persistProgressingFailure(ctx, cluster, "IndexerFailed", indexerResult.Error.Error())
 		return ctrl.Result{}, indexerResult.Error
 	}
 	if indexerResult.PendingRollout != nil {
@@ -517,7 +517,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	managerResult := r.ClusterReconciler.ReconcileManagerNonBlocking(ctx, cluster, masterCertHash, workerCertHash)
 	if managerResult.Error != nil {
 		log.Error(managerResult.Error, "Failed to reconcile Manager")
-		r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "ManagerFailed", managerResult.Error.Error())
+		r.persistProgressingFailure(ctx, cluster, "ManagerFailed", managerResult.Error.Error())
 		return ctrl.Result{}, managerResult.Error
 	}
 	newPendingRollouts = append(newPendingRollouts, managerResult.PendingRollouts...)
@@ -546,7 +546,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	dashboardResult := r.DashboardReconciler.ReconcileNonBlocking(ctx, cluster, dashboardCertHash)
 	if dashboardResult.Error != nil {
 		log.Error(dashboardResult.Error, "Failed to reconcile Dashboard")
-		r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "DashboardFailed", dashboardResult.Error.Error())
+		r.persistProgressingFailure(ctx, cluster, "DashboardFailed", dashboardResult.Error.Error())
 		return ctrl.Result{}, dashboardResult.Error
 	}
 	if dashboardResult.PendingRollout != nil {
@@ -584,7 +584,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		} else if r.GatewayReconciler != nil {
 			if err := r.GatewayReconciler.Reconcile(ctx, cluster); err != nil {
 				log.Error(err, "Failed to reconcile Gateway API routes")
-				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "GatewayAPIFailed", err.Error())
+				r.persistProgressingFailure(ctx, cluster, "GatewayAPIFailed", err.Error())
 				return ctrl.Result{}, err
 			}
 		}
@@ -602,7 +602,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if r.IngressReconciler != nil {
 			if err := r.IngressReconciler.Reconcile(ctx, cluster); err != nil {
 				log.Error(err, "Failed to reconcile Ingress resources")
-				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "IngressFailed", err.Error())
+				r.persistProgressingFailure(ctx, cluster, "IngressFailed", err.Error())
 				return ctrl.Result{}, err
 			}
 		}
@@ -620,7 +620,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if r.NetworkPolicyReconciler != nil {
 			if err := r.NetworkPolicyReconciler.Reconcile(ctx, cluster); err != nil {
 				log.Error(err, "Failed to reconcile NetworkPolicy resources")
-				r.persistCondition(ctx, cluster, wazuhv1.ConditionTypeProgressing, "NetworkPolicyFailed", err.Error())
+				r.persistProgressingFailure(ctx, cluster, "NetworkPolicyFailed", err.Error())
 				return ctrl.Result{}, err
 			}
 		}
@@ -1135,20 +1135,21 @@ func (r *WazuhClusterReconciler) cleanupResources(ctx context.Context, cluster *
 // to avoid triggering unnecessary status writes.
 func (r *WazuhClusterReconciler) updateCondition(cluster *wazuhv1.WazuhCluster, conditionType string, status metav1.ConditionStatus, reason, message string) {
 	for i, c := range cluster.Status.Conditions {
-		if c.Type == conditionType {
-			// Nothing changed - skip entirely to avoid a no-op status write
-			if c.Status == status && c.Reason == reason && c.Message == message && c.ObservedGeneration == cluster.Generation {
-				return
-			}
-			cluster.Status.Conditions[i].Reason = reason
-			cluster.Status.Conditions[i].Message = message
-			cluster.Status.Conditions[i].ObservedGeneration = cluster.Generation
-			if c.Status != status {
-				cluster.Status.Conditions[i].Status = status
-				cluster.Status.Conditions[i].LastTransitionTime = metav1.Now()
-			}
+		if c.Type != conditionType {
+			continue
+		}
+		// Nothing changed - skip entirely to avoid a no-op status write
+		if c.Status == status && c.Reason == reason && c.Message == message && c.ObservedGeneration == cluster.Generation {
 			return
 		}
+		cluster.Status.Conditions[i].Reason = reason
+		cluster.Status.Conditions[i].Message = message
+		cluster.Status.Conditions[i].ObservedGeneration = cluster.Generation
+		if c.Status != status {
+			cluster.Status.Conditions[i].Status = status
+			cluster.Status.Conditions[i].LastTransitionTime = metav1.Now()
+		}
+		return
 	}
 
 	// Condition not found - append a new one
@@ -1162,9 +1163,12 @@ func (r *WazuhClusterReconciler) updateCondition(cluster *wazuhv1.WazuhCluster, 
 	})
 }
 
-// persistCondition updates a condition to False in memory and persists it to the API server (best-effort).
+// persistProgressingFailure marks the Progressing condition False in memory and
+// persists it to the API server (best-effort).
 // Use this on error paths where the main updateStatus() won't be reached.
-func (r *WazuhClusterReconciler) persistCondition(ctx context.Context, cluster *wazuhv1.WazuhCluster, conditionType, reason, message string) {
+func (r *WazuhClusterReconciler) persistProgressingFailure(ctx context.Context, cluster *wazuhv1.WazuhCluster, reason, message string) {
+	const conditionType = wazuhv1.ConditionTypeProgressing
+
 	r.updateCondition(cluster, conditionType, metav1.ConditionFalse, reason, message)
 	if err := utils.RetryOnConflict(ctx, func() error {
 		latestCluster := &wazuhv1.WazuhCluster{}
@@ -1280,14 +1284,8 @@ func (r *WazuhClusterReconciler) updateStatus(ctx context.Context, cluster *wazu
 		// master from worker health. The worker ready count is derived from the
 		// manager status (total ready minus the 1 master node).
 		if latestCluster.Status.Manager != nil {
-			workerReady := latestCluster.Status.Manager.ReadyReplicas - 1
-			if workerReady < 0 {
-				workerReady = 0
-			}
-			workerDesired := latestCluster.Status.Manager.Replicas - 1
-			if workerDesired < 0 {
-				workerDesired = 0
-			}
+			workerReady := max(latestCluster.Status.Manager.ReadyReplicas-1, 0)
+			workerDesired := max(latestCluster.Status.Manager.Replicas-1, 0)
 			metrics.SetClusterReplicas(cluster.Name, cluster.Namespace, "worker", workerReady, workerDesired)
 			var workerHealth metrics.ClusterHealthStatus
 			if workerDesired == 0 {
@@ -1356,10 +1354,7 @@ func (r *WazuhClusterReconciler) updateStatus(ctx context.Context, cluster *wazu
 			// Count master nodes (always 1 in current design)
 			metrics.SetWazuhManagerNodes(latestCluster.Name, latestCluster.Namespace, "master", "ready", 1)
 			// Count worker nodes
-			workerCount := int(latestCluster.Status.Manager.ReadyReplicas) - 1
-			if workerCount < 0 {
-				workerCount = 0
-			}
+			workerCount := max(int(latestCluster.Status.Manager.ReadyReplicas)-1, 0)
 			metrics.SetWazuhManagerNodes(latestCluster.Name, latestCluster.Namespace, "worker", "ready", workerCount)
 		}
 
@@ -1652,7 +1647,7 @@ func (r *WazuhClusterReconciler) reconcileAPICredentialsStatusAndRollout(ctx con
 	return nil
 }
 
-func (r *WazuhClusterReconciler) resolveAuthdCredentialsRef(cluster *wazuhv1.WazuhCluster) (secretName, passwordKey string, enabledOnMasterOnly bool, configured bool) {
+func (r *WazuhClusterReconciler) resolveAuthdCredentialsRef(cluster *wazuhv1.WazuhCluster) (secretName, passwordKey string, enabledOnMasterOnly, configured bool) {
 	enabledOnMasterOnly = true
 	if cluster.Spec.Manager == nil {
 		return "", "", enabledOnMasterOnly, false
@@ -1698,7 +1693,7 @@ func (r *WazuhClusterReconciler) resolveAuthdCredentialsRef(cluster *wazuhv1.Waz
 	return secretName, passwordKey, enabledOnMasterOnly, true
 }
 
-func (r *WazuhClusterReconciler) computeAuthdCredentialsHash(ctx context.Context, cluster *wazuhv1.WazuhCluster) (hash string, enabledOnMasterOnly bool, configured bool, err error) {
+func (r *WazuhClusterReconciler) computeAuthdCredentialsHash(ctx context.Context, cluster *wazuhv1.WazuhCluster) (hash string, enabledOnMasterOnly, configured bool, err error) {
 	secretName, passwordKey, enabledOnMasterOnly, configured := r.resolveAuthdCredentialsRef(cluster)
 	if !configured {
 		return "", enabledOnMasterOnly, false, nil

@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -143,9 +144,7 @@ func (b *FilebeatTemplateBuilder) mergeAdditionalMappings(template map[string]an
 	}
 
 	// Merge additional properties
-	for key, value := range additionalProps {
-		properties[key] = value
-	}
+	maps.Copy(properties, additionalProps)
 
 	return nil
 }

@@ -20,6 +20,7 @@ package validation
 import (
 	"fmt"
 	"regexp"
+	"slices"
 
 	"k8s.io/apimachinery/pkg/util/validation/field"
 
@@ -142,12 +143,7 @@ func toStringSlice(types []wazuhv1.CertificateType) []string {
 
 // isValidCertificateType checks if a certificate type is valid
 func isValidCertificateType(certType wazuhv1.CertificateType, validTypes []wazuhv1.CertificateType) bool {
-	for _, t := range validTypes {
-		if t == certType {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(validTypes, certType)
 }
 
 // isValidVersion checks if a version string is valid

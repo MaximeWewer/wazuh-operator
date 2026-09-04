@@ -110,7 +110,7 @@ func TestTemplateReconciler_buildIndexTemplate(t *testing.T) {
 							"app-all": {
 								IndexRouting:  "shard1",
 								SearchRouting: "shard1",
-								IsWriteIndex:  boolPtr(true),
+								IsWriteIndex:  new(true),
 							},
 							"app-read": {
 								Filter: &runtime.RawExtension{
@@ -173,7 +173,7 @@ func TestTemplateReconciler_buildIndexTemplate_TemplateDetails(t *testing.T) {
 					"logs": {
 						IndexRouting:  "r1",
 						SearchRouting: "r2",
-						IsWriteIndex:  boolPtr(true),
+						IsWriteIndex:  new(true),
 						Filter: &runtime.RawExtension{
 							Raw: []byte(`{"term":{"env":"prod"}}`),
 						},
@@ -245,5 +245,3 @@ func TestTemplateReconciler_buildIndexTemplate_NilTemplate(t *testing.T) {
 		t.Error("Expected Template to be nil when spec.Template is nil")
 	}
 }
-
-func boolPtr(b bool) *bool { return &b }

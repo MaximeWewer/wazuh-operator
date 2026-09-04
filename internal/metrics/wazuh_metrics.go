@@ -63,7 +63,7 @@ var (
 	// WazuhAgentsDisconnected tracks agents in the disconnected state.
 	// A sudden jump here while the manager pods stay Ready is the signature of a
 	// wazuh-db problem (e.g. corrupt global.db): agents keep-alive but their status
-	// can no longer be recorded/synchronised.
+	// can no longer be recorded/synchronized.
 	WazuhAgentsDisconnected = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: MetricsNamespace,

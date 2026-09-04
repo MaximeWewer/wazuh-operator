@@ -17,6 +17,7 @@ limitations under the License.
 package reconciler
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -382,7 +383,7 @@ func (r *CertificateReconciler) reconcileAdminCerts(ctx context.Context, cluster
 					convertedKey, convErr := certcommon.ConvertPrivateKeyPEMToPKCS8(found.Data[constants.SecretKeyTLSKey])
 					if convErr != nil {
 						log.V(1).Info("Failed to convert existing admin key to PKCS#8", "secret", secretName, "error", convErr.Error())
-					} else if string(found.Data[constants.SecretKeyTLSKey]) != string(convertedKey) {
+					} else if !bytes.Equal(found.Data[constants.SecretKeyTLSKey], convertedKey) {
 						found.Data[constants.SecretKeyTLSKey] = convertedKey
 						if err := r.Update(ctx, found); err != nil {
 							return fmt.Errorf("failed to migrate admin key to PKCS#8 in secret %s: %w", secretName, err)

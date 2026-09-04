@@ -3,6 +3,7 @@
 version: "2"
 
 run:
+  go: "1.27"
   timeout: 10m
   build-tags:
     - integration
@@ -59,6 +60,16 @@ linters:
     - rowserrcheck
     - sqlclosecheck
     - wastedassign
+    - nilnesserr
+    - recvcheck
+
+    # Modernization (Go 1.27 language and stdlib features)
+    - modernize
+    - intrange
+    - copyloopvar
+    - exptostd
+    - fatcontext
+    - usetesting
 
   settings:
     errcheck:
@@ -81,6 +92,10 @@ linters:
       checks:
         - all
         - -SA1019
+
+    modernize:
+      disable:
+        - embedlit
 
     misspell:
       locale: US
@@ -202,6 +217,18 @@ linters:
         linters:
           - gocyclo
           - gocognit
+
+      # hack/ holds developer CLI tools whose whole job is to read and rewrite
+      # repository files from operator-supplied path flags.
+      - path: "hack/.*\\.go$"
+        text: "G703"
+        linters:
+          - gosec
+
+      # Ginkgo scaffolding assigns the package-level ctx/cancel inside BeforeSuite
+      - path: "suite_test\\.go$"
+        linters:
+          - fatcontext
 
       # Controllers often have complex reconcile functions
       - path: "controllers/.*\\.go$"

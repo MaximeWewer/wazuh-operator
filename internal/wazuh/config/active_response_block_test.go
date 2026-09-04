@@ -21,7 +21,7 @@ import (
 	"testing"
 )
 
-func i32(v int32) *int32 { return &v }
+func i32(v int32) *int32 { return new(v) }
 
 func TestBuildActiveResponseBlock_Full(t *testing.T) {
 	got := BuildActiveResponseBlock(ActiveResponseBlockOptions{

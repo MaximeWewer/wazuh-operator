@@ -19,6 +19,7 @@ package deployments
 
 import (
 	"fmt"
+	"maps"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -368,9 +369,7 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 func (b *ManagerStatefulSetBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
 	labels[constants.LabelManagerNodeType] = b.nodeType
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }
 

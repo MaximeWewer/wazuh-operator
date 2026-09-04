@@ -20,6 +20,7 @@ package drain
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -265,11 +266,8 @@ func (d *IndexerDrainerImpl) EvaluateFeasibility(ctx context.Context, nodeName s
 
 	// Estimate duration
 	if shardCount > 0 {
-		// Rough estimate: 30 seconds per shard
-		estimatedSeconds := int64(shardCount * 30)
-		if estimatedSeconds < 60 {
-			estimatedSeconds = 60 // Minimum 1 minute
-		}
+		// Rough estimate: 30 seconds per shard, never below 1 minute
+		estimatedSeconds := max(int64(shardCount*30), 60)
 		result.EstimatedDuration = &metav1.Duration{Duration: time.Duration(estimatedSeconds) * time.Second}
 	} else {
 		result.EstimatedDuration = &metav1.Duration{Duration: 30 * time.Second}
@@ -365,12 +363,7 @@ func (info *NodePoolScaleDownInfo) GetReplicasDelta() int32 {
 
 // HasRole checks if the nodePool has the specified role
 func (info *NodePoolScaleDownInfo) HasRole(role string) bool {
-	for _, r := range info.Roles {
-		if r == role {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(info.Roles, role)
 }
 
 // HasDataRole returns true if the nodePool has the data role

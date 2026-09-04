@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 )
 
@@ -139,9 +140,7 @@ func NormalizeIndexSettings(settings map[string]any) map[string]any {
 	// Check if there's already an "index" key
 	if existing, ok := settings["index"]; ok {
 		if m, ok := existing.(map[string]any); ok {
-			for k, v := range m {
-				indexSettings[k] = v
-			}
+			maps.Copy(indexSettings, m)
 		}
 	}
 

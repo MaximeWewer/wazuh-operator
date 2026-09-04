@@ -27,6 +27,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
@@ -172,7 +173,7 @@ func (c *Client) Delete(ctx context.Context, path string) (*http.Response, error
 
 // PutJSON makes a PUT request with a JSON payload
 // This is a convenience method for updating resources via the REST API
-func (c *Client) PutJSON(ctx context.Context, path string, body map[string]interface{}) (*http.Response, error) {
+func (c *Client) PutJSON(ctx context.Context, path string, body map[string]any) (*http.Response, error) {
 	return c.Request(ctx, "PUT", path, body)
 }
 
@@ -276,14 +277,15 @@ func (c *Client) ReloadAllCertificates(ctx context.Context) error {
 	}
 
 	if len(errs) > 0 {
-		errMsg := "certificate reload errors: "
+		var errMsg strings.Builder
+		errMsg.WriteString("certificate reload errors: ")
 		for i, e := range errs {
 			if i > 0 {
-				errMsg += "; "
+				errMsg.WriteString("; ")
 			}
-			errMsg += e.Error()
+			errMsg.WriteString(e.Error())
 		}
-		return fmt.Errorf("%s", errMsg)
+		return fmt.Errorf("%s", errMsg.String())
 	}
 
 	return nil

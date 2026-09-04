@@ -19,27 +19,26 @@ package utils //nolint:revive // utils is a common package name
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 )
 
 // MergeStringMaps merges multiple string maps, with later maps taking precedence
-func MergeStringMaps(maps ...map[string]string) map[string]string {
+func MergeStringMaps(sources ...map[string]string) map[string]string {
 	result := make(map[string]string)
-	for _, m := range maps {
-		for k, v := range m {
-			result[k] = v
-		}
+	for _, m := range sources {
+		maps.Copy(result, m)
 	}
 	return result
 }
 
 // MergeLabels is an alias for MergeStringMaps for semantic clarity
-func MergeLabels(maps ...map[string]string) map[string]string {
-	return MergeStringMaps(maps...)
+func MergeLabels(sources ...map[string]string) map[string]string {
+	return MergeStringMaps(sources...)
 }
 
 // MergeAnnotations is an alias for MergeStringMaps for semantic clarity
-func MergeAnnotations(maps ...map[string]string) map[string]string {
-	return MergeStringMaps(maps...)
+func MergeAnnotations(sources ...map[string]string) map[string]string {
+	return MergeStringMaps(sources...)
 }
 
 // DeepMerge performs a recursive deep merge of two objects.
@@ -83,9 +82,7 @@ func DeepMerge(dst, src any) error {
 // Otherwise src values override dst values.
 func deepMergeMaps(dst, src map[string]any) map[string]any {
 	result := make(map[string]any, len(dst))
-	for k, v := range dst {
-		result[k] = v
-	}
+	maps.Copy(result, dst)
 	for k, srcVal := range src {
 		if dstVal, exists := result[k]; exists {
 			srcMap, srcOk := srcVal.(map[string]any)
@@ -123,9 +120,7 @@ func CopyStringMap(m map[string]string) map[string]string {
 		return nil
 	}
 	result := make(map[string]string, len(m))
-	for k, v := range m {
-		result[k] = v
-	}
+	maps.Copy(result, m)
 	return result
 }
 

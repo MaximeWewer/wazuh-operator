@@ -28,13 +28,13 @@ import (
 // ipLineRegex matches lines that start with an IPv4 address and an optional CIDR mask.
 // Group 1 is the address, group 2 (optional) is the mask. Mirrors the regex used by
 // Wazuh's iplist-to-cdblist.py conversion script.
-var ipLineRegex = regexp.MustCompile(`^((?:[0-9]{1,3}\.){3}[0-9]{1,3})(?:/(\d{1,2}))?`)
+var ipLineRegex = regexp.MustCompile(`^((?:\d{1,3}\.){3}\d{1,3})(?:/(\d{1,2}))?`)
 
 // cidrOctets maps a supported CIDR mask to the number of leading octets kept.
 var cidrOctets = map[string]int{"32": 4, "24": 3, "16": 2, "8": 1}
 
 // IPListToCDB converts a plain IP/CIDR list into CDB list content, reproducing the
-// behaviour of Wazuh's iplist-to-cdblist.py script:
+// behavior of Wazuh's iplist-to-cdblist.py script:
 //
 //   - only lines that start with an IPv4 address are considered;
 //   - a supported CIDR mask (/8, /16, /24, /32) truncates the address to the network
@@ -46,7 +46,7 @@ var cidrOctets = map[string]int{"32": 4, "24": 3, "16": 2, "8": 1}
 // Output entries are newline-separated with a trailing newline.
 func IPListToCDB(input string) string {
 	var entries []string
-	for _, line := range strings.Split(input, "\n") {
+	for line := range strings.SplitSeq(input, "\n") {
 		line = strings.TrimRight(line, "\r")
 		m := ipLineRegex.FindStringSubmatch(line)
 		if m == nil {
@@ -78,7 +78,7 @@ func IPListToCDB(input string) string {
 // containing ":" are left untouched so pre-formatted content stays idempotent.
 func KeyListToCDB(input string) string {
 	var entries []string
-	for _, line := range strings.Split(input, "\n") {
+	for line := range strings.SplitSeq(input, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue // skip blank lines and comments (feed headers)
@@ -126,7 +126,7 @@ func RenderEntries(entries []Entry) string {
 // guarantees a trailing newline. Used for raw CDB content supplied inline or fetched.
 func Normalize(content string) string {
 	var lines []string
-	for _, line := range strings.Split(content, "\n") {
+	for line := range strings.SplitSeq(content, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -139,7 +139,7 @@ func Normalize(content string) string {
 // CountEntries counts non-blank lines in rendered CDB content.
 func CountEntries(content string) int {
 	count := 0
-	for _, line := range strings.Split(content, "\n") {
+	for line := range strings.SplitSeq(content, "\n") {
 		if strings.TrimSpace(line) != "" {
 			count++
 		}

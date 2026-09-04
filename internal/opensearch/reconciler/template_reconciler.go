@@ -259,7 +259,7 @@ func (r *TemplateReconciler) handleDeletion(ctx context.Context, template *wazuh
 			return err
 		}
 		controllerutil.RemoveFinalizer(latest, constants.IndexTemplateFinalizer)
-		return r.Client.Update(ctx, latest)
+		return r.Update(ctx, latest)
 	})
 }
 

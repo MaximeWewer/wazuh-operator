@@ -16,7 +16,10 @@ limitations under the License.
 
 package validation
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestValidateIndexerPassword(t *testing.T) {
 	tests := []struct {
@@ -65,7 +68,11 @@ func TestValidateIndexerPassword_ReportsEachUnsafeCharOnce(t *testing.T) {
 	if !IsPasswordValidationError(err) {
 		t.Fatalf("got %T, want *PasswordValidationError", err)
 	}
-	pve = err.(*PasswordValidationError)
+	pve = func() *PasswordValidationError {
+		target := &PasswordValidationError{}
+		_ = errors.As(err, &target)
+		return target
+	}()
 	if len(pve.Reasons) != 3 {
 		t.Errorf("got %d reasons %v, want 3 (one per distinct unsafe character)", len(pve.Reasons), pve.Reasons)
 	}

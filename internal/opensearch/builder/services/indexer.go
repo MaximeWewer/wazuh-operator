@@ -18,6 +18,8 @@ limitations under the License.
 package services
 
 import (
+	"maps"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -74,17 +76,13 @@ func (b *IndexerServiceBuilder) WithHeadless(headless bool) *IndexerServiceBuild
 
 // WithLabels adds custom labels
 func (b *IndexerServiceBuilder) WithLabels(labels map[string]string) *IndexerServiceBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *IndexerServiceBuilder) WithAnnotations(annotations map[string]string) *IndexerServiceBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -185,9 +183,7 @@ func (b *IndexerServiceBuilder) BuildHeadless() *corev1.Service {
 // buildLabels builds the complete label set
 func (b *IndexerServiceBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, constants.ComponentIndexer, b.version)
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }
 

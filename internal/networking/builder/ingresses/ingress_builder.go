@@ -18,6 +18,7 @@ package ingresses
 
 import (
 	"fmt"
+	"maps"
 
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -87,9 +88,7 @@ func (b *IngressBuilder) WithBackendService(name string, port int32) *IngressBui
 
 // WithLabels adds additional labels
 func (b *IngressBuilder) WithLabels(labels map[string]string) *IngressBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
@@ -160,9 +159,7 @@ func (b *IngressBuilder) Build() *networkingv1.Ingress {
 
 	// Merge annotations
 	allAnnotations := make(map[string]string)
-	for k, v := range b.annotations {
-		allAnnotations[k] = v
-	}
+	maps.Copy(allAnnotations, b.annotations)
 
 	// Build ingress spec
 	spec := networkingv1.IngressSpec{

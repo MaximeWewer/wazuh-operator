@@ -68,7 +68,7 @@ func TestGenerateRandomPassword_InvalidLength(t *testing.T) {
 func TestGenerateRandomPassword_Uniqueness(t *testing.T) {
 	// Generate multiple passwords and ensure they're different
 	passwords := make(map[string]bool)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		pwd, err := GenerateRandomPassword(16)
 		if err != nil {
 			t.Fatalf("GenerateRandomPassword(16) returned unexpected error: %v", err)
@@ -164,7 +164,7 @@ func TestGenerateWazuhAPIPassword(t *testing.T) {
 func TestGenerateWazuhAPIPassword_Uniqueness(t *testing.T) {
 	// Generate multiple passwords and ensure they're different
 	passwords := make(map[string]bool)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		pwd, err := GenerateWazuhAPIPassword(20)
 		if err != nil {
 			t.Fatalf("GenerateWazuhAPIPassword(20) returned unexpected error: %v", err)
@@ -181,7 +181,7 @@ func TestGenerateWazuhAPIPassword_SpecialCharDistribution(t *testing.T) {
 
 	// Generate many passwords and check special char distribution
 	charCounts := make(map[rune]int)
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		pwd, err := GenerateWazuhAPIPassword(20)
 		if err != nil {
 			t.Fatalf("GenerateWazuhAPIPassword(20) returned unexpected error: %v", err)

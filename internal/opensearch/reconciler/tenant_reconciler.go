@@ -216,7 +216,7 @@ func (r *TenantReconciler) handleDeletion(ctx context.Context, tenant *wazuhv1.O
 			return err
 		}
 		controllerutil.RemoveFinalizer(latest, constants.TenantFinalizer)
-		return r.Client.Update(ctx, latest)
+		return r.Update(ctx, latest)
 	})
 }
 

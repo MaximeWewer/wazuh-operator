@@ -330,7 +330,7 @@ func (r *ActiveResponseReconciler) determineAppliedNodes(ar *wazuhv1.WazuhActive
 		nodes = append(nodes, fmt.Sprintf("%s-manager-master-0", cluster.Name))
 	}
 	if targetNodes == "workers" || targetNodes == "all" {
-		for i := int32(0); i < workerCount; i++ {
+		for i := range workerCount {
 			nodes = append(nodes, fmt.Sprintf("%s-manager-worker-%d", cluster.Name, i))
 		}
 	}

@@ -143,7 +143,7 @@ func (c *OpenSearchConfig) generateDiscoveryHosts() {
 
 	headlessService := c.ClusterName + "-indexer-headless"
 
-	for i := int32(0); i < c.Replicas; i++ {
+	for i := range c.Replicas {
 		podName := fmt.Sprintf("%s-indexer-%d", c.ClusterName, i)
 		host := dns.PodFQDN(podName, headlessService, c.Namespace)
 		c.DiscoverySeedHosts = append(c.DiscoverySeedHosts, host)
@@ -368,7 +368,7 @@ func GenerateDiscoveryHostsForNodePools(clusterName, namespace string, clusterMa
 	var hosts []string
 	for _, pool := range clusterManagerPools {
 		headlessService := constants.IndexerNodePoolHeadlessServiceFQDN(clusterName, pool.Name, namespace)
-		for i := int32(0); i < pool.Replicas; i++ {
+		for i := range pool.Replicas {
 			podName := constants.IndexerNodePoolPodName(clusterName, pool.Name, int(i))
 			host := fmt.Sprintf("%s.%s", podName, headlessService)
 			hosts = append(hosts, host)
@@ -385,7 +385,7 @@ func GenerateInitialMasterNodesForNodePools(clusterName string, clusterManagerPo
 }) []string {
 	var nodes []string
 	for _, pool := range clusterManagerPools {
-		for i := int32(0); i < pool.Replicas; i++ {
+		for i := range pool.Replicas {
 			nodeName := constants.IndexerNodePoolPodName(clusterName, pool.Name, int(i))
 			nodes = append(nodes, nodeName)
 		}

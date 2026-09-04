@@ -46,7 +46,7 @@ func runDashboardConfigProcessScript(t *testing.T, template, username, password 
 	script := strings.ReplaceAll(dashboardConfigProcessScript, "/config-template/opensearch_dashboards.yml", in)
 	script = strings.ReplaceAll(script, "/config-processed/opensearch_dashboards.yml", out)
 
-	cmd := exec.Command("sh", "-c", script)
+	cmd := exec.CommandContext(t.Context(), "sh", "-c", script)
 	cmd.Env = append(os.Environ(), "INDEXER_USERNAME="+username, "INDEXER_PASSWORD="+password)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("script failed: %v\n%s", err, output)

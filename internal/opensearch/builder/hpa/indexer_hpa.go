@@ -17,6 +17,8 @@ limitations under the License.
 package hpa
 
 import (
+	"maps"
+
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -53,17 +55,13 @@ func (b *IndexerHPABuilder) WithSpec(spec *wazuhv1.HPASpec) *IndexerHPABuilder {
 
 // WithLabels sets additional labels
 func (b *IndexerHPABuilder) WithLabels(labels map[string]string) *IndexerHPABuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations sets additional annotations
 func (b *IndexerHPABuilder) WithAnnotations(annotations map[string]string) *IndexerHPABuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -92,17 +90,13 @@ func (b *IndexerHPABuilder) Build() *autoscalingv2.HorizontalPodAutoscaler {
 		constants.LabelComponent: "indexer",
 		constants.LabelInstance:  b.clusterName,
 	}
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 
 	// Build annotations with StatefulSet warning
 	annotations := map[string]string{
 		"wazuh.com/hpa-note": "HPA for StatefulSet; OpenSearch may require manual shard rebalancing after scale-up",
 	}
-	for k, v := range b.annotations {
-		annotations[k] = v
-	}
+	maps.Copy(annotations, b.annotations)
 
 	// Build metrics
 	var metrics []autoscalingv2.MetricSpec

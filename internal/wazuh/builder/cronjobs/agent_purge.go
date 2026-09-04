@@ -19,6 +19,7 @@ package cronjobs
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -118,9 +119,7 @@ func (b *AgentPurgeCronJobBuilder) WithVersion(version string) *AgentPurgeCronJo
 
 // WithLabels adds custom labels
 func (b *AgentPurgeCronJobBuilder) WithLabels(labels map[string]string) *AgentPurgeCronJobBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
@@ -128,9 +127,7 @@ func (b *AgentPurgeCronJobBuilder) WithLabels(labels map[string]string) *AgentPu
 func (b *AgentPurgeCronJobBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, "agent-purge", b.version)
 	labels["app.kubernetes.io/component"] = "agent-purge"
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }
 

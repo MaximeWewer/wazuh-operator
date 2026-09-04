@@ -17,6 +17,8 @@ limitations under the License.
 package opensearchcerts
 
 import (
+	"maps"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -55,17 +57,13 @@ func (b *IndexerCertsSecretBuilder) WithVersion(version string) *IndexerCertsSec
 
 // WithLabels adds custom labels
 func (b *IndexerCertsSecretBuilder) WithLabels(labels map[string]string) *IndexerCertsSecretBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *IndexerCertsSecretBuilder) WithAnnotations(annotations map[string]string) *IndexerCertsSecretBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -101,9 +99,7 @@ func (b *IndexerCertsSecretBuilder) WithAdminKey(key []byte) *IndexerCertsSecret
 
 // WithData adds raw data entries
 func (b *IndexerCertsSecretBuilder) WithData(data map[string][]byte) *IndexerCertsSecretBuilder {
-	for k, v := range data {
-		b.data[k] = v
-	}
+	maps.Copy(b.data, data)
 	return b
 }
 
@@ -126,8 +122,6 @@ func (b *IndexerCertsSecretBuilder) Build() *corev1.Secret {
 // buildLabels builds the complete label set
 func (b *IndexerCertsSecretBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, constants.ComponentIndexer, b.version)
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }

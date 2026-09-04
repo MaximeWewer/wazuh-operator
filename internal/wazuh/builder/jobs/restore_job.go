@@ -18,6 +18,7 @@ package jobs
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -50,9 +51,7 @@ func NewRestoreJobBuilder(restore *wazuhv1.WazuhRestore) *RestoreJobBuilder {
 
 // WithLabels adds custom labels
 func (b *RestoreJobBuilder) WithLabels(labels map[string]string) *RestoreJobBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
@@ -66,9 +65,7 @@ func (b *RestoreJobBuilder) buildLabels() map[string]string {
 		"wazuh.com/restore":            b.restore.Name,
 		"wazuh.com/cluster":            b.clusterName,
 	}
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }
 
@@ -639,15 +636,11 @@ func (b *RestoreJobBuilder) BuildServiceAccount() *corev1.ServiceAccount {
 
 	if cfg := b.serviceAccountConfig(); cfg != nil {
 		if len(cfg.Labels) > 0 {
-			for k, v := range cfg.Labels {
-				sa.Labels[k] = v
-			}
+			maps.Copy(sa.Labels, cfg.Labels)
 		}
 		if len(cfg.Annotations) > 0 {
 			sa.Annotations = make(map[string]string, len(cfg.Annotations))
-			for k, v := range cfg.Annotations {
-				sa.Annotations[k] = v
-			}
+			maps.Copy(sa.Annotations, cfg.Annotations)
 		}
 	}
 

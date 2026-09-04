@@ -35,8 +35,6 @@ stuvAgMBAAEwDQYJKoZIhvcNAQELBQADQQBexampleexampleexampleexampleex
 ampleexampleexampleexampleexampleexampleexampleexampleexampleex
 -----END CERTIFICATE-----`
 
-func boolPtr(b bool) *bool { return &b }
-
 // assertBlockScalar checks the PEM was rendered under the given key as a "|-" literal
 // block scalar and its lines were NOT folded onto a single line.
 func assertBlockScalar(t *testing.T, out, key string) {
@@ -63,7 +61,7 @@ func TestBuildSecurityConfig_OIDCIdpTLS(t *testing.T) {
 			ClientID:   "wazuh",
 			IdpTLS: &v1.IdpTLSSpec{
 				EnableSSL:       true,
-				VerifyHostnames: boolPtr(false),
+				VerifyHostnames: new(false),
 			},
 		},
 	}
@@ -91,7 +89,7 @@ func TestBuildSecurityConfig_SAMLIdpTLS(t *testing.T) {
 			KibanaURL:      "https://wazuh.example.com",
 			IdpTLS: &v1.IdpTLSSpec{
 				EnableSSL:       true,
-				VerifyHostnames: boolPtr(false),
+				VerifyHostnames: new(false),
 			},
 		},
 	}

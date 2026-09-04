@@ -32,7 +32,7 @@ type IndexSettings struct {
 
 // IndexConfig represents index configuration
 type IndexConfig struct {
-	Settings IndexSettings  `json:"settings,omitempty"`
+	Settings IndexSettings  `json:"settings,omitzero"`
 	Mappings map[string]any `json:"mappings,omitempty"`
 }
 

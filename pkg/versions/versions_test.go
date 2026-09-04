@@ -17,6 +17,7 @@ limitations under the License.
 package versions
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -464,13 +465,7 @@ func TestGetAllSupportedWazuhVersions(t *testing.T) {
 	}
 
 	// Check that 4.9.0 is in the list
-	found := false
-	for _, v := range versions {
-		if v == "4.9.0" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(versions, "4.9.0")
 	if !found {
 		t.Error("Expected 4.9.0 to be in the list of supported versions")
 	}

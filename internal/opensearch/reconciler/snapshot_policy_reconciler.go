@@ -350,7 +350,7 @@ func (r *SnapshotPolicyReconciler) handleDeletion(ctx context.Context, policy *w
 			return err
 		}
 		controllerutil.RemoveFinalizer(latest, constants.SnapshotPolicyFinalizer)
-		return r.Client.Update(ctx, latest)
+		return r.Update(ctx, latest)
 	})
 }
 

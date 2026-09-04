@@ -272,7 +272,7 @@ func (r *PolicyReconciler) handleDeletion(ctx context.Context, policy *wazuhv1.O
 			return err
 		}
 		controllerutil.RemoveFinalizer(latest, constants.ISMPolicyFinalizer)
-		return r.Client.Update(ctx, latest)
+		return r.Update(ctx, latest)
 	})
 }
 

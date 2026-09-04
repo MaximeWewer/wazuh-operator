@@ -455,7 +455,7 @@ func (h *HotReloader) getPodsForCertType(cluster *wazuhv1.WazuhCluster, certType
 		if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Replicas > 0 {
 			replicas = cluster.Spec.Indexer.Replicas
 		}
-		for i := int32(0); i < replicas; i++ {
+		for i := range replicas {
 			pods = append(pods, fmt.Sprintf("%s-indexer-%d", cluster.Name, i))
 		}
 
@@ -469,7 +469,7 @@ func (h *HotReloader) getPodsForCertType(cluster *wazuhv1.WazuhCluster, certType
 		pods = append(pods, fmt.Sprintf("%s-manager-master-0", cluster.Name))
 		if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Replicas != nil && *cluster.Spec.Manager.Workers.Replicas > 0 {
 			workerReplicas := *cluster.Spec.Manager.Workers.Replicas
-			for i := int32(0); i < workerReplicas; i++ {
+			for i := range workerReplicas {
 				pods = append(pods, fmt.Sprintf("%s-manager-workers-%d", cluster.Name, i))
 			}
 		}

@@ -20,6 +20,7 @@ package serviceaccount
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -82,17 +83,13 @@ func ReconcileServiceAccount(
 	// Set annotations
 	if len(cfg.Annotations) > 0 {
 		sa.Annotations = make(map[string]string, len(cfg.Annotations))
-		for k, v := range cfg.Annotations {
-			sa.Annotations[k] = v
-		}
+		maps.Copy(sa.Annotations, cfg.Annotations)
 	}
 
 	// Set labels
 	if len(cfg.Labels) > 0 {
 		sa.Labels = make(map[string]string, len(cfg.Labels))
-		for k, v := range cfg.Labels {
-			sa.Labels[k] = v
-		}
+		maps.Copy(sa.Labels, cfg.Labels)
 	}
 
 	// Set owner reference for garbage collection

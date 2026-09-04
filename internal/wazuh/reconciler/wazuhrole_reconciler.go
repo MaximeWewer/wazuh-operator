@@ -21,6 +21,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -482,8 +483,6 @@ func mergeIDMaps(dst, src map[string]int) map[string]int {
 	if dst == nil {
 		dst = make(map[string]int, len(src))
 	}
-	for k, v := range src {
-		dst[k] = v
-	}
+	maps.Copy(dst, src)
 	return dst
 }

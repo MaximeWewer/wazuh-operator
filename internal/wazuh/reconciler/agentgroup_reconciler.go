@@ -17,6 +17,7 @@ limitations under the License.
 package reconciler
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -547,7 +548,7 @@ func mapsEqualBytes(a, b map[string][]byte) bool {
 	}
 	for k, v := range a {
 		bv, ok := b[k]
-		if !ok || string(v) != string(bv) {
+		if !ok || !bytes.Equal(v, bv) {
 			return false
 		}
 	}

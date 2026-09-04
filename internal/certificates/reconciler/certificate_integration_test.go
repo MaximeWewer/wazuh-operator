@@ -33,11 +33,6 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
-// boolPtrInt returns a pointer to a bool value (local helper for integration tests)
-func boolPtrInt(b bool) *bool {
-	return &b
-}
-
 // Integration test scenarios that simulate full certificate lifecycle
 
 func TestCertificateRenewal_FullScenario_HotReloadSupported(t *testing.T) {
@@ -58,7 +53,7 @@ func TestCertificateRenewal_FullScenario_HotReloadSupported(t *testing.T) {
 		Spec: wazuhv1.WazuhClusterSpec{
 			Version: "4.14.0", // Automatic hot reload version
 			TLS: &wazuhv1.TLSConfig{
-				Enabled: boolPtrInt(true),
+				Enabled: new(true),
 				HotReload: &wazuhv1.HotReloadConfig{
 					Enabled: true,
 				},
@@ -133,7 +128,7 @@ func TestCertificateRenewal_FullScenario_HotReloadNotSupported(t *testing.T) {
 		Spec: wazuhv1.WazuhClusterSpec{
 			Version: "4.7.0", // Hot reload NOT supported
 			TLS: &wazuhv1.TLSConfig{
-				Enabled: boolPtrInt(true),
+				Enabled: new(true),
 				HotReload: &wazuhv1.HotReloadConfig{
 					Enabled: true,
 				},
@@ -495,7 +490,7 @@ func TestHotReloadWithFallback_EventEmission(t *testing.T) {
 		Spec: wazuhv1.WazuhClusterSpec{
 			Version: "4.7.0", // Hot reload not supported - will fallback
 			TLS: &wazuhv1.TLSConfig{
-				Enabled: boolPtrInt(true),
+				Enabled: new(true),
 				HotReload: &wazuhv1.HotReloadConfig{
 					Enabled: true,
 				},

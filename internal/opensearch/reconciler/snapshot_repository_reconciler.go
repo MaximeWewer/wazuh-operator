@@ -306,7 +306,7 @@ func (r *SnapshotRepositoryReconciler) handleDeletion(ctx context.Context, repo 
 			return err
 		}
 		controllerutil.RemoveFinalizer(latest, SnapshotRepositoryFinalizer)
-		return r.Client.Update(ctx, latest)
+		return r.Update(ctx, latest)
 	})
 }
 

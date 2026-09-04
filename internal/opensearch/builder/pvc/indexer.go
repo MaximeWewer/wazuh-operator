@@ -19,6 +19,7 @@ package pvc
 
 import (
 	"fmt"
+	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -88,17 +89,13 @@ func (b *IndexerPVCBuilder) WithVolumeMode(mode corev1.PersistentVolumeMode) *In
 
 // WithLabels adds custom labels
 func (b *IndexerPVCBuilder) WithLabels(labels map[string]string) *IndexerPVCBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *IndexerPVCBuilder) WithAnnotations(annotations map[string]string) *IndexerPVCBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -153,9 +150,7 @@ func (b *IndexerPVCBuilder) BuildVolumeClaimTemplate() corev1.PersistentVolumeCl
 // buildLabels builds the complete label set
 func (b *IndexerPVCBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, constants.ComponentIndexer, b.version)
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }
 

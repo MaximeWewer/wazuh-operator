@@ -124,7 +124,7 @@ func ValidateDomain(domain string) error {
 	}
 
 	// Check each label length (max 63 chars per RFC 1123)
-	for _, label := range strings.Split(domain, ".") {
+	for label := range strings.SplitSeq(domain, ".") {
 		if len(label) > 63 {
 			return fmt.Errorf("domain label %q exceeds maximum length of 63 characters", label)
 		}

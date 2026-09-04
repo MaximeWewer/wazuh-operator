@@ -61,11 +61,11 @@ func BuildActiveResponseBlock(o ActiveResponseBlockOptions) string {
 
 	// <command> block binds the script.
 	b.WriteString("  <command>\n")
-	b.WriteString(fmt.Sprintf("    <name>%s</name>\n", xmlValueEscaper.Replace(o.Name)))
-	b.WriteString(fmt.Sprintf("    <executable>%s</executable>\n", xmlValueEscaper.Replace(o.Executable)))
-	b.WriteString(fmt.Sprintf("    <timeout_allowed>%s</timeout_allowed>\n", yesNo(o.TimeoutAllowed)))
+	fmt.Fprintf(&b, "    <name>%s</name>\n", xmlValueEscaper.Replace(o.Name))
+	fmt.Fprintf(&b, "    <executable>%s</executable>\n", xmlValueEscaper.Replace(o.Executable))
+	fmt.Fprintf(&b, "    <timeout_allowed>%s</timeout_allowed>\n", yesNo(o.TimeoutAllowed))
 	if strings.TrimSpace(o.ExtraArgs) != "" {
-		b.WriteString(fmt.Sprintf("    <extra_args>%s</extra_args>\n", xmlValueEscaper.Replace(o.ExtraArgs)))
+		fmt.Fprintf(&b, "    <extra_args>%s</extra_args>\n", xmlValueEscaper.Replace(o.ExtraArgs))
 	}
 	b.WriteString("  </command>\n")
 
@@ -74,31 +74,31 @@ func BuildActiveResponseBlock(o ActiveResponseBlockOptions) string {
 	if o.Disabled {
 		b.WriteString("    <disabled>yes</disabled>\n")
 	}
-	b.WriteString(fmt.Sprintf("    <command>%s</command>\n", xmlValueEscaper.Replace(o.Name)))
+	fmt.Fprintf(&b, "    <command>%s</command>\n", xmlValueEscaper.Replace(o.Name))
 
 	location := o.Location
 	if location == "" {
 		location = "local"
 	}
-	b.WriteString(fmt.Sprintf("    <location>%s</location>\n", xmlValueEscaper.Replace(location)))
+	fmt.Fprintf(&b, "    <location>%s</location>\n", xmlValueEscaper.Replace(location))
 
 	if location == "defined-agent" && o.AgentID != "" {
-		b.WriteString(fmt.Sprintf("    <agent_id>%s</agent_id>\n", xmlValueEscaper.Replace(o.AgentID)))
+		fmt.Fprintf(&b, "    <agent_id>%s</agent_id>\n", xmlValueEscaper.Replace(o.AgentID))
 	}
 	if o.Level != nil {
-		b.WriteString(fmt.Sprintf("    <level>%d</level>\n", *o.Level))
+		fmt.Fprintf(&b, "    <level>%d</level>\n", *o.Level)
 	}
 	if len(o.RulesID) > 0 {
-		b.WriteString(fmt.Sprintf("    <rules_id>%s</rules_id>\n", joinInt32(o.RulesID)))
+		fmt.Fprintf(&b, "    <rules_id>%s</rules_id>\n", joinInt32(o.RulesID))
 	}
 	if o.RulesGroup != "" {
-		b.WriteString(fmt.Sprintf("    <rules_group>%s</rules_group>\n", xmlValueEscaper.Replace(o.RulesGroup)))
+		fmt.Fprintf(&b, "    <rules_group>%s</rules_group>\n", xmlValueEscaper.Replace(o.RulesGroup))
 	}
 	if o.Timeout != nil {
-		b.WriteString(fmt.Sprintf("    <timeout>%d</timeout>\n", *o.Timeout))
+		fmt.Fprintf(&b, "    <timeout>%d</timeout>\n", *o.Timeout)
 	}
 	if len(o.RepeatedOffenders) > 0 {
-		b.WriteString(fmt.Sprintf("    <repeated_offenders>%s</repeated_offenders>\n", joinInt32(o.RepeatedOffenders)))
+		fmt.Fprintf(&b, "    <repeated_offenders>%s</repeated_offenders>\n", joinInt32(o.RepeatedOffenders))
 	}
 	b.WriteString("  </active-response>")
 	return b.String()

@@ -17,6 +17,8 @@ limitations under the License.
 package services
 
 import (
+	"maps"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -65,17 +67,13 @@ func (b *DashboardServiceBuilder) WithServiceType(serviceType corev1.ServiceType
 
 // WithLabels adds custom labels
 func (b *DashboardServiceBuilder) WithLabels(labels map[string]string) *DashboardServiceBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *DashboardServiceBuilder) WithAnnotations(annotations map[string]string) *DashboardServiceBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -135,9 +133,7 @@ func (b *DashboardServiceBuilder) Build() *corev1.Service {
 // buildLabels builds the complete label set
 func (b *DashboardServiceBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, constants.ComponentDashboard, b.version)
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }
 

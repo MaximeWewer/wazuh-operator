@@ -21,5 +21,5 @@ package reconciler
 // int32Ptr returns a pointer to an int32 value
 // Used for creating WazuhWorkerSpec.Replicas and other pointer fields
 func int32Ptr(i int32) *int32 {
-	return &i
+	return new(i)
 }

@@ -278,7 +278,7 @@ func (r *ManualSnapshotReconciler) handleDeletion(ctx context.Context, snapshot 
 			return err
 		}
 		controllerutil.RemoveFinalizer(latest, ManualSnapshotFinalizer)
-		return r.Client.Update(ctx, latest)
+		return r.Update(ctx, latest)
 	})
 }
 

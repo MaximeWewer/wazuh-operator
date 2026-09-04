@@ -18,6 +18,7 @@ package utils //nolint:revive // utils is a common package name
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -68,9 +69,7 @@ func EnsureLabels(obj metav1.Object, labels map[string]string) {
 	if existing == nil {
 		existing = make(map[string]string)
 	}
-	for k, v := range labels {
-		existing[k] = v
-	}
+	maps.Copy(existing, labels)
 	obj.SetLabels(existing)
 }
 
@@ -80,9 +79,7 @@ func EnsureAnnotations(obj metav1.Object, annotations map[string]string) {
 	if existing == nil {
 		existing = make(map[string]string)
 	}
-	for k, v := range annotations {
-		existing[k] = v
-	}
+	maps.Copy(existing, annotations)
 	obj.SetAnnotations(existing)
 }
 
@@ -152,26 +149,6 @@ func RemoveFinalizer(obj client.Object, finalizer string) {
 // IsBeingDeleted checks if an object is being deleted
 func IsBeingDeleted(obj metav1.Object) bool {
 	return !obj.GetDeletionTimestamp().IsZero()
-}
-
-// Int32Ptr returns a pointer to an int32
-func Int32Ptr(i int32) *int32 {
-	return &i
-}
-
-// Int64Ptr returns a pointer to an int64
-func Int64Ptr(i int64) *int64 {
-	return &i
-}
-
-// BoolPtr returns a pointer to a bool
-func BoolPtr(b bool) *bool {
-	return &b
-}
-
-// StringPtr returns a pointer to a string
-func StringPtr(s string) *string {
-	return &s
 }
 
 // IsCRDNotInstalledError checks if the error is due to a CRD not being installed.

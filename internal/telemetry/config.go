@@ -115,7 +115,7 @@ func parseHeaders(raw string) map[string]string {
 		return nil
 	}
 	headers := make(map[string]string)
-	for _, pair := range strings.Split(raw, ",") {
+	for pair := range strings.SplitSeq(raw, ",") {
 		kv := strings.SplitN(strings.TrimSpace(pair), "=", 2)
 		if len(kv) != 2 {
 			continue

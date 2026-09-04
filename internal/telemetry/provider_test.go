@@ -80,9 +80,9 @@ func TestLoadFromEnv(t *testing.T) {
 			os.Unsetenv("OTEL_SERVICE_VERSION")
 			os.Unsetenv("OTEL_TRACES_SAMPLER_ARG")
 
-			// Set test env vars
+			// Set test env vars (t.Setenv restores them when the subtest ends)
 			for k, v := range tt.envVars {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
 
 			config := LoadFromEnv()
@@ -212,7 +212,7 @@ func TestSamplingRatioParsing(t *testing.T) {
 			os.Unsetenv("OTEL_TRACES_SAMPLER_ARG")
 
 			if tt.envValue != "" {
-				os.Setenv("OTEL_TRACES_SAMPLER_ARG", tt.envValue)
+				t.Setenv("OTEL_TRACES_SAMPLER_ARG", tt.envValue)
 			}
 
 			config := LoadFromEnv()

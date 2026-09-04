@@ -16,7 +16,11 @@ limitations under the License.
 
 package reconciler
 
-import corev1 "k8s.io/api/core/v1"
+import (
+	"bytes"
+
+	corev1 "k8s.io/api/core/v1"
+)
 
 // preserveServiceDefaults copies all server-assigned and server-defaulted
 // fields from the existing Service into the desired Service so that
@@ -82,7 +86,7 @@ func mapsEqualBytes(a, b map[string][]byte) bool {
 	}
 	for k, v := range a {
 		bv, ok := b[k]
-		if !ok || string(v) != string(bv) {
+		if !ok || !bytes.Equal(v, bv) {
 			return false
 		}
 	}

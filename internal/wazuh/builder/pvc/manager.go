@@ -19,6 +19,7 @@ package pvc
 
 import (
 	"fmt"
+	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -90,17 +91,13 @@ func (b *ManagerPVCBuilder) WithVolumeMode(mode corev1.PersistentVolumeMode) *Ma
 
 // WithLabels adds custom labels
 func (b *ManagerPVCBuilder) WithLabels(labels map[string]string) *ManagerPVCBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *ManagerPVCBuilder) WithAnnotations(annotations map[string]string) *ManagerPVCBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -156,9 +153,7 @@ func (b *ManagerPVCBuilder) BuildVolumeClaimTemplate() corev1.PersistentVolumeCl
 func (b *ManagerPVCBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
 	labels[constants.LabelManagerNodeType] = b.nodeType
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }
 

@@ -61,91 +61,25 @@ func (v *OpenSearchAuthConfigCustomValidator) ValidateDelete(_ context.Context, 
 
 // validateOpenSearchAuthConfig validates the OpenSearchAuthConfig spec
 func (v *OpenSearchAuthConfigCustomValidator) validateOpenSearchAuthConfig(authConfig *OpenSearchAuthConfig) (admission.Warnings, error) {
-	var allErrors []string
 	var warnings admission.Warnings
 
 	spec := &authConfig.Spec
 
+	var allErrors []string
 	// Rule 1: At least one auth method must be enabled
 	if !v.hasEnabledAuthMethod(spec) {
 		allErrors = append(allErrors, "spec: at least one authentication method must be enabled (basicAuth, oidc, saml, ldap, jwt, proxy, or kerberos)")
 	}
-
-	// Rule 2: OIDC enabled → connectURL and clientId required
-	if spec.OIDC != nil && spec.OIDC.Enabled {
-		if spec.OIDC.ConnectURL == "" {
-			allErrors = append(allErrors, "spec.oidc.connectURL: is required when OIDC is enabled")
-		}
-		if spec.OIDC.ClientID == "" {
-			allErrors = append(allErrors, "spec.oidc.clientId: is required when OIDC is enabled")
-		}
-		if spec.OIDC.IdpTLS != nil && spec.OIDC.IdpTLS.TrustedCAsSecretRef != nil && !spec.OIDC.IdpTLS.EnableSSL {
-			allErrors = append(allErrors, "spec.oidc.idpTLS.trustedCAsSecretRef: requires enableSSL: true")
-		}
-	}
-
-	// Rule 3: SAML enabled → idpEntityId, spEntityId, kibanaUrl required + idpMetadataUrl or idpMetadataFile
-	if spec.SAML != nil && spec.SAML.Enabled {
-		if spec.SAML.IdpEntityID == "" {
-			allErrors = append(allErrors, "spec.saml.idpEntityId: is required when SAML is enabled")
-		}
-		if spec.SAML.SpEntityID == "" {
-			allErrors = append(allErrors, "spec.saml.spEntityId: is required when SAML is enabled")
-		}
-		if spec.SAML.KibanaURL == "" {
-			allErrors = append(allErrors, "spec.saml.kibanaUrl: is required when SAML is enabled")
-		}
-		if spec.SAML.IdpMetadataURL == "" && spec.SAML.IdpMetadataFile == "" {
-			allErrors = append(allErrors, "spec.saml: either idpMetadataUrl or idpMetadataFile must be specified when SAML is enabled")
-		}
-		if spec.SAML.IdpTLS != nil && spec.SAML.IdpTLS.TrustedCAsSecretRef != nil && !spec.SAML.IdpTLS.EnableSSL {
-			allErrors = append(allErrors, "spec.saml.idpTLS.trustedCAsSecretRef: requires enableSSL: true")
-		}
-	}
-
-	// Rule 4: LDAP enabled → hosts non-empty + authentication.userBase required
-	if spec.LDAP != nil && spec.LDAP.Enabled {
-		if len(spec.LDAP.Hosts) == 0 {
-			allErrors = append(allErrors, "spec.ldap.hosts: must not be empty when LDAP is enabled")
-		}
-		if spec.LDAP.Authentication.UserBase == "" {
-			allErrors = append(allErrors, "spec.ldap.authentication.userBase: is required when LDAP is enabled")
-		}
-	}
-
-	// Rule 5: JWT enabled → exactly one verification source (signingKeyRef or jwksUrl)
-	if spec.JWT != nil && spec.JWT.Enabled {
-		hasKey := spec.JWT.SigningKeyRef != nil
-		hasJWKS := spec.JWT.JwksURL != ""
-		if !hasKey && !hasJWKS {
-			allErrors = append(allErrors, "spec.jwt: either signingKeyRef or jwksUrl is required when JWT is enabled")
-		}
-		if hasKey && hasJWKS {
-			allErrors = append(allErrors, "spec.jwt: signingKeyRef and jwksUrl are mutually exclusive")
-		}
-	}
-
-	// Rule 6: Proxy enabled → xff.internalProxies required (without it the security
-	// plugin ignores the proxy identity headers).
-	if spec.Proxy != nil && spec.Proxy.Enabled {
-		if spec.Proxy.XFF.InternalProxies == "" {
-			allErrors = append(allErrors, "spec.proxy.xff.internalProxies is required when proxy is enabled")
-		}
-	}
-
-	// Rule 7: Kerberos enabled → acceptorPrincipal and credentialsSecret required
-	if spec.Kerberos != nil && spec.Kerberos.Enabled {
-		if spec.Kerberos.AcceptorPrincipal == "" {
-			allErrors = append(allErrors, "spec.kerberos.acceptorPrincipal: is required when Kerberos is enabled")
-		}
-		if spec.Kerberos.CredentialsSecret == "" {
-			allErrors = append(allErrors, "spec.kerberos.credentialsSecret: is required when Kerberos is enabled")
-		}
-	}
+	// Rules 2-7: per-backend requirements, each independent of the others.
+	allErrors = append(allErrors, validateOIDCSpec(spec.OIDC)...)
+	allErrors = append(allErrors, validateSAMLSpec(spec.SAML)...)
+	allErrors = append(allErrors, validateLDAPSpec(spec.LDAP)...)
+	allErrors = append(allErrors, validateJWTSpec(spec.JWT)...)
+	allErrors = append(allErrors, validateProxySpec(spec.Proxy)...)
+	allErrors = append(allErrors, validateKerberosSpec(spec.Kerberos)...)
 
 	// Rule 8: Warning if more than one auth domain has challenge=true
-	challengeCount := v.countChallengeDomains(spec)
-	if challengeCount > 1 {
+	if challengeCount := v.countChallengeDomains(spec); challengeCount > 1 {
 		warnings = append(warnings, fmt.Sprintf("%d authentication domains have challenge=true; only one should issue challenges to avoid conflicts", challengeCount))
 	}
 
@@ -154,6 +88,111 @@ func (v *OpenSearchAuthConfigCustomValidator) validateOpenSearchAuthConfig(authC
 	}
 
 	return warnings, nil
+}
+
+// validateOIDCSpec checks the OIDC backend: connectURL and clientId are required,
+// and a trusted CA bundle is only honored when SSL is enabled.
+func validateOIDCSpec(spec *OIDCAuthSpec) []string {
+	if spec == nil || !spec.Enabled {
+		return nil
+	}
+	var errs []string
+	if spec.ConnectURL == "" {
+		errs = append(errs, "spec.oidc.connectURL: is required when OIDC is enabled")
+	}
+	if spec.ClientID == "" {
+		errs = append(errs, "spec.oidc.clientId: is required when OIDC is enabled")
+	}
+	if spec.IdpTLS != nil && spec.IdpTLS.TrustedCAsSecretRef != nil && !spec.IdpTLS.EnableSSL {
+		errs = append(errs, "spec.oidc.idpTLS.trustedCAsSecretRef: requires enableSSL: true")
+	}
+	return errs
+}
+
+// validateSAMLSpec checks the SAML backend: entity IDs, the dashboard URL and a
+// metadata source are required, and a trusted CA bundle needs SSL enabled.
+func validateSAMLSpec(spec *SAMLAuthSpec) []string {
+	if spec == nil || !spec.Enabled {
+		return nil
+	}
+	var errs []string
+	if spec.IdpEntityID == "" {
+		errs = append(errs, "spec.saml.idpEntityId: is required when SAML is enabled")
+	}
+	if spec.SpEntityID == "" {
+		errs = append(errs, "spec.saml.spEntityId: is required when SAML is enabled")
+	}
+	if spec.KibanaURL == "" {
+		errs = append(errs, "spec.saml.kibanaUrl: is required when SAML is enabled")
+	}
+	if spec.IdpMetadataURL == "" && spec.IdpMetadataFile == "" {
+		errs = append(errs, "spec.saml: either idpMetadataUrl or idpMetadataFile must be specified when SAML is enabled")
+	}
+	if spec.IdpTLS != nil && spec.IdpTLS.TrustedCAsSecretRef != nil && !spec.IdpTLS.EnableSSL {
+		errs = append(errs, "spec.saml.idpTLS.trustedCAsSecretRef: requires enableSSL: true")
+	}
+	return errs
+}
+
+// validateLDAPSpec checks the LDAP backend: at least one host and a user base DN.
+func validateLDAPSpec(spec *LDAPAuthSpec) []string {
+	if spec == nil || !spec.Enabled {
+		return nil
+	}
+	var errs []string
+	if len(spec.Hosts) == 0 {
+		errs = append(errs, "spec.ldap.hosts: must not be empty when LDAP is enabled")
+	}
+	if spec.Authentication.UserBase == "" {
+		errs = append(errs, "spec.ldap.authentication.userBase: is required when LDAP is enabled")
+	}
+	return errs
+}
+
+// validateJWTSpec checks the JWT backend: exactly one verification source
+// (a signing key or a JWKS URL).
+func validateJWTSpec(spec *JWTAuthSpec) []string {
+	if spec == nil || !spec.Enabled {
+		return nil
+	}
+	var errs []string
+	hasKey := spec.SigningKeyRef != nil
+	hasJWKS := spec.JwksURL != ""
+	if !hasKey && !hasJWKS {
+		errs = append(errs, "spec.jwt: either signingKeyRef or jwksUrl is required when JWT is enabled")
+	}
+	if hasKey && hasJWKS {
+		errs = append(errs, "spec.jwt: signingKeyRef and jwksUrl are mutually exclusive")
+	}
+	return errs
+}
+
+// validateProxySpec checks the proxy backend: without xff.internalProxies the
+// security plugin ignores the proxy identity headers.
+func validateProxySpec(spec *ProxyAuthSpec) []string {
+	if spec == nil || !spec.Enabled {
+		return nil
+	}
+	if spec.XFF.InternalProxies == "" {
+		return []string{"spec.proxy.xff.internalProxies is required when proxy is enabled"}
+	}
+	return nil
+}
+
+// validateKerberosSpec checks the Kerberos backend: acceptor principal and keytab
+// credentials are both required.
+func validateKerberosSpec(spec *KerberosAuthSpec) []string {
+	if spec == nil || !spec.Enabled {
+		return nil
+	}
+	var errs []string
+	if spec.AcceptorPrincipal == "" {
+		errs = append(errs, "spec.kerberos.acceptorPrincipal: is required when Kerberos is enabled")
+	}
+	if spec.CredentialsSecret == "" {
+		errs = append(errs, "spec.kerberos.credentialsSecret: is required when Kerberos is enabled")
+	}
+	return errs
 }
 
 // hasEnabledAuthMethod checks if at least one auth method is enabled

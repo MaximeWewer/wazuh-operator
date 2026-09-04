@@ -359,7 +359,7 @@ func (r *BackupReconciler) handleDeletion(ctx context.Context, backup *wazuhv1.W
 			return err
 		}
 		controllerutil.RemoveFinalizer(latest, WazuhBackupFinalizer)
-		return r.Client.Update(ctx, latest)
+		return r.Update(ctx, latest)
 	}); err != nil {
 		return fmt.Errorf("failed to remove finalizer: %w", err)
 	}

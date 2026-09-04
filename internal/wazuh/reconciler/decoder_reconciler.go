@@ -345,7 +345,7 @@ func (r *DecoderReconciler) determineAppliedNodes(decoder *wazuhv1.WazuhDecoder,
 		if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Replicas != nil {
 			workerCount = *cluster.Spec.Manager.Workers.Replicas
 		}
-		for i := int32(0); i < workerCount; i++ {
+		for i := range workerCount {
 			nodes = append(nodes, fmt.Sprintf("%s-manager-worker-%d", clusterName, i))
 		}
 	case "all":
@@ -354,7 +354,7 @@ func (r *DecoderReconciler) determineAppliedNodes(decoder *wazuhv1.WazuhDecoder,
 		if cluster.Spec.Manager != nil && cluster.Spec.Manager.Workers.Replicas != nil {
 			workerCount = *cluster.Spec.Manager.Workers.Replicas
 		}
-		for i := int32(0); i < workerCount; i++ {
+		for i := range workerCount {
 			nodes = append(nodes, fmt.Sprintf("%s-manager-worker-%d", clusterName, i))
 		}
 	}

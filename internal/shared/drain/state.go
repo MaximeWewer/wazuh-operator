@@ -19,6 +19,7 @@ package drain
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,12 +65,7 @@ func IsValidTransition(from, to v1.DrainPhase) bool {
 	if !ok {
 		return false
 	}
-	for _, valid := range validTargets {
-		if valid == to {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(validTargets, to)
 }
 
 // TransitionTo attempts to transition the drain status to a new phase

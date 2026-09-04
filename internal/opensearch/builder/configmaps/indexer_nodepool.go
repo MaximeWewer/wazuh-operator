@@ -17,6 +17,8 @@ limitations under the License.
 package configmaps
 
 import (
+	"maps"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -64,25 +66,19 @@ func (b *NodePoolConfigMapBuilder) WithOpenSearchYML(config string) *NodePoolCon
 
 // WithLabels adds custom labels
 func (b *NodePoolConfigMapBuilder) WithLabels(labels map[string]string) *NodePoolConfigMapBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *NodePoolConfigMapBuilder) WithAnnotations(annotations map[string]string) *NodePoolConfigMapBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
 // WithData adds additional data entries
 func (b *NodePoolConfigMapBuilder) WithData(data map[string]string) *NodePoolConfigMapBuilder {
-	for k, v := range data {
-		b.data[k] = v
-	}
+	maps.Copy(b.data, data)
 	return b
 }
 
@@ -100,9 +96,7 @@ func (b *NodePoolConfigMapBuilder) Build() *corev1.ConfigMap {
 	}
 
 	// Add any additional data
-	for k, v := range b.data {
-		data[k] = v
-	}
+	maps.Copy(data, b.data)
 
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -120,8 +114,6 @@ func (b *NodePoolConfigMapBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, constants.ComponentIndexer, b.version)
 	// Add nodePool-specific labels
 	labels[constants.LabelNodePool] = b.poolName
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }

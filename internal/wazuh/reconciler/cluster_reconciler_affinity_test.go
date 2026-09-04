@@ -598,7 +598,7 @@ func TestAntiAffinityIntegration_HashChangeOnAntiAffinityChange(t *testing.T) {
 
 	// Verify that different anti-affinity configs produce different affinities
 	// (which would result in different spec hashes)
-	for i := 0; i < len(tests); i++ {
+	for i := range tests {
 		for j := i + 1; j < len(tests); j++ {
 			// If both are nil, they're equal (both disabled)
 			if affinities[i] == nil && affinities[j] == nil {

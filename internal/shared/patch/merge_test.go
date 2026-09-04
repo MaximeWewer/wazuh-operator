@@ -56,7 +56,7 @@ func TestMergeStatefulSetUpdate(t *testing.T) {
 						},
 					},
 				},
-				Replicas: ptr.To(int32(3)),
+				Replicas: new(int32(3)),
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{Name: "old", Image: "old:v1"}},
@@ -92,7 +92,7 @@ func TestMergeStatefulSetUpdate(t *testing.T) {
 						},
 					},
 				},
-				Replicas: ptr.To(int32(5)),
+				Replicas: new(int32(5)),
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						Containers: []corev1.Container{{Name: "new", Image: "new:v2"}},
@@ -195,7 +195,7 @@ func TestMergeDeploymentUpdate(t *testing.T) {
 				},
 			},
 			Spec: appsv1.DeploymentSpec{
-				Replicas: ptr.To(int32(2)),
+				Replicas: new(int32(2)),
 				Selector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{"app": "test"},
 				},
@@ -215,7 +215,7 @@ func TestMergeDeploymentUpdate(t *testing.T) {
 				},
 			},
 			Spec: appsv1.DeploymentSpec{
-				Replicas: ptr.To(int32(4)),
+				Replicas: new(int32(4)),
 				Selector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{"app": "test"},
 				},

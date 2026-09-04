@@ -391,7 +391,7 @@ func formatConfigMap(config map[string]any, indent int) string {
 				// spaces and mangles the key. "|-" preserves newlines and strips the final
 				// one. Block content is indented two spaces past the key.
 				fmt.Fprintf(&sb, "%s%s: |-\n", prefix, key)
-				for _, line := range strings.Split(v, "\n") {
+				for line := range strings.SplitSeq(v, "\n") {
 					fmt.Fprintf(&sb, "%s  %s\n", prefix, line)
 				}
 			case strings.Contains(v, ":") || strings.Contains(v, "#"):

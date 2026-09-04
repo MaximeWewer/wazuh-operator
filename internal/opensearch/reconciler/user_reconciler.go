@@ -270,15 +270,6 @@ func (r *UserReconciler) getPassword(ctx context.Context, user *wazuhv1.OpenSear
 	return string(password), nil
 }
 
-// getOpenSearchClient (legacy) returns a client for the first cluster ref.
-// Used by Delete which currently iterates manually.
-func (r *UserReconciler) getOpenSearchClient(ctx context.Context, user *wazuhv1.OpenSearchUser) (*adapters.OpenSearchHTTPAdapter, error) {
-	if len(user.Spec.ClusterRefs) == 0 {
-		return nil, fmt.Errorf("no cluster references configured")
-	}
-	return r.getOpenSearchClientForRef(ctx, user.Spec.ClusterRefs[0])
-}
-
 // updateStatus updates the user status with retry on conflict.
 // Skips the write when phase, message and generation are unchanged.
 func (r *UserReconciler) updateStatus(ctx context.Context, user *wazuhv1.OpenSearchUser, phase wazuhv1.OpenSearchResourcePhase, message string, updateTimestamp ...bool) error {
@@ -329,7 +320,7 @@ func (r *UserReconciler) handleDeletion(ctx context.Context, user *wazuhv1.OpenS
 			return err
 		}
 		controllerutil.RemoveFinalizer(latest, constants.UserFinalizer)
-		return r.Client.Update(ctx, latest)
+		return r.Update(ctx, latest)
 	})
 }
 

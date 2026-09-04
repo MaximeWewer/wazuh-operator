@@ -18,6 +18,7 @@ package deployments
 
 import (
 	"fmt"
+	"maps"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -160,17 +161,13 @@ func (b *NodePoolStatefulSetBuilder) WithTopologySpreadConstraints(constraints [
 
 // WithLabels adds custom labels
 func (b *NodePoolStatefulSetBuilder) WithLabels(labels map[string]string) *NodePoolStatefulSetBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *NodePoolStatefulSetBuilder) WithAnnotations(annotations map[string]string) *NodePoolStatefulSetBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -339,7 +336,7 @@ func (b *NodePoolStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			ImagePullPolicy: corev1.PullIfNotPresent,
 			Resources:       *resources,
 			SecurityContext: &corev1.SecurityContext{
-				AllowPrivilegeEscalation: boolPtr(false),
+				AllowPrivilegeEscalation: new(false),
 				Capabilities: &corev1.Capabilities{
 					Drop: []corev1.Capability{"ALL"},
 				},
@@ -457,9 +454,7 @@ func (b *NodePoolStatefulSetBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, constants.ComponentIndexer, b.version)
 	// Add nodePool-specific labels
 	labels[constants.LabelNodePool] = b.poolName
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }
 
@@ -685,8 +680,8 @@ func (b *NodePoolStatefulSetBuilder) buildInitContainers(_, _ string) []corev1.C
 			Image:   constants.ImageBusyboxStable,
 			Command: []string{"sh", "-c"},
 			SecurityContext: &corev1.SecurityContext{
-				AllowPrivilegeEscalation: boolPtr(false),
-				ReadOnlyRootFilesystem:   boolPtr(false), // Needs to write to /tmp/config
+				AllowPrivilegeEscalation: new(false),
+				ReadOnlyRootFilesystem:   new(false), // Needs to write to /tmp/config
 				Capabilities: &corev1.Capabilities{
 					Drop: []corev1.Capability{"ALL"},
 				},
@@ -740,7 +735,7 @@ ls -la /tmp/config/
 			Image:   constants.ImageBusyboxStable,
 			Command: []string{"sh", "-c", fmt.Sprintf("chown -R 1000:1000 %s || true", constants.PathIndexerData)},
 			SecurityContext: &corev1.SecurityContext{
-				RunAsUser: int64Ptr(0),
+				RunAsUser: new(int64(0)),
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
@@ -762,8 +757,8 @@ ls -la /tmp/config/
 						"SYS_ADMIN",
 					},
 				},
-				Privileged: boolPtr(true),
-				RunAsUser:  int64Ptr(0),
+				Privileged: new(true),
+				RunAsUser:  new(int64(0)),
 			},
 		},
 	}

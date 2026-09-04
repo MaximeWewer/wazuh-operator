@@ -19,6 +19,7 @@ package secrets
 
 import (
 	"fmt"
+	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,26 +65,20 @@ func (b *ClusterKeySecretBuilder) WithClusterKey(key string) *ClusterKeySecretBu
 
 // WithLabels adds custom labels
 func (b *ClusterKeySecretBuilder) WithLabels(labels map[string]string) *ClusterKeySecretBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *ClusterKeySecretBuilder) WithAnnotations(annotations map[string]string) *ClusterKeySecretBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
 // Build creates the Secret
 func (b *ClusterKeySecretBuilder) Build() *corev1.Secret {
 	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -143,26 +138,20 @@ func (b *APICredentialsSecretBuilder) WithCredentials(username, password string)
 
 // WithLabels adds custom labels
 func (b *APICredentialsSecretBuilder) WithLabels(labels map[string]string) *APICredentialsSecretBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *APICredentialsSecretBuilder) WithAnnotations(annotations map[string]string) *APICredentialsSecretBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
 // Build creates the Secret
 func (b *APICredentialsSecretBuilder) Build() *corev1.Secret {
 	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{

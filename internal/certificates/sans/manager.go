@@ -46,7 +46,7 @@ func GenerateManagerNodeSANs(clusterName, namespace string, workerReplicas int32
 	}
 
 	// Add individual worker pod names
-	for i := int32(0); i < workerReplicas; i++ {
+	for i := range workerReplicas {
 		podName := fmt.Sprintf("%s-manager-workers-%d", clusterName, i)
 		sans = append(sans, podName, dns.PodFQDN(podName, workersService, namespace))
 	}

@@ -18,6 +18,8 @@ limitations under the License.
 package secrets
 
 import (
+	"maps"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -56,17 +58,13 @@ func (b *IndexerSecuritySecretBuilder) WithVersion(version string) *IndexerSecur
 
 // WithLabels adds custom labels
 func (b *IndexerSecuritySecretBuilder) WithLabels(labels map[string]string) *IndexerSecuritySecretBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *IndexerSecuritySecretBuilder) WithAnnotations(annotations map[string]string) *IndexerSecuritySecretBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -108,9 +106,7 @@ func (b *IndexerSecuritySecretBuilder) WithConfig(content []byte) *IndexerSecuri
 
 // WithData adds raw data entries
 func (b *IndexerSecuritySecretBuilder) WithData(data map[string][]byte) *IndexerSecuritySecretBuilder {
-	for k, v := range data {
-		b.data[k] = v
-	}
+	maps.Copy(b.data, data)
 	return b
 }
 
@@ -133,9 +129,7 @@ func (b *IndexerSecuritySecretBuilder) Build() *corev1.Secret {
 // buildLabels builds the complete label set
 func (b *IndexerSecuritySecretBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, constants.ComponentIndexer, b.version)
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }
 
@@ -186,26 +180,20 @@ func (b *IndexerCredentialsSecretBuilder) WithKibanaPassword(password string) *I
 
 // WithLabels adds custom labels
 func (b *IndexerCredentialsSecretBuilder) WithLabels(labels map[string]string) *IndexerCredentialsSecretBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *IndexerCredentialsSecretBuilder) WithAnnotations(annotations map[string]string) *IndexerCredentialsSecretBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
 // Build creates the Secret
 func (b *IndexerCredentialsSecretBuilder) Build() *corev1.Secret {
 	labels := constants.CommonLabels(b.clusterName, constants.ComponentIndexer, b.version)
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 
 	data := map[string][]byte{
 		constants.SecretKeyAdminUsername: []byte(b.adminUsername),

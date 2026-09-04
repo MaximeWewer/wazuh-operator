@@ -54,12 +54,12 @@ func TestCDBFetchInitContainerRendersScript(t *testing.T) {
 	}
 
 	for _, want := range []string{
-		"https://example.com/blocklist.txt",                 // source URL
-		"tail -n +4",                                        // SkipLines 3 -> tail +4
-		"RSTART,RLENGTH",                                    // iplist awk marker
-		"/var/ossec/etc/lists/malicious-ioc/malicious-ip",   // destination path
-		"wget -q -O",                                        // download
-		"mv",                                                // atomic publish
+		"https://example.com/blocklist.txt", // source URL
+		"tail -n +4",                        // SkipLines 3 -> tail +4
+		"RSTART,RLENGTH",                    // iplist awk marker
+		"/var/ossec/etc/lists/malicious-ioc/malicious-ip", // destination path
+		"wget -q -O", // download
+		"mv",         // atomic publish
 	} {
 		if !strings.Contains(script, want) {
 			t.Errorf("script missing %q\n---\n%s", want, script)
@@ -75,8 +75,8 @@ func TestCDBFetchInitContainerRendersScript(t *testing.T) {
 	for i, ic := range inits {
 		idx[ic.Name] = i
 	}
-	if !(idx[constants.InitContainerNamePermissions] < idx[constants.InitContainerNameCDBFetch] &&
-		idx[constants.InitContainerNameCDBFetch] < idx["fix-ownership"]) {
+	if idx[constants.InitContainerNamePermissions] >= idx[constants.InitContainerNameCDBFetch] ||
+		idx[constants.InitContainerNameCDBFetch] >= idx["fix-ownership"] {
 		t.Errorf("cdb-fetch not ordered between fix-permissions and fix-ownership: %v", idx)
 	}
 }

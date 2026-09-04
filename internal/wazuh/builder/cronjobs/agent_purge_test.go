@@ -117,11 +117,6 @@ func TestAgentPurgeCronJobBuilder_BuildScript(t *testing.T) {
 			t.Errorf("expected script to contain %q, got: %s", expected, script)
 		}
 	}
-
-	// Non-dry-run should not include the dry-run label
-	if strings.Contains(script, "[dry-run]") && strings.Contains(script, `"false" = "true"`) {
-		// The dry-run branch text is still present in the shell if/else, but the flag is false
-	}
 }
 
 func TestAgentPurgeCronJobBuilder_BuildScript_DryRun(t *testing.T) {

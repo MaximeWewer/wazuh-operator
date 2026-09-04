@@ -17,6 +17,8 @@ limitations under the License.
 package hpa
 
 import (
+	"maps"
+
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -51,17 +53,13 @@ func (b *WorkerHPABuilder) WithSpec(spec *wazuhv1.HPASpec) *WorkerHPABuilder {
 
 // WithLabels sets additional labels
 func (b *WorkerHPABuilder) WithLabels(labels map[string]string) *WorkerHPABuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations sets additional annotations
 func (b *WorkerHPABuilder) WithAnnotations(annotations map[string]string) *WorkerHPABuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -90,9 +88,7 @@ func (b *WorkerHPABuilder) Build() *autoscalingv2.HorizontalPodAutoscaler {
 		constants.LabelComponent: "manager-worker",
 		constants.LabelInstance:  b.clusterName,
 	}
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 
 	// Build metrics
 	var metrics []autoscalingv2.MetricSpec

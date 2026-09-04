@@ -91,23 +91,7 @@ func buildExporter(ctx context.Context, config Config) (sdktrace.SpanExporter, e
 	hasScheme := strings.Contains(config.Endpoint, "://")
 
 	if config.Protocol == "http" {
-		opts := []otlptracehttp.Option{}
-		if hasScheme {
-			opts = append(opts, otlptracehttp.WithEndpointURL(config.Endpoint))
-		} else {
-			opts = append(opts, otlptracehttp.WithEndpoint(config.Endpoint))
-		}
-		if len(config.Headers) > 0 {
-			opts = append(opts, otlptracehttp.WithHeaders(config.Headers))
-		}
-		if config.Insecure {
-			opts = append(opts, otlptracehttp.WithInsecure())
-		} else if tlsCfg, err := tlsConfigFromCA(config.CACertPath); err != nil {
-			return nil, err
-		} else if tlsCfg != nil {
-			opts = append(opts, otlptracehttp.WithTLSClientConfig(tlsCfg))
-		}
-		return otlptracehttp.New(ctx, opts...)
+		return buildHTTPExporter(ctx, config, hasScheme)
 	}
 
 	// gRPC (default)
@@ -130,6 +114,31 @@ func buildExporter(ctx context.Context, config Config) (sdktrace.SpanExporter, e
 		opts = append(opts, otlptracegrpc.WithTLSCredentials(creds))
 	}
 	return otlptracegrpc.New(ctx, opts...)
+}
+
+// buildHTTPExporter creates the OTLP/HTTP trace exporter.
+func buildHTTPExporter(ctx context.Context, config Config, hasScheme bool) (sdktrace.SpanExporter, error) {
+	opts := []otlptracehttp.Option{}
+	if hasScheme {
+		opts = append(opts, otlptracehttp.WithEndpointURL(config.Endpoint))
+	} else {
+		opts = append(opts, otlptracehttp.WithEndpoint(config.Endpoint))
+	}
+	if len(config.Headers) > 0 {
+		opts = append(opts, otlptracehttp.WithHeaders(config.Headers))
+	}
+	if config.Insecure {
+		opts = append(opts, otlptracehttp.WithInsecure())
+	} else {
+		tlsCfg, err := tlsConfigFromCA(config.CACertPath)
+		if err != nil {
+			return nil, err
+		}
+		if tlsCfg != nil {
+			opts = append(opts, otlptracehttp.WithTLSClientConfig(tlsCfg))
+		}
+	}
+	return otlptracehttp.New(ctx, opts...)
 }
 
 // tlsConfigFromCA builds a *tls.Config trusting the given PEM CA bundle.

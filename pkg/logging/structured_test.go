@@ -65,22 +65,19 @@ func TestLoadFromEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original env
-			origFormat := os.Getenv(EnvLogFormat)
-			origLevel := os.Getenv(EnvLogLevel)
-			defer func() {
-				os.Setenv(EnvLogFormat, origFormat)
-				os.Setenv(EnvLogLevel, origLevel)
-			}()
+			// t.Setenv registers restoration of the original values (unset included)
+			// when the subtest ends.
+			t.Setenv(EnvLogFormat, os.Getenv(EnvLogFormat))
+			t.Setenv(EnvLogLevel, os.Getenv(EnvLogLevel))
 
 			// Set test env
 			if tt.envFormat != "" {
-				os.Setenv(EnvLogFormat, tt.envFormat)
+				t.Setenv(EnvLogFormat, tt.envFormat)
 			} else {
 				os.Unsetenv(EnvLogFormat)
 			}
 			if tt.envLevel != "" {
-				os.Setenv(EnvLogLevel, tt.envLevel)
+				t.Setenv(EnvLogLevel, tt.envLevel)
 			} else {
 				os.Unsetenv(EnvLogLevel)
 			}

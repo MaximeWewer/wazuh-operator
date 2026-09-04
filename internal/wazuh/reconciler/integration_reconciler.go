@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
@@ -352,12 +353,12 @@ func (r *IntegrationReconciler) determineAppliedNodes(integration *wazuhv1.Wazuh
 	case "master":
 		nodes = append(nodes, fmt.Sprintf("%s-manager-master-0", clusterName))
 	case "workers":
-		for i := int32(0); i < workerCount; i++ {
+		for i := range workerCount {
 			nodes = append(nodes, fmt.Sprintf("%s-manager-worker-%d", clusterName, i))
 		}
 	case "all":
 		nodes = append(nodes, fmt.Sprintf("%s-manager-master-0", clusterName))
-		for i := int32(0); i < workerCount; i++ {
+		for i := range workerCount {
 			nodes = append(nodes, fmt.Sprintf("%s-manager-worker-%d", clusterName, i))
 		}
 	}
@@ -604,12 +605,12 @@ func joinNonEmpty(parts []string, sep string) string {
 			filtered = append(filtered, p)
 		}
 	}
-	result := ""
+	var result strings.Builder
 	for i, p := range filtered {
 		if i > 0 {
-			result += sep
+			result.WriteString(sep)
 		}
-		result += p
+		result.WriteString(p)
 	}
-	return result
+	return result.String()
 }

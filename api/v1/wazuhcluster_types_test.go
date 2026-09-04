@@ -22,7 +22,7 @@ import (
 
 // Helper function for creating int32 pointer
 func int32Ptr(i int32) *int32 {
-	return &i
+	return new(i)
 }
 
 // TestWazuhManagerClusterSpec_GetTotalReplicas tests total replica count calculation

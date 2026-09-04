@@ -548,7 +548,7 @@ func TestComputeSpecHash_Deterministic(t *testing.T) {
 		t.Fatalf("ComputeIndexerSpecHashFull failed: %v", err)
 	}
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		hash, err := ComputeIndexerSpecHashFull(input)
 		if err != nil {
 			t.Fatalf("ComputeIndexerSpecHashFull failed on iteration %d: %v", i, err)

@@ -365,7 +365,7 @@ func (r *WazuhRestoreReconciler) handleDeletion(ctx context.Context, restore *wa
 			return err
 		}
 		controllerutil.RemoveFinalizer(latest, WazuhRestoreFinalizer)
-		return r.Client.Update(ctx, latest)
+		return r.Update(ctx, latest)
 	}); err != nil {
 		return fmt.Errorf("failed to remove finalizer: %w", err)
 	}

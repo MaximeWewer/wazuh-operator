@@ -18,6 +18,7 @@ package routes
 
 import (
 	"fmt"
+	"maps"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
@@ -88,9 +89,7 @@ func (b *HTTPRouteBuilder) WithAnnotations(annotations map[string]string) *HTTPR
 
 // WithLabels adds additional labels
 func (b *HTTPRouteBuilder) WithLabels(labels map[string]string) *HTTPRouteBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
@@ -139,9 +138,7 @@ func (b *HTTPRouteBuilder) Build() *gatewayv1.HTTPRoute {
 
 	// Merge annotations
 	allAnnotations := make(map[string]string)
-	for k, v := range b.annotations {
-		allAnnotations[k] = v
-	}
+	maps.Copy(allAnnotations, b.annotations)
 
 	route := &gatewayv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{

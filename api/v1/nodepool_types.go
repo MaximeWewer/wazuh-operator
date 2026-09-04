@@ -17,6 +17,8 @@ limitations under the License.
 package v1
 
 import (
+	"slices"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -191,12 +193,7 @@ func (p *IndexerNodePoolSpec) GetRolesAsStrings() []string {
 
 // HasRole checks if the nodePool has a specific role
 func (p *IndexerNodePoolSpec) HasRole(role IndexerNodeRole) bool {
-	for _, r := range p.Roles {
-		if r == role {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(p.Roles, role)
 }
 
 // HasClusterManagerRole checks if the nodePool has the cluster_manager role

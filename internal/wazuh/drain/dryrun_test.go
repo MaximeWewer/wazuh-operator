@@ -18,6 +18,7 @@ package drain
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -313,13 +314,7 @@ func TestDryRunEvaluator_EvaluateAll_OneNotFeasible(t *testing.T) {
 	}
 
 	// Should have blocker from manager with [manager] prefix
-	foundManagerBlocker := false
-	for _, blocker := range result.Blockers {
-		if blocker == "[manager] Only one worker" {
-			foundManagerBlocker = true
-			break
-		}
-	}
+	foundManagerBlocker := slices.Contains(result.Blockers, "[manager] Only one worker")
 	if !foundManagerBlocker {
 		t.Error("expected manager blocker with prefix in combined blockers")
 	}

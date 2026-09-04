@@ -18,6 +18,8 @@ limitations under the License.
 package configmaps
 
 import (
+	"maps"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -70,17 +72,13 @@ func (b *IndexerConfigMapBuilder) WithVersion(version string) *IndexerConfigMapB
 
 // WithLabels adds custom labels
 func (b *IndexerConfigMapBuilder) WithLabels(labels map[string]string) *IndexerConfigMapBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *IndexerConfigMapBuilder) WithAnnotations(annotations map[string]string) *IndexerConfigMapBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -156,17 +154,13 @@ func (b *IndexerConfigMapBuilder) BuildSecurityConfigFromAuth() string {
 
 // WithData adds raw data entries
 func (b *IndexerConfigMapBuilder) WithData(data map[string]string) *IndexerConfigMapBuilder {
-	for k, v := range data {
-		b.data[k] = v
-	}
+	maps.Copy(b.data, data)
 	return b
 }
 
 // WithBinaryData adds binary data entries
 func (b *IndexerConfigMapBuilder) WithBinaryData(data map[string][]byte) *IndexerConfigMapBuilder {
-	for k, v := range data {
-		b.binaryData[k] = v
-	}
+	maps.Copy(b.binaryData, data)
 	return b
 }
 
@@ -183,9 +177,7 @@ func (b *IndexerConfigMapBuilder) Build() *corev1.ConfigMap {
 	}
 
 	// Add any additional data
-	for k, v := range b.data {
-		data[k] = v
-	}
+	maps.Copy(data, b.data)
 
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -202,8 +194,6 @@ func (b *IndexerConfigMapBuilder) Build() *corev1.ConfigMap {
 // buildLabels builds the complete label set
 func (b *IndexerConfigMapBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, constants.ComponentIndexer, b.version)
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }

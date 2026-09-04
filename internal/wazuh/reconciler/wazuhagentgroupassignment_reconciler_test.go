@@ -228,7 +228,7 @@ func TestComputeDesiredAgentGroups_PlatformUnion(t *testing.T) {
 	agents := []adapters.WazuhAgent{
 		{ID: "001", Name: "web-1", Groups: []string{"default"}, OSPlatform: "ubuntu"}, // name (CR1) + platform (CR2)
 		{ID: "002", Name: "db-1", Groups: []string{"default"}, OSPlatform: "Windows"}, // platform only (CR3, case-insensitive)
-		{ID: "003", Name: "misc-1", Groups: []string{"default"}, OSPlatform: ""},       // no name/platform match -> untouched
+		{ID: "003", Name: "misc-1", Groups: []string{"default"}, OSPlatform: ""},      // no name/platform match -> untouched
 	}
 	crs := []wazuhv1.WazuhAgentGroupAssignment{
 		waga([]string{"web"}, wazuhv1.AgentSelector{NamePatterns: []string{"web-*"}}),

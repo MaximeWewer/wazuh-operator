@@ -429,7 +429,7 @@ func (r *FilebeatReconciler) Delete(ctx context.Context, filebeat *wazuhv1.Wazuh
 		cm := &corev1.ConfigMap{}
 		err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: ref.Namespace}, cm)
 		if err == nil {
-			// Only delete if labelled as ours, to avoid stomping on a CM owned by the cluster.
+			// Only delete if labeled as ours, to avoid stomping on a CM owned by the cluster.
 			if cm.Labels["resources.wazuh.com/filebeat-cr"] == filebeat.Name &&
 				cm.Labels["resources.wazuh.com/filebeat-cr-namespace"] == filebeat.Namespace {
 				if err := r.Client.Delete(ctx, cm); err != nil && !errors.IsNotFound(err) {

@@ -276,14 +276,6 @@ func (r *IndexReconciler) buildDynamicSettings(index *wazuhv1.OpenSearchIndex) m
 	}
 }
 
-// getOpenSearchClient (legacy) returns a client for the first cluster ref.
-func (r *IndexReconciler) getOpenSearchClient(ctx context.Context, index *wazuhv1.OpenSearchIndex) (*adapters.OpenSearchHTTPAdapter, error) {
-	if len(index.Spec.ClusterRefs) == 0 {
-		return nil, fmt.Errorf("no cluster references configured")
-	}
-	return r.getOpenSearchClientForRef(ctx, index.Spec.ClusterRefs[0])
-}
-
 // getOpenSearchClientForRef builds an HTTP adapter for the given cluster ref.
 func (r *IndexReconciler) getOpenSearchClientForRef(ctx context.Context, ref wazuhv1.WazuhClusterRef) (*adapters.OpenSearchHTTPAdapter, error) {
 	if r.ClientFactory == nil {
@@ -350,7 +342,7 @@ func (r *IndexReconciler) handleDeletion(ctx context.Context, index *wazuhv1.Ope
 			return err
 		}
 		controllerutil.RemoveFinalizer(latest, constants.IndexFinalizer)
-		return r.Client.Update(ctx, latest)
+		return r.Update(ctx, latest)
 	})
 }
 

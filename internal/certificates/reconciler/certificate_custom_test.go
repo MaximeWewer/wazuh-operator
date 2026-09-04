@@ -39,10 +39,6 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
-func boolPtrCustom(b bool) *bool {
-	return &b
-}
-
 // generateTestCert generates a self-signed test certificate with the given validity
 func generateTestCert(t *testing.T, validity time.Duration) []byte {
 	t.Helper()
@@ -98,7 +94,7 @@ func TestReconcileCustomCerts_BasicFlow(t *testing.T) {
 		Spec: wazuhv1.WazuhClusterSpec{
 			Version: "4.9.0",
 			TLS: &wazuhv1.TLSConfig{
-				Enabled: boolPtrCustom(true),
+				Enabled: new(true),
 				CustomCerts: &wazuhv1.CustomCertsConfig{
 					CASecretRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{Name: "my-ca-secret"},
@@ -180,7 +176,7 @@ func TestReconcileCustomCerts_WithNodeCerts(t *testing.T) {
 		Spec: wazuhv1.WazuhClusterSpec{
 			Version: "4.9.0",
 			TLS: &wazuhv1.TLSConfig{
-				Enabled: boolPtrCustom(true),
+				Enabled: new(true),
 				CustomCerts: &wazuhv1.CustomCertsConfig{
 					CASecretRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{Name: "my-ca"},
@@ -250,7 +246,7 @@ func TestReconcileCustomCerts_MissingCASecret(t *testing.T) {
 		Spec: wazuhv1.WazuhClusterSpec{
 			Version: "4.9.0",
 			TLS: &wazuhv1.TLSConfig{
-				Enabled: boolPtrCustom(true),
+				Enabled: new(true),
 				CustomCerts: &wazuhv1.CustomCertsConfig{
 					CASecretRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{Name: "nonexistent"},

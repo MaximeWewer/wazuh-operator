@@ -227,7 +227,7 @@ func (r *ComponentTemplateReconciler) handleDeletion(ctx context.Context, templa
 			return err
 		}
 		controllerutil.RemoveFinalizer(latest, constants.ComponentTemplateFinalizer)
-		return r.Client.Update(ctx, latest)
+		return r.Update(ctx, latest)
 	})
 }
 

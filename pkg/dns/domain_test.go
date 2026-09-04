@@ -158,12 +158,9 @@ func TestValidateDomain(t *testing.T) {
 }
 
 func TestInitialize(t *testing.T) {
-	// Save original env and restore after test
-	originalEnv := os.Getenv(EnvClusterDomain)
-	defer func() {
-		os.Setenv(EnvClusterDomain, originalEnv)
-		Reset()
-	}()
+	// t.Setenv registers restoration of the original value (unset included) at test end.
+	t.Setenv(EnvClusterDomain, os.Getenv(EnvClusterDomain))
+	t.Cleanup(Reset)
 
 	t.Run("initialize with default domain", func(t *testing.T) {
 		Reset()
@@ -182,7 +179,7 @@ func TestInitialize(t *testing.T) {
 	t.Run("initialize with custom domain from env", func(t *testing.T) {
 		Reset()
 		customDomain := "custom.internal"
-		os.Setenv(EnvClusterDomain, customDomain)
+		t.Setenv(EnvClusterDomain, customDomain)
 
 		err := Initialize()
 		if err != nil {
@@ -196,7 +193,7 @@ func TestInitialize(t *testing.T) {
 
 	t.Run("initialize with invalid domain from env", func(t *testing.T) {
 		Reset()
-		os.Setenv(EnvClusterDomain, "INVALID.DOMAIN")
+		t.Setenv(EnvClusterDomain, "INVALID.DOMAIN")
 
 		err := Initialize()
 		if err == nil {
@@ -206,7 +203,7 @@ func TestInitialize(t *testing.T) {
 
 	t.Run("double initialization is no-op", func(t *testing.T) {
 		Reset()
-		os.Setenv(EnvClusterDomain, "first.domain")
+		t.Setenv(EnvClusterDomain, "first.domain")
 
 		err := Initialize()
 		if err != nil {
@@ -214,7 +211,7 @@ func TestInitialize(t *testing.T) {
 		}
 
 		// Change env and try to initialize again
-		os.Setenv(EnvClusterDomain, "second.domain")
+		t.Setenv(EnvClusterDomain, "second.domain")
 		err = Initialize()
 		if err != nil {
 			t.Errorf("Initialize() second call error = %v", err)

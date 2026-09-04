@@ -43,7 +43,7 @@ func GenerateFilebeatSANs(clusterName, namespace string, workerReplicas int32) [
 		dns.ServiceFQDN(workersService, namespace),
 	}
 
-	for i := int32(0); i < workerReplicas; i++ {
+	for i := range workerReplicas {
 		podName := fmt.Sprintf("%s-manager-workers-%d", clusterName, i)
 		sans = append(sans, podName, dns.PodFQDN(podName, workersService, namespace))
 	}

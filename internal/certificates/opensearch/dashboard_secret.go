@@ -17,6 +17,8 @@ limitations under the License.
 package opensearchcerts
 
 import (
+	"maps"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -55,17 +57,13 @@ func (b *DashboardCertsSecretBuilder) WithVersion(version string) *DashboardCert
 
 // WithLabels adds custom labels
 func (b *DashboardCertsSecretBuilder) WithLabels(labels map[string]string) *DashboardCertsSecretBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *DashboardCertsSecretBuilder) WithAnnotations(annotations map[string]string) *DashboardCertsSecretBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -89,9 +87,7 @@ func (b *DashboardCertsSecretBuilder) WithDashboardKey(key []byte) *DashboardCer
 
 // WithData adds raw data entries
 func (b *DashboardCertsSecretBuilder) WithData(data map[string][]byte) *DashboardCertsSecretBuilder {
-	for k, v := range data {
-		b.data[k] = v
-	}
+	maps.Copy(b.data, data)
 	return b
 }
 
@@ -114,8 +110,6 @@ func (b *DashboardCertsSecretBuilder) Build() *corev1.Secret {
 // buildLabels builds the complete label set
 func (b *DashboardCertsSecretBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, constants.ComponentDashboard, b.version)
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }

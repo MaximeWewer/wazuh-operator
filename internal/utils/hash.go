@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // HashObject computes a SHA256 hash of an object's JSON representation
@@ -45,12 +46,12 @@ func HashString(s string) string {
 }
 
 // HashStrings computes a hash of multiple strings
-func HashStrings(strings ...string) string {
-	combined := ""
-	for _, s := range strings {
-		combined += s + "\n"
+func HashStrings(values ...string) string {
+	var combined strings.Builder
+	for _, s := range values {
+		combined.WriteString(s + "\n")
 	}
-	return HashString(combined)
+	return HashString(combined.String())
 }
 
 // HashMap computes a deterministic hash of a map
@@ -62,11 +63,11 @@ func HashMap(m map[string]string) string {
 	}
 	sort.Strings(keys)
 
-	combined := ""
+	var combined strings.Builder
 	for _, k := range keys {
-		combined += k + "=" + m[k] + "\n"
+		combined.WriteString(k + "=" + m[k] + "\n")
 	}
-	return HashString(combined)
+	return HashString(combined.String())
 }
 
 // ShortHash returns a truncated hash (first 8 characters)

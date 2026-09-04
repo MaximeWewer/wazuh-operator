@@ -128,10 +128,7 @@ func RetryWithResult[T any](ctx context.Context, config RetryConfig, fn func() (
 // CalculateBackoff calculates the backoff duration for a given attempt
 func CalculateBackoff(attempt int, config RetryConfig) time.Duration {
 	backoff := float64(config.InitialInterval) * math.Pow(config.Multiplier, float64(attempt))
-	d := time.Duration(backoff)
-	if d > config.MaxInterval {
-		d = config.MaxInterval
-	}
+	d := min(time.Duration(backoff), config.MaxInterval)
 	if config.Jitter {
 		d = applyJitter(d)
 	}
@@ -147,10 +144,7 @@ func applyJitter(d time.Duration) time.Duration {
 
 // nextInterval computes the next backoff interval, capped and optionally jittered.
 func nextInterval(current time.Duration, config RetryConfig) time.Duration {
-	next := time.Duration(float64(current) * config.Multiplier)
-	if next > config.MaxInterval {
-		next = config.MaxInterval
-	}
+	next := min(time.Duration(float64(current)*config.Multiplier), config.MaxInterval)
 	if config.Jitter {
 		next = applyJitter(next)
 	}

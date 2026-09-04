@@ -34,6 +34,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -68,7 +69,7 @@ const (
 
 var (
 	stableTag = regexp.MustCompile(`^v(\d+\.\d+\.\d+)$`) // rejects alpha/beta/rc/build suffixes
-	osVerLine = regexp.MustCompile(`(?m)^\s*opensearch\s*=\s*([0-9]+\.[0-9]+\.[0-9]+)\s*$`)
+	osVerLine = regexp.MustCompile(`(?m)^\s*opensearch\s*=\s*(\d+\.\d+\.\d+)\s*$`)
 )
 
 func main() {
@@ -79,7 +80,7 @@ func main() {
 	)
 	flag.Parse()
 
-	if err := run(*file, *dryRun, *summaryFn); err != nil {
+	if err := run(context.Background(), *file, *dryRun, *summaryFn); err != nil {
 		fmt.Fprintf(os.Stderr, "version-sync: %v\n", err)
 		os.Exit(1)
 	}
@@ -92,14 +93,14 @@ type row struct {
 	parsedVer *versions.Version
 }
 
-func run(file string, dryRun bool, summaryFn string) error {
+func run(ctx context.Context, file string, dryRun bool, summaryFn string) error {
 	src, err := os.ReadFile(file)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", file, err)
 	}
 	existing, minorOS := parseExistingRows(string(src))
 
-	tags, err := fetchIndexerTags()
+	tags, err := fetchIndexerTags(ctx)
 	if err != nil {
 		return fmt.Errorf("fetch indexer tags: %w", err)
 	}
@@ -120,7 +121,7 @@ func run(file string, dryRun bool, summaryFn string) error {
 			continue
 		}
 
-		osVer, err := fetchOpenSearchVersion("v" + wv)
+		osVer, err := fetchOpenSearchVersion(ctx, "v"+wv)
 		if errors.Is(err, errNotFound) {
 			// Tag has no buildSrc/version.properties (very old layout) - genuinely skippable.
 			skipped = append(skipped, fmt.Sprintf("%s: no version.properties at this tag", wv))
@@ -152,7 +153,7 @@ func run(file string, dryRun bool, summaryFn string) error {
 
 		plugin := osVer + ".0"
 
-		ok, err := exporterReleaseExists(plugin)
+		ok, err := exporterReleaseExists(ctx, plugin)
 		if err != nil {
 			return fmt.Errorf("check exporter release %s (for Wazuh %s): %w", plugin, wv, err)
 		}
@@ -185,7 +186,7 @@ func run(file string, dryRun bool, summaryFn string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(file, []byte(updated), 0o644); err != nil {
+	if err := os.WriteFile(file, []byte(updated), 0o600); err != nil {
 		return fmt.Errorf("write %s: %w", file, err)
 	}
 	fmt.Printf("version-sync: added %d row(s) to %s\n", len(newRows), file)
@@ -231,18 +232,9 @@ func parseExistingRows(src string) (seen map[string]struct{}, minorOS map[string
 // version is lower than it.
 func insertRows(src string, rows []row) (string, error) {
 	lines := strings.Split(src, "\n")
-	beginIdx, endIdx := -1, -1
-	for i, ln := range lines {
-		if strings.Contains(ln, beginMarker) {
-			beginIdx = i
-		}
-		if strings.Contains(ln, endMarker) {
-			endIdx = i
-			break
-		}
-	}
-	if beginIdx == -1 || endIdx == -1 || endIdx < beginIdx {
-		return "", fmt.Errorf("could not locate %q / %q markers in versions.go", beginMarker, endMarker)
+	beginIdx, endIdx, err := findGeneratedBlock(lines)
+	if err != nil {
+		return "", err
 	}
 
 	rowKeyRe := regexp.MustCompile(`^\s*"(\d+\.\d+\.\d+)":`)
@@ -260,17 +252,7 @@ func insertRows(src string, rows []row) (string, error) {
 		return a.Major > b.Major || (a.Major == b.Major && a.Minor > b.Minor)
 	}
 
-	// Which Wazuh minors already have a section in the block: a new patch of an
-	// existing minor tucks under that minor's comment silently, whereas a brand-new
-	// minor gets its own generated "// Wazuh X.Y.x - OpenSearch A.B.x" header.
-	hasMinor := map[string]bool{}
-	for _, ln := range block {
-		if m := rowKeyRe.FindStringSubmatch(ln); m != nil {
-			if v, err := versions.ParseVersion(m[1]); err == nil {
-				hasMinor[minorOf(v)] = true
-			}
-		}
-	}
+	hasMinor := existingMinors(block, rowKeyRe, minorOf)
 
 	pending := append([]row(nil), rows...)
 	sort.Slice(pending, func(i, j int) bool { return pending[i].parsedVer.Compare(pending[j].parsedVer) > 0 })
@@ -329,6 +311,43 @@ func insertRows(src string, rows []row) (string, error) {
 	return strings.Join(out, "\n"), nil
 }
 
+// findGeneratedBlock locates the BEGIN/END generated-mapping markers and returns
+// their line indices.
+func findGeneratedBlock(lines []string) (beginIdx, endIdx int, err error) {
+	beginIdx, endIdx = -1, -1
+	for i, ln := range lines {
+		if strings.Contains(ln, beginMarker) {
+			beginIdx = i
+		}
+		if strings.Contains(ln, endMarker) {
+			endIdx = i
+			break
+		}
+	}
+	if beginIdx == -1 || endIdx == -1 || endIdx < beginIdx {
+		return 0, 0, fmt.Errorf("could not locate %q / %q markers in versions.go", beginMarker, endMarker)
+	}
+	return beginIdx, endIdx, nil
+}
+
+// existingMinors reports which Wazuh minors already have a section in the block:
+// a new patch of an existing minor tucks under that minor's comment silently,
+// whereas a brand-new minor gets its own generated
+// "// Wazuh X.Y.x - OpenSearch A.B.x" header.
+func existingMinors(block []string, rowKeyRe *regexp.Regexp, minorOf func(*versions.Version) string) map[string]bool {
+	hasMinor := map[string]bool{}
+	for _, ln := range block {
+		m := rowKeyRe.FindStringSubmatch(ln)
+		if m == nil {
+			continue
+		}
+		if v, err := versions.ParseVersion(m[1]); err == nil {
+			hasMinor[minorOf(v)] = true
+		}
+	}
+	return hasMinor
+}
+
 func report(newRows []row, skipped []string, summaryFn string) {
 	var b strings.Builder
 	if len(newRows) > 0 {
@@ -350,7 +369,7 @@ func report(newRows []row, skipped []string, summaryFn string) {
 	}
 	fmt.Print(b.String())
 	if summaryFn != "" {
-		f, err := os.OpenFile(summaryFn, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		f, err := os.OpenFile(summaryFn, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		if err == nil {
 			defer f.Close()
 			_, _ = f.WriteString(b.String())
@@ -362,8 +381,8 @@ func report(newRows []row, skipped []string, summaryFn string) {
 
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
-func ghGet(url string, into any) error {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+func ghGet(ctx context.Context, url string, into any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return err
 	}
@@ -385,7 +404,7 @@ func ghGet(url string, into any) error {
 
 // fetchIndexerTags returns the stable Wazuh versions (bare "X.Y.Z") published as
 // wazuh-indexer git tags, across the first few pages.
-func fetchIndexerTags() ([]string, error) {
+func fetchIndexerTags(ctx context.Context) ([]string, error) {
 	seen := map[string]struct{}{}
 	var out []string
 	for page := 1; page <= 3; page++ {
@@ -393,7 +412,7 @@ func fetchIndexerTags() ([]string, error) {
 			Name string `json:"name"`
 		}
 		url := fmt.Sprintf("https://api.github.com/repos/%s/tags?per_page=100&page=%d", indexerRepo, page)
-		if err := ghGet(url, &tags); err != nil {
+		if err := ghGet(ctx, url, &tags); err != nil {
 			return nil, err
 		}
 		if len(tags) == 0 {
@@ -416,9 +435,13 @@ func fetchIndexerTags() ([]string, error) {
 
 // fetchOpenSearchVersion reads buildSrc/version.properties at the given tag and
 // returns the pinned OpenSearch version (e.g. "2.19.5").
-func fetchOpenSearchVersion(tag string) (string, error) {
+func fetchOpenSearchVersion(ctx context.Context, tag string) (string, error) {
 	url := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/buildSrc/version.properties", indexerRepo, tag)
-	resp, err := httpClient.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return "", err
+	}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -448,12 +471,15 @@ var exporterCache = map[string]bool{}
 
 // exporterReleaseExists reports whether a prometheus-exporter release with the
 // given tag (e.g. "2.19.5.0") exists and ships a downloadable .zip asset.
-func exporterReleaseExists(pluginVer string) (bool, error) {
+func exporterReleaseExists(ctx context.Context, pluginVer string) (bool, error) {
 	if v, ok := exporterCache[pluginVer]; ok {
 		return v, nil
 	}
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s", exporterRepo, pluginVer)
-	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return false, err
+	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	if tok := os.Getenv("GITHUB_TOKEN"); tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)

@@ -124,7 +124,7 @@ func TestCallReloadCertificatesAPIPerPod_MultiPod(t *testing.T) {
 		Spec: wazuhv1.WazuhClusterSpec{
 			Version: "4.9.0",
 			TLS: &wazuhv1.TLSConfig{
-				Enabled: boolPtr(true),
+				Enabled: new(true),
 			},
 			Indexer: &wazuhv1.WazuhIndexerClusterSpec{
 				Replicas: 3,
@@ -587,7 +587,7 @@ func TestIsHotReloadEnabled(t *testing.T) {
 			cluster: &wazuhv1.WazuhCluster{
 				Spec: wazuhv1.WazuhClusterSpec{
 					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
+						Enabled: new(true),
 						HotReload: &wazuhv1.HotReloadConfig{
 							Enabled: true,
 						},
@@ -601,7 +601,7 @@ func TestIsHotReloadEnabled(t *testing.T) {
 			cluster: &wazuhv1.WazuhCluster{
 				Spec: wazuhv1.WazuhClusterSpec{
 					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
+						Enabled: new(true),
 					},
 				},
 			},
@@ -612,7 +612,7 @@ func TestIsHotReloadEnabled(t *testing.T) {
 			cluster: &wazuhv1.WazuhCluster{
 				Spec: wazuhv1.WazuhClusterSpec{
 					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
+						Enabled: new(true),
 						HotReload: &wazuhv1.HotReloadConfig{
 							Enabled: false,
 						},
@@ -626,7 +626,7 @@ func TestIsHotReloadEnabled(t *testing.T) {
 			cluster: &wazuhv1.WazuhCluster{
 				Spec: wazuhv1.WazuhClusterSpec{
 					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(false),
+						Enabled: new(false),
 					},
 				},
 			},
@@ -663,7 +663,7 @@ func TestGetHotReloadConfigString(t *testing.T) {
 				Spec: wazuhv1.WazuhClusterSpec{
 					Version: "4.9.0",
 					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
+						Enabled: new(true),
 						HotReload: &wazuhv1.HotReloadConfig{
 							Enabled: true,
 						},
@@ -678,7 +678,7 @@ func TestGetHotReloadConfigString(t *testing.T) {
 				Spec: wazuhv1.WazuhClusterSpec{
 					Version: "4.9.0",
 					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
+						Enabled: new(true),
 						HotReload: &wazuhv1.HotReloadConfig{
 							Enabled: false,
 						},
@@ -693,7 +693,7 @@ func TestGetHotReloadConfigString(t *testing.T) {
 				Spec: wazuhv1.WazuhClusterSpec{
 					Version: "4.9.0",
 					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(false),
+						Enabled: new(false),
 					},
 				},
 			},
@@ -705,7 +705,7 @@ func TestGetHotReloadConfigString(t *testing.T) {
 				Spec: wazuhv1.WazuhClusterSpec{
 					Version: "4.7.0",
 					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
+						Enabled: new(true),
 						HotReload: &wazuhv1.HotReloadConfig{
 							Enabled: true,
 						},
@@ -724,9 +724,4 @@ func TestGetHotReloadConfigString(t *testing.T) {
 			}
 		})
 	}
-}
-
-// boolPtr returns a pointer to a bool value
-func boolPtr(b bool) *bool {
-	return &b
 }

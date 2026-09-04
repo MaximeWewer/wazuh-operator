@@ -201,7 +201,7 @@ func TestIndexerStatefulSetBuilder_ContainerSecurityContextOverride(t *testing.T
 		uid := int64(5000)
 		sts := NewIndexerStatefulSetBuilder("cluster", "ns").
 			WithContainerSecurityContext(&corev1.SecurityContext{
-				AllowPrivilegeEscalation: boolPtr(true),
+				AllowPrivilegeEscalation: new(true),
 				RunAsUser:                &uid,
 				Capabilities: &corev1.Capabilities{
 					Add: []corev1.Capability{"NET_BIND_SERVICE"},

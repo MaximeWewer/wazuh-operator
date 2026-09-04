@@ -224,7 +224,7 @@ func (r *RoleMappingReconciler) handleDeletion(ctx context.Context, mapping *waz
 			return err
 		}
 		controllerutil.RemoveFinalizer(latest, constants.RoleMappingFinalizer)
-		return r.Client.Update(ctx, latest)
+		return r.Update(ctx, latest)
 	})
 }
 

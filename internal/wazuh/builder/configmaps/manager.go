@@ -19,6 +19,7 @@ package configmaps
 
 import (
 	"fmt"
+	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -68,17 +69,13 @@ func (b *ManagerConfigMapBuilder) WithVersion(version string) *ManagerConfigMapB
 
 // WithLabels adds custom labels
 func (b *ManagerConfigMapBuilder) WithLabels(labels map[string]string) *ManagerConfigMapBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *ManagerConfigMapBuilder) WithAnnotations(annotations map[string]string) *ManagerConfigMapBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -108,17 +105,13 @@ func (b *ManagerConfigMapBuilder) WithExtraConfig(filename, content string) *Man
 
 // WithData adds raw data entries
 func (b *ManagerConfigMapBuilder) WithData(data map[string]string) *ManagerConfigMapBuilder {
-	for k, v := range data {
-		b.data[k] = v
-	}
+	maps.Copy(b.data, data)
 	return b
 }
 
 // WithBinaryData adds binary data entries
 func (b *ManagerConfigMapBuilder) WithBinaryData(data map[string][]byte) *ManagerConfigMapBuilder {
-	for k, v := range data {
-		b.binaryData[k] = v
-	}
+	maps.Copy(b.binaryData, data)
 	return b
 }
 
@@ -146,14 +139,10 @@ func (b *ManagerConfigMapBuilder) Build() *corev1.ConfigMap {
 	}
 
 	// Add extra configs
-	for k, v := range b.extraConfigs {
-		data[k] = v
-	}
+	maps.Copy(data, b.extraConfigs)
 
 	// Add any additional data
-	for k, v := range b.data {
-		data[k] = v
-	}
+	maps.Copy(data, b.data)
 
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -171,9 +160,7 @@ func (b *ManagerConfigMapBuilder) Build() *corev1.ConfigMap {
 func (b *ManagerConfigMapBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
 	labels[constants.LabelManagerNodeType] = b.nodeType
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }
 
@@ -210,34 +197,26 @@ func (b *SharedConfigMapBuilder) WithVersion(version string) *SharedConfigMapBui
 
 // WithLabels adds custom labels
 func (b *SharedConfigMapBuilder) WithLabels(labels map[string]string) *SharedConfigMapBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *SharedConfigMapBuilder) WithAnnotations(annotations map[string]string) *SharedConfigMapBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
 // WithData adds data entries
 func (b *SharedConfigMapBuilder) WithData(data map[string]string) *SharedConfigMapBuilder {
-	for k, v := range data {
-		b.data[k] = v
-	}
+	maps.Copy(b.data, data)
 	return b
 }
 
 // Build creates the ConfigMap
 func (b *SharedConfigMapBuilder) Build() *corev1.ConfigMap {
 	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{

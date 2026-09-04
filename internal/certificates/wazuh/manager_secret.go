@@ -18,6 +18,7 @@ package wazuhcerts
 
 import (
 	"fmt"
+	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -58,17 +59,13 @@ func (b *ManagerCertsSecretBuilder) WithVersion(version string) *ManagerCertsSec
 
 // WithLabels adds custom labels
 func (b *ManagerCertsSecretBuilder) WithLabels(labels map[string]string) *ManagerCertsSecretBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *ManagerCertsSecretBuilder) WithAnnotations(annotations map[string]string) *ManagerCertsSecretBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -104,9 +101,7 @@ func (b *ManagerCertsSecretBuilder) WithFilebeatKey(key []byte) *ManagerCertsSec
 
 // WithData adds raw data entries
 func (b *ManagerCertsSecretBuilder) WithData(data map[string][]byte) *ManagerCertsSecretBuilder {
-	for k, v := range data {
-		b.data[k] = v
-	}
+	maps.Copy(b.data, data)
 	return b
 }
 
@@ -129,8 +124,6 @@ func (b *ManagerCertsSecretBuilder) Build() *corev1.Secret {
 // buildLabels builds the complete label set
 func (b *ManagerCertsSecretBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }

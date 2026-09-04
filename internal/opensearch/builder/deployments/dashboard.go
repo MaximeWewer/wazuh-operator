@@ -18,6 +18,7 @@ package deployments
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -149,17 +150,13 @@ func (b *DashboardDeploymentBuilder) WithTopologySpreadConstraints(constraints [
 
 // WithLabels sets custom labels
 func (b *DashboardDeploymentBuilder) WithLabels(labels map[string]string) *DashboardDeploymentBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations sets custom annotations
 func (b *DashboardDeploymentBuilder) WithAnnotations(annotations map[string]string) *DashboardDeploymentBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -554,9 +551,7 @@ func (b *DashboardDeploymentBuilder) Build() *appsv1.Deployment {
 // buildLabels builds the complete label set
 func (b *DashboardDeploymentBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, constants.ComponentDashboard, b.version)
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }
 

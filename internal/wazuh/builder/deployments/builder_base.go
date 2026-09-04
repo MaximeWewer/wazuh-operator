@@ -20,6 +20,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -209,17 +210,13 @@ func (b *baseStatefulSetBuilder[T]) WithTopologySpreadConstraints(constraints []
 
 // WithLabels sets custom labels
 func (b *baseStatefulSetBuilder[T]) WithLabels(labels map[string]string) T {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b.self
 }
 
 // WithAnnotations sets custom annotations
 func (b *baseStatefulSetBuilder[T]) WithAnnotations(annotations map[string]string) T {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b.self
 }
 
@@ -768,16 +765,16 @@ func (b *baseStatefulSetBuilder[T]) buildCDBFetchInitContainer() (corev1.Contain
 		awkProg := cdbFetchAWKProgram(ref.Format)
 		skip := ref.SkipLines + 1
 
-		sb.WriteString(fmt.Sprintf("mkdir -p \"$(dirname %s)\"\n", qDest))
+		fmt.Fprintf(&sb, "mkdir -p \"$(dirname %s)\"\n", qDest)
 		// Fetch the raw body first; only convert and publish on a successful download so a
 		// failed fetch never clobbers a previously written file with empty content.
-		sb.WriteString(fmt.Sprintf("if wget -q %s-O %s %s; then\n", insecure, qRaw, qURL))
-		sb.WriteString(fmt.Sprintf("  tail -n +%d %s | awk '%s' > %s && mv %s %s\n", skip, qRaw, awkProg, qTmp, qTmp, qDest))
-		sb.WriteString(fmt.Sprintf("  rm -f %s\n", qRaw))
-		sb.WriteString(fmt.Sprintf("  printf 'cdb-fetch: wrote %%s\\n' %s >&2\n", qDest))
+		fmt.Fprintf(&sb, "if wget -q %s-O %s %s; then\n", insecure, qRaw, qURL)
+		fmt.Fprintf(&sb, "  tail -n +%d %s | awk '%s' > %s && mv %s %s\n", skip, qRaw, awkProg, qTmp, qTmp, qDest)
+		fmt.Fprintf(&sb, "  rm -f %s\n", qRaw)
+		fmt.Fprintf(&sb, "  printf 'cdb-fetch: wrote %%s\\n' %s >&2\n", qDest)
 		sb.WriteString("else\n")
-		sb.WriteString(fmt.Sprintf("  rm -f %s\n", qRaw))
-		sb.WriteString(fmt.Sprintf("  printf 'cdb-fetch: failed to fetch %%s, keeping existing file\\n' %s >&2\n", qURL))
+		fmt.Fprintf(&sb, "  rm -f %s\n", qRaw)
+		fmt.Fprintf(&sb, "  printf 'cdb-fetch: failed to fetch %%s, keeping existing file\\n' %s >&2\n", qURL)
 		sb.WriteString("fi\n")
 	}
 
@@ -927,10 +924,7 @@ func boundedVolumeName(prefix, key string) string {
 	}
 	sum := sha256.Sum256([]byte(key))
 	suffix := "-" + hex.EncodeToString(sum[:])[:8] // 9 chars, alphanumeric end
-	budget := 63 - len(prefix) - 1 - len(suffix)
-	if budget < 1 {
-		budget = 1
-	}
+	budget := max(63-len(prefix)-1-len(suffix), 1)
 	trimmed := key
 	if len(trimmed) > budget {
 		trimmed = strings.TrimRight(trimmed[:budget], "-")

@@ -19,6 +19,8 @@ package deployments
 
 import (
 	"fmt"
+	"maps"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -167,17 +169,13 @@ func (b *IndexerStatefulSetBuilder) WithTopologySpreadConstraints(constraints []
 
 // WithLabels sets custom labels
 func (b *IndexerStatefulSetBuilder) WithLabels(labels map[string]string) *IndexerStatefulSetBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations sets custom annotations
 func (b *IndexerStatefulSetBuilder) WithAnnotations(annotations map[string]string) *IndexerStatefulSetBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -344,8 +342,8 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 
 	// Security context for OpenSearch (defaults, can be overridden by user)
 	podSecCtx := &corev1.PodSecurityContext{
-		FSGroup:   int64Ptr(1000),
-		RunAsUser: int64Ptr(1000),
+		FSGroup:   new(int64(1000)),
+		RunAsUser: new(int64(1000)),
 		SeccompProfile: &corev1.SeccompProfile{
 			Type: corev1.SeccompProfileTypeRuntimeDefault,
 		},
@@ -379,7 +377,7 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 
 	// Container security context (defaults, can be overridden by user)
 	containerSecCtx := &corev1.SecurityContext{
-		AllowPrivilegeEscalation: boolPtr(false),
+		AllowPrivilegeEscalation: new(false),
 		Capabilities: &corev1.Capabilities{
 			Drop: []corev1.Capability{"ALL"},
 		},
@@ -529,9 +527,7 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 // buildLabels builds the complete label set
 func (b *IndexerStatefulSetBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, constants.ComponentIndexer, b.version)
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }
 
@@ -761,14 +757,14 @@ func (b *IndexerStatefulSetBuilder) buildEnvVars() []corev1.EnvVar {
 
 // buildInitialMasterNodes builds the initial master nodes list
 func (b *IndexerStatefulSetBuilder) buildInitialMasterNodes() string {
-	nodes := ""
-	for i := int32(0); i < b.replicas; i++ {
+	var nodes strings.Builder
+	for i := range b.replicas {
 		if i > 0 {
-			nodes += ","
+			nodes.WriteString(",")
 		}
-		nodes += fmt.Sprintf("%s-%d", b.name, i)
+		fmt.Fprintf(&nodes, "%s-%d", b.name, i)
 	}
-	return nodes
+	return nodes.String()
 }
 
 // buildInitContainers creates the init containers for the StatefulSet
@@ -779,8 +775,8 @@ func (b *IndexerStatefulSetBuilder) buildInitContainers(_ string) []corev1.Conta
 			Image:   constants.ImageBusyboxStable,
 			Command: []string{"sh", "-c"},
 			SecurityContext: &corev1.SecurityContext{
-				AllowPrivilegeEscalation: boolPtr(false),
-				ReadOnlyRootFilesystem:   boolPtr(false), // Needs to write to /tmp/config
+				AllowPrivilegeEscalation: new(false),
+				ReadOnlyRootFilesystem:   new(false), // Needs to write to /tmp/config
 				Capabilities: &corev1.Capabilities{
 					Drop: []corev1.Capability{"ALL"},
 				},
@@ -834,7 +830,7 @@ ls -la /tmp/config/
 			Image:   constants.ImageBusyboxStable,
 			Command: []string{"sh", "-c", fmt.Sprintf("chown -R 1000:1000 %s || true", constants.PathIndexerData)},
 			SecurityContext: &corev1.SecurityContext{
-				RunAsUser: int64Ptr(0),
+				RunAsUser: new(int64(0)),
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
@@ -861,8 +857,8 @@ fi`, config.VMMaxMapCount()),
 						"SYS_ADMIN",
 					},
 				},
-				Privileged: boolPtr(true),
-				RunAsUser:  int64Ptr(0),
+				Privileged: new(true),
+				RunAsUser:  new(int64(0)),
 			},
 		},
 	}
@@ -892,14 +888,4 @@ func (b *IndexerStatefulSetBuilder) resolveUpdateStrategy() appsv1.StatefulSetUp
 		return b.updateStrategy
 	}
 	return appsv1.RollingUpdateStatefulSetStrategyType
-}
-
-// boolPtr returns a pointer to a bool
-func boolPtr(b bool) *bool {
-	return &b
-}
-
-// int64Ptr returns a pointer to an int64
-func int64Ptr(i int64) *int64 {
-	return &i
 }

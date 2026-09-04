@@ -39,7 +39,7 @@ import (
 // reconcileUntilDone runs reconciliation in a loop until no requeue is needed
 // This simulates the controller runtime behavior of re-reconciling on requeue
 func reconcileUntilDone(ctx context.Context, req reconcile.Request, maxIterations int) error {
-	for i := 0; i < maxIterations; i++ {
+	for range maxIterations {
 		result, err := reconciler.Reconcile(ctx, req)
 		if err != nil {
 			return err
@@ -1140,7 +1140,7 @@ var _ = Describe("WazuhCluster Controller", func() {
 			initialDashboardRV := dashboardDep.ResourceVersion
 
 			// Trigger reconciliation 3 more times
-			for i := 0; i < 3; i++ {
+			for range 3 {
 				_, err := reconciler.Reconcile(ctx, reconcileRequest)
 				Expect(err).NotTo(HaveOccurred())
 			}
@@ -3408,7 +3408,7 @@ var _ = Describe("WazuhCluster Controller", func() {
 						Replicas: 1,
 					},
 					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
+						Enabled: new(true),
 					},
 				},
 			}
@@ -3480,7 +3480,7 @@ var _ = Describe("WazuhCluster Controller", func() {
 						Replicas: 1,
 					},
 					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
+						Enabled: new(true),
 					},
 				},
 			}
@@ -3546,7 +3546,7 @@ var _ = Describe("WazuhCluster Controller", func() {
 						},
 					},
 					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
+						Enabled: new(true),
 					},
 				},
 			}
@@ -3630,7 +3630,7 @@ var _ = Describe("WazuhCluster Controller", func() {
 						},
 					},
 					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
+						Enabled: new(true),
 					},
 				},
 			}
@@ -4236,10 +4236,5 @@ func randStringRunes(n int) string {
 
 // int32Ptr returns a pointer to an int32
 func int32Ptr(i int32) *int32 {
-	return &i
-}
-
-// boolPtr returns a pointer to a bool
-func boolPtr(b bool) *bool {
-	return &b
+	return new(i)
 }

@@ -19,6 +19,7 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -205,9 +206,7 @@ func MergeAnnotations(existing, newAnnotations map[string]string) map[string]str
 	if existing == nil {
 		existing = make(map[string]string)
 	}
-	for k, v := range newAnnotations {
-		existing[k] = v
-	}
+	maps.Copy(existing, newAnnotations)
 	return existing
 }
 

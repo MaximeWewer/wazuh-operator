@@ -27,16 +27,14 @@ import (
 // cluster key never overlap (no version-conflict-inducing concurrency).
 func TestWithSecurityWriteLock_SameKeySerializes(t *testing.T) {
 	const key = "https://cluster-a:9200"
-	var inCritical int32
+	var inCritical atomic.Int32
 	var maxObserved int32
 	var wg sync.WaitGroup
 
-	for i := 0; i < 20; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 20 {
+		wg.Go(func() {
 			_ = WithSecurityWriteLock(key, func() error {
-				n := atomic.AddInt32(&inCritical, 1)
+				n := inCritical.Add(1)
 				for {
 					m := atomic.LoadInt32(&maxObserved)
 					if n <= m || atomic.CompareAndSwapInt32(&maxObserved, m, n) {
@@ -44,10 +42,10 @@ func TestWithSecurityWriteLock_SameKeySerializes(t *testing.T) {
 					}
 				}
 				time.Sleep(time.Millisecond)
-				atomic.AddInt32(&inCritical, -1)
+				inCritical.Add(-1)
 				return nil
 			})
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -75,7 +73,7 @@ func TestWithSecurityWriteLock_DifferentKeysConcurrent(t *testing.T) {
 	run("https://cluster-b:9200")
 
 	// Both must enter their critical sections concurrently (different keys).
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		select {
 		case <-entered:
 		case <-time.After(2 * time.Second):

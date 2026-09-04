@@ -18,6 +18,7 @@ package routes
 
 import (
 	"fmt"
+	"maps"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -73,9 +74,7 @@ func (b *UDPRouteBuilder) WithAnnotations(annotations map[string]string) *UDPRou
 
 // WithLabels adds additional labels
 func (b *UDPRouteBuilder) WithLabels(labels map[string]string) *UDPRouteBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
@@ -109,9 +108,7 @@ func (b *UDPRouteBuilder) Build() *gatewayv1alpha2.UDPRoute {
 
 	// Merge annotations
 	allAnnotations := make(map[string]string)
-	for k, v := range b.annotations {
-		allAnnotations[k] = v
-	}
+	maps.Copy(allAnnotations, b.annotations)
 
 	route := &gatewayv1alpha2.UDPRoute{
 		ObjectMeta: metav1.ObjectMeta{

@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -364,12 +365,7 @@ var _ = Describe("WazuhRule Controller", func() {
 				if err != nil {
 					return false
 				}
-				for _, f := range updatedRule.Finalizers {
-					if f == wazuhreconciler.RuleFinalizer {
-						return true
-					}
-				}
-				return false
+				return slices.Contains(updatedRule.Finalizers, wazuhreconciler.RuleFinalizer)
 			}, timeout, interval).Should(BeTrue())
 		})
 

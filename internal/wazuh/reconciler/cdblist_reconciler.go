@@ -21,6 +21,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -30,7 +31,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -141,7 +142,7 @@ func (r *CDBListReconciler) Reconcile(ctx context.Context, list *wazuhv1.WazuhCD
 
 	// Resolve the desired list content (fetches the URL when a source is due for refresh).
 	content, fetched, err := r.resolveContent(ctx, list)
-	if err == errCDBListRefreshSkipped {
+	if errors.Is(err, errCDBListRefreshSkipped) {
 		// Not due for refresh and nothing for the operator to deliver (init-fetch list).
 		// Leave the existing status untouched and requeue for the next periodic refresh.
 		return r.refreshInterval(list), nil
@@ -249,7 +250,7 @@ func (r *CDBListReconciler) resolveContent(ctx context.Context, list *wazuhv1.Wa
 		return r.formatRaw(list.Spec.Content, list.Spec.Format, list.Spec.SkipLines), false, nil
 
 	case list.Spec.Source != nil:
-		if !r.shouldRefetch(ctx, list) {
+		if !r.shouldRefetch(list) {
 			if existing, ok := r.readExistingContent(ctx, list); ok {
 				return existing, false, nil
 			}
@@ -284,7 +285,7 @@ func (r *CDBListReconciler) formatRaw(raw string, format wazuhv1.CDBListFormat, 
 }
 
 // shouldRefetch reports whether a URL source is due for a new fetch.
-func (r *CDBListReconciler) shouldRefetch(ctx context.Context, list *wazuhv1.WazuhCDBList) bool {
+func (r *CDBListReconciler) shouldRefetch(list *wazuhv1.WazuhCDBList) bool {
 	// Spec changed since last observed generation, or never fetched.
 	if list.Status.ObservedGeneration != list.Generation || list.Status.ContentHash == "" || list.Status.LastFetchTime == nil {
 		return true
@@ -317,7 +318,7 @@ func (r *CDBListReconciler) fetch(ctx context.Context, list *wazuhv1.WazuhCDBLis
 	reqCtx, cancel := context.WithTimeout(ctx, cdbListFetchTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, src.URL, nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, src.URL, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to build request for %s: %w", src.URL, err)
 	}
@@ -417,7 +418,7 @@ func (r *CDBListReconciler) reconcileListForCluster(
 	cluster := &wazuhv1.WazuhCluster{}
 	clusterKeyNN := types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace}
 	if err := r.Get(ctx, clusterKeyNN, cluster); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			st.Phase = wazuhv1.CDBListPhasePending
 			st.Message = fmt.Sprintf("WazuhCluster %s not found", clusterKeyNN)
 			if r.Recorder != nil {
@@ -519,12 +520,12 @@ func (r *CDBListReconciler) deleteListConfigMap(ctx context.Context, list *wazuh
 	cmName := cdbListConfigMapName(list.Namespace, list.Name)
 	cm := &corev1.ConfigMap{}
 	if err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: namespace}, cm); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return nil
 		}
 		return err
 	}
-	if err := r.Client.Delete(ctx, cm); err != nil && !errors.IsNotFound(err) {
+	if err := r.Client.Delete(ctx, cm); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
 	return nil
@@ -579,7 +580,7 @@ func (r *CDBListReconciler) reconcileConfigMap(
 
 	existing := &corev1.ConfigMap{}
 	err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: ref.Namespace}, existing)
-	if err != nil && errors.IsNotFound(err) {
+	if err != nil && apierrors.IsNotFound(err) {
 		log.Info("Creating CDB list ConfigMap", "name", cmName, "namespace", ref.Namespace)
 		if err := r.Create(ctx, desired); err != nil {
 			return "", err
@@ -648,7 +649,7 @@ func (r *CDBListReconciler) determineAppliedNodes(list *wazuhv1.WazuhCDBList, cl
 		nodes = append(nodes, fmt.Sprintf("%s-manager-master-0", cluster.Name))
 	}
 	if targetNodes == "workers" || targetNodes == "all" {
-		for i := int32(0); i < workerCount; i++ {
+		for i := range workerCount {
 			nodes = append(nodes, fmt.Sprintf("%s-manager-worker-%d", cluster.Name, i))
 		}
 	}
@@ -665,11 +666,11 @@ func (r *CDBListReconciler) Delete(ctx context.Context, list *wazuhv1.WazuhCDBLi
 		cm := &corev1.ConfigMap{}
 		err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: ref.Namespace}, cm)
 		if err == nil {
-			if err := r.Client.Delete(ctx, cm); err != nil && !errors.IsNotFound(err) {
+			if err := r.Client.Delete(ctx, cm); err != nil && !apierrors.IsNotFound(err) {
 				log.Error(err, "Failed to delete CDB list ConfigMap",
 					"configMap", cmName, "namespace", ref.Namespace)
 			}
-		} else if !errors.IsNotFound(err) {
+		} else if !apierrors.IsNotFound(err) {
 			log.Error(err, "Failed to lookup CDB list ConfigMap",
 				"configMap", cmName, "namespace", ref.Namespace)
 		}
@@ -823,9 +824,9 @@ func computeCDBListHash(content string) string {
 
 // joinStrings concatenates strings with a newline separator.
 func joinStrings(items []string) string {
-	out := ""
+	var out strings.Builder
 	for _, s := range items {
-		out += s + "\n"
+		out.WriteString(s + "\n")
 	}
-	return out
+	return out.String()
 }

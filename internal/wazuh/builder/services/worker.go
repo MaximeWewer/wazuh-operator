@@ -18,6 +18,7 @@ package services
 
 import (
 	"fmt"
+	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,17 +76,13 @@ func (b *WorkerServiceBuilder) WithHeadless(headless bool) *WorkerServiceBuilder
 
 // WithLabels adds custom labels
 func (b *WorkerServiceBuilder) WithLabels(labels map[string]string) *WorkerServiceBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *WorkerServiceBuilder) WithAnnotations(annotations map[string]string) *WorkerServiceBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -192,9 +189,7 @@ func (b *WorkerServiceBuilder) BuildHeadless() *corev1.Service {
 func (b *WorkerServiceBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
 	labels[constants.LabelManagerNodeType] = "worker"
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }
 

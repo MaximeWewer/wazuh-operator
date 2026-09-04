@@ -62,8 +62,7 @@ func TestIsGatewayAPIEnabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.envValue != "" {
-				os.Setenv(EnvGatewayAPIEnabled, tt.envValue)
-				defer os.Unsetenv(EnvGatewayAPIEnabled)
+				t.Setenv(EnvGatewayAPIEnabled, tt.envValue)
 			} else {
 				os.Unsetenv(EnvGatewayAPIEnabled)
 			}

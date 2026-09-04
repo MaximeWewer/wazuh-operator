@@ -104,7 +104,7 @@ func (h *HotReloader) callReloadCertificatesAPIPerPod(ctx context.Context, clust
 
 	// Iterate over each pod using the headless service FQDN pattern
 	var errors []string
-	for i := int32(0); i < replicas; i++ {
+	for i := range replicas {
 		podName := fmt.Sprintf("%s-indexer-%d", cluster.Name, i)
 		headlessService := fmt.Sprintf("%s-indexer-headless", cluster.Name)
 		podURL := fmt.Sprintf("https://%s:%d",
@@ -212,10 +212,7 @@ func (h *HotReloader) waitForSecurityReady(ctx context.Context, client *api.Clie
 			return ctx.Err()
 		case <-time.After(backoff):
 			// Increase backoff up to 5 seconds
-			backoff = time.Duration(float64(backoff) * 1.5)
-			if backoff > 5*time.Second {
-				backoff = 5 * time.Second
-			}
+			backoff = min(time.Duration(float64(backoff)*1.5), 5*time.Second)
 		}
 	}
 }

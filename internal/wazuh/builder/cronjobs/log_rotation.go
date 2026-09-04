@@ -19,6 +19,7 @@ package cronjobs
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -115,9 +116,7 @@ func (b *LogRotationCronJobBuilder) WithVersion(version string) *LogRotationCron
 
 // WithLabels adds custom labels
 func (b *LogRotationCronJobBuilder) WithLabels(labels map[string]string) *LogRotationCronJobBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
@@ -125,9 +124,7 @@ func (b *LogRotationCronJobBuilder) WithLabels(labels map[string]string) *LogRot
 func (b *LogRotationCronJobBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, "log-rotation", b.version)
 	labels["app.kubernetes.io/component"] = "log-rotation"
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }
 

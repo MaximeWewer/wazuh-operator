@@ -296,7 +296,7 @@ func (r *RestoreReconciler) handleDeletion(ctx context.Context, restore *wazuhv1
 			return err
 		}
 		controllerutil.RemoveFinalizer(latest, RestoreFinalizer)
-		return r.Client.Update(ctx, latest)
+		return r.Update(ctx, latest)
 	})
 }
 

@@ -179,16 +179,16 @@ func WithReconcileContext(ctx context.Context, crd, name, namespace string) logr
 }
 
 // Info logs an info message with trace context
-func Info(ctx context.Context, msg string, keysAndValues ...interface{}) {
+func Info(ctx context.Context, msg string, keysAndValues ...any) {
 	WithTraceID(ctx).Info(msg, keysAndValues...)
 }
 
 // Error logs an error message with trace context
-func Error(ctx context.Context, err error, msg string, keysAndValues ...interface{}) {
+func Error(ctx context.Context, err error, msg string, keysAndValues ...any) {
 	WithTraceID(ctx).Error(err, msg, keysAndValues...)
 }
 
 // Debug logs a debug message with trace context (V(1) level)
-func Debug(ctx context.Context, msg string, keysAndValues ...interface{}) {
+func Debug(ctx context.Context, msg string, keysAndValues ...any) {
 	WithTraceID(ctx).V(1).Info(msg, keysAndValues...)
 }

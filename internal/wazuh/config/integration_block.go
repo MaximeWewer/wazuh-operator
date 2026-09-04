@@ -59,39 +59,39 @@ var xmlValueEscaper = strings.NewReplacer(
 func BuildIntegrationBlock(o IntegrationBlockOptions) string {
 	var b strings.Builder
 	b.WriteString("  <integration>\n")
-	b.WriteString(fmt.Sprintf("    <name>%s</name>\n", xmlValueEscaper.Replace(o.Name)))
+	fmt.Fprintf(&b, "    <name>%s</name>\n", xmlValueEscaper.Replace(o.Name))
 
 	if o.HookURL != "" {
-		b.WriteString(fmt.Sprintf("    <hook_url>%s</hook_url>\n", xmlValueEscaper.Replace(o.HookURL)))
+		fmt.Fprintf(&b, "    <hook_url>%s</hook_url>\n", xmlValueEscaper.Replace(o.HookURL))
 	}
 	if o.APIKey != "" {
-		b.WriteString(fmt.Sprintf("    <api_key>%s</api_key>\n", xmlValueEscaper.Replace(o.APIKey)))
+		fmt.Fprintf(&b, "    <api_key>%s</api_key>\n", xmlValueEscaper.Replace(o.APIKey))
 	}
 	if o.Level != nil {
-		b.WriteString(fmt.Sprintf("    <level>%d</level>\n", *o.Level))
+		fmt.Fprintf(&b, "    <level>%d</level>\n", *o.Level)
 	}
 	if len(o.RuleID) > 0 {
 		ids := make([]string, 0, len(o.RuleID))
 		for _, id := range o.RuleID {
 			ids = append(ids, strconv.FormatInt(int64(id), 10))
 		}
-		b.WriteString(fmt.Sprintf("    <rule_id>%s</rule_id>\n", strings.Join(ids, ",")))
+		fmt.Fprintf(&b, "    <rule_id>%s</rule_id>\n", strings.Join(ids, ","))
 	}
 	if o.Group != "" {
-		b.WriteString(fmt.Sprintf("    <group>%s</group>\n", xmlValueEscaper.Replace(o.Group)))
+		fmt.Fprintf(&b, "    <group>%s</group>\n", xmlValueEscaper.Replace(o.Group))
 	}
 	if o.EventLocation != "" {
-		b.WriteString(fmt.Sprintf("    <location>%s</location>\n", xmlValueEscaper.Replace(o.EventLocation)))
+		fmt.Fprintf(&b, "    <location>%s</location>\n", xmlValueEscaper.Replace(o.EventLocation))
 	}
 
 	alertFormat := o.AlertFormat
 	if alertFormat == "" {
 		alertFormat = "json"
 	}
-	b.WriteString(fmt.Sprintf("    <alert_format>%s</alert_format>\n", xmlValueEscaper.Replace(alertFormat)))
+	fmt.Fprintf(&b, "    <alert_format>%s</alert_format>\n", xmlValueEscaper.Replace(alertFormat))
 
 	if strings.TrimSpace(o.Options) != "" {
-		b.WriteString(fmt.Sprintf("    <options>%s</options>\n", strings.TrimSpace(o.Options)))
+		fmt.Fprintf(&b, "    <options>%s</options>\n", strings.TrimSpace(o.Options))
 	}
 
 	b.WriteString("  </integration>")

@@ -18,6 +18,7 @@ package routes
 
 import (
 	"fmt"
+	"maps"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
@@ -73,9 +74,7 @@ func (b *TCPRouteBuilder) WithAnnotations(annotations map[string]string) *TCPRou
 
 // WithLabels adds additional labels
 func (b *TCPRouteBuilder) WithLabels(labels map[string]string) *TCPRouteBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
@@ -109,9 +108,7 @@ func (b *TCPRouteBuilder) Build() *gatewayv1alpha2.TCPRoute {
 
 	// Merge annotations
 	allAnnotations := make(map[string]string)
-	for k, v := range b.annotations {
-		allAnnotations[k] = v
-	}
+	maps.Copy(allAnnotations, b.annotations)
 
 	route := &gatewayv1alpha2.TCPRoute{
 		ObjectMeta: metav1.ObjectMeta{

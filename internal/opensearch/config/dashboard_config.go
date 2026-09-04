@@ -90,11 +90,7 @@ func (b *DashboardAuthConfigBuilder) BuildAuthSection() (string, error) {
 
 	// Build auth-specific configuration
 	if b.authConfig.OIDC != nil && b.authConfig.OIDC.Enabled {
-		oidcConfig, err := b.buildOIDCDashboardConfig()
-		if err != nil {
-			return "", fmt.Errorf("failed to build OIDC dashboard config: %w", err)
-		}
-		sb.WriteString(oidcConfig)
+		sb.WriteString(b.buildOIDCDashboardConfig())
 	}
 
 	if b.authConfig.SAML != nil && b.authConfig.SAML.Enabled {
@@ -187,7 +183,7 @@ func (b *DashboardAuthConfigBuilder) isMultiAuthEnabled() bool {
 // opensearch-dashboards and they caused validation failures (FATAL ValidationError
 // on "definition for this key is missing"). Cookie signing is now written under
 // the global `opensearch_security.cookie.password` key by buildCookiePassword().
-func (b *DashboardAuthConfigBuilder) buildOIDCDashboardConfig() (string, error) {
+func (b *DashboardAuthConfigBuilder) buildOIDCDashboardConfig() string {
 	var sb strings.Builder
 	spec := b.authConfig.OIDC
 
@@ -218,7 +214,7 @@ func (b *DashboardAuthConfigBuilder) buildOIDCDashboardConfig() (string, error) 
 		}
 	}
 
-	return sb.String(), nil
+	return sb.String()
 }
 
 // buildCookiePassword emits the global `opensearch_security.cookie.password`
@@ -336,7 +332,7 @@ func (b *DashboardAuthConfigBuilder) buildMultiAuthConfig() string {
 	}
 
 	// Sort by order
-	for i := 0; i < len(methods)-1; i++ {
+	for i := range len(methods) - 1 {
 		for j := i + 1; j < len(methods); j++ {
 			if methods[j].order < methods[i].order {
 				methods[i], methods[j] = methods[j], methods[i]

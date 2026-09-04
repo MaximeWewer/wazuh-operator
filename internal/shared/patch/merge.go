@@ -17,6 +17,8 @@ limitations under the License.
 package patch
 
 import (
+	"maps"
+
 	appsv1 "k8s.io/api/apps/v1"
 )
 
@@ -73,11 +75,7 @@ func mergeStringMaps(current, desired map[string]string) map[string]string {
 		return current
 	}
 	merged := make(map[string]string, len(current)+len(desired))
-	for k, v := range current {
-		merged[k] = v
-	}
-	for k, v := range desired {
-		merged[k] = v
-	}
+	maps.Copy(merged, current)
+	maps.Copy(merged, desired)
 	return merged
 }

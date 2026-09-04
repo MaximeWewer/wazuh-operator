@@ -19,6 +19,7 @@ package monitoring
 
 import (
 	"fmt"
+	"maps"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -45,9 +46,7 @@ func NewManagerServiceMonitor(cluster *wazuhv1.WazuhCluster) *monitoringv1.Servi
 
 	// Add custom labels from config
 	if cluster.Spec.Monitoring.ServiceMonitor.Labels != nil {
-		for k, v := range cluster.Spec.Monitoring.ServiceMonitor.Labels {
-			labels[k] = v
-		}
+		maps.Copy(labels, cluster.Spec.Monitoring.ServiceMonitor.Labels)
 	}
 
 	// Get configuration values
@@ -80,7 +79,7 @@ func NewManagerServiceMonitor(cluster *wazuhv1.WazuhCluster) *monitoringv1.Servi
 					Interval:      monitoringv1.Duration(interval),
 					ScrapeTimeout: monitoringv1.Duration(scrapeTimeout),
 					Path:          "/metrics",
-					Scheme:        schemePtr(schemeHTTP),
+					Scheme:        new(schemeHTTP),
 				},
 			},
 		},
@@ -104,9 +103,7 @@ func NewIndexerServiceMonitor(cluster *wazuhv1.WazuhCluster) *monitoringv1.Servi
 
 	// Add custom labels from config
 	if cluster.Spec.Monitoring.ServiceMonitor.Labels != nil {
-		for k, v := range cluster.Spec.Monitoring.ServiceMonitor.Labels {
-			labels[k] = v
-		}
+		maps.Copy(labels, cluster.Spec.Monitoring.ServiceMonitor.Labels)
 	}
 
 	// Get configuration values
@@ -139,12 +136,12 @@ func NewIndexerServiceMonitor(cluster *wazuhv1.WazuhCluster) *monitoringv1.Servi
 					Interval:      monitoringv1.Duration(interval),
 					ScrapeTimeout: monitoringv1.Duration(scrapeTimeout),
 					Path:          "/_prometheus/metrics",
-					Scheme:        schemePtr(schemeHTTPS),
+					Scheme:        new(schemeHTTPS),
 					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
 						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
 							TLSConfig: &monitoringv1.TLSConfig{
 								SafeTLSConfig: monitoringv1.SafeTLSConfig{
-									InsecureSkipVerify: boolPtr(true), // OpenSearch uses self-signed certs
+									InsecureSkipVerify: new(true), // OpenSearch uses self-signed certs
 								},
 							},
 							HTTPConfigWithoutTLS: monitoringv1.HTTPConfigWithoutTLS{
@@ -193,11 +190,6 @@ func isIndexerExporterEnabled(cluster *wazuhv1.WazuhCluster) bool {
 	return true
 }
 
-// boolPtr returns a pointer to a bool
-func boolPtr(b bool) *bool {
-	return &b
-}
-
 // Lowercase scheme values. The monitoringv1.SchemeHTTP/SchemeHTTPS constants are
 // uppercase ("HTTP"/"HTTPS"); older ServiceMonitor CRDs only allow the lowercase
 // enum (http;https) and reject uppercase. Lowercase is accepted by every CRD
@@ -206,8 +198,3 @@ const (
 	schemeHTTP  monitoringv1.Scheme = "http"
 	schemeHTTPS monitoringv1.Scheme = "https"
 )
-
-// schemePtr returns a pointer to a Scheme
-func schemePtr(s monitoringv1.Scheme) *monitoringv1.Scheme {
-	return &s
-}

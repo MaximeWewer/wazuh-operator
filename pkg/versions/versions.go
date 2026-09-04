@@ -53,7 +53,7 @@ func ParseVersion(version string) (*Version, error) {
 	patch := 0
 	if len(parts) >= 3 {
 		// Handle patch version which might have additional suffixes like "0-rc1"
-		patchStr := strings.Split(parts[2], "-")[0]
+		patchStr, _, _ := strings.Cut(parts[2], "-")
 		patch, err = strconv.Atoi(patchStr)
 		if err != nil {
 			// If patch can't be parsed, default to 0

@@ -23,7 +23,6 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
@@ -44,8 +43,8 @@ func TestResolveManagerConfig_PropagatesGlobalConfig(t *testing.T) {
 			Manager: &wazuhv1.WazuhManagerClusterSpec{
 				Config: &wazuhv1.WazuhConfigSpec{
 					Global: &wazuhv1.OSSECGlobalSpec{
-						LogAll:     ptr.To(true),
-						LogAllJSON: ptr.To(true),
+						LogAll:     new(true),
+						LogAllJSON: new(true),
 					},
 				},
 			},
@@ -59,10 +58,7 @@ func TestResolveManagerConfig_PropagatesGlobalConfig(t *testing.T) {
 
 	reconciler := NewClusterReconciler(client, scheme)
 
-	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, _, authdPassword, err := reconciler.resolveManagerConfig(context.Background(), cluster)
-	if err != nil {
-		t.Fatalf("resolveManagerConfig failed: %v", err)
-	}
+	sections, authdPassword := reconciler.resolveManagerConfig(context.Background(), cluster)
 
 	ossecConf, err := config.BuildMasterConfigWithConfig(
 		cluster.Name,
@@ -70,11 +66,11 @@ func TestResolveManagerConfig_PropagatesGlobalConfig(t *testing.T) {
 		cluster.Name+"-manager-master",
 		"",
 		"",
-		globalCfg,
-		alertsCfg,
-		loggingCfg,
-		remoteCfg,
-		authCfg,
+		sections.Global,
+		sections.Alerts,
+		sections.Logging,
+		sections.Remote,
+		sections.Auth,
 		authdPassword,
 	)
 	if err != nil {
@@ -111,11 +107,8 @@ func TestResolveManagerConfig_BackwardCompat_NilManager(t *testing.T) {
 
 	reconciler := NewClusterReconciler(client, scheme)
 
-	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, _, authdPassword, err := reconciler.resolveManagerConfig(context.Background(), cluster)
-	if err != nil {
-		t.Fatalf("resolveManagerConfig failed: %v", err)
-	}
-	if globalCfg == nil || alertsCfg == nil || loggingCfg == nil || remoteCfg == nil || authCfg == nil {
+	sections, authdPassword := reconciler.resolveManagerConfig(context.Background(), cluster)
+	if sections.Global == nil || sections.Alerts == nil || sections.Logging == nil || sections.Remote == nil || sections.Auth == nil {
 		t.Fatalf("expected default configs when manager is nil")
 	}
 	if authdPassword != "" {
@@ -147,11 +140,8 @@ func TestResolveManagerConfig_BackwardCompat_NilManagerConfig(t *testing.T) {
 
 	reconciler := NewClusterReconciler(client, scheme)
 
-	globalCfg, alertsCfg, loggingCfg, remoteCfg, authCfg, _, authdPassword, err := reconciler.resolveManagerConfig(context.Background(), cluster)
-	if err != nil {
-		t.Fatalf("resolveManagerConfig failed: %v", err)
-	}
-	if globalCfg == nil || alertsCfg == nil || loggingCfg == nil || remoteCfg == nil || authCfg == nil {
+	sections, authdPassword := reconciler.resolveManagerConfig(context.Background(), cluster)
+	if sections.Global == nil || sections.Alerts == nil || sections.Logging == nil || sections.Remote == nil || sections.Auth == nil {
 		t.Fatalf("expected default configs when manager.config is nil")
 	}
 	if authdPassword != "" {

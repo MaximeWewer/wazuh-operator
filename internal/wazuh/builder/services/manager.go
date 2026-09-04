@@ -19,6 +19,7 @@ package services
 
 import (
 	"fmt"
+	"maps"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -80,17 +81,13 @@ func (b *ManagerServiceBuilder) WithHeadless(headless bool) *ManagerServiceBuild
 
 // WithLabels adds custom labels
 func (b *ManagerServiceBuilder) WithLabels(labels map[string]string) *ManagerServiceBuilder {
-	for k, v := range labels {
-		b.labels[k] = v
-	}
+	maps.Copy(b.labels, labels)
 	return b
 }
 
 // WithAnnotations adds custom annotations
 func (b *ManagerServiceBuilder) WithAnnotations(annotations map[string]string) *ManagerServiceBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
@@ -234,9 +231,7 @@ func (b *ManagerServiceBuilder) BuildHeadless() *corev1.Service {
 func (b *ManagerServiceBuilder) buildLabels() map[string]string {
 	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
 	labels[constants.LabelManagerNodeType] = b.nodeType
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 	return labels
 }
 
@@ -296,18 +291,14 @@ func (b *ManagerExternalServiceBuilder) WithExposedPorts(ports []string) *Manage
 
 // WithAnnotations adds custom annotations
 func (b *ManagerExternalServiceBuilder) WithAnnotations(annotations map[string]string) *ManagerExternalServiceBuilder {
-	for k, v := range annotations {
-		b.annotations[k] = v
-	}
+	maps.Copy(b.annotations, annotations)
 	return b
 }
 
 // Build creates the external Service
 func (b *ManagerExternalServiceBuilder) Build() *corev1.Service {
 	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
-	for k, v := range b.labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, b.labels)
 
 	selectorLabels := constants.SelectorLabels(b.clusterName, "wazuh-manager")
 	// Select only master for external access

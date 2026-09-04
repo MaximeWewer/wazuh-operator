@@ -278,11 +278,8 @@ func (d *ManagerDrainerImpl) EvaluateFeasibility(ctx context.Context, nodeName s
 			fmt.Sprintf("Cannot check queue status: %v", err))
 	} else if queueStatus.TotalEvents > 0 {
 		// Estimate duration based on queue depth
-		// Rough estimate: 1000 events per second
-		estimatedSeconds := queueStatus.TotalEvents / 1000
-		if estimatedSeconds < 60 {
-			estimatedSeconds = 60 // Minimum 1 minute
-		}
+		// Rough estimate: 1000 events per second, never below 1 minute
+		estimatedSeconds := max(queueStatus.TotalEvents/1000, 60)
 		// Add grace period
 		estimatedSeconds += int64(d.gracePeriod.Seconds())
 		result.EstimatedDuration = &metav1.Duration{Duration: time.Duration(estimatedSeconds) * time.Second}

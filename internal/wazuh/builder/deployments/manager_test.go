@@ -31,8 +31,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func boolPtr(b bool) *bool { return &b }
-
 func TestManagerStatefulSetBuilder_CustomImage(t *testing.T) {
 	t.Run("default image when no override", func(t *testing.T) {
 		sts := NewManagerStatefulSetBuilder("cluster", "ns", "master").WithVersion("4.9.0").Build()
@@ -137,7 +135,7 @@ func TestManagerStatefulSetBuilder_ContainerSecurityContextOverride(t *testing.T
 	t.Run("override ReadOnlyRootFilesystem", func(t *testing.T) {
 		sts := NewManagerStatefulSetBuilder("cluster", "ns", "master").
 			WithContainerSecurityContext(&corev1.SecurityContext{
-				ReadOnlyRootFilesystem: boolPtr(true),
+				ReadOnlyRootFilesystem: new(true),
 			}).
 			Build()
 		sc := sts.Spec.Template.Spec.Containers[0].SecurityContext

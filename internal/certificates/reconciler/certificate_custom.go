@@ -21,6 +21,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"maps"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -93,9 +94,7 @@ func (r *CertificateReconciler) reconcileCustomCerts(ctx context.Context, cluste
 			constants.SecretKeyRootCA: caData[customCerts.CASecretRef.Key],
 		}
 		// Copy all keys from the user secret
-		for k, v := range adminData {
-			adminSecretData[k] = v
-		}
+		maps.Copy(adminSecretData, adminData)
 
 		if err := r.ensureCustomCertSecret(ctx, cluster, constants.AdminCertsName(cluster.Name), adminSecretData); err != nil {
 			return nil, fmt.Errorf("failed to ensure admin certs secret: %w", err)
@@ -117,9 +116,7 @@ func (r *CertificateReconciler) reconcileCustomCerts(ctx context.Context, cluste
 		filebeatSecretData := map[string][]byte{
 			constants.SecretKeyRootCA: caData[customCerts.CASecretRef.Key],
 		}
-		for k, v := range filebeatData {
-			filebeatSecretData[k] = v
-		}
+		maps.Copy(filebeatSecretData, filebeatData)
 
 		if err := r.ensureCustomCertSecret(ctx, cluster, constants.FilebeatCertsName(cluster.Name), filebeatSecretData); err != nil {
 			return nil, fmt.Errorf("failed to ensure filebeat certs secret: %w", err)
@@ -154,9 +151,7 @@ func (r *CertificateReconciler) copyNodeCertsToComponents(ctx context.Context, c
 		constants.SecretKeyRootCA: caCert,
 	}
 	// Copy all keys from the user secret
-	for k, v := range nodeData {
-		baseData[k] = v
-	}
+	maps.Copy(baseData, nodeData)
 
 	// Component cert secrets to populate
 	componentSecrets := []string{
@@ -169,9 +164,7 @@ func (r *CertificateReconciler) copyNodeCertsToComponents(ctx context.Context, c
 	for _, secretName := range componentSecrets {
 		// Make a copy of baseData for each secret
 		secretData := make(map[string][]byte, len(baseData))
-		for k, v := range baseData {
-			secretData[k] = v
-		}
+		maps.Copy(secretData, baseData)
 
 		if err := r.ensureCustomCertSecret(ctx, cluster, secretName, secretData); err != nil {
 			return fmt.Errorf("failed to ensure secret %s: %w", secretName, err)

@@ -16,6 +16,8 @@ limitations under the License.
 
 package constants
 
+import "slices"
+
 // OpenSearch Node Roles
 // These follow OpenSearch 2.x naming conventions where "master" became "cluster_manager"
 const (
@@ -89,32 +91,17 @@ const (
 
 // IsValidOpenSearchRole checks if a role string is a valid OpenSearch role
 func IsValidOpenSearchRole(role string) bool {
-	for _, validRole := range OpenSearchRoleList {
-		if role == validRole {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(OpenSearchRoleList, role)
 }
 
 // HasClusterManagerRole checks if a list of roles contains cluster_manager
 func HasClusterManagerRole(roles []string) bool {
-	for _, role := range roles {
-		if role == OpenSearchRoleClusterManager {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(roles, OpenSearchRoleClusterManager)
 }
 
 // HasDataRole checks if a list of roles contains data
 func HasDataRole(roles []string) bool {
-	for _, role := range roles {
-		if role == OpenSearchRoleData {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(roles, OpenSearchRoleData)
 }
 
 // IsCoordinatingOnly checks if a roles list represents a coordinating-only node

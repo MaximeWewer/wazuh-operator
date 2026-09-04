@@ -41,11 +41,6 @@ func init() {
 	_ = dns.InitializeWithDomain("cluster.local")
 }
 
-// boolPtr returns a pointer to a bool value
-func boolPtr(b bool) *bool {
-	return &b
-}
-
 func TestShouldTriggerHotReload_TLSEnabled(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
@@ -66,7 +61,7 @@ func TestShouldTriggerHotReload_TLSEnabled(t *testing.T) {
 				Spec: wazuhv1.WazuhClusterSpec{
 					Version: "4.9.0",
 					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
+						Enabled: new(true),
 						HotReload: &wazuhv1.HotReloadConfig{
 							Enabled: true,
 						},
@@ -85,7 +80,7 @@ func TestShouldTriggerHotReload_TLSEnabled(t *testing.T) {
 				Spec: wazuhv1.WazuhClusterSpec{
 					Version: "4.9.0",
 					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
+						Enabled: new(true),
 						HotReload: &wazuhv1.HotReloadConfig{
 							Enabled: false,
 						},
@@ -104,7 +99,7 @@ func TestShouldTriggerHotReload_TLSEnabled(t *testing.T) {
 				Spec: wazuhv1.WazuhClusterSpec{
 					Version: "4.9.0",
 					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(true),
+						Enabled: new(true),
 					},
 				},
 			},
@@ -148,7 +143,7 @@ func TestShouldTriggerHotReload_TLSDisabled(t *testing.T) {
 				Spec: wazuhv1.WazuhClusterSpec{
 					Version: "4.9.0",
 					TLS: &wazuhv1.TLSConfig{
-						Enabled: boolPtr(false),
+						Enabled: new(false),
 						HotReload: &wazuhv1.HotReloadConfig{
 							Enabled: true, // Should be ignored when TLS is disabled
 						},
@@ -203,7 +198,7 @@ func TestTriggerCertificateHotReload_Version49_APICall(t *testing.T) {
 		Spec: wazuhv1.WazuhClusterSpec{
 			Version: "4.9.0",
 			TLS: &wazuhv1.TLSConfig{
-				Enabled: boolPtr(true),
+				Enabled: new(true),
 				HotReload: &wazuhv1.HotReloadConfig{
 					Enabled: true,
 				},
@@ -282,7 +277,7 @@ func TestTriggerCertificateHotReload_Version414_Automatic(t *testing.T) {
 		Spec: wazuhv1.WazuhClusterSpec{
 			Version: "4.14.0",
 			TLS: &wazuhv1.TLSConfig{
-				Enabled: boolPtr(true),
+				Enabled: new(true),
 				HotReload: &wazuhv1.HotReloadConfig{
 					Enabled: true,
 				},
@@ -555,7 +550,7 @@ func TestTriggerCertificateHotReloadWithFallback_NotSupported(t *testing.T) {
 		Spec: wazuhv1.WazuhClusterSpec{
 			Version: "4.7.0", // Version that doesn't support hot reload
 			TLS: &wazuhv1.TLSConfig{
-				Enabled: boolPtr(true),
+				Enabled: new(true),
 				HotReload: &wazuhv1.HotReloadConfig{
 					Enabled: true,
 				},
@@ -600,7 +595,7 @@ func TestTriggerCertificateHotReloadWithFallback_AutomaticSuccess(t *testing.T) 
 		Spec: wazuhv1.WazuhClusterSpec{
 			Version: "4.14.0", // Version with automatic hot reload
 			TLS: &wazuhv1.TLSConfig{
-				Enabled: boolPtr(true),
+				Enabled: new(true),
 				HotReload: &wazuhv1.HotReloadConfig{
 					Enabled: true,
 				},

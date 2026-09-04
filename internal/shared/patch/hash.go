@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -273,12 +274,12 @@ func ComputeConfigHash(data map[string]string) string {
 	sort.Strings(keys)
 
 	// Build deterministic string representation
-	combined := ""
+	var combined strings.Builder
 	for _, k := range keys {
-		combined += k + "=" + data[k] + "\n"
+		combined.WriteString(k + "=" + data[k] + "\n")
 	}
 
-	hash := sha256.Sum256([]byte(combined))
+	hash := sha256.Sum256([]byte(combined.String()))
 	return hex.EncodeToString(hash[:])[:16]
 }
 

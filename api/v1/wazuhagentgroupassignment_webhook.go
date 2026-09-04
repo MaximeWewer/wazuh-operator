@@ -68,77 +68,91 @@ func (v *WazuhAgentGroupAssignmentCustomValidator) ValidateDelete(_ context.Cont
 
 // validate validates the WazuhAgentGroupAssignment spec.
 func (v *WazuhAgentGroupAssignmentCustomValidator) validate(assignment *WazuhAgentGroupAssignment) (admission.Warnings, error) {
-	var allErrors []string
 	spec := &assignment.Spec
 
-	// ClusterRefs non-empty with name+namespace set.
-	if len(spec.ClusterRefs) == 0 {
-		allErrors = append(allErrors, "spec.clusterRefs: at least one cluster reference is required")
-	}
-	for i, ref := range spec.ClusterRefs {
-		if ref.Name == "" {
-			allErrors = append(allErrors, fmt.Sprintf("spec.clusterRefs[%d].name: must not be empty", i))
-		}
-		if ref.Namespace == "" {
-			allErrors = append(allErrors, fmt.Sprintf("spec.clusterRefs[%d].namespace: must not be empty", i))
-		}
-	}
-
-	// Groups non-empty and each a valid Wazuh group name.
-	if len(spec.Groups) == 0 {
-		allErrors = append(allErrors, "spec.groups: at least one group is required")
-	}
-	for i, g := range spec.Groups {
-		if g == "000" {
-			allErrors = append(allErrors, fmt.Sprintf("spec.groups[%d]: %q is not a valid group name", i, g))
-			continue
-		}
-		if len(g) > 255 || !wazuhGroupNamePattern.MatchString(g) {
-			allErrors = append(allErrors, fmt.Sprintf("spec.groups[%d]: %q is not a valid Wazuh group name (must match %s, length <= 255)", i, g, wazuhGroupNamePattern.String()))
-		}
-	}
-
-	// Selector must have at least one non-empty list.
-	sel := spec.Selector
-	if len(sel.AgentNames) == 0 && len(sel.NamePatterns) == 0 && len(sel.NameRegex) == 0 && len(sel.OSPlatforms) == 0 {
-		allErrors = append(allErrors, "spec.selector: at least one of agentNames, namePatterns, nameRegex or osPlatforms must be non-empty")
-	}
-
-	// Each glob pattern must be valid.
-	for i, p := range sel.NamePatterns {
-		if _, err := path.Match(p, "probe"); err != nil {
-			allErrors = append(allErrors, fmt.Sprintf("spec.selector.namePatterns[%d]: invalid glob %q: %v", i, p, err))
-		}
-	}
-
-	// Each regex must compile.
-	for i, re := range sel.NameRegex {
-		if _, err := regexp.Compile(re); err != nil {
-			allErrors = append(allErrors, fmt.Sprintf("spec.selector.nameRegex[%d]: invalid regex %q: %v", i, re, err))
-		}
-	}
-
-	// requireOsPlatform is meaningless without osPlatforms to filter on.
-	if sel.RequireOSPlatform && len(sel.OSPlatforms) == 0 {
-		allErrors = append(allErrors, "spec.selector.requireOsPlatform: requires osPlatforms to be non-empty")
-	}
-
-	// The exclusion block's glob and regex entries must also be valid.
-	if sel.Exclude != nil {
-		for i, p := range sel.Exclude.NamePatterns {
-			if _, err := path.Match(p, "probe"); err != nil {
-				allErrors = append(allErrors, fmt.Sprintf("spec.selector.exclude.namePatterns[%d]: invalid glob %q: %v", i, p, err))
-			}
-		}
-		for i, re := range sel.Exclude.NameRegex {
-			if _, err := regexp.Compile(re); err != nil {
-				allErrors = append(allErrors, fmt.Sprintf("spec.selector.exclude.nameRegex[%d]: invalid regex %q: %v", i, re, err))
-			}
-		}
-	}
+	var allErrors []string
+	allErrors = append(allErrors, validateAssignmentClusterRefs(spec.ClusterRefs)...)
+	allErrors = append(allErrors, validateAssignmentGroups(spec.Groups)...)
+	allErrors = append(allErrors, validateAssignmentSelector(&spec.Selector)...)
 
 	if len(allErrors) > 0 {
 		return nil, fmt.Errorf("validation failed: %v", allErrors)
 	}
 	return nil, nil
+}
+
+// validateAssignmentClusterRefs requires a non-empty list of fully qualified refs.
+func validateAssignmentClusterRefs(refs []WazuhClusterRef) []string {
+	var errs []string
+	if len(refs) == 0 {
+		errs = append(errs, "spec.clusterRefs: at least one cluster reference is required")
+	}
+	for i, ref := range refs {
+		if ref.Name == "" {
+			errs = append(errs, fmt.Sprintf("spec.clusterRefs[%d].name: must not be empty", i))
+		}
+		if ref.Namespace == "" {
+			errs = append(errs, fmt.Sprintf("spec.clusterRefs[%d].namespace: must not be empty", i))
+		}
+	}
+	return errs
+}
+
+// validateAssignmentGroups requires a non-empty list of valid Wazuh group names.
+// "000" is the built-in default group and cannot be assigned explicitly.
+func validateAssignmentGroups(groups []string) []string {
+	var errs []string
+	if len(groups) == 0 {
+		errs = append(errs, "spec.groups: at least one group is required")
+	}
+	for i, g := range groups {
+		if g == "000" {
+			errs = append(errs, fmt.Sprintf("spec.groups[%d]: %q is not a valid group name", i, g))
+			continue
+		}
+		if len(g) > 255 || !wazuhGroupNamePattern.MatchString(g) {
+			errs = append(errs, fmt.Sprintf("spec.groups[%d]: %q is not a valid Wazuh group name (must match %s, length <= 255)", i, g, wazuhGroupNamePattern.String()))
+		}
+	}
+	return errs
+}
+
+// validateAssignmentSelector requires at least one match criterion and checks that
+// every glob and regex - in the selector and in its exclusion block - is well formed.
+func validateAssignmentSelector(sel *AgentSelector) []string {
+	var errs []string
+
+	if len(sel.AgentNames) == 0 && len(sel.NamePatterns) == 0 && len(sel.NameRegex) == 0 && len(sel.OSPlatforms) == 0 {
+		errs = append(errs, "spec.selector: at least one of agentNames, namePatterns, nameRegex or osPlatforms must be non-empty")
+	}
+
+	errs = append(errs, validateGlobsAndRegexes("spec.selector", sel.NamePatterns, sel.NameRegex)...)
+
+	// requireOsPlatform is meaningless without osPlatforms to filter on.
+	if sel.RequireOSPlatform && len(sel.OSPlatforms) == 0 {
+		errs = append(errs, "spec.selector.requireOsPlatform: requires osPlatforms to be non-empty")
+	}
+
+	if sel.Exclude != nil {
+		errs = append(errs, validateGlobsAndRegexes("spec.selector.exclude", sel.Exclude.NamePatterns, sel.Exclude.NameRegex)...)
+	}
+
+	return errs
+}
+
+// validateGlobsAndRegexes reports malformed glob patterns and regexes under the
+// given spec field prefix.
+func validateGlobsAndRegexes(fieldPrefix string, patterns, regexes []string) []string {
+	var errs []string
+	for i, p := range patterns {
+		if _, err := path.Match(p, "probe"); err != nil {
+			errs = append(errs, fmt.Sprintf("%s.namePatterns[%d]: invalid glob %q: %v", fieldPrefix, i, p, err))
+		}
+	}
+	for i, re := range regexes {
+		if _, err := regexp.Compile(re); err != nil {
+			errs = append(errs, fmt.Sprintf("%s.nameRegex[%d]: invalid regex %q: %v", fieldPrefix, i, re, err))
+		}
+	}
+	return errs
 }
