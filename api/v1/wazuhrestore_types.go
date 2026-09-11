@@ -39,16 +39,16 @@ type WazuhRestoreSpec struct {
 
 	// PreRestoreBackup creates a backup of current data before restore
 	// +kubebuilder:default=true
-	PreRestoreBackup bool `json:"preRestoreBackup,omitempty"`
+	PreRestoreBackup *bool `json:"preRestoreBackup,omitempty"`
 
 	// StopManager stops the manager during restore
 	// Recommended for data consistency
 	// +kubebuilder:default=true
-	StopManager bool `json:"stopManager,omitempty"`
+	StopManager *bool `json:"stopManager,omitempty"`
 
 	// RestartAfterRestore restarts the manager after successful restore
 	// +kubebuilder:default=true
-	RestartAfterRestore bool `json:"restartAfterRestore,omitempty"`
+	RestartAfterRestore *bool `json:"restartAfterRestore,omitempty"`
 
 	// RestoreTimeout is the maximum duration for the restore operation
 	// +kubebuilder:default="30m"
@@ -195,15 +195,15 @@ type WazuhBackupReference struct {
 type RestoreComponents struct {
 	// AgentKeys restores /var/ossec/etc/client.keys
 	// +kubebuilder:default=true
-	AgentKeys bool `json:"agentKeys,omitempty"`
+	AgentKeys *bool `json:"agentKeys,omitempty"`
 
 	// FIMDatabase restores /var/ossec/queue/fim/db/
 	// +kubebuilder:default=true
-	FIMDatabase bool `json:"fimDatabase,omitempty"`
+	FIMDatabase *bool `json:"fimDatabase,omitempty"`
 
 	// AgentDatabase restores /var/ossec/queue/db/
 	// +kubebuilder:default=true
-	AgentDatabase bool `json:"agentDatabase,omitempty"`
+	AgentDatabase *bool `json:"agentDatabase,omitempty"`
 
 	// Integrations restores /var/ossec/integrations/
 	// +kubebuilder:default=false

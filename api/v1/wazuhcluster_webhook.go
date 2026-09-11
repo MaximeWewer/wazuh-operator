@@ -530,7 +530,7 @@ func validateDrainConfig(drain *DrainConfiguration) []string {
 
 	// Validate retry config
 	if drain.Retry != nil {
-		if drain.Retry.MaxAttempts < 0 {
+		if drain.Retry.MaxAttempts != nil && *drain.Retry.MaxAttempts < 0 {
 			errors = append(errors, "spec.drain.retry.maxAttempts: cannot be negative")
 		}
 	}

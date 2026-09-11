@@ -23,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
@@ -82,7 +83,7 @@ func NewWazuhExporterConfig(cluster *wazuhv1.WazuhCluster) *WazuhExporterConfig 
 		Image:             DefaultWazuhExporterImage,
 		Port:              DefaultWazuhExporterPort,
 		APIProtocol:       "https",
-		APIVerifySSL:      exporterSpec.APIVerifySSL,
+		APIVerifySSL:      ptr.Deref(exporterSpec.APIVerifySSL, true),
 		LogLevel:          "info",
 		StartupGrace:      "60s",
 		APICredentialsRef: constants.APICredentialsName(cluster.Name),

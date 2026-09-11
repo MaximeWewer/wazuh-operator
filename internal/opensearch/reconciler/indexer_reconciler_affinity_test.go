@@ -49,7 +49,7 @@ func TestIndexerAntiAffinityIntegration_ShouldApply(t *testing.T) {
 					Indexer: &wazuhv1.WazuhIndexerClusterSpec{
 						Replicas: 3,
 						AntiAffinity: &wazuhv1.AntiAffinitySpec{
-							Enabled: true,
+							Enabled: new(true),
 						},
 					},
 				},
@@ -68,7 +68,7 @@ func TestIndexerAntiAffinityIntegration_ShouldApply(t *testing.T) {
 					Indexer: &wazuhv1.WazuhIndexerClusterSpec{
 						Replicas: 3,
 						AntiAffinity: &wazuhv1.AntiAffinitySpec{
-							Enabled: false,
+							Enabled: new(false),
 						},
 					},
 				},
@@ -127,7 +127,7 @@ func TestIndexerAntiAffinityIntegration_BuildRequiredRules(t *testing.T) {
 			Indexer: &wazuhv1.WazuhIndexerClusterSpec{
 				Replicas: 3,
 				AntiAffinity: &wazuhv1.AntiAffinitySpec{
-					Enabled:     true,
+					Enabled:     new(true),
 					Type:        "required",
 					TopologyKey: "kubernetes.io/hostname",
 				},
@@ -178,7 +178,7 @@ func TestIndexerAntiAffinityIntegration_BuildPreferredRules(t *testing.T) {
 			Indexer: &wazuhv1.WazuhIndexerClusterSpec{
 				Replicas: 3,
 				AntiAffinity: &wazuhv1.AntiAffinitySpec{
-					Enabled: true,
+					Enabled: new(true),
 					Type:    "preferred",
 					Weight:  75,
 				},
@@ -235,7 +235,7 @@ func TestIndexerAntiAffinityIntegration_MergeWithIndexerAffinity(t *testing.T) {
 					},
 				},
 				AntiAffinity: &wazuhv1.AntiAffinitySpec{
-					Enabled: true,
+					Enabled: new(true),
 					Type:    "required",
 				},
 			},
@@ -286,7 +286,7 @@ func TestIndexerAntiAffinityIntegration_ZoneSpread(t *testing.T) {
 			Indexer: &wazuhv1.WazuhIndexerClusterSpec{
 				Replicas: 3,
 				AntiAffinity: &wazuhv1.AntiAffinitySpec{
-					Enabled:     true,
+					Enabled:     new(true),
 					Type:        "required",
 					TopologyKey: "topology.kubernetes.io/zone",
 				},
@@ -359,7 +359,7 @@ func TestIndexerAntiAffinityIntegration_SpecChangeTriggersUpdate(t *testing.T) {
 			Indexer: &wazuhv1.WazuhIndexerClusterSpec{
 				Replicas: 3,
 				AntiAffinity: &wazuhv1.AntiAffinitySpec{
-					Enabled: true,
+					Enabled: new(true),
 					Type:    "required",
 				},
 			},
@@ -376,7 +376,7 @@ func TestIndexerAntiAffinityIntegration_SpecChangeTriggersUpdate(t *testing.T) {
 			Indexer: &wazuhv1.WazuhIndexerClusterSpec{
 				Replicas: 3,
 				AntiAffinity: &wazuhv1.AntiAffinitySpec{
-					Enabled: false,
+					Enabled: new(false),
 				},
 			},
 		},
@@ -425,14 +425,14 @@ func TestIndexerAntiAffinityIntegration_HashChangeOnAntiAffinityChange(t *testin
 		{
 			name: "required anti-affinity",
 			antiAffinity: &wazuhv1.AntiAffinitySpec{
-				Enabled: true,
+				Enabled: new(true),
 				Type:    "required",
 			},
 		},
 		{
 			name: "preferred anti-affinity weight 50",
 			antiAffinity: &wazuhv1.AntiAffinitySpec{
-				Enabled: true,
+				Enabled: new(true),
 				Type:    "preferred",
 				Weight:  50,
 			},
@@ -440,7 +440,7 @@ func TestIndexerAntiAffinityIntegration_HashChangeOnAntiAffinityChange(t *testin
 		{
 			name: "preferred anti-affinity weight 100",
 			antiAffinity: &wazuhv1.AntiAffinitySpec{
-				Enabled: true,
+				Enabled: new(true),
 				Type:    "preferred",
 				Weight:  100,
 			},
@@ -448,7 +448,7 @@ func TestIndexerAntiAffinityIntegration_HashChangeOnAntiAffinityChange(t *testin
 		{
 			name: "zone topology key",
 			antiAffinity: &wazuhv1.AntiAffinitySpec{
-				Enabled:     true,
+				Enabled:     new(true),
 				Type:        "required",
 				TopologyKey: "topology.kubernetes.io/zone",
 			},

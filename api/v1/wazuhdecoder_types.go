@@ -39,7 +39,7 @@ type WazuhDecoderSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=1000
 	// +kubebuilder:default=500
-	Priority int32 `json:"priority,omitempty"`
+	Priority *int32 `json:"priority,omitempty"`
 
 	// Overwrite determines if this decoder should overwrite existing decoders
 	// +optional

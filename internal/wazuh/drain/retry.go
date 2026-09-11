@@ -61,8 +61,8 @@ func NewRetryManager(log logr.Logger) *RetryManagerImpl {
 func (r *RetryManagerImpl) ShouldRetry(status *v1.ComponentDrainStatus, config *v1.DrainRetryConfig) bool {
 	// If no config, use defaults
 	maxAttempts := constants.DefaultDrainRetryMaxAttempts
-	if config != nil && config.MaxAttempts > 0 {
-		maxAttempts = config.MaxAttempts
+	if config != nil && config.MaxAttempts != nil {
+		maxAttempts = *config.MaxAttempts
 	}
 
 	// Check if max attempts reached
@@ -158,8 +158,8 @@ func (r *RetryManagerImpl) ResetRetryState(status *v1.ComponentDrainStatus) {
 // GetRetryStatus returns human-readable retry status
 func (r *RetryManagerImpl) GetRetryStatus(status *v1.ComponentDrainStatus, config *v1.DrainRetryConfig) string {
 	maxAttempts := constants.DefaultDrainRetryMaxAttempts
-	if config != nil && config.MaxAttempts > 0 {
-		maxAttempts = config.MaxAttempts
+	if config != nil && config.MaxAttempts != nil {
+		maxAttempts = *config.MaxAttempts
 	}
 
 	if status.AttemptCount >= maxAttempts {
@@ -196,8 +196,8 @@ type RetryDecision struct {
 // EvaluateRetry provides a comprehensive retry decision
 func (r *RetryManagerImpl) EvaluateRetry(status *v1.ComponentDrainStatus, config *v1.DrainRetryConfig) *RetryDecision {
 	maxAttempts := constants.DefaultDrainRetryMaxAttempts
-	if config != nil && config.MaxAttempts > 0 {
-		maxAttempts = config.MaxAttempts
+	if config != nil && config.MaxAttempts != nil {
+		maxAttempts = *config.MaxAttempts
 	}
 
 	decision := &RetryDecision{

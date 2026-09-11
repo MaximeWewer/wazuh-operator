@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	retry "k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -166,7 +167,7 @@ func (r *RestoreReconciler) Reconcile(ctx context.Context, restore *wazuhv1.Open
 		// Build restore options
 		opts := api.RestoreOptions{
 			Indices:            restore.Spec.Indices,
-			IgnoreUnavailable:  restore.Spec.IgnoreUnavailable,
+			IgnoreUnavailable:  ptr.Deref(restore.Spec.IgnoreUnavailable, true),
 			IncludeGlobalState: restore.Spec.IncludeGlobalState,
 			RenamePattern:      restore.Spec.RenamePattern,
 			RenameReplacement:  restore.Spec.RenameReplacement,

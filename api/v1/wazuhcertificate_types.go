@@ -133,7 +133,7 @@ type AutoRenewalConfig struct {
 	// Enable automatic renewal
 	// +optional
 	// +kubebuilder:default=true
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// Renew certificate X days before expiry
 	// +optional
@@ -184,7 +184,7 @@ type AutoGenerateSANsConfig struct {
 	// Enable auto-generation of SANs based on certificate type
 	// +optional
 	// +kubebuilder:default=true
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// Number of indexer replicas (used to generate pod-specific SANs)
 	// +optional

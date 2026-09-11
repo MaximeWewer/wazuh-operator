@@ -46,7 +46,7 @@ func TestBackupReconciler_ReconcileRBAC_ServiceAccountCreateTrue(t *testing.T) {
 		},
 		Spec: wazuhv1.WazuhBackupSpec{
 			ClusterRef: wazuhv1.WazuhClusterRef{Name: "wazuh-cluster", Namespace: "wazuh"},
-			Components: wazuhv1.BackupComponents{AgentKeys: true},
+			Components: wazuhv1.BackupComponents{AgentKeys: new(true)},
 			Storage:    wazuhv1.BackupStorage{Type: constants.RepositoryTypeS3, Bucket: "bucket"},
 			ServiceAccount: &wazuhv1.ServiceAccountConfig{
 				Create: true,
@@ -91,7 +91,7 @@ func TestBackupReconciler_ReconcileRBAC_ServiceAccountCreateFalse(t *testing.T) 
 		},
 		Spec: wazuhv1.WazuhBackupSpec{
 			ClusterRef: wazuhv1.WazuhClusterRef{Name: "wazuh-cluster", Namespace: "wazuh"},
-			Components: wazuhv1.BackupComponents{AgentKeys: true},
+			Components: wazuhv1.BackupComponents{AgentKeys: new(true)},
 			Storage:    wazuhv1.BackupStorage{Type: constants.RepositoryTypeS3, Bucket: "bucket"},
 			ServiceAccount: &wazuhv1.ServiceAccountConfig{
 				Create: false,

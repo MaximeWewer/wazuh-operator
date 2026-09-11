@@ -29,8 +29,8 @@ func TestBuildSecurityConfig_ProxyEnabled(t *testing.T) {
 	spec := &v1.OpenSearchAuthConfigSpec{
 		Proxy: &v1.ProxyAuthSpec{
 			Enabled:        true,
-			Order:          5,
-			HTTPEnabled:    true,
+			Order:          new(5),
+			HTTPEnabled:    new(true),
 			UserHeader:     "x-proxy-user",
 			RolesHeader:    "x-proxy-roles",
 			RolesSeparator: ",",
@@ -67,8 +67,8 @@ func TestBuildSecurityConfig_ProxyExtended(t *testing.T) {
 	spec := &v1.OpenSearchAuthConfigSpec{
 		Proxy: &v1.ProxyAuthSpec{
 			Enabled:          true,
-			Order:            5,
-			HTTPEnabled:      true,
+			Order:            new(5),
+			HTTPEnabled:      new(true),
 			UserHeader:       "x-proxy-user",
 			RolesHeader:      "x-proxy-roles",
 			RolesSeparator:   ",",
@@ -92,10 +92,10 @@ func TestBuildSecurityConfig_ProxyExtended(t *testing.T) {
 func TestBuildSecurityConfig_ProxyDisabledOrNil(t *testing.T) {
 	cases := map[string]*v1.OpenSearchAuthConfigSpec{
 		"nil proxy": {
-			BasicAuth: &v1.BasicAuthSpec{Enabled: true, Challenge: true},
+			BasicAuth: &v1.BasicAuthSpec{Enabled: new(true), Challenge: new(true)},
 		},
 		"disabled proxy": {
-			BasicAuth: &v1.BasicAuthSpec{Enabled: true, Challenge: true},
+			BasicAuth: &v1.BasicAuthSpec{Enabled: new(true), Challenge: new(true)},
 			Proxy:     &v1.ProxyAuthSpec{Enabled: false, XFF: v1.ProxyXFFSpec{InternalProxies: ".*"}},
 		},
 	}
@@ -118,7 +118,7 @@ func TestBuildSecurityConfig_ProxyInternalProxiesRegex(t *testing.T) {
 	spec := &v1.OpenSearchAuthConfigSpec{
 		Proxy: &v1.ProxyAuthSpec{
 			Enabled:     true,
-			HTTPEnabled: true,
+			HTTPEnabled: new(true),
 			XFF:         v1.ProxyXFFSpec{InternalProxies: `192\.168\.0\.\d+|10\.0\.0\.1`},
 		},
 	}

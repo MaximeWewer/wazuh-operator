@@ -1,6 +1,8 @@
 package config
 
 import (
+	"k8s.io/utils/ptr"
+
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
@@ -59,8 +61,8 @@ func (b *AuthConfigBuilder) buildJWTAuthDomain(spec *v1.JWTAuthSpec) AuthDomainC
 	// "openid_auth_domain".
 	return AuthDomainConfig{
 		Name:                "jwt_auth_domain",
-		Order:               spec.Order,
-		HTTPEnabled:         spec.HTTPEnabled,
+		Order:               ptr.Deref(spec.Order, 4),
+		HTTPEnabled:         ptr.Deref(spec.HTTPEnabled, true),
 		TransportEnabled:    spec.TransportEnabled,
 		Challenge:           spec.Challenge,
 		AuthenticatorType:   authType,

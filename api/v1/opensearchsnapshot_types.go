@@ -43,7 +43,7 @@ type OpenSearchSnapshotSpec struct {
 
 	// IgnoreUnavailable skips missing indices during snapshot
 	// +kubebuilder:default=true
-	IgnoreUnavailable bool `json:"ignoreUnavailable,omitempty"`
+	IgnoreUnavailable *bool `json:"ignoreUnavailable,omitempty"`
 
 	// IncludeGlobalState includes cluster state in the snapshot
 	// +kubebuilder:default=false
@@ -56,7 +56,7 @@ type OpenSearchSnapshotSpec struct {
 	// WaitForCompletion blocks until snapshot completes
 	// If false, snapshot is created asynchronously
 	// +kubebuilder:default=true
-	WaitForCompletion bool `json:"waitForCompletion,omitempty"`
+	WaitForCompletion *bool `json:"waitForCompletion,omitempty"`
 }
 
 // OpenSearchSnapshotStatus defines the observed state of OpenSearchSnapshot

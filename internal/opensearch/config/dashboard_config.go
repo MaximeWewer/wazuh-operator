@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/utils/ptr"
+
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
@@ -126,7 +128,7 @@ func (b *DashboardAuthConfigBuilder) determineAuthType() string {
 	// Count enabled auth types
 	types := []string{}
 
-	if b.authConfig.BasicAuth != nil && b.authConfig.BasicAuth.Enabled {
+	if b.authConfig.BasicAuth != nil && ptr.Deref(b.authConfig.BasicAuth.Enabled, true) {
 		types = append(types, "basicauth")
 	}
 	if b.authConfig.OIDC != nil && b.authConfig.OIDC.Enabled {
@@ -156,7 +158,7 @@ func (b *DashboardAuthConfigBuilder) determineAuthType() string {
 // isMultiAuthEnabled returns true if multiple auth types are enabled
 func (b *DashboardAuthConfigBuilder) isMultiAuthEnabled() bool {
 	count := 0
-	if b.authConfig.BasicAuth != nil && b.authConfig.BasicAuth.Enabled {
+	if b.authConfig.BasicAuth != nil && ptr.Deref(b.authConfig.BasicAuth.Enabled, true) {
 		count++
 	}
 	if b.authConfig.OIDC != nil && b.authConfig.OIDC.Enabled {
@@ -318,17 +320,17 @@ func (b *DashboardAuthConfigBuilder) buildMultiAuthConfig() string {
 
 	var methods []authMethod
 
-	if b.authConfig.BasicAuth != nil && b.authConfig.BasicAuth.Enabled {
+	if b.authConfig.BasicAuth != nil && ptr.Deref(b.authConfig.BasicAuth.Enabled, true) {
 		methods = append(methods, authMethod{"basicauth", b.authConfig.BasicAuth.Order})
 	}
 	if b.authConfig.OIDC != nil && b.authConfig.OIDC.Enabled {
-		methods = append(methods, authMethod{"openid", b.authConfig.OIDC.Order})
+		methods = append(methods, authMethod{"openid", ptr.Deref(b.authConfig.OIDC.Order, 1)})
 	}
 	if b.authConfig.SAML != nil && b.authConfig.SAML.Enabled {
-		methods = append(methods, authMethod{"saml", b.authConfig.SAML.Order})
+		methods = append(methods, authMethod{"saml", ptr.Deref(b.authConfig.SAML.Order, 2)})
 	}
 	if b.authConfig.JWT != nil && b.authConfig.JWT.Enabled {
-		methods = append(methods, authMethod{"jwt", b.authConfig.JWT.Order})
+		methods = append(methods, authMethod{"jwt", ptr.Deref(b.authConfig.JWT.Order, 4)})
 	}
 
 	// Sort by order
@@ -359,7 +361,7 @@ func (b *DashboardAuthConfigBuilder) buildMultiAuthConfig() string {
 func (b *DashboardAuthConfigBuilder) GetActiveAuthTypes() []string {
 	var types []string
 
-	if b.authConfig.BasicAuth != nil && b.authConfig.BasicAuth.Enabled {
+	if b.authConfig.BasicAuth != nil && ptr.Deref(b.authConfig.BasicAuth.Enabled, true) {
 		types = append(types, "basicauth")
 	}
 	if b.authConfig.OIDC != nil && b.authConfig.OIDC.Enabled {

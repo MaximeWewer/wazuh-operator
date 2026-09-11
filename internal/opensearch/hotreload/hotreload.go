@@ -29,6 +29,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -192,7 +193,7 @@ func (h *HotReloader) ShouldTriggerHotReload(cluster *wazuhv1.WazuhCluster) bool
 		return true
 	}
 
-	return cluster.Spec.TLS.HotReload.Enabled
+	return ptr.Deref(cluster.Spec.TLS.HotReload.Enabled, true)
 }
 
 // ShouldForceAPIReload determines if API reload should be forced
@@ -348,7 +349,7 @@ func IsHotReloadEnabled(cluster *wazuhv1.WazuhCluster) bool {
 		// Default: enabled if TLS is enabled
 		return true
 	}
-	return cluster.Spec.TLS.HotReload.Enabled
+	return ptr.Deref(cluster.Spec.TLS.HotReload.Enabled, true)
 }
 
 // GetHotReloadConfigString returns the OpenSearch configuration string for hot reload
@@ -361,7 +362,7 @@ func GetHotReloadConfigString(cluster *wazuhv1.WazuhCluster) string {
 	if cluster.Spec.TLS.Enabled != nil && !*cluster.Spec.TLS.Enabled {
 		return ""
 	}
-	if cluster.Spec.TLS.HotReload != nil && !cluster.Spec.TLS.HotReload.Enabled {
+	if cluster.Spec.TLS.HotReload != nil && !ptr.Deref(cluster.Spec.TLS.HotReload.Enabled, true) {
 		return ""
 	}
 

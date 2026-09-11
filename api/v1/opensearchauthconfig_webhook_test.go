@@ -44,7 +44,7 @@ func TestOpenSearchAuthConfigValidator_BasicAuthOnly(t *testing.T) {
 		Spec: OpenSearchAuthConfigSpec{
 			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			BasicAuth: &BasicAuthSpec{
-				Enabled: true,
+				Enabled: new(true),
 			},
 		},
 	}
@@ -351,8 +351,8 @@ func TestOpenSearchAuthConfigValidator_MultipleChallengeWarning(t *testing.T) {
 		Spec: OpenSearchAuthConfigSpec{
 			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			BasicAuth: &BasicAuthSpec{
-				Enabled:   true,
-				Challenge: true,
+				Enabled:   new(true),
+				Challenge: new(true),
 			},
 			OIDC: &OIDCAuthSpec{
 				Enabled:    true,
@@ -379,8 +379,8 @@ func TestOpenSearchAuthConfigValidator_SingleChallengeNoWarning(t *testing.T) {
 		Spec: OpenSearchAuthConfigSpec{
 			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			BasicAuth: &BasicAuthSpec{
-				Enabled:   true,
-				Challenge: true,
+				Enabled:   new(true),
+				Challenge: new(true),
 			},
 			OIDC: &OIDCAuthSpec{
 				Enabled:    true,
@@ -408,8 +408,8 @@ func TestOpenSearchAuthConfigValidator_DisabledAuthNotCounted(t *testing.T) {
 		Spec: OpenSearchAuthConfigSpec{
 			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
 			BasicAuth: &BasicAuthSpec{
-				Enabled:   true,
-				Challenge: true,
+				Enabled:   new(true),
+				Challenge: new(true),
 			},
 			OIDC: &OIDCAuthSpec{
 				Enabled:   false, // disabled
@@ -433,13 +433,13 @@ func TestOpenSearchAuthConfigValidator_ValidateUpdate(t *testing.T) {
 	old := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
 			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
-			BasicAuth:   &BasicAuthSpec{Enabled: true},
+			BasicAuth:   &BasicAuthSpec{Enabled: new(true)},
 		},
 	}
 	new := &OpenSearchAuthConfig{
 		Spec: OpenSearchAuthConfigSpec{
 			ClusterRefs: []WazuhClusterRef{{Name: "test-cluster", Namespace: "default"}},
-			BasicAuth:   &BasicAuthSpec{Enabled: true},
+			BasicAuth:   &BasicAuthSpec{Enabled: new(true)},
 			OIDC: &OIDCAuthSpec{
 				Enabled:    true,
 				ConnectURL: "https://idp.example.com/.well-known/openid-configuration",

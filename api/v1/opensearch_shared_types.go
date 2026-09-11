@@ -63,7 +63,7 @@ type WazuhPluginConfig struct {
 	// Enable Wazuh plugin
 	// +optional
 	// +kubebuilder:default=true
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// Default API endpoint configuration (used when apiEndpoints is empty)
 	// This allows configuring the default Wazuh Manager API connection with credentials from a secret
@@ -89,7 +89,7 @@ type WazuhPluginConfig struct {
 	// User ability to change index pattern from menu
 	// +optional
 	// +kubebuilder:default=true
-	IPSelector bool `json:"ipSelector,omitempty"`
+	IPSelector *bool `json:"ipSelector,omitempty"`
 
 	// Index pattern names disabled from availability
 	// +optional
@@ -141,7 +141,7 @@ type WazuhMonitoringConfig struct {
 	// Enable agent connection states visualization
 	// +optional
 	// +kubebuilder:default=true
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// API request frequency in seconds (minimum: 60)
 	// +optional
@@ -176,42 +176,42 @@ type WazuhChecksConfig struct {
 	// Validate index patterns on dashboard load
 	// +optional
 	// +kubebuilder:default=true
-	Pattern bool `json:"pattern,omitempty"`
+	Pattern *bool `json:"pattern,omitempty"`
 
 	// Verify index template validity
 	// +optional
 	// +kubebuilder:default=true
-	Template bool `json:"template,omitempty"`
+	Template *bool `json:"template,omitempty"`
 
 	// Test Wazuh server API connectivity
 	// +optional
 	// +kubebuilder:default=true
-	API bool `json:"api,omitempty"`
+	API *bool `json:"api,omitempty"`
 
 	// Confirm version compatibility
 	// +optional
 	// +kubebuilder:default=true
-	Setup bool `json:"setup,omitempty"`
+	Setup *bool `json:"setup,omitempty"`
 
 	// Verify mapped document fields
 	// +optional
 	// +kubebuilder:default=true
-	Fields bool `json:"fields,omitempty"`
+	Fields *bool `json:"fields,omitempty"`
 
 	// Check special metadata fields
 	// +optional
 	// +kubebuilder:default=true
-	MetaFields bool `json:"metaFields,omitempty"`
+	MetaFields *bool `json:"metaFields,omitempty"`
 
 	// Ensure time range is configured
 	// +optional
 	// +kubebuilder:default=true
-	TimeFilter bool `json:"timeFilter,omitempty"`
+	TimeFilter *bool `json:"timeFilter,omitempty"`
 
 	// Verify aggregation bucket limits
 	// +optional
 	// +kubebuilder:default=true
-	MaxBuckets bool `json:"maxBuckets,omitempty"`
+	MaxBuckets *bool `json:"maxBuckets,omitempty"`
 }
 
 // WazuhCronStatisticsConfig defines cron statistics settings
@@ -219,7 +219,7 @@ type WazuhCronStatisticsConfig struct {
 	// Enable/disable statistics task execution
 	// +optional
 	// +kubebuilder:default=true
-	Status bool `json:"status,omitempty"`
+	Status *bool `json:"status,omitempty"`
 
 	// Specific API hosts for statistics
 	// +optional

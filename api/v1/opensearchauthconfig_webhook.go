@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -197,7 +198,7 @@ func validateKerberosSpec(spec *KerberosAuthSpec) []string {
 
 // hasEnabledAuthMethod checks if at least one auth method is enabled
 func (v *OpenSearchAuthConfigCustomValidator) hasEnabledAuthMethod(spec *OpenSearchAuthConfigSpec) bool {
-	if spec.BasicAuth != nil && spec.BasicAuth.Enabled {
+	if spec.BasicAuth != nil && ptr.Deref(spec.BasicAuth.Enabled, true) {
 		return true
 	}
 	if spec.OIDC != nil && spec.OIDC.Enabled {
@@ -224,7 +225,7 @@ func (v *OpenSearchAuthConfigCustomValidator) hasEnabledAuthMethod(spec *OpenSea
 // countChallengeDomains counts how many auth domains have challenge=true
 func (v *OpenSearchAuthConfigCustomValidator) countChallengeDomains(spec *OpenSearchAuthConfigSpec) int {
 	count := 0
-	if spec.BasicAuth != nil && spec.BasicAuth.Enabled && spec.BasicAuth.Challenge {
+	if spec.BasicAuth != nil && ptr.Deref(spec.BasicAuth.Enabled, true) && ptr.Deref(spec.BasicAuth.Challenge, true) {
 		count++
 	}
 	if spec.OIDC != nil && spec.OIDC.Enabled && spec.OIDC.Challenge {

@@ -57,7 +57,7 @@ func TestSnapshotRepositoryReconciler_buildRepositorySettings(t *testing.T) {
 						Region:               "us-east-1",
 						Endpoint:             "s3.amazonaws.com",
 						Protocol:             "https",
-						Compress:             true,
+						Compress:             new(true),
 						ServerSideEncryption: true,
 						StorageClass:         "standard",
 						CannedACL:            "private",
@@ -87,7 +87,7 @@ func TestSnapshotRepositoryReconciler_buildRepositorySettings(t *testing.T) {
 					Type: constants.RepositoryTypeFS,
 					Settings: wazuhv1.SnapshotRepositorySettings{
 						Location: "/mnt/snapshots",
-						Compress: true,
+						Compress: new(true),
 					},
 				},
 			},

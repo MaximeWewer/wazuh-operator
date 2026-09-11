@@ -589,7 +589,7 @@ func TestIsHotReloadEnabled(t *testing.T) {
 					TLS: &wazuhv1.TLSConfig{
 						Enabled: new(true),
 						HotReload: &wazuhv1.HotReloadConfig{
-							Enabled: true,
+							Enabled: new(true),
 						},
 					},
 				},
@@ -614,7 +614,7 @@ func TestIsHotReloadEnabled(t *testing.T) {
 					TLS: &wazuhv1.TLSConfig{
 						Enabled: new(true),
 						HotReload: &wazuhv1.HotReloadConfig{
-							Enabled: false,
+							Enabled: new(false),
 						},
 					},
 				},
@@ -665,7 +665,7 @@ func TestGetHotReloadConfigString(t *testing.T) {
 					TLS: &wazuhv1.TLSConfig{
 						Enabled: new(true),
 						HotReload: &wazuhv1.HotReloadConfig{
-							Enabled: true,
+							Enabled: new(true),
 						},
 					},
 				},
@@ -680,7 +680,7 @@ func TestGetHotReloadConfigString(t *testing.T) {
 					TLS: &wazuhv1.TLSConfig{
 						Enabled: new(true),
 						HotReload: &wazuhv1.HotReloadConfig{
-							Enabled: false,
+							Enabled: new(false),
 						},
 					},
 				},
@@ -707,7 +707,7 @@ func TestGetHotReloadConfigString(t *testing.T) {
 					TLS: &wazuhv1.TLSConfig{
 						Enabled: new(true),
 						HotReload: &wazuhv1.HotReloadConfig{
-							Enabled: true,
+							Enabled: new(true),
 						},
 					},
 				},

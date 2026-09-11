@@ -17,6 +17,8 @@ limitations under the License.
 package config
 
 import (
+	"k8s.io/utils/ptr"
+
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
@@ -57,8 +59,8 @@ func (b *AuthConfigBuilder) buildProxyAuthDomain(spec *v1.ProxyAuthSpec) AuthDom
 
 	return AuthDomainConfig{
 		Name:             "proxy_auth_domain",
-		Order:            spec.Order,
-		HTTPEnabled:      spec.HTTPEnabled,
+		Order:            ptr.Deref(spec.Order, 5),
+		HTTPEnabled:      ptr.Deref(spec.HTTPEnabled, true),
 		TransportEnabled: spec.TransportEnabled,
 		// A proxy cannot issue an interactive challenge.
 		Challenge:           false,

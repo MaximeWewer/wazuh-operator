@@ -75,7 +75,7 @@ type WazuhRuleSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=1000
 	// +kubebuilder:default=500
-	Priority int32 `json:"priority,omitempty"`
+	Priority *int32 `json:"priority,omitempty"`
 
 	// IfSID references parent rule IDs
 	// +optional

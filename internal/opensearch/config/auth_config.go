@@ -21,6 +21,8 @@ import (
 	"sort"
 	"strings"
 
+	"k8s.io/utils/ptr"
+
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/versions"
 )
@@ -195,7 +197,7 @@ func (b *AuthConfigBuilder) buildAuthzDomains() []AuthDomainConfig {
 	var domains []AuthDomainConfig
 
 	if b.authConfig.LDAP != nil && b.authConfig.LDAP.Enabled &&
-		b.authConfig.LDAP.Authorization != nil && b.authConfig.LDAP.Authorization.Enabled {
+		b.authConfig.LDAP.Authorization != nil && ptr.Deref(b.authConfig.LDAP.Authorization.Enabled, true) {
 		domains = append(domains, b.buildLDAPAuthzDomain(b.authConfig.LDAP))
 	}
 
@@ -274,7 +276,7 @@ func (b *AuthConfigBuilder) buildBasicAuthDomain(spec *v1.BasicAuthSpec) AuthDom
 
 	if spec != nil {
 		domain.Order = spec.Order
-		domain.Challenge = spec.Challenge
+		domain.Challenge = ptr.Deref(spec.Challenge, true)
 	} else if maxOrder, ok := b.maxNonBasicOrder(); ok {
 		// No explicit basicAuth: evaluate it right after the SSO domain(s) so SSO
 		// owns the front door while basic stays the interactive fallback. Mirrors the
@@ -301,22 +303,22 @@ func (b *AuthConfigBuilder) maxNonBasicOrder() (int, bool) {
 		}
 	}
 	if b.authConfig.OIDC != nil {
-		consider(b.authConfig.OIDC.Enabled, b.authConfig.OIDC.Order)
+		consider(b.authConfig.OIDC.Enabled, ptr.Deref(b.authConfig.OIDC.Order, 1))
 	}
 	if b.authConfig.SAML != nil {
-		consider(b.authConfig.SAML.Enabled, b.authConfig.SAML.Order)
+		consider(b.authConfig.SAML.Enabled, ptr.Deref(b.authConfig.SAML.Order, 2))
 	}
 	if b.authConfig.LDAP != nil {
-		consider(b.authConfig.LDAP.Enabled, b.authConfig.LDAP.Order)
+		consider(b.authConfig.LDAP.Enabled, ptr.Deref(b.authConfig.LDAP.Order, 3))
 	}
 	if b.authConfig.JWT != nil {
-		consider(b.authConfig.JWT.Enabled, b.authConfig.JWT.Order)
+		consider(b.authConfig.JWT.Enabled, ptr.Deref(b.authConfig.JWT.Order, 4))
 	}
 	if b.authConfig.Proxy != nil {
-		consider(b.authConfig.Proxy.Enabled, b.authConfig.Proxy.Order)
+		consider(b.authConfig.Proxy.Enabled, ptr.Deref(b.authConfig.Proxy.Order, 5))
 	}
 	if b.authConfig.Kerberos != nil {
-		consider(b.authConfig.Kerberos.Enabled, b.authConfig.Kerberos.Order)
+		consider(b.authConfig.Kerberos.Enabled, ptr.Deref(b.authConfig.Kerberos.Order, 6))
 	}
 	return maxOrder, found
 }
@@ -457,7 +459,7 @@ func (b *AuthConfigBuilder) GetActiveAuthMethods() []string {
 func (b *AuthConfigBuilder) ValidateChallengeSettings() error {
 	challengeCount := 0
 
-	if b.authConfig.BasicAuth != nil && b.authConfig.BasicAuth.Enabled && b.authConfig.BasicAuth.Challenge {
+	if b.authConfig.BasicAuth != nil && ptr.Deref(b.authConfig.BasicAuth.Enabled, true) && ptr.Deref(b.authConfig.BasicAuth.Challenge, true) {
 		challengeCount++
 	}
 	if b.authConfig.OIDC != nil && b.authConfig.OIDC.Enabled && b.authConfig.OIDC.Challenge {
@@ -497,7 +499,7 @@ func (b *AuthConfigBuilder) ValidateMultiAuthRequiresBasic() error {
 	if b.authConfig.JWT != nil && b.authConfig.JWT.Enabled {
 		enabled++
 	}
-	basicOn := b.authConfig.BasicAuth != nil && b.authConfig.BasicAuth.Enabled
+	basicOn := b.authConfig.BasicAuth != nil && ptr.Deref(b.authConfig.BasicAuth.Enabled, true)
 	if basicOn {
 		enabled++
 	}

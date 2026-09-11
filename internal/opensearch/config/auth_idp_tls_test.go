@@ -56,7 +56,7 @@ func TestBuildSecurityConfig_OIDCIdpTLS(t *testing.T) {
 	spec := &v1.OpenSearchAuthConfigSpec{
 		OIDC: &v1.OIDCAuthSpec{
 			Enabled:    true,
-			Order:      0,
+			Order:      new(0),
 			ConnectURL: "https://idp.internal/.well-known/openid-configuration",
 			ClientID:   "wazuh",
 			IdpTLS: &v1.IdpTLSSpec{
@@ -82,7 +82,7 @@ func TestBuildSecurityConfig_SAMLIdpTLS(t *testing.T) {
 	spec := &v1.OpenSearchAuthConfigSpec{
 		SAML: &v1.SAMLAuthSpec{
 			Enabled:        true,
-			Order:          0,
+			Order:          new(0),
 			IdpMetadataURL: "https://idp.internal/saml/metadata",
 			IdpEntityID:    "https://idp.internal/entity",
 			SpEntityID:     "wazuh-dashboard",
@@ -110,7 +110,7 @@ func TestBuildSecurityConfig_LDAPIdpTLS(t *testing.T) {
 	spec := &v1.OpenSearchAuthConfigSpec{
 		LDAP: &v1.LDAPAuthSpec{
 			Enabled: true,
-			Order:   0,
+			Order:   new(0),
 			Hosts:   []string{"ldaps://ldap.internal:636"},
 			Authentication: v1.LDAPAuthenticationSpec{
 				UserBase:          "ou=users,dc=example,dc=com",
@@ -133,13 +133,13 @@ func TestBuildSecurityConfig_NoIdpTLS_NoKeys(t *testing.T) {
 	spec := &v1.OpenSearchAuthConfigSpec{
 		OIDC: &v1.OIDCAuthSpec{
 			Enabled:    true,
-			Order:      0,
+			Order:      new(0),
 			ConnectURL: "https://idp.example.com/.well-known/openid-configuration",
 			ClientID:   "wazuh",
 		},
 		SAML: &v1.SAMLAuthSpec{
 			Enabled:        true,
-			Order:          1,
+			Order:          new(1),
 			IdpMetadataURL: "https://idp.example.com/saml/metadata",
 			IdpEntityID:    "https://idp.example.com/entity",
 			SpEntityID:     "wazuh-dashboard",

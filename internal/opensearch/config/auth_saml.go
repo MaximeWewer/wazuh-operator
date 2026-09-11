@@ -19,6 +19,8 @@ package config
 import (
 	"fmt"
 
+	"k8s.io/utils/ptr"
+
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
@@ -71,8 +73,8 @@ func (b *AuthConfigBuilder) buildSAMLAuthDomain(spec *v1.SAMLAuthSpec) AuthDomai
 
 	return AuthDomainConfig{
 		Name:                "saml_auth_domain",
-		Order:               spec.Order,
-		HTTPEnabled:         spec.HTTPEnabled,
+		Order:               ptr.Deref(spec.Order, 2),
+		HTTPEnabled:         ptr.Deref(spec.HTTPEnabled, true),
 		TransportEnabled:    false, // SAML is HTTP only
 		Challenge:           spec.Challenge,
 		AuthenticatorType:   "saml",

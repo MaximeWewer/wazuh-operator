@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -3303,7 +3304,7 @@ func toWazuhExporterHashInput(cluster *wazuhv1.WazuhCluster) *patch.WazuhExporte
 		Port:         e.Port,
 		Resources:    e.Resources,
 		APIProtocol:  e.APIProtocol,
-		APIVerifySSL: e.APIVerifySSL,
+		APIVerifySSL: ptr.Deref(e.APIVerifySSL, true),
 		LogLevel:     e.LogLevel,
 		CacheTTL:     e.CacheTTL,
 		StartupGrace: e.StartupGrace,

@@ -55,7 +55,7 @@ func TestCertificateRenewal_FullScenario_HotReloadSupported(t *testing.T) {
 			TLS: &wazuhv1.TLSConfig{
 				Enabled: new(true),
 				HotReload: &wazuhv1.HotReloadConfig{
-					Enabled: true,
+					Enabled: new(true),
 				},
 			},
 			Indexer: &wazuhv1.WazuhIndexerClusterSpec{
@@ -130,7 +130,7 @@ func TestCertificateRenewal_FullScenario_HotReloadNotSupported(t *testing.T) {
 			TLS: &wazuhv1.TLSConfig{
 				Enabled: new(true),
 				HotReload: &wazuhv1.HotReloadConfig{
-					Enabled: true,
+					Enabled: new(true),
 				},
 			},
 			Indexer: &wazuhv1.WazuhIndexerClusterSpec{
@@ -492,7 +492,7 @@ func TestHotReloadWithFallback_EventEmission(t *testing.T) {
 			TLS: &wazuhv1.TLSConfig{
 				Enabled: new(true),
 				HotReload: &wazuhv1.HotReloadConfig{
-					Enabled: true,
+					Enabled: new(true),
 				},
 			},
 		},

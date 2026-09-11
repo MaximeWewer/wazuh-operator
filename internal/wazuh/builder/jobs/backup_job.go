@@ -27,6 +27,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
@@ -108,13 +109,13 @@ func (b *BackupJobBuilder) buildBackupPaths() []string {
 
 	components := b.backup.Spec.Components
 
-	if components.AgentKeys {
+	if ptr.Deref(components.AgentKeys, true) {
 		paths = append(paths, constants.WazuhBackupPathAgentKeys)
 	}
-	if components.FIMDatabase {
+	if ptr.Deref(components.FIMDatabase, true) {
 		paths = append(paths, constants.WazuhBackupPathFIMDatabase)
 	}
-	if components.AgentDatabase {
+	if ptr.Deref(components.AgentDatabase, true) {
 		paths = append(paths, constants.WazuhBackupPathAgentDatabase)
 	}
 	if components.Integrations {

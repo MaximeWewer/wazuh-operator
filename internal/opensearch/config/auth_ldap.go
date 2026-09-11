@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/utils/ptr"
+
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
@@ -76,8 +78,8 @@ func (b *AuthConfigBuilder) buildLDAPAuthDomain(spec *v1.LDAPAuthSpec) AuthDomai
 
 	return AuthDomainConfig{
 		Name:              "ldap_auth_domain",
-		Order:             spec.Order,
-		HTTPEnabled:       spec.HTTPEnabled,
+		Order:             ptr.Deref(spec.Order, 3),
+		HTTPEnabled:       ptr.Deref(spec.HTTPEnabled, true),
 		TransportEnabled:  spec.TransportEnabled,
 		Challenge:         spec.Challenge,
 		AuthenticatorType: "basic",
@@ -141,7 +143,7 @@ func (b *AuthConfigBuilder) buildLDAPAuthzDomain(spec *v1.LDAPAuthSpec) AuthDoma
 
 	return AuthDomainConfig{
 		Name:          "ldap_authz_domain",
-		HTTPEnabled:   spec.HTTPEnabled,
+		HTTPEnabled:   ptr.Deref(spec.HTTPEnabled, true),
 		BackendType:   "ldap",
 		BackendConfig: config,
 		Description:   "Authorize via LDAP/Active Directory groups",
@@ -276,7 +278,7 @@ func (b *LDAPConfigBuilder) ValidateConfig() error {
 	}
 
 	// Validate authorization if enabled
-	if b.spec.Authorization != nil && b.spec.Authorization.Enabled {
+	if b.spec.Authorization != nil && ptr.Deref(b.spec.Authorization.Enabled, true) {
 		if b.spec.Authorization.RoleBase == "" {
 			return &ValidationError{
 				Field:   "ldap.authorization.roleBase",

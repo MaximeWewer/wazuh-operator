@@ -42,7 +42,7 @@ func TestRetryManager_ShouldRetry(t *testing.T) {
 				AttemptCount: 1,
 			},
 			config: &v1.DrainRetryConfig{
-				MaxAttempts: 3,
+				MaxAttempts: new(int32(3)),
 			},
 			expectedRetry: true,
 		},
@@ -53,7 +53,7 @@ func TestRetryManager_ShouldRetry(t *testing.T) {
 				AttemptCount: 3,
 			},
 			config: &v1.DrainRetryConfig{
-				MaxAttempts: 3,
+				MaxAttempts: new(int32(3)),
 			},
 			expectedRetry: false,
 		},
@@ -64,7 +64,7 @@ func TestRetryManager_ShouldRetry(t *testing.T) {
 				AttemptCount: 1,
 			},
 			config: &v1.DrainRetryConfig{
-				MaxAttempts: 3,
+				MaxAttempts: new(int32(3)),
 			},
 			expectedRetry: false,
 		},
@@ -258,7 +258,7 @@ func TestRetryManager_EvaluateRetry(t *testing.T) {
 				AttemptCount: 1,
 			},
 			config: &v1.DrainRetryConfig{
-				MaxAttempts: 3,
+				MaxAttempts: new(int32(3)),
 			},
 			expectedShouldRetry:      true,
 			expectedRemainingGreater: 1,
@@ -270,7 +270,7 @@ func TestRetryManager_EvaluateRetry(t *testing.T) {
 				AttemptCount: 3,
 			},
 			config: &v1.DrainRetryConfig{
-				MaxAttempts: 3,
+				MaxAttempts: new(int32(3)),
 			},
 			expectedShouldRetry:      false,
 			expectedRemainingGreater: -1,
@@ -307,7 +307,7 @@ func TestRetryManager_GetRetryStatus(t *testing.T) {
 				AttemptCount: 3,
 			},
 			config: &v1.DrainRetryConfig{
-				MaxAttempts: 3,
+				MaxAttempts: new(int32(3)),
 			},
 			contains: "manual intervention",
 		},
@@ -318,7 +318,7 @@ func TestRetryManager_GetRetryStatus(t *testing.T) {
 				NextRetryTime: &metav1.Time{Time: time.Now().Add(5 * time.Minute)},
 			},
 			config: &v1.DrainRetryConfig{
-				MaxAttempts: 3,
+				MaxAttempts: new(int32(3)),
 			},
 			contains: "retry scheduled",
 		},
@@ -329,7 +329,7 @@ func TestRetryManager_GetRetryStatus(t *testing.T) {
 				NextRetryTime: &metav1.Time{Time: time.Now().Add(-1 * time.Minute)},
 			},
 			config: &v1.DrainRetryConfig{
-				MaxAttempts: 3,
+				MaxAttempts: new(int32(3)),
 			},
 			contains: "retry due",
 		},

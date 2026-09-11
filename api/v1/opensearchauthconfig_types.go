@@ -86,7 +86,7 @@ type BasicAuthSpec struct {
 	// internal basic auth domain (it is always kept). Setting it to false is
 	// ignored and the operator emits a warning. Use Order/Challenge to tune behavior.
 	// +kubebuilder:default=true
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// Order determines the evaluation order of this auth domain
 	// Lower numbers are evaluated first
@@ -99,16 +99,16 @@ type BasicAuthSpec struct {
 	// default) so local accounts stay reachable; SSO domains must use challenge=false
 	// (their default) since only one domain may issue the challenge.
 	// +kubebuilder:default=true
-	Challenge bool `json:"challenge,omitempty"`
+	Challenge *bool `json:"challenge,omitempty"`
 
 	// HTTPEnabled is forced on by the operator (the basic domain must always be
 	// usable on the HTTP layer for service accounts); this field has no effect.
 	// +kubebuilder:default=true
-	HTTPEnabled bool `json:"httpEnabled,omitempty"`
+	HTTPEnabled *bool `json:"httpEnabled,omitempty"`
 
 	// TransportEnabled is forced on by the operator; this field has no effect.
 	// +kubebuilder:default=true
-	TransportEnabled bool `json:"transportEnabled,omitempty"`
+	TransportEnabled *bool `json:"transportEnabled,omitempty"`
 }
 
 // ============================================================================
@@ -125,7 +125,7 @@ type OIDCAuthSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=100
 	// +kubebuilder:default=1
-	Order int `json:"order,omitempty"`
+	Order *int `json:"order,omitempty"`
 
 	// Challenge enables authentication challenge
 	// Should typically be false when multiple auth methods are enabled
@@ -134,7 +134,7 @@ type OIDCAuthSpec struct {
 
 	// HTTPEnabled enables authentication on HTTP layer
 	// +kubebuilder:default=true
-	HTTPEnabled bool `json:"httpEnabled,omitempty"`
+	HTTPEnabled *bool `json:"httpEnabled,omitempty"`
 
 	// ConnectURL is the OpenID Connect discovery endpoint URL
 	// Example: https://keycloak.example.com/realms/wazuh/.well-known/openid-configuration
@@ -232,7 +232,7 @@ type SAMLAuthSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=100
 	// +kubebuilder:default=2
-	Order int `json:"order,omitempty"`
+	Order *int `json:"order,omitempty"`
 
 	// Challenge enables authentication challenge
 	// Should typically be false when multiple auth methods are enabled
@@ -241,7 +241,7 @@ type SAMLAuthSpec struct {
 
 	// HTTPEnabled enables authentication on HTTP layer
 	// +kubebuilder:default=true
-	HTTPEnabled bool `json:"httpEnabled,omitempty"`
+	HTTPEnabled *bool `json:"httpEnabled,omitempty"`
 
 	// IdpMetadataURL is the URL to fetch IdP metadata from
 	// Either IdpMetadataURL or IdpMetadataFile must be specified
@@ -313,7 +313,7 @@ type LDAPAuthSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=100
 	// +kubebuilder:default=3
-	Order int `json:"order,omitempty"`
+	Order *int `json:"order,omitempty"`
 
 	// Challenge enables authentication challenge
 	// Should typically be false when multiple auth methods are enabled
@@ -322,7 +322,7 @@ type LDAPAuthSpec struct {
 
 	// HTTPEnabled enables authentication on HTTP layer
 	// +kubebuilder:default=true
-	HTTPEnabled bool `json:"httpEnabled,omitempty"`
+	HTTPEnabled *bool `json:"httpEnabled,omitempty"`
 
 	// TransportEnabled enables authentication on transport layer
 	// +kubebuilder:default=false
@@ -375,7 +375,7 @@ type LDAPAuthenticationSpec struct {
 type LDAPAuthorizationSpec struct {
 	// Enabled enables LDAP authorization
 	// +kubebuilder:default=true
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// RoleBase is the base DN for role searches
 	// Example: ou=groups,dc=example,dc=com
@@ -417,7 +417,7 @@ type LDAPTLSSpec struct {
 
 	// VerifyHostnames enables hostname verification
 	// +kubebuilder:default=true
-	VerifyHostnames bool `json:"verifyHostnames,omitempty"`
+	VerifyHostnames *bool `json:"verifyHostnames,omitempty"`
 
 	// TrustAllCertificates disables certificate verification (insecure)
 	// +kubebuilder:default=false
@@ -455,7 +455,7 @@ type JWTAuthSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=100
 	// +kubebuilder:default=4
-	Order int `json:"order,omitempty"`
+	Order *int `json:"order,omitempty"`
 
 	// Challenge enables authentication challenge
 	// JWT is non-interactive; this should stay false when other domains are enabled
@@ -464,7 +464,7 @@ type JWTAuthSpec struct {
 
 	// HTTPEnabled enables authentication on HTTP layer
 	// +kubebuilder:default=true
-	HTTPEnabled bool `json:"httpEnabled,omitempty"`
+	HTTPEnabled *bool `json:"httpEnabled,omitempty"`
 
 	// TransportEnabled enables authentication on transport layer
 	// +kubebuilder:default=false
@@ -542,10 +542,10 @@ type ProxyAuthSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=100
 	// +kubebuilder:default=5
-	Order int `json:"order,omitempty"`
+	Order *int `json:"order,omitempty"`
 	// HTTPEnabled enables the domain on the HTTP layer.
 	// +kubebuilder:default=true
-	HTTPEnabled bool `json:"httpEnabled,omitempty"`
+	HTTPEnabled *bool `json:"httpEnabled,omitempty"`
 	// TransportEnabled - proxy identity headers only arrive over HTTP; leave false.
 	// +kubebuilder:default=false
 	TransportEnabled bool `json:"transportEnabled,omitempty"`
@@ -603,7 +603,7 @@ type KerberosAuthSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=100
 	// +kubebuilder:default=6
-	Order int `json:"order,omitempty"`
+	Order *int `json:"order,omitempty"`
 
 	// Challenge sends the SPNEGO "WWW-Authenticate: Negotiate" challenge. Only one auth domain
 	// may challenge; keep this false (the operator's basic domain challenges) unless you switch

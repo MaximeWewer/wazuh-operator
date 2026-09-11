@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -395,7 +396,7 @@ func (r *CertificateReconciler) generateSANs(cert *wazuhv1.WazuhCertificate) []s
 	}
 
 	// Auto-generate SANs if enabled
-	if cert.Spec.AutoGenerateSANs != nil && cert.Spec.AutoGenerateSANs.Enabled {
+	if cert.Spec.AutoGenerateSANs != nil && ptr.Deref(cert.Spec.AutoGenerateSANs.Enabled, true) {
 		namespace := cert.Spec.AutoGenerateSANs.Namespace
 		if namespace == "" {
 			namespace = cert.Namespace

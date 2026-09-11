@@ -77,17 +77,17 @@ type BackupComponents struct {
 	// AgentKeys backs up /var/ossec/etc/client.keys (agent registrations)
 	// Critical for agent reconnection after restore
 	// +kubebuilder:default=true
-	AgentKeys bool `json:"agentKeys,omitempty"`
+	AgentKeys *bool `json:"agentKeys,omitempty"`
 
 	// FIMDatabase backs up /var/ossec/queue/fim/db/ (File Integrity Monitoring)
 	// Contains FIM state and baselines
 	// +kubebuilder:default=true
-	FIMDatabase bool `json:"fimDatabase,omitempty"`
+	FIMDatabase *bool `json:"fimDatabase,omitempty"`
 
 	// AgentDatabase backs up /var/ossec/queue/db/ (agent databases)
 	// Contains agent state information
 	// +kubebuilder:default=true
-	AgentDatabase bool `json:"agentDatabase,omitempty"`
+	AgentDatabase *bool `json:"agentDatabase,omitempty"`
 
 	// Integrations backs up /var/ossec/integrations/
 	// Contains integration scripts

@@ -614,7 +614,7 @@ type AntiAffinitySpec struct {
 	// When true (default), anti-affinity rules are added to spread pods across topology domains
 	// +optional
 	// +kubebuilder:default=true
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// TopologyKey is the key for node labels used to define topology domains
 	// Pods will be spread across nodes with different values for this label
@@ -1100,7 +1100,7 @@ type DrainRetryConfig struct {
 	// +kubebuilder:default=3
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=10
-	MaxAttempts int32 `json:"maxAttempts,omitempty"`
+	MaxAttempts *int32 `json:"maxAttempts,omitempty"`
 
 	// InitialDelay before first retry
 	// +optional

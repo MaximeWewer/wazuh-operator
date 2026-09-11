@@ -47,7 +47,7 @@ type OpenSearchRestoreSpec struct {
 
 	// IgnoreUnavailable skips missing indices during restore
 	// +kubebuilder:default=true
-	IgnoreUnavailable bool `json:"ignoreUnavailable,omitempty"`
+	IgnoreUnavailable *bool `json:"ignoreUnavailable,omitempty"`
 
 	// IncludeGlobalState restores cluster state from the snapshot
 	// +kubebuilder:default=false
@@ -75,7 +75,7 @@ type OpenSearchRestoreSpec struct {
 
 	// WaitForCompletion blocks until restore completes
 	// +kubebuilder:default=true
-	WaitForCompletion bool `json:"waitForCompletion,omitempty"`
+	WaitForCompletion *bool `json:"waitForCompletion,omitempty"`
 }
 
 // OpenSearchRestoreStatus defines the observed state of OpenSearchRestore

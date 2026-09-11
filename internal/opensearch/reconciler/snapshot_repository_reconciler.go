@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -114,7 +115,7 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 	}
 
 	totalSnapshots := int32(0)
-	allVerified := repo.Spec.Verify
+	allVerified := ptr.Deref(repo.Spec.Verify, true)
 	newStatuses := make([]wazuhv1.OpenSearchClusterStatus, 0, len(repo.Spec.ClusterRefs))
 	anyFailed := false
 	anyPending := false
@@ -190,7 +191,7 @@ func (r *SnapshotRepositoryReconciler) Reconcile(ctx context.Context, repo *wazu
 				log.Error(err, "Failed to reload secure settings", "cluster", ref.Name)
 			}
 		}
-		if repo.Spec.Verify {
+		if ptr.Deref(repo.Spec.Verify, true) {
 			if _, err := snapshotsAPI.VerifyRepository(ctx, repo.Name); err != nil {
 				st.Phase = wazuhv1.OpenSearchResourcePhaseFailed
 				st.Message = fmt.Sprintf("Repository verification failed: %v", err)
@@ -330,7 +331,7 @@ func (r *SnapshotRepositoryReconciler) buildRepositorySettings(ctx context.Conte
 	if spec.BasePath != "" {
 		settings["base_path"] = spec.BasePath
 	}
-	if spec.Compress {
+	if ptr.Deref(spec.Compress, true) {
 		settings["compress"] = true
 	}
 	if spec.ChunkSize != "" {

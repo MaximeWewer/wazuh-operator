@@ -17,6 +17,8 @@ limitations under the License.
 package config
 
 import (
+	"k8s.io/utils/ptr"
+
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
@@ -46,7 +48,7 @@ func (b *AuthConfigBuilder) buildKerberosAuthDomain(spec *v1.KerberosAuthSpec) A
 
 	return AuthDomainConfig{
 		Name:                "kerberos_auth_domain",
-		Order:               spec.Order,
+		Order:               ptr.Deref(spec.Order, 6),
 		HTTPEnabled:         true,
 		TransportEnabled:    false,
 		Challenge:           spec.Challenge,

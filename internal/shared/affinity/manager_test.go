@@ -40,7 +40,7 @@ func TestBuildManagerAntiAffinity_Nil(t *testing.T) {
 func TestBuildManagerAntiAffinity_Disabled(t *testing.T) {
 	// Test with disabled anti-affinity
 	spec := &v1.AntiAffinitySpec{
-		Enabled: false,
+		Enabled: new(false),
 	}
 	result := BuildManagerAntiAffinity("test-cluster", spec)
 	if result != nil {
@@ -50,7 +50,7 @@ func TestBuildManagerAntiAffinity_Disabled(t *testing.T) {
 
 func TestBuildManagerAntiAffinity_Required_Default(t *testing.T) {
 	spec := &v1.AntiAffinitySpec{
-		Enabled: true,
+		Enabled: new(true),
 		// Type defaults to "required"
 		// TopologyKey defaults to "kubernetes.io/hostname"
 	}
@@ -97,7 +97,7 @@ func TestBuildManagerAntiAffinity_Required_Default(t *testing.T) {
 
 func TestBuildManagerAntiAffinity_Required_ExplicitType(t *testing.T) {
 	spec := &v1.AntiAffinitySpec{
-		Enabled: true,
+		Enabled: new(true),
 		Type:    AntiAffinityTypeRequired,
 	}
 
@@ -114,7 +114,7 @@ func TestBuildManagerAntiAffinity_Required_ExplicitType(t *testing.T) {
 
 func TestBuildManagerAntiAffinity_Preferred_DefaultWeight(t *testing.T) {
 	spec := &v1.AntiAffinitySpec{
-		Enabled: true,
+		Enabled: new(true),
 		Type:    AntiAffinityTypePreferred,
 		// Weight defaults to 100
 	}
@@ -150,7 +150,7 @@ func TestBuildManagerAntiAffinity_Preferred_DefaultWeight(t *testing.T) {
 
 func TestBuildManagerAntiAffinity_Preferred_CustomWeight(t *testing.T) {
 	spec := &v1.AntiAffinitySpec{
-		Enabled: true,
+		Enabled: new(true),
 		Type:    AntiAffinityTypePreferred,
 		Weight:  50,
 	}
@@ -170,7 +170,7 @@ func TestBuildManagerAntiAffinity_Preferred_CustomWeight(t *testing.T) {
 
 func TestBuildManagerAntiAffinity_CustomTopologyKey(t *testing.T) {
 	spec := &v1.AntiAffinitySpec{
-		Enabled:     true,
+		Enabled:     new(true),
 		TopologyKey: "topology.kubernetes.io/zone",
 	}
 
@@ -387,7 +387,7 @@ func TestShouldApplyAntiAffinity(t *testing.T) {
 							Replicas: int32Ptr(2),
 						},
 						AntiAffinity: &v1.AntiAffinitySpec{
-							Enabled: true,
+							Enabled: new(true),
 						},
 					},
 				},
@@ -406,7 +406,7 @@ func TestShouldApplyAntiAffinity(t *testing.T) {
 							Replicas: int32Ptr(2),
 						},
 						AntiAffinity: &v1.AntiAffinitySpec{
-							Enabled: false,
+							Enabled: new(false),
 						},
 					},
 				},
@@ -454,7 +454,7 @@ func TestShouldApplyAntiAffinity(t *testing.T) {
 func TestBuildManagerAntiAffinity_InvalidWeight(t *testing.T) {
 	// Test that invalid weight (0) uses default
 	spec := &v1.AntiAffinitySpec{
-		Enabled: true,
+		Enabled: new(true),
 		Type:    AntiAffinityTypePreferred,
 		Weight:  0, // Invalid, should use default
 	}
@@ -475,7 +475,7 @@ func TestBuildManagerAntiAffinity_InvalidWeight(t *testing.T) {
 func TestBuildManagerAntiAffinity_InvalidWeightOver100(t *testing.T) {
 	// Test that weight > 100 uses default
 	spec := &v1.AntiAffinitySpec{
-		Enabled: true,
+		Enabled: new(true),
 		Type:    AntiAffinityTypePreferred,
 		Weight:  150, // Invalid, should use default
 	}

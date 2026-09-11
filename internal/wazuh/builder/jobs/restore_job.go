@@ -26,6 +26,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
@@ -102,19 +103,19 @@ func (b *RestoreJobBuilder) buildRestorePaths() []string {
 	components := b.restore.Spec.Components
 	if components == nil {
 		components = &wazuhv1.RestoreComponents{
-			AgentKeys:     true,
-			FIMDatabase:   true,
-			AgentDatabase: true,
+			AgentKeys:     new(true),
+			FIMDatabase:   new(true),
+			AgentDatabase: new(true),
 		}
 	}
 
-	if components.AgentKeys {
+	if ptr.Deref(components.AgentKeys, true) {
 		paths = append(paths, constants.WazuhBackupPathAgentKeys)
 	}
-	if components.FIMDatabase {
+	if ptr.Deref(components.FIMDatabase, true) {
 		paths = append(paths, constants.WazuhBackupPathFIMDatabase)
 	}
-	if components.AgentDatabase {
+	if ptr.Deref(components.AgentDatabase, true) {
 		paths = append(paths, constants.WazuhBackupPathAgentDatabase)
 	}
 	if components.Integrations {
@@ -260,17 +261,17 @@ func (b *RestoreJobBuilder) buildRestoreScript() string {
 	}
 
 	preRestoreBackup := "false"
-	if b.restore.Spec.PreRestoreBackup {
+	if ptr.Deref(b.restore.Spec.PreRestoreBackup, true) {
 		preRestoreBackup = "true"
 	}
 
 	stopManager := "false"
-	if b.restore.Spec.StopManager {
+	if ptr.Deref(b.restore.Spec.StopManager, true) {
 		stopManager = "true"
 	}
 
 	restartAfterRestore := "false"
-	if b.restore.Spec.RestartAfterRestore {
+	if ptr.Deref(b.restore.Spec.RestartAfterRestore, true) {
 		restartAfterRestore = "true"
 	}
 

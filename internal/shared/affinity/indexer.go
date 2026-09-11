@@ -19,6 +19,7 @@ package affinity
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
@@ -27,7 +28,7 @@ import (
 // BuildIndexerAntiAffinity creates a corev1.Affinity with podAntiAffinity rules for indexer pods
 // Returns nil if spec is nil or anti-affinity is disabled
 func BuildIndexerAntiAffinity(clusterName string, spec *v1.AntiAffinitySpec) *corev1.Affinity {
-	if spec == nil || !spec.Enabled {
+	if spec == nil || !ptr.Deref(spec.Enabled, true) {
 		return nil
 	}
 
@@ -95,7 +96,7 @@ func ShouldApplyIndexerAntiAffinity(cluster *v1.WazuhCluster) bool {
 	}
 
 	// Don't apply if explicitly disabled
-	if !cluster.Spec.Indexer.AntiAffinity.Enabled {
+	if !ptr.Deref(cluster.Spec.Indexer.AntiAffinity.Enabled, true) {
 		return false
 	}
 

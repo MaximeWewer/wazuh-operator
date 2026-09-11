@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	retry "k8s.io/client-go/util/retry"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -92,7 +93,7 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 	// basic_internal_auth_domain is always emitted: the dashboard (kibanaserver),
 	// the operator's own API client (admin) and securityadmin all authenticate via
 	// HTTP Basic, so disabling it would lock them out. Warn instead of honoring it.
-	if authConfig.Spec.BasicAuth != nil && !authConfig.Spec.BasicAuth.Enabled {
+	if authConfig.Spec.BasicAuth != nil && !ptr.Deref(authConfig.Spec.BasicAuth.Enabled, true) {
 		log.Info("basicAuth.enabled=false is ignored: internal basic auth is always kept so the dashboard and operator service accounts keep working; use basicAuth.challenge/order to tune it instead",
 			"name", authConfig.Name)
 		r.recordEvent(authConfig, corev1.EventTypeWarning, "BasicAuthAlwaysOn",
@@ -272,7 +273,7 @@ func (r *AuthConfigReconciler) cleanupLegacyConfigMaps(ctx context.Context, clus
 func (r *AuthConfigReconciler) getActiveAuthDomains(authConfig *wazuhv1.OpenSearchAuthConfig) []string {
 	var domains []string
 
-	if authConfig.Spec.BasicAuth != nil && authConfig.Spec.BasicAuth.Enabled {
+	if authConfig.Spec.BasicAuth != nil && ptr.Deref(authConfig.Spec.BasicAuth.Enabled, true) {
 		domains = append(domains, "basic")
 	}
 	if authConfig.Spec.OIDC != nil && authConfig.Spec.OIDC.Enabled {

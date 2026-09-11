@@ -30,10 +30,10 @@ import (
 func TestBuildSecurityConfig_AlwaysIncludesBasicInternalDomain(t *testing.T) {
 	cases := map[string]*v1.OpenSearchAuthConfigSpec{
 		"oidc only (no basicAuth)": {
-			OIDC: &v1.OIDCAuthSpec{Enabled: true, Order: 0, ConnectURL: "https://idp/.well-known/openid-configuration", ClientID: "x"},
+			OIDC: &v1.OIDCAuthSpec{Enabled: true, Order: new(0), ConnectURL: "https://idp/.well-known/openid-configuration", ClientID: "x"},
 		},
 		"basicAuth disabled is ignored": {
-			BasicAuth: &v1.BasicAuthSpec{Enabled: false, Order: 5, Challenge: true},
+			BasicAuth: &v1.BasicAuthSpec{Enabled: new(false), Order: 5, Challenge: new(true)},
 		},
 		"empty spec": {},
 	}
@@ -55,7 +55,7 @@ func TestBuildSecurityConfig_AlwaysIncludesBasicInternalDomain(t *testing.T) {
 // tried to disable them.
 func TestBuildBasicAuthDomain_ForcesHTTPAndTransport(t *testing.T) {
 	spec := &v1.OpenSearchAuthConfigSpec{
-		BasicAuth: &v1.BasicAuthSpec{Enabled: true, HTTPEnabled: false, TransportEnabled: false, Challenge: true},
+		BasicAuth: &v1.BasicAuthSpec{Enabled: new(true), HTTPEnabled: new(false), TransportEnabled: new(false), Challenge: new(true)},
 	}
 	d := NewAuthConfigBuilder(spec).buildBasicAuthDomain(spec.BasicAuth)
 	if !d.HTTPEnabled || !d.TransportEnabled {
@@ -67,7 +67,7 @@ func TestBuildBasicAuthDomain_ForcesHTTPAndTransport(t *testing.T) {
 // SSO owns the front door while basic stays the interactive fallback (challenge=true).
 func TestBuildBasicAuthDomain_DefaultsAfterSSO(t *testing.T) {
 	spec := &v1.OpenSearchAuthConfigSpec{
-		OIDC: &v1.OIDCAuthSpec{Enabled: true, Order: 0},
+		OIDC: &v1.OIDCAuthSpec{Enabled: true, Order: new(0)},
 	}
 	d := NewAuthConfigBuilder(spec).buildBasicAuthDomain(nil)
 	if d.Order != 1 {

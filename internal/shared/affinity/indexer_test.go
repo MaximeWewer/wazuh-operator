@@ -34,7 +34,7 @@ func TestBuildIndexerAntiAffinity_Nil(t *testing.T) {
 
 func TestBuildIndexerAntiAffinity_Disabled(t *testing.T) {
 	spec := &v1.AntiAffinitySpec{
-		Enabled: false,
+		Enabled: new(false),
 	}
 	result := BuildIndexerAntiAffinity("test-cluster", spec)
 	if result != nil {
@@ -44,7 +44,7 @@ func TestBuildIndexerAntiAffinity_Disabled(t *testing.T) {
 
 func TestBuildIndexerAntiAffinity_Required_Default(t *testing.T) {
 	spec := &v1.AntiAffinitySpec{
-		Enabled: true,
+		Enabled: new(true),
 	}
 	result := BuildIndexerAntiAffinity("test-cluster", spec)
 
@@ -79,7 +79,7 @@ func TestBuildIndexerAntiAffinity_Required_Default(t *testing.T) {
 
 func TestBuildIndexerAntiAffinity_Required_ExplicitType(t *testing.T) {
 	spec := &v1.AntiAffinitySpec{
-		Enabled: true,
+		Enabled: new(true),
 		Type:    AntiAffinityTypeRequired,
 	}
 	result := BuildIndexerAntiAffinity("test-cluster", spec)
@@ -99,7 +99,7 @@ func TestBuildIndexerAntiAffinity_Required_ExplicitType(t *testing.T) {
 
 func TestBuildIndexerAntiAffinity_Preferred_DefaultWeight(t *testing.T) {
 	spec := &v1.AntiAffinitySpec{
-		Enabled: true,
+		Enabled: new(true),
 		Type:    AntiAffinityTypePreferred,
 	}
 	result := BuildIndexerAntiAffinity("test-cluster", spec)
@@ -122,7 +122,7 @@ func TestBuildIndexerAntiAffinity_Preferred_DefaultWeight(t *testing.T) {
 
 func TestBuildIndexerAntiAffinity_Preferred_CustomWeight(t *testing.T) {
 	spec := &v1.AntiAffinitySpec{
-		Enabled: true,
+		Enabled: new(true),
 		Type:    AntiAffinityTypePreferred,
 		Weight:  50,
 	}
@@ -141,7 +141,7 @@ func TestBuildIndexerAntiAffinity_Preferred_CustomWeight(t *testing.T) {
 
 func TestBuildIndexerAntiAffinity_CustomTopologyKey(t *testing.T) {
 	spec := &v1.AntiAffinitySpec{
-		Enabled:     true,
+		Enabled:     new(true),
 		TopologyKey: "topology.kubernetes.io/zone",
 	}
 	result := BuildIndexerAntiAffinity("test-cluster", spec)
@@ -175,7 +175,7 @@ func TestShouldApplyIndexerAntiAffinity(t *testing.T) {
 					Indexer: &v1.WazuhIndexerClusterSpec{
 						Replicas: 3,
 						AntiAffinity: &v1.AntiAffinitySpec{
-							Enabled: true,
+							Enabled: new(true),
 						},
 					},
 				},
@@ -194,7 +194,7 @@ func TestShouldApplyIndexerAntiAffinity(t *testing.T) {
 					Indexer: &v1.WazuhIndexerClusterSpec{
 						Replicas: 3,
 						AntiAffinity: &v1.AntiAffinitySpec{
-							Enabled: false,
+							Enabled: new(false),
 						},
 					},
 				},
@@ -245,7 +245,7 @@ func TestShouldApplyIndexerAntiAffinity(t *testing.T) {
 func TestBuildIndexerAntiAffinity_InvalidWeight(t *testing.T) {
 	// Test that invalid weight (0) uses default
 	spec := &v1.AntiAffinitySpec{
-		Enabled: true,
+		Enabled: new(true),
 		Type:    AntiAffinityTypePreferred,
 		Weight:  0, // Invalid, should use default
 	}
@@ -264,7 +264,7 @@ func TestBuildIndexerAntiAffinity_InvalidWeight(t *testing.T) {
 func TestBuildIndexerAntiAffinity_InvalidWeightOver100(t *testing.T) {
 	// Test that invalid weight (>100) uses default
 	spec := &v1.AntiAffinitySpec{
-		Enabled: true,
+		Enabled: new(true),
 		Type:    AntiAffinityTypePreferred,
 		Weight:  150, // Invalid, should use default
 	}

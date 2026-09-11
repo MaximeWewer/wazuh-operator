@@ -63,7 +63,7 @@ func TestShouldTriggerHotReload_TLSEnabled(t *testing.T) {
 					TLS: &wazuhv1.TLSConfig{
 						Enabled: new(true),
 						HotReload: &wazuhv1.HotReloadConfig{
-							Enabled: true,
+							Enabled: new(true),
 						},
 					},
 				},
@@ -82,7 +82,7 @@ func TestShouldTriggerHotReload_TLSEnabled(t *testing.T) {
 					TLS: &wazuhv1.TLSConfig{
 						Enabled: new(true),
 						HotReload: &wazuhv1.HotReloadConfig{
-							Enabled: false,
+							Enabled: new(false),
 						},
 					},
 				},
@@ -145,7 +145,7 @@ func TestShouldTriggerHotReload_TLSDisabled(t *testing.T) {
 					TLS: &wazuhv1.TLSConfig{
 						Enabled: new(false),
 						HotReload: &wazuhv1.HotReloadConfig{
-							Enabled: true, // Should be ignored when TLS is disabled
+							Enabled: new(true), // Should be ignored when TLS is disabled
 						},
 					},
 				},
@@ -200,7 +200,7 @@ func TestTriggerCertificateHotReload_Version49_APICall(t *testing.T) {
 			TLS: &wazuhv1.TLSConfig{
 				Enabled: new(true),
 				HotReload: &wazuhv1.HotReloadConfig{
-					Enabled: true,
+					Enabled: new(true),
 				},
 			},
 			Indexer: &wazuhv1.WazuhIndexerClusterSpec{
@@ -279,7 +279,7 @@ func TestTriggerCertificateHotReload_Version414_Automatic(t *testing.T) {
 			TLS: &wazuhv1.TLSConfig{
 				Enabled: new(true),
 				HotReload: &wazuhv1.HotReloadConfig{
-					Enabled: true,
+					Enabled: new(true),
 				},
 			},
 		},
@@ -552,7 +552,7 @@ func TestTriggerCertificateHotReloadWithFallback_NotSupported(t *testing.T) {
 			TLS: &wazuhv1.TLSConfig{
 				Enabled: new(true),
 				HotReload: &wazuhv1.HotReloadConfig{
-					Enabled: true,
+					Enabled: new(true),
 				},
 			},
 		},
@@ -597,7 +597,7 @@ func TestTriggerCertificateHotReloadWithFallback_AutomaticSuccess(t *testing.T) 
 			TLS: &wazuhv1.TLSConfig{
 				Enabled: new(true),
 				HotReload: &wazuhv1.HotReloadConfig{
-					Enabled: true,
+					Enabled: new(true),
 				},
 			},
 		},

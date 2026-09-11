@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -227,7 +228,7 @@ func (r *DashboardReconciler) reconcileConfigMap(ctx context.Context, cluster *w
 	// Build dashboard configuration (already generates opensearch_dashboards.yml)
 	configBuilder := configmaps.NewDashboardConfigMapBuilder(cluster.Name, cluster.Namespace)
 	if cluster.Spec.Dashboard != nil {
-		configBuilder.WithEnableSSL(cluster.Spec.Dashboard.EnableSSL)
+		configBuilder.WithEnableSSL(ptr.Deref(cluster.Spec.Dashboard.EnableSSL, true))
 	}
 
 	// Apply authentication configuration from the matching OpenSearchAuthConfig CR.
@@ -521,7 +522,7 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 		if cluster.Spec.Dashboard.Resources != nil {
 			deployBuilder.WithResources(cluster.Spec.Dashboard.Resources)
 		}
-		deployBuilder.WithEnableSSL(cluster.Spec.Dashboard.EnableSSL)
+		deployBuilder.WithEnableSSL(ptr.Deref(cluster.Spec.Dashboard.EnableSSL, true))
 		// Drive run_as from the Wazuh plugin API endpoint config so changing it
 		// rolls out the dashboard and regenerates the effective wazuh.yml.
 		if wp := cluster.Spec.Dashboard.WazuhPlugin; wp != nil {
@@ -649,7 +650,7 @@ func (r *DashboardReconciler) reconcileDeploymentWithCertHash(ctx context.Contex
 			ContainerSecurityContext:      cluster.Spec.Dashboard.ContainerSecurityContext,
 			TerminationGracePeriodSeconds: cluster.Spec.Dashboard.TerminationGracePeriodSeconds,
 			ImagePullPolicy:               imagePullPolicy,
-			EnableSSL:                     cluster.Spec.Dashboard.EnableSSL,
+			EnableSSL:                     ptr.Deref(cluster.Spec.Dashboard.EnableSSL, true),
 		})
 		if err != nil {
 			log.Error(err, "Failed to compute dashboard spec hash, continuing without spec tracking")
@@ -1088,7 +1089,7 @@ func (r *DashboardReconciler) reconcileDeploymentNonBlocking(ctx context.Context
 	// Extract enableSSL before hash computation (defaults to true via kubebuilder)
 	enableSSL := true
 	if cluster.Spec.Dashboard != nil {
-		enableSSL = cluster.Spec.Dashboard.EnableSSL
+		enableSSL = ptr.Deref(cluster.Spec.Dashboard.EnableSSL, true)
 	}
 
 	// Extract run_as from the Wazuh plugin API endpoint config. Included in the

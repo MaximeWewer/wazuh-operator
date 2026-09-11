@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -57,7 +58,7 @@ func (r *CertificateReconciler) checkCAMaintenanceWindow(cluster *wazuhv1.WazuhC
 	caConfig := cluster.Spec.TLS.CAMaintenance
 
 	// If AutoRestart is disabled, don't allow automatic renewal
-	if !caConfig.AutoRestart {
+	if !ptr.Deref(caConfig.AutoRestart, true) {
 		result.AllowRenewal = false
 		result.Reason = "AutoRestart is disabled, waiting for manual intervention"
 		return result

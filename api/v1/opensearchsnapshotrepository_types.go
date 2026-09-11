@@ -44,7 +44,7 @@ type OpenSearchSnapshotRepositorySpec struct {
 
 	// Verify enables repository verification after creation
 	// +kubebuilder:default=true
-	Verify bool `json:"verify,omitempty"`
+	Verify *bool `json:"verify,omitempty"`
 }
 
 // SnapshotRepositorySettings contains repository configuration
@@ -71,7 +71,7 @@ type SnapshotRepositorySettings struct {
 
 	// Compress enables snapshot compression
 	// +kubebuilder:default=true
-	Compress bool `json:"compress,omitempty"`
+	Compress *bool `json:"compress,omitempty"`
 
 	// ChunkSize is the chunk size for large files (e.g., "1gb")
 	// +optional

@@ -454,7 +454,7 @@ type WazuhDashboardClusterSpec struct {
 	// Enable SSL
 	// +optional
 	// +kubebuilder:default=true
-	EnableSSL bool `json:"enableSSL,omitempty"`
+	EnableSSL *bool `json:"enableSSL,omitempty"`
 
 	// Service configuration
 	// +optional
@@ -599,7 +599,7 @@ type HotReloadConfig struct {
 	// Requires Wazuh >= 4.9.0 (OpenSearch >= 2.13)
 	// +optional
 	// +kubebuilder:default=true
-	Enabled bool `json:"enabled,omitempty"`
+	Enabled *bool `json:"enabled,omitempty"`
 
 	// ForceAPIReload forces the operator to call the reload certificates API
 	// even for versions that support automatic reload (OpenSearch >= 2.19)
@@ -617,7 +617,7 @@ type CAMaintenanceConfig struct {
 	// If false, operator emits an event and waits for manual intervention
 	// +optional
 	// +kubebuilder:default=true
-	AutoRestart bool `json:"autoRestart,omitempty"`
+	AutoRestart *bool `json:"autoRestart,omitempty"`
 
 	// MaintenanceWindows specifies time windows when CA renewal restarts are allowed
 	// Format: cron expression for the start of the window
@@ -857,7 +857,7 @@ type WazuhExporterConfig struct {
 	// exporter verifies against (mounted as WAZUH_API_CA_FILE).
 	// +optional
 	// +kubebuilder:default=true
-	APIVerifySSL bool `json:"apiVerifySSL,omitempty"`
+	APIVerifySSL *bool `json:"apiVerifySSL,omitempty"`
 
 	// APICASecretRef references a Secret holding the CA bundle that verifies the
 	// Wazuh API certificate. Only used when apiVerifySSL is true. When omitted, the

@@ -29,7 +29,7 @@ func TestBuildSecurityConfig_KerberosEnabled(t *testing.T) {
 	spec := &v1.OpenSearchAuthConfigSpec{
 		Kerberos: &v1.KerberosAuthSpec{
 			Enabled:           true,
-			Order:             6,
+			Order:             new(6),
 			AcceptorPrincipal: "HTTP/opensearch.example.com",
 			CredentialsSecret: "kerberos-creds",
 		},
@@ -78,10 +78,10 @@ func TestBuildSecurityConfig_KerberosStripRealmFalse(t *testing.T) {
 func TestBuildSecurityConfig_KerberosDisabledOrNil(t *testing.T) {
 	cases := map[string]*v1.OpenSearchAuthConfigSpec{
 		"nil kerberos": {
-			BasicAuth: &v1.BasicAuthSpec{Enabled: true, Challenge: true},
+			BasicAuth: &v1.BasicAuthSpec{Enabled: new(true), Challenge: new(true)},
 		},
 		"disabled kerberos": {
-			BasicAuth: &v1.BasicAuthSpec{Enabled: true, Challenge: true},
+			BasicAuth: &v1.BasicAuthSpec{Enabled: new(true), Challenge: new(true)},
 			Kerberos:  &v1.KerberosAuthSpec{Enabled: false, AcceptorPrincipal: "HTTP/x", CredentialsSecret: "s"},
 		},
 	}

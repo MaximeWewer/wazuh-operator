@@ -17,6 +17,8 @@ limitations under the License.
 package config
 
 import (
+	"k8s.io/utils/ptr"
+
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 )
 
@@ -69,8 +71,8 @@ func (b *AuthConfigBuilder) buildOIDCAuthDomain(spec *v1.OIDCAuthSpec) AuthDomai
 
 	return AuthDomainConfig{
 		Name:                "openid_auth_domain",
-		Order:               spec.Order,
-		HTTPEnabled:         spec.HTTPEnabled,
+		Order:               ptr.Deref(spec.Order, 1),
+		HTTPEnabled:         ptr.Deref(spec.HTTPEnabled, true),
 		TransportEnabled:    false, // OIDC is HTTP only
 		Challenge:           spec.Challenge,
 		AuthenticatorType:   "openid",
