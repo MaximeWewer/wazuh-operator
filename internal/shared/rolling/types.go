@@ -15,8 +15,9 @@ limitations under the License.
 */
 
 // Package rolling provides quorum-safe rolling restart orchestration for StatefulSets.
-// It works with OnDelete update strategy to control pod-by-pod restarts with
-// cluster health verification between each pod replacement.
+// With the OnDelete update strategy it controls pod-by-pod restarts with cluster health
+// verification between each pod replacement; with RollingUpdate it leaves the replacement
+// to the StatefulSet controller and only unsticks pods left on a failed revision.
 package rolling
 
 import "context"

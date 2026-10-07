@@ -326,8 +326,10 @@ type WazuhIndexerClusterSpec struct {
 	NetworkPolicy *NetworkPolicySpec `json:"networkPolicy,omitempty"`
 
 	// Update strategy for the StatefulSet
-	// "RollingUpdate" (default) lets Kubernetes handle rolling updates automatically
-	// "OnDelete" requires manual pod deletion to trigger updates
+	// "RollingUpdate" (default) lets Kubernetes replace the pods automatically; the operator
+	// only deletes pods left crash-looping on a superseded revision so the rollout can resume
+	// "OnDelete" lets the operator replace the pods one at a time, waiting for the cluster
+	// to be healthy between each replacement (quorum-safe rolling restart)
 	// +optional
 	// +kubebuilder:default="RollingUpdate"
 	// +kubebuilder:validation:Enum=OnDelete;RollingUpdate

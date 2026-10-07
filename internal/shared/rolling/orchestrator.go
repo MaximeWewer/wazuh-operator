@@ -43,6 +43,13 @@ func NewOrchestrator(c client.Client) *RollingRestartOrchestrator {
 
 // OrchestrateRestart performs one step of a rolling restart for the given StatefulSet.
 //
+// The operator only drives the restart of StatefulSets using the OnDelete update
+// strategy. With RollingUpdate the StatefulSet controller already replaces the pods itself;
+// deleting pods on top of it races with it (a deleted pod whose ordinal is below
+// status.currentReplicas is recreated on the OLD revision, so it restarts twice). There the
+// orchestrator only reports progress and unsticks pods left on an intermediate revision
+// (step 4b), which the StatefulSet controller never does on its own.
+//
 // Algorithm (one pod per call):
 //  1. Compare UpdateRevision vs CurrentRevision - if equal, no restart needed.
 //  2. List pods and compare each pod's controller-revision-hash label to UpdateRevision.
@@ -50,9 +57,10 @@ func NewOrchestrator(c client.Client) *RollingRestartOrchestrator {
 //  4. If a pod is terminating → InProgress (wait). If an outdated pod is not ready →
 //     delete it now (it serves nothing; waiting would deadlock recovery from a bad
 //     revision). If an updated pod is not ready → InProgress (wait for it).
-//  5. Call healthChecker.IsHealthyForRestart() → if unhealthy, InProgress (wait).
-//  6. Delete ONE outdated pod (highest ordinal first when deleteHighestFirst=true).
-//  7. Return InProgress with CurrentPod set.
+//  5. RollingUpdate → InProgress (the StatefulSet controller replaces the ready pods).
+//  6. Call healthChecker.IsHealthyForRestart() → if unhealthy, InProgress (wait).
+//  7. Delete ONE outdated pod (highest ordinal first when deleteHighestFirst=true).
+//  8. Return InProgress with CurrentPod set.
 func (o *RollingRestartOrchestrator) OrchestrateRestart(
 	ctx context.Context,
 	sts *appsv1.StatefulSet,
@@ -141,9 +149,15 @@ func (o *RollingRestartOrchestrator) OrchestrateRestart(
 	// revision (e.g. an invalid rule) crash-looped a pod and a fixed revision followed:
 	// waiting for it to become ready first would deadlock forever. The health check is
 	// skipped for the same reason - it would count this very pod as unhealthy.
+	managed := sts.Spec.UpdateStrategy.Type == appsv1.OnDeleteStatefulSetStrategyType
 	sortByOrdinal(outdatedPods, deleteHighestFirst)
 	for _, pod := range outdatedPods {
 		if isPodReady(&pod) {
+			continue
+		}
+		// Under RollingUpdate, a pod on the current revision is recreated on that same
+		// revision, so deleting it fixes nothing; only an intermediate revision is stuck.
+		if !managed && pod.Labels["controller-revision-hash"] == currentRevision {
 			continue
 		}
 		log.Info("Deleting outdated pod that is not ready",
@@ -179,7 +193,17 @@ func (o *RollingRestartOrchestrator) OrchestrateRestart(
 		}
 	}
 
-	// Step 5: Health check before deleting next pod
+	// Step 5: RollingUpdate - the StatefulSet controller replaces the remaining pods.
+	if !managed {
+		return &RestartResult{
+			Phase:       RestartPhaseInProgress,
+			TotalPods:   totalPods,
+			UpdatedPods: updatedCount,
+			Message:     fmt.Sprintf("StatefulSet rolling update in progress (%d/%d updated)", updatedCount, totalPods),
+		}, nil
+	}
+
+	// Step 6: Health check before deleting next pod
 	healthy, msg, err := healthChecker.IsHealthyForRestart(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("health check failed for StatefulSet %s: %w", sts.Name, err)
@@ -194,7 +218,7 @@ func (o *RollingRestartOrchestrator) OrchestrateRestart(
 		}, nil
 	}
 
-	// Step 6: Delete one outdated pod (already sorted by ordinal in step 4b)
+	// Step 7: Delete one outdated pod (already sorted by ordinal in step 4b)
 	podToDelete := outdatedPods[0]
 	log.Info("Deleting outdated pod for rolling restart",
 		"pod", podToDelete.Name,
@@ -206,7 +230,7 @@ func (o *RollingRestartOrchestrator) OrchestrateRestart(
 		return nil, fmt.Errorf("failed to delete pod %s: %w", podToDelete.Name, err)
 	}
 
-	// Step 7: Return InProgress
+	// Step 8: Return InProgress
 	return &RestartResult{
 		Phase:       RestartPhaseInProgress,
 		TotalPods:   totalPods,

@@ -49,6 +49,8 @@ func newSTS(name, ns, currentRev, updateRev string, replicas int32) *appsv1.Stat
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: &replicas,
+			// OnDelete: the strategy under which the operator drives the restart.
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{Type: appsv1.OnDeleteStatefulSetStrategyType},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"app": name},
 			},
@@ -472,5 +474,57 @@ func TestOrchestrateRestart_Terminating_Waits(t *testing.T) {
 	}
 	if !podNames(remaining)["manager-0"] {
 		t.Error("manager-0 must not be deleted while manager-1 is terminating")
+	}
+}
+
+// rollingUpdateSTS returns a StatefulSet left to the Kubernetes RollingUpdate controller.
+func rollingUpdateSTS(name, currentRev, updateRev string, replicas int32) *appsv1.StatefulSet {
+	sts := newSTS(name, "ns", currentRev, updateRev, replicas)
+	sts.Spec.UpdateStrategy.Type = appsv1.RollingUpdateStatefulSetStrategyType
+	return sts
+}
+
+// TestOrchestrateRestart_RollingUpdate_DoesNotDeleteReadyPods guards the double-restart race:
+// under RollingUpdate the StatefulSet controller replaces the pods; a pod the operator also
+// deleted came back on the OLD revision and had to restart a second time.
+func TestOrchestrateRestart_RollingUpdate_DoesNotDeleteReadyPods(t *testing.T) {
+	sts := rollingUpdateSTS("manager", "rev-1", "rev-2", 2)
+	result, remaining := runOrchestrator(t, sts, &mockHealthChecker{healthy: true},
+		newPod("manager-0", "ns", "manager", "rev-1", true),
+		newPod("manager-1", "ns", "manager", "rev-1", true),
+	)
+	if result.Phase != RestartPhaseInProgress || result.CurrentPod != "" {
+		t.Fatalf("expected InProgress without a deleted pod, got %+v", result)
+	}
+	if len(remaining.Items) != 2 {
+		t.Errorf("operator deleted a pod under RollingUpdate, %d left", len(remaining.Items))
+	}
+}
+
+// TestOrchestrateRestart_RollingUpdate_UnsticksIntermediateRevision asserts the operator still
+// recovers the documented StatefulSet deadlock: a pod crash-looping on a reverted/fixed-up
+// intermediate revision is deleted so the controller recreates it on the update revision.
+func TestOrchestrateRestart_RollingUpdate_UnsticksIntermediateRevision(t *testing.T) {
+	sts := rollingUpdateSTS("manager", "rev-1", "rev-3", 2)
+	result, remaining := runOrchestrator(t, sts, &mockHealthChecker{healthy: false},
+		newPod("manager-0", "ns", "manager", "rev-1", true),
+		newPod("manager-1", "ns", "manager", "rev-2", false),
+	)
+	if result.CurrentPod != "manager-1" || podNames(remaining)["manager-1"] {
+		t.Fatalf("stuck pod manager-1 not deleted: %+v", result)
+	}
+}
+
+// TestOrchestrateRestart_RollingUpdate_KeepsNotReadyCurrentRevisionPod asserts a not-ready pod
+// on the current revision is left alone under RollingUpdate: the controller would recreate
+// it on that same revision, so deleting it only adds a restart.
+func TestOrchestrateRestart_RollingUpdate_KeepsNotReadyCurrentRevisionPod(t *testing.T) {
+	sts := rollingUpdateSTS("manager", "rev-1", "rev-2", 2)
+	_, remaining := runOrchestrator(t, sts, &mockHealthChecker{healthy: true},
+		newPod("manager-0", "ns", "manager", "rev-1", false),
+		newPod("manager-1", "ns", "manager", "rev-2", true),
+	)
+	if len(remaining.Items) != 2 {
+		t.Errorf("not-ready current-revision pod deleted under RollingUpdate, %d left", len(remaining.Items))
 	}
 }

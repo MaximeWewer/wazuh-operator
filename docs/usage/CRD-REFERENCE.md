@@ -429,7 +429,7 @@ spec:
 | `podAnnotations`           | map[string]string                             | No       | -                  | Pod annotations                                                    |
 | `ingress`                  | [IngressSpec](#ingressspec)                   | No       | -                  | Ingress config                                                     |
 | `gatewayAPI`               | [GatewayAPISpec](#gatewayapispec)             | No       | -                  | Gateway API config                                                 |
-| `updateStrategy`           | string                                        | No       | `RollingUpdate`    | Update strategy (`RollingUpdate` or `OnDelete`)                    |
+| `updateStrategy`           | string                                        | No       | `RollingUpdate`    | `RollingUpdate` (Kubernetes) or `OnDelete` (operator-driven)      |
 | `extraVolumes`             | []Volume                                      | No       | -                  | Extra volumes                                                      |
 | `extraVolumeMounts`        | []VolumeMount                                 | No       | -                  | Extra volume mounts                                                |
 | `extraInitContainers`      | []Container                                   | No       | -                  | Extra init containers                                              |

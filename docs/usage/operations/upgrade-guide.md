@@ -218,8 +218,14 @@ When a configuration or certificate change is detected:
    one at a time (highest ordinal first)
 2. **Dashboard**: Standard rolling deployment (Deployment, not StatefulSet)
 
-> **Note:** You can switch to `OnDelete` strategy via the `updateStrategy` field if you need manual
-> control over pod restarts.
+With `RollingUpdate`, the operator never deletes healthy pods (that would race with the StatefulSet
+controller). It only deletes a pod left crash-looping on a superseded revision - for example after
+fixing a CR that produced a broken configuration - so the rollout resumes on the fixed revision
+instead of waiting forever for that pod to become ready.
+
+Set `updateStrategy: OnDelete` to let the operator drive the restart instead: it replaces one pod
+at a time and waits for the cluster to be healthy (OpenSearch cluster health for the indexer, pod
+readiness for the managers) before replacing the next one.
 
 Rolling restart progress is tracked in `.status.rollingRestart` and visible via:
 
