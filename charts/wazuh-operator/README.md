@@ -231,7 +231,7 @@ kubectl delete -f <(helm template wazuh-operator ./charts/wazuh-operator --names
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| leaderElection.enabled | bool | `false` | Enable leader election (REQUIRED when replicaCount > 1) |
+| leaderElection.enabled | bool | `true` | Enable leader election. Keep it on even with a single replica: during a rolling update the old and new operator pods run at the same time, and without a lease both reconcile and fight over the same resources. |
 | leaderElection.id | string | `"wazuh-operator-leader"` | Leader election lease name |
 | replicaCount | int | `1` | Number of operator replicas. For HA, set > 1 AND enable leaderElection. |
 

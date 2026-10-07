@@ -644,12 +644,10 @@ func main() {
 		setupLog.Error(err, "unable to set up informer-sync ready check")
 		os.Exit(1)
 	}
-	if enableLeaderElection {
-		if err := mgr.AddReadyzCheck("leader-election", health.LeaderElectionChecker(mgr)); err != nil {
-			setupLog.Error(err, "unable to set up leader-election ready check")
-			os.Exit(1)
-		}
-	}
+	// Leadership is deliberately not a readiness condition: a standby replica is healthy,
+	// and gating readiness on the lease deadlocks rolling updates (the new pod waits for the
+	// lease the old pod keeps until the new pod is ready). Leadership is exposed through the
+	// leader_election_master_status metric.
 	if err := mgr.AddReadyzCheck("reconcile-watchdog", health.WatchdogChecker(reconcileWatchdog)); err != nil {
 		setupLog.Error(err, "unable to set up reconcile-watchdog ready check")
 		os.Exit(1)

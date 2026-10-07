@@ -210,7 +210,6 @@ The operator itself exposes health endpoints on port `8081` used by Kubernetes l
 | `ping` | Always passes |
 | `informer-sync` | Kubernetes informer cache has fully synced |
 | `reconcile-watchdog` | Reconcile loop has run within the last 5 minutes |
-| `leader-election` | Instance is the elected leader (only when `--leader-elect` is enabled) |
 
 ### Verifying Health
 

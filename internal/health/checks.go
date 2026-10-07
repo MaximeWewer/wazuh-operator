@@ -15,23 +15,13 @@ import (
 // informer cache has synced. Before cache sync, the operator cannot read
 // resources reliably and should not be considered ready.
 //
-// It works by waiting (non-blocking) for the manager to be elected leader,
-// then performing a blocking WaitForCacheSync with a short deadline.
-// Before election, the check fails immediately without calling into the cache.
+// It does not depend on leader election: the manager starts its cache before
+// campaigning for the lease, so a standby replica has a synced cache and is ready.
+// Gating on leadership deadlocks rolling updates (the new pod would wait for the lease
+// the old pod keeps until the new pod is ready). The bounded wait returns false while
+// the cache is not started or not synced yet.
 func InformerSyncChecker(mgr manager.Manager) healthz.Checker {
 	return func(_ *http.Request) error {
-		// Before the manager is fully started (leader elected, cache started),
-		// WaitForCacheSync cannot succeed. Check Elected() first to avoid
-		// calling WaitForCacheSync with a canceled context (which always
-		// returns false because the internal startWait channel races with
-		// the canceled Done channel).
-		select {
-		case <-mgr.Elected():
-			// Manager is started and cache is running.
-		default:
-			return fmt.Errorf("manager not yet started")
-		}
-
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
 
@@ -39,20 +29,6 @@ func InformerSyncChecker(mgr manager.Manager) healthz.Checker {
 			return fmt.Errorf("informer cache not synced")
 		}
 		return nil
-	}
-}
-
-// LeaderElectionChecker returns a healthz.Checker that verifies this instance
-// is the current leader. The Elected() channel is closed once leadership is
-// acquired (or immediately when leader election is disabled).
-func LeaderElectionChecker(mgr manager.Manager) healthz.Checker {
-	return func(_ *http.Request) error {
-		select {
-		case <-mgr.Elected():
-			return nil
-		default:
-			return fmt.Errorf("not the leader")
-		}
 	}
 }
 

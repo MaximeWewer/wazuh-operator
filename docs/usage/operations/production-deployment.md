@@ -43,7 +43,7 @@ spec:
 
 **Flags:**
 
-- `--leader-elect`: Enable leader election (default: false)
+- `--leader-elect`: Enable leader election (binary default: false; the Helm chart enables it with `leaderElection.enabled: true`, also needed with a single replica so the old and new pods of a rolling update never reconcile at the same time)
 - `--leader-election-id`: Unique identifier for the leader election lock (default: "wazuh-operator-leader")
 
 ### Pod Disruption Budget

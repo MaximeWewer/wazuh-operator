@@ -24,72 +24,34 @@ func (f *fakeCache) WaitForCacheSync(_ context.Context) bool {
 // fakeManager implements the subset of manager.Manager used by the checkers.
 type fakeManager struct {
 	manager.Manager
-	cache   *fakeCache
-	elected chan struct{}
+	cache *fakeCache
 }
 
 func (f *fakeManager) GetCache() cache.Cache {
 	return f.cache
 }
 
-func (f *fakeManager) Elected() <-chan struct{} {
-	return f.elected
-}
-
 // --- Tests ---
 
+// TestInformerSyncChecker asserts readiness follows the cache sync only, never leadership:
+// a standby replica must be ready or rolling updates of the operator deadlock.
 func TestInformerSyncChecker(t *testing.T) {
-	elected := make(chan struct{})
-	close(elected)
-	notElected := make(chan struct{})
-
 	tests := []struct {
 		name    string
 		synced  bool
-		elected chan struct{}
 		wantErr bool
 	}{
-		{"elected and synced returns nil", true, elected, false},
-		{"elected but unsynced returns error", false, elected, true},
-		{"not elected returns error", true, notElected, true},
+		{"synced returns nil", true, false},
+		{"unsynced returns error", false, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mgr := &fakeManager{
-				cache:   &fakeCache{synced: tt.synced},
-				elected: tt.elected,
-			}
+			mgr := &fakeManager{cache: &fakeCache{synced: tt.synced}}
 			checker := InformerSyncChecker(mgr)
 			err := checker(nil)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("InformerSyncChecker() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestLeaderElectionChecker(t *testing.T) {
-	tests := []struct {
-		name    string
-		elected bool
-		wantErr bool
-	}{
-		{"elected returns nil", true, false},
-		{"not elected returns error", false, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ch := make(chan struct{})
-			if tt.elected {
-				close(ch)
-			}
-			mgr := &fakeManager{elected: ch}
-			checker := LeaderElectionChecker(mgr)
-			err := checker(nil)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("LeaderElectionChecker() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

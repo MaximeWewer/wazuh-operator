@@ -552,7 +552,6 @@ The operator exposes health endpoints on port `8081` (configurable via `operator
 | `ping` | Always passes if the process is running |
 | `informer-sync` | Passes once the Kubernetes informer cache has fully synced |
 | `reconcile-watchdog` | Passes while the reconcile loop has run within the last 5 minutes |
-| `leader-election` | Passes once this instance is the elected leader (only registered when `--leader-elect` is enabled) |
 
 Use the `?verbose` query parameter to see individual check results:
 
