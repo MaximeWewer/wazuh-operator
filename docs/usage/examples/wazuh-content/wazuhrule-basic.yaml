@@ -46,12 +46,4 @@ spec:
         <description>Possible SSH compromise: successful login after multiple failures</description>
         <group>authentication_success,attack,pci_dss_10.2.4,nist_800_53_AU.14,</group>
       </rule>
-
-      <!-- Detect SSH connection from unusual country (requires GeoIP) -->
-      <rule id="100102" level="8">
-        <if_sid>5715</if_sid>
-        <geoip_src>!US,!CA,!GB,!DE,!FR</geoip_src>
-        <description>SSH login from unusual geographic location</description>
-        <group>authentication_success,gdpr_IV_35.7.d,</group>
-      </rule>
     </group>
