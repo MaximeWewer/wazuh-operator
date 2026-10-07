@@ -174,17 +174,21 @@ const (
 	// DefaultDashboardMemoryLimit is the default memory limit for dashboard
 	DefaultDashboardMemoryLimit = "1Gi"
 
+	// Indexer init containers that run the JVM-based opensearch-plugin / opensearch-keystore
+	// tools. A JVM needs well over its default heap (25% of the limit) for metaspace, code
+	// cache and threads: under a 256Mi limit the plugin install was OOMKilled (exit 137).
+
 	// DefaultInitContainerCPURequest is the default CPU request for init containers
 	DefaultInitContainerCPURequest = "100m"
 
 	// DefaultInitContainerMemoryRequest is the default memory request for init containers
-	DefaultInitContainerMemoryRequest = "128Mi"
+	DefaultInitContainerMemoryRequest = "256Mi"
 
 	// DefaultInitContainerCPULimit is the default CPU limit for init containers
-	DefaultInitContainerCPULimit = "200m"
+	DefaultInitContainerCPULimit = "500m"
 
 	// DefaultInitContainerMemoryLimit is the default memory limit for init containers
-	DefaultInitContainerMemoryLimit = "256Mi"
+	DefaultInitContainerMemoryLimit = "512Mi"
 
 	// DefaultExporterCPURequest is the default CPU request for exporter sidecars
 	DefaultExporterCPURequest = "100m"

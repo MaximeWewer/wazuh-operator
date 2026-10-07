@@ -192,20 +192,7 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		initContainers = append(initContainers, cdbFetch)
 	}
 
-	initContainers = append(initContainers, corev1.Container{
-		Name:  "fix-ownership",
-		Image: image,
-		Command: []string{
-			"/bin/bash",
-			"-c",
-			// Chown only writable files not already owned by 999: "-writable" skips
-			// read-only mounts (e.g. the authd.pass Secret) that would otherwise fail
-			// the chown on a read-only fs; "! -user 999" skips the already-correct
-			// files so restarts don't re-chown the whole /var/ossec tree.
-			"find /var/ossec -writable ! -user 999 -print0 | xargs -0 -r chown 999:999",
-		},
-		VolumeMounts: b.buildVolumeMounts(),
-	})
+	initContainers = append(initContainers, buildFixOwnershipInitContainer(image, b.buildVolumeMounts()))
 
 	// Append extra init containers
 	initContainers = append(initContainers, b.extraInitContainers...)
@@ -227,6 +214,7 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			Env:          env,
 			EnvFrom:      b.envFrom,
 			VolumeMounts: volumeMounts,
+			StartupProbe: managerStartupProbe(),
 			LivenessProbe: &corev1.Probe{
 				ProbeHandler:        managerAPIProbeHandler(),
 				InitialDelaySeconds: 90,

@@ -161,6 +161,63 @@ func managerAPIProbeHandler() corev1.ProbeHandler {
 	}
 }
 
+// managerStartupProbe gives wazuh-manager up to 10 minutes to bring its API up (ruleset
+// compilation, cluster sync and the API on a busy node can exceed the liveness budget of
+// 90s + 3x30s). Liveness and readiness only start once it succeeds, so a slow first start
+// is no longer killed and restarted from scratch.
+func managerStartupProbe() *corev1.Probe {
+	return &corev1.Probe{
+		ProbeHandler:     managerAPIProbeHandler(),
+		PeriodSeconds:    10,
+		TimeoutSeconds:   5,
+		FailureThreshold: 60,
+	}
+}
+
+// buildFixOwnershipInitContainer chowns to wazuh (999) the files the earlier init
+// containers wrote on the volumes (cdb-fetch lists, seeded defaults, per-path volume
+// claims...).
+//
+// It walks only the writable volume mounts under /var/ossec, never the image layer: an
+// init container's root filesystem is its own throw-away overlay, so chowning image files
+// there has no effect on the manager container, yet each chown copies the whole file up
+// into that layer - minutes of I/O on every pod start. "-writable" still skips read-only
+// files (e.g. the authd.pass Secret) and "! -user 999" the already-correct ones.
+func buildFixOwnershipInitContainer(image string, mounts []corev1.VolumeMount) corev1.Container {
+	var roots []string
+	for _, m := range mounts {
+		if m.ReadOnly || !strings.HasPrefix(m.MountPath, constants.PathWazuhBase+"/") {
+			continue
+		}
+		roots = append(roots, m.MountPath)
+	}
+	// Drop mounts nested under another root: find already descends into them.
+	sort.Strings(roots)
+	var top []string
+	for _, r := range roots {
+		if len(top) > 0 && (r == top[len(top)-1] || strings.HasPrefix(r, top[len(top)-1]+"/")) {
+			continue
+		}
+		top = append(top, r)
+	}
+
+	script := "echo 'fix-ownership: no writable volume under " + constants.PathWazuhBase + "'"
+	if len(top) > 0 {
+		quoted := make([]string, len(top))
+		for i, r := range top {
+			quoted[i] = shellSingleQuote(r)
+		}
+		script = "find " + strings.Join(quoted, " ") + " -writable ! -user 999 -print0 | xargs -0 -r chown 999:999"
+	}
+
+	return corev1.Container{
+		Name:         constants.InitContainerNameFixOwnership,
+		Image:        image,
+		Command:      []string{"/bin/bash", "-c", script},
+		VolumeMounts: mounts,
+	}
+}
+
 // WithResources sets the resource requirements
 func (b *baseStatefulSetBuilder[T]) WithResources(resources *corev1.ResourceRequirements) T {
 	b.resources = resources

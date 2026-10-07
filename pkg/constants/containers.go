@@ -54,6 +54,10 @@ const (
 	// directly into the PVC-backed /var/ossec/etc/lists at pod startup.
 	InitContainerNameCDBFetch = "cdb-fetch"
 
+	// InitContainerNameFixOwnership chowns the files written by the earlier init
+	// containers on the manager volumes to the wazuh user (999).
+	InitContainerNameFixOwnership = "fix-ownership"
+
 	// InitContainerNameMigrateData copies existing data from the default wazuh-data volume
 	// into newly-introduced per-path PVCs, once, on first roll-out of a split volume.
 	InitContainerNameMigrateData = "migrate-data"
