@@ -330,26 +330,32 @@ deploy_wazuh_cluster() {
 wait_for_cluster_ready() {
     log_section "Waiting for Cluster Components to be Ready"
 
-    log_info "Waiting for WazuhCluster CR to be created..."
-    kubectl wait --for=condition=Ready --timeout=600s \
+    local failed=()
+    local instance="app.kubernetes.io/instance=${CLUSTER_NAME}"
+
+    # The WazuhCluster Ready condition is set once every component is ready, so it is the
+    # authoritative check; the pod waits below name the component that is lagging.
+    log_info "Waiting for WazuhCluster ${CLUSTER_NAME} to be Ready..."
+    if ! kubectl wait --for=condition=Ready --timeout=600s \
         wazuhcluster/"${CLUSTER_NAME}" \
-        -n "${CLUSTER_NAMESPACE}" || true
+        -n "${CLUSTER_NAMESPACE}"; then
+        failed+=("WazuhCluster")
+    fi
 
-    log_info "Waiting for Manager Master StatefulSet..."
-    kubectl wait --for=condition=ready --timeout=600s \
-        pod -l app.kubernetes.io/component=manager-master \
-        -n "${CLUSTER_NAMESPACE}" || true
+    local component
+    for component in wazuh-manager indexer dashboard; do
+        log_info "Waiting for ${component} pods..."
+        if ! kubectl wait --for=condition=ready --timeout=60s \
+            pod -l "${instance},app.kubernetes.io/component=${component}" \
+            -n "${CLUSTER_NAMESPACE}"; then
+            failed+=("${component}")
+        fi
+    done
 
-    log_info "Waiting for Indexer StatefulSet..."
-    kubectl wait --for=condition=ready --timeout=600s \
-        pod -l app.kubernetes.io/component=indexer \
-        -n "${CLUSTER_NAMESPACE}" || true
-
-    log_info "Waiting for Dashboard Deployment..."
-    kubectl wait --for=condition=ready --timeout=600s \
-        pod -l app.kubernetes.io/component=dashboard \
-        -n "${CLUSTER_NAMESPACE}" || true
-
+    if [ "${#failed[@]}" -gt 0 ]; then
+        log_error "Not ready: ${failed[*]}"
+        return 1
+    fi
     log_success "All components ready"
 }
 
@@ -423,8 +429,15 @@ main() {
     cleanup_old_images
     deploy_operator
     deploy_wazuh_cluster
-    wait_for_cluster_ready
+    local ready=true
+    wait_for_cluster_ready || ready=false
     show_cluster_status
+    if [ "${ready}" != true ]; then
+        log_error "Deployment finished but the cluster is not ready; see the status above and:"
+        echo "  kubectl describe wazuhcluster ${CLUSTER_NAME} -n ${CLUSTER_NAMESPACE}"
+        echo "  kubectl logs -n ${OPERATOR_NAMESPACE} -l app.kubernetes.io/name=wazuh-operator --tail=100"
+        exit 1
+    fi
     get_dashboard_url
 
     log_section "Deployment Complete!"
