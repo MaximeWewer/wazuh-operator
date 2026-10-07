@@ -21,6 +21,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -909,6 +910,65 @@ chown -R 999:999 "$DEST"`,
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: constants.VolumeNameWazuhData, MountPath: "/wazuh-data"},
 		},
+	}
+}
+
+// seedDefaultsPaths are the PVC-backed directories whose image defaults the Wazuh
+// entrypoint would seed on an empty volume (mount_permanent_data), excluding the API
+// configuration (handled by seed-api-config) and the runtime state dirs (logs, queue,
+// multigroups) that the daemons recreate themselves.
+var seedDefaultsPaths = []string{
+	constants.PathWazuhConfig,
+	constants.PathWazuhIntegrations,
+	constants.PathWazuhActiveResponse,
+	constants.PathWazuhAgentless,
+	constants.PathWazuhWodles,
+}
+
+// buildSeedDefaultsInitContainer restores the image's default files into the PVC-backed
+// directories listed in seedDefaultsPaths.
+//
+// The Wazuh entrypoint (0-wazuh-init: mount_permanent_data) only seeds a permanent
+// directory when it is empty. The operator always makes these directories non-empty
+// before the entrypoint runs: the authd.pass Secret and the rule/decoder/list/integration/
+// active-response ConfigMaps are subPath-mounted into them, and the kubelet creates each
+// mount point on the volume. The entrypoint then skips the seed and the manager runs
+// without its defaults (lists/audit-keys, rootcheck/, local_rules.xml, the stock
+// active-response scripts...), silently ignoring the default rules that reference them.
+//
+// A no-clobber copy from the image's permanent-data backup seeds a fresh PVC fully and
+// repairs a PVC left incomplete by an earlier operator version, without ever overwriting
+// existing data or operator-managed files. The mounts mirror the main container's PVC
+// mounts (including per-path volume claims) so the files land on the volume the manager
+// actually reads.
+func (b *baseStatefulSetBuilder[T]) buildSeedDefaultsInitContainer(image string) corev1.Container {
+	var mounts []corev1.VolumeMount
+	for _, m := range wazuhDataBaseMounts() {
+		if m.Name == constants.VolumeNameWazuhData && slices.Contains(seedDefaultsPaths, m.MountPath) {
+			mounts = append(mounts, m)
+		}
+	}
+	mounts = b.applyVolumeClaimMounts(mounts)
+
+	return corev1.Container{
+		Name:  constants.InitContainerNameSeedDefaults,
+		Image: image,
+		Command: []string{
+			"/bin/bash",
+			"-c",
+			`set -e
+BACKUP=/var/ossec/data_tmp/permanent
+for dir in ` + strings.Join(seedDefaultsPaths, " ") + `; do
+  if [ -d "$BACKUP$dir" ]; then
+    # No-clobber: copy only what is missing, preserving the image ownership and modes.
+    cp -an "$BACKUP$dir/." "$dir/"
+    echo "Ensured defaults in $dir"
+  else
+    echo "WARNING: image backup $BACKUP$dir not found; skipping"
+  fi
+done`,
+		},
+		VolumeMounts: mounts,
 	}
 }
 

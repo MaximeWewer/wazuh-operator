@@ -46,6 +46,10 @@ const (
 	// (api.yaml, security/ RBAC dir, ssl/) into an empty PVC before the main container.
 	InitContainerNameSeedAPIConfig = "seed-api-config"
 
+	// InitContainerNameSeedDefaults restores the image's default files (etc/, integrations,
+	// active responses, wodles, agentless) missing from their PVC-backed directories.
+	InitContainerNameSeedDefaults = "seed-defaults"
+
 	// InitContainerNameCDBFetch fetches large CDB lists (over the ConfigMap size limit)
 	// directly into the PVC-backed /var/ossec/etc/lists at pod startup.
 	InitContainerNameCDBFetch = "cdb-fetch"

@@ -246,6 +246,7 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 	}
 	initContainers = append(initContainers,
 		buildSeedAPIConfigInitContainer(image),
+		b.buildSeedDefaultsInitContainer(image),
 		b.buildInitContainer(),
 	)
 
