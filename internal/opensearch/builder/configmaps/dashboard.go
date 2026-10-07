@@ -22,6 +22,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/config"
@@ -395,7 +396,7 @@ func (b *DashboardConfigMapBuilder) buildWazuhConfig() string {
 		}
 
 		// IP Selector
-		fmt.Fprintf(&sb, "ip.selector: %v\n", b.wazuhPlugin.IPSelector)
+		fmt.Fprintf(&sb, "ip.selector: %v\n", ptr.Deref(b.wazuhPlugin.IPSelector, true))
 
 		// IP Ignore
 		if len(b.wazuhPlugin.IPIgnore) > 0 {
@@ -433,7 +434,7 @@ func (b *DashboardConfigMapBuilder) buildWazuhConfig() string {
 
 		// Monitoring configuration
 		if b.wazuhPlugin.Monitoring != nil {
-			fmt.Fprintf(&sb, "wazuh.monitoring.enabled: %v\n", b.wazuhPlugin.Monitoring.Enabled)
+			fmt.Fprintf(&sb, "wazuh.monitoring.enabled: %v\n", ptr.Deref(b.wazuhPlugin.Monitoring.Enabled, true))
 			if b.wazuhPlugin.Monitoring.Frequency > 0 {
 				fmt.Fprintf(&sb, "wazuh.monitoring.frequency: %d\n", b.wazuhPlugin.Monitoring.Frequency)
 			}
@@ -451,19 +452,19 @@ func (b *DashboardConfigMapBuilder) buildWazuhConfig() string {
 
 		// Checks configuration
 		if b.wazuhPlugin.Checks != nil {
-			fmt.Fprintf(&sb, "checks.pattern: %v\n", b.wazuhPlugin.Checks.Pattern)
-			fmt.Fprintf(&sb, "checks.template: %v\n", b.wazuhPlugin.Checks.Template)
-			fmt.Fprintf(&sb, "checks.api: %v\n", b.wazuhPlugin.Checks.API)
-			fmt.Fprintf(&sb, "checks.setup: %v\n", b.wazuhPlugin.Checks.Setup)
-			fmt.Fprintf(&sb, "checks.fields: %v\n", b.wazuhPlugin.Checks.Fields)
-			fmt.Fprintf(&sb, "checks.metaFields: %v\n", b.wazuhPlugin.Checks.MetaFields)
-			fmt.Fprintf(&sb, "checks.timeFilter: %v\n", b.wazuhPlugin.Checks.TimeFilter)
-			fmt.Fprintf(&sb, "checks.maxBuckets: %v\n", b.wazuhPlugin.Checks.MaxBuckets)
+			fmt.Fprintf(&sb, "checks.pattern: %v\n", ptr.Deref(b.wazuhPlugin.Checks.Pattern, true))
+			fmt.Fprintf(&sb, "checks.template: %v\n", ptr.Deref(b.wazuhPlugin.Checks.Template, true))
+			fmt.Fprintf(&sb, "checks.api: %v\n", ptr.Deref(b.wazuhPlugin.Checks.API, true))
+			fmt.Fprintf(&sb, "checks.setup: %v\n", ptr.Deref(b.wazuhPlugin.Checks.Setup, true))
+			fmt.Fprintf(&sb, "checks.fields: %v\n", ptr.Deref(b.wazuhPlugin.Checks.Fields, true))
+			fmt.Fprintf(&sb, "checks.metaFields: %v\n", ptr.Deref(b.wazuhPlugin.Checks.MetaFields, true))
+			fmt.Fprintf(&sb, "checks.timeFilter: %v\n", ptr.Deref(b.wazuhPlugin.Checks.TimeFilter, true))
+			fmt.Fprintf(&sb, "checks.maxBuckets: %v\n", ptr.Deref(b.wazuhPlugin.Checks.MaxBuckets, true))
 		}
 
 		// Cron Statistics configuration
 		if b.wazuhPlugin.CronStatistics != nil {
-			fmt.Fprintf(&sb, "cron.statistics.status: %v\n", b.wazuhPlugin.CronStatistics.Status)
+			fmt.Fprintf(&sb, "cron.statistics.status: %v\n", ptr.Deref(b.wazuhPlugin.CronStatistics.Status, true))
 			if len(b.wazuhPlugin.CronStatistics.APIs) > 0 {
 				sb.WriteString("cron.statistics.apis:\n")
 				for _, api := range b.wazuhPlugin.CronStatistics.APIs {
