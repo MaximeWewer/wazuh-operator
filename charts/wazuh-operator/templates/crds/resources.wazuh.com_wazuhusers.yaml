@@ -18,7 +18,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.username
+    - jsonPath: .status.username
       name: Username
       type: string
     - jsonPath: .status.phase
@@ -333,6 +333,11 @@ spec:
                 - Pending
                 - Ready
                 - Failed
+                type: string
+              username:
+                description: |-
+                  Username is the effective Wazuh API username (spec.username, or metadata.name
+                  when unset).
                 type: string
             type: object
         required:

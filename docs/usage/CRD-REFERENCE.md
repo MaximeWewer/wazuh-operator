@@ -1984,6 +1984,7 @@ on the Manager API.
 
 | Field                | Type                       | Description                                                       |
 | -------------------- | -------------------------- | ----------------------------------------------------------------- |
+| `roleName`           | string                     | Effective role name (`spec.roleName` or `metadata.name`)          |
 | `phase`              | string                     | Aggregate phase (Pending/Ready/Failed)                            |
 | `conditions`         | []Condition                | Standard conditions                                               |
 | `observedGeneration` | int64                      | Last observed generation                                          |
@@ -2033,8 +2034,9 @@ dashboard run_as flow uses `WazuhRole` rules instead.
 
 #### Status Fields
 
-Same shape as WazuhRole; per-cluster `clusterStatuses[]` carries the resolved
-`userId` and `assignedRoleIds`.
+Same shape as WazuhRole, with `username` (effective username: `spec.username` or
+`metadata.name`) in place of `roleName`; per-cluster `clusterStatuses[]` carries the
+resolved `userId` and `assignedRoleIds`.
 
 #### Example
 

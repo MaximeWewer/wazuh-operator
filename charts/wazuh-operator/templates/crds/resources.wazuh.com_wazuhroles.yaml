@@ -18,7 +18,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.roleName
+    - jsonPath: .status.roleName
       name: Role
       type: string
     - jsonPath: .status.phase
@@ -316,6 +316,11 @@ spec:
                 - Pending
                 - Ready
                 - Failed
+                type: string
+              roleName:
+                description: |-
+                  RoleName is the effective Wazuh API role name (spec.roleName, or metadata.name
+                  when unset).
                 type: string
             type: object
         required:

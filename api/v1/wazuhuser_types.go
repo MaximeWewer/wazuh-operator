@@ -54,6 +54,11 @@ type WazuhUserSpec struct {
 
 // WazuhUserStatus defines the observed state of WazuhUser.
 type WazuhUserStatus struct {
+	// Username is the effective Wazuh API username (spec.username, or metadata.name
+	// when unset).
+	// +optional
+	Username string `json:"username,omitempty"`
+
 	// Phase is the aggregate phase across all target clusters.
 	// +optional
 	Phase WazuhRBACPhase `json:"phase,omitempty"`
@@ -84,7 +89,7 @@ type WazuhUserStatus struct {
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced,shortName=wuser
-// +kubebuilder:printcolumn:name="Username",type=string,JSONPath=`.spec.username`
+// +kubebuilder:printcolumn:name="Username",type=string,JSONPath=`.status.username`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 

@@ -84,6 +84,7 @@ func (r *WazuhAPIUserReconciler) Reconcile(ctx context.Context, user *wazuhv1.Wa
 
 	log := logf.FromContext(ctx)
 	username := user.ResolveUsername()
+	user.Status.Username = username
 
 	if user.Status.Phase == "" {
 		user.Status.Phase = wazuhv1.WazuhRBACPhasePending

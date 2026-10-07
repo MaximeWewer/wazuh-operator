@@ -85,6 +85,7 @@ func (r *WazuhAPIRoleReconciler) Reconcile(ctx context.Context, role *wazuhv1.Wa
 
 	log := logf.FromContext(ctx)
 	roleName := role.ResolveRoleName()
+	role.Status.RoleName = roleName
 
 	if role.Status.Phase == "" {
 		role.Status.Phase = wazuhv1.WazuhRBACPhasePending

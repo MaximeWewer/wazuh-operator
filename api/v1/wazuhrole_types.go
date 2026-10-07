@@ -101,6 +101,11 @@ type WazuhRoleRule struct {
 
 // WazuhRoleStatus defines the observed state of WazuhRole.
 type WazuhRoleStatus struct {
+	// RoleName is the effective Wazuh API role name (spec.roleName, or metadata.name
+	// when unset).
+	// +optional
+	RoleName string `json:"roleName,omitempty"`
+
 	// Phase is the aggregate phase across all target clusters.
 	// Ready when every cluster is Ready; Failed if any is Failed; Pending otherwise.
 	// +optional
@@ -190,7 +195,7 @@ type WazuhRBACClusterStatus struct {
 // +kubebuilder:storageversion
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced,shortName=wrole
-// +kubebuilder:printcolumn:name="Role",type=string,JSONPath=`.spec.roleName`
+// +kubebuilder:printcolumn:name="Role",type=string,JSONPath=`.status.roleName`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
