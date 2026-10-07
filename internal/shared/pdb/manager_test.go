@@ -75,7 +75,7 @@ func TestManagerPDBBuilder_Build(t *testing.T) {
 	}
 
 	// Verify selector matches manager pods (wazuh-manager component)
-	expectedLabels := constants.SelectorLabels("test-cluster", "wazuh-manager")
+	expectedLabels := constants.SelectorLabels("test-cluster", constants.ComponentManager)
 	for k, v := range expectedLabels {
 		if pdb.Spec.Selector.MatchLabels[k] != v {
 			t.Errorf("expected selector label %s=%s, got %s=%s", k, v, k, pdb.Spec.Selector.MatchLabels[k])

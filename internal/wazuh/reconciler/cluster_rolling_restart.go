@@ -119,7 +119,7 @@ func (r *ClusterReconciler) orchestrateWorkerRestart(ctx context.Context, cluste
 	}
 
 	// Worker health checker: ensure all worker pods are ready before deleting next one
-	workerLabels := constants.SelectorLabels(cluster.Name, "wazuh-manager")
+	workerLabels := constants.SelectorLabels(cluster.Name, constants.ComponentManager)
 	workerLabels[constants.LabelManagerNodeType] = "worker"
 	healthChecker := NewManagerWorkerHealthChecker(r.Client, cluster.Namespace, workerLabels)
 
@@ -161,7 +161,7 @@ func (r *ClusterReconciler) orchestrateMasterRestart(ctx context.Context, cluste
 	}
 
 	// Master health checker: use master selector labels to check readiness
-	masterLabels := constants.SelectorLabels(cluster.Name, "wazuh-manager")
+	masterLabels := constants.SelectorLabels(cluster.Name, constants.ComponentManager)
 	healthChecker := NewManagerWorkerHealthChecker(r.Client, cluster.Namespace, masterLabels)
 
 	result, err := orchestrator.OrchestrateRestart(ctx, masterSts, healthChecker, true)

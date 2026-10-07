@@ -261,7 +261,7 @@ echo "Remote prefix: ${S3_PREFIX}"
 mkdir -p ${TEMP_DIR}
 
 # Get manager pod name (master or first manager)
-MANAGER_POD=$(kubectl get pods -n ${NAMESPACE} -l app.kubernetes.io/component=wazuh-manager,app.kubernetes.io/instance=${CLUSTER_NAME} -o jsonpath='{.items[0].metadata.name}')
+MANAGER_POD=$(kubectl get pods -n ${NAMESPACE} -l app.kubernetes.io/component=manager,app.kubernetes.io/instance=${CLUSTER_NAME} -o jsonpath='{.items[0].metadata.name}')
 
 if [ -z "$MANAGER_POD" ]; then
     echo "ERROR: No Wazuh Manager pod found"

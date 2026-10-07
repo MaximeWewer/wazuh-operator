@@ -77,7 +77,7 @@ func (b *ClusterKeySecretBuilder) WithAnnotations(annotations map[string]string)
 
 // Build creates the Secret
 func (b *ClusterKeySecretBuilder) Build() *corev1.Secret {
-	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
+	labels := constants.CommonLabels(b.clusterName, constants.ComponentManager, b.version)
 	maps.Copy(labels, b.labels)
 
 	return &corev1.Secret{
@@ -150,7 +150,7 @@ func (b *APICredentialsSecretBuilder) WithAnnotations(annotations map[string]str
 
 // Build creates the Secret
 func (b *APICredentialsSecretBuilder) Build() *corev1.Secret {
-	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
+	labels := constants.CommonLabels(b.clusterName, constants.ComponentManager, b.version)
 	maps.Copy(labels, b.labels)
 
 	return &corev1.Secret{

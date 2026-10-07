@@ -87,7 +87,7 @@ func TestBuildManagerAntiAffinity_Required_Default(t *testing.T) {
 		t.Fatal("expected label selector to be set")
 	}
 
-	expectedLabels := constants.SelectorLabels("test-cluster", "wazuh-manager")
+	expectedLabels := constants.SelectorLabels("test-cluster", constants.ComponentManager)
 	for k, v := range expectedLabels {
 		if rule.LabelSelector.MatchLabels[k] != v {
 			t.Errorf("expected selector label %s=%s, got %s=%s", k, v, k, rule.LabelSelector.MatchLabels[k])

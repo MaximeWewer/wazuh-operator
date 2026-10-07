@@ -158,7 +158,7 @@ func (b *ManagerConfigMapBuilder) Build() *corev1.ConfigMap {
 
 // buildLabels builds the complete label set
 func (b *ManagerConfigMapBuilder) buildLabels() map[string]string {
-	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
+	labels := constants.CommonLabels(b.clusterName, constants.ComponentManager, b.version)
 	labels[constants.LabelManagerNodeType] = b.nodeType
 	maps.Copy(labels, b.labels)
 	return labels
@@ -215,7 +215,7 @@ func (b *SharedConfigMapBuilder) WithData(data map[string]string) *SharedConfigM
 
 // Build creates the ConfigMap
 func (b *SharedConfigMapBuilder) Build() *corev1.ConfigMap {
-	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
+	labels := constants.CommonLabels(b.clusterName, constants.ComponentManager, b.version)
 	maps.Copy(labels, b.labels)
 
 	return &corev1.ConfigMap{

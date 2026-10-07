@@ -187,7 +187,7 @@ func (b *WorkerServiceBuilder) BuildHeadless() *corev1.Service {
 
 // buildLabels builds the complete label set
 func (b *WorkerServiceBuilder) buildLabels() map[string]string {
-	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
+	labels := constants.CommonLabels(b.clusterName, constants.ComponentManager, b.version)
 	labels[constants.LabelManagerNodeType] = "worker"
 	maps.Copy(labels, b.labels)
 	return labels
@@ -195,7 +195,7 @@ func (b *WorkerServiceBuilder) buildLabels() map[string]string {
 
 // buildSelectorLabels builds the selector labels
 func (b *WorkerServiceBuilder) buildSelectorLabels() map[string]string {
-	labels := constants.SelectorLabels(b.clusterName, "wazuh-manager")
+	labels := constants.SelectorLabels(b.clusterName, constants.ComponentManager)
 	labels[constants.LabelManagerNodeType] = "worker"
 	return labels
 }

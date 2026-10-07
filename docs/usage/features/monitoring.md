@@ -151,7 +151,7 @@ Example Grafana dashboards are available in `config/monitoring/`:
 
 ```bash
 # Check Wazuh exporter sidecar
-kubectl get pods -n wazuh -l app.kubernetes.io/component=wazuh-manager -o yaml | grep wazuh-exporter
+kubectl get pods -n wazuh -l app.kubernetes.io/component=manager -o yaml | grep wazuh-exporter
 
 # Check indexer pods
 kubectl get pods -n wazuh -l app.kubernetes.io/component=wazuh-indexer

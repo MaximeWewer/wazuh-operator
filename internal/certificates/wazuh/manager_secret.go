@@ -123,7 +123,7 @@ func (b *ManagerCertsSecretBuilder) Build() *corev1.Secret {
 
 // buildLabels builds the complete label set
 func (b *ManagerCertsSecretBuilder) buildLabels() map[string]string {
-	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
+	labels := constants.CommonLabels(b.clusterName, constants.ComponentManager, b.version)
 	maps.Copy(labels, b.labels)
 	return labels
 }

@@ -53,9 +53,9 @@ func (b *ManagerPDBBuilder) Build() *policyv1.PodDisruptionBudget {
 	}
 
 	// Build selector to match manager pods
-	// Manager StatefulSets use "wazuh-manager" as component label
+	// Manager StatefulSets use the "manager" component label
 	selector := &metav1.LabelSelector{
-		MatchLabels: constants.SelectorLabels(b.cluster.Name, "wazuh-manager"),
+		MatchLabels: constants.SelectorLabels(b.cluster.Name, constants.ComponentManager),
 	}
 
 	// Build the PDB
@@ -84,7 +84,7 @@ func (b *ManagerPDBBuilder) BuildWithMaxUnavailable(maxUnavailable int32) *polic
 
 	// Build selector to match manager pods
 	selector := &metav1.LabelSelector{
-		MatchLabels: constants.SelectorLabels(b.cluster.Name, "wazuh-manager"),
+		MatchLabels: constants.SelectorLabels(b.cluster.Name, constants.ComponentManager),
 	}
 
 	// Build the PDB

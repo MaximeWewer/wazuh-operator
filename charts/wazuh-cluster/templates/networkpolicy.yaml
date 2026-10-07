@@ -34,7 +34,7 @@ spec:
     - from:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/component: wazuh-manager
+              app.kubernetes.io/component: manager
               app.kubernetes.io/instance: {{ .Values.cluster.name }}
       ports:
         - protocol: TCP
@@ -97,7 +97,7 @@ metadata:
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/component: wazuh-manager
+      app.kubernetes.io/component: manager
       app.kubernetes.io/instance: {{ .Values.cluster.name }}
   policyTypes:
     - Ingress
@@ -107,7 +107,7 @@ spec:
     - from:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/component: wazuh-manager
+              app.kubernetes.io/component: manager
               app.kubernetes.io/instance: {{ .Values.cluster.name }}
       ports:
         - protocol: TCP
@@ -177,7 +177,7 @@ spec:
     - to:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/component: wazuh-manager
+              app.kubernetes.io/component: manager
               app.kubernetes.io/instance: {{ .Values.cluster.name }}
       ports:
         - protocol: TCP
@@ -246,7 +246,7 @@ spec:
     - to:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/component: wazuh-manager
+              app.kubernetes.io/component: manager
               app.kubernetes.io/instance: {{ .Values.cluster.name }}
       ports:
         - protocol: TCP

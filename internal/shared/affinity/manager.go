@@ -59,9 +59,9 @@ func BuildManagerAntiAffinity(clusterName string, spec *v1.AntiAffinitySpec) *co
 	}
 
 	// Build label selector to match manager pods
-	// Manager StatefulSets use "wazuh-manager" as component label (matches pdb/manager.go pattern)
+	// Manager StatefulSets use the "manager" component label (matches pdb/manager.go pattern)
 	labelSelector := &metav1.LabelSelector{
-		MatchLabels: constants.SelectorLabels(clusterName, "wazuh-manager"),
+		MatchLabels: constants.SelectorLabels(clusterName, constants.ComponentManager),
 	}
 
 	affinity := &corev1.Affinity{

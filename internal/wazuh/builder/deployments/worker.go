@@ -284,7 +284,7 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 
 // buildLabels builds the complete label set
 func (b *WorkerStatefulSetBuilder) buildLabels() map[string]string {
-	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
+	labels := constants.CommonLabels(b.clusterName, constants.ComponentManager, b.version)
 	labels[constants.LabelManagerNodeType] = "worker"
 	maps.Copy(labels, b.labels)
 	return labels
@@ -292,7 +292,7 @@ func (b *WorkerStatefulSetBuilder) buildLabels() map[string]string {
 
 // buildSelectorLabels builds the selector labels
 func (b *WorkerStatefulSetBuilder) buildSelectorLabels() map[string]string {
-	labels := constants.SelectorLabels(b.clusterName, "wazuh-manager")
+	labels := constants.SelectorLabels(b.clusterName, constants.ComponentManager)
 	labels[constants.LabelManagerNodeType] = "worker"
 	return labels
 }

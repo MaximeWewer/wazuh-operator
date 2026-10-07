@@ -276,7 +276,7 @@ func TestLogRotationCronJobBuilder_BuildScript(t *testing.T) {
 	expectedContains := []string{
 		"Starting log rotation for cluster test-cluster",
 		"kubectl get pods -n test-ns",
-		"app.kubernetes.io/component=wazuh-manager",
+		"app.kubernetes.io/component=manager",
 		"app.kubernetes.io/instance=test-cluster",
 		"kubectl exec -n test-ns",
 		"find",

@@ -179,7 +179,7 @@ func TestAntiAffinityIntegration_BuildRequiredRules(t *testing.T) {
 	}
 
 	// Verify label selector matches manager pods
-	expectedLabels := constants.SelectorLabels("test-cluster", "wazuh-manager")
+	expectedLabels := constants.SelectorLabels("test-cluster", constants.ComponentManager)
 	for k, v := range expectedLabels {
 		if rule.LabelSelector.MatchLabels[k] != v {
 			t.Errorf("expected selector label %s=%s, got %s", k, v, rule.LabelSelector.MatchLabels[k])
@@ -419,7 +419,7 @@ func TestAntiAffinityIntegration_ZoneSpread(t *testing.T) {
 	}
 
 	// Verify label selector uses the correct cluster name
-	expectedLabels := constants.SelectorLabels("ha-cluster", "wazuh-manager")
+	expectedLabels := constants.SelectorLabels("ha-cluster", constants.ComponentManager)
 	for k, v := range expectedLabels {
 		if rule.LabelSelector.MatchLabels[k] != v {
 			t.Errorf("expected selector label %s=%s, got %s", k, v, rule.LabelSelector.MatchLabels[k])

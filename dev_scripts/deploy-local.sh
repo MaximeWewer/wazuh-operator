@@ -343,7 +343,7 @@ wait_for_cluster_ready() {
     fi
 
     local component
-    for component in wazuh-manager indexer dashboard; do
+    for component in manager indexer dashboard; do
         log_info "Waiting for ${component} pods..."
         if ! kubectl wait --for=condition=ready --timeout=60s \
             pod -l "${instance},app.kubernetes.io/component=${component}" \

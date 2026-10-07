@@ -93,7 +93,7 @@ func (o *RollingRestartOrchestrator) OrchestrateRestart(
 
 	// Filter pods by owner reference to ensure we only consider pods owned by this StatefulSet.
 	// This is important when multiple StatefulSets share the same label selector (e.g. manager-master
-	// and manager-worker both use "wazuh-manager" app label).
+	// and manager-worker both use the "manager" component labels).
 	stsUID := sts.UID
 	var ownedPods []corev1.Pod
 	for _, pod := range podList.Items {

@@ -229,7 +229,7 @@ func (b *ManagerServiceBuilder) BuildHeadless() *corev1.Service {
 
 // buildLabels builds the complete label set
 func (b *ManagerServiceBuilder) buildLabels() map[string]string {
-	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
+	labels := constants.CommonLabels(b.clusterName, constants.ComponentManager, b.version)
 	labels[constants.LabelManagerNodeType] = b.nodeType
 	maps.Copy(labels, b.labels)
 	return labels
@@ -237,7 +237,7 @@ func (b *ManagerServiceBuilder) buildLabels() map[string]string {
 
 // buildSelectorLabels builds the selector labels
 func (b *ManagerServiceBuilder) buildSelectorLabels() map[string]string {
-	labels := constants.SelectorLabels(b.clusterName, "wazuh-manager")
+	labels := constants.SelectorLabels(b.clusterName, constants.ComponentManager)
 	labels[constants.LabelManagerNodeType] = b.nodeType
 	return labels
 }
@@ -297,10 +297,10 @@ func (b *ManagerExternalServiceBuilder) WithAnnotations(annotations map[string]s
 
 // Build creates the external Service
 func (b *ManagerExternalServiceBuilder) Build() *corev1.Service {
-	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
+	labels := constants.CommonLabels(b.clusterName, constants.ComponentManager, b.version)
 	maps.Copy(labels, b.labels)
 
-	selectorLabels := constants.SelectorLabels(b.clusterName, "wazuh-manager")
+	selectorLabels := constants.SelectorLabels(b.clusterName, constants.ComponentManager)
 	// Select only master for external access
 	selectorLabels[constants.LabelManagerNodeType] = "master"
 

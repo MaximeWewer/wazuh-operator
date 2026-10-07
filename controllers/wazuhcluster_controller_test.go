@@ -196,8 +196,8 @@ var _ = Describe("WazuhCluster Controller", func() {
 			}, timeout, interval).Should(Succeed())
 
 			Expect(*managerSts.Spec.Replicas).To(Equal(int32(1)))
-			Expect(managerSts.Labels["app.kubernetes.io/name"]).To(Equal("wazuh-wazuh-manager"))
-			Expect(managerSts.Labels["app.kubernetes.io/component"]).To(Equal("wazuh-manager"))
+			Expect(managerSts.Labels["app.kubernetes.io/name"]).To(Equal("wazuh-manager"))
+			Expect(managerSts.Labels["app.kubernetes.io/component"]).To(Equal("manager"))
 			Expect(managerSts.Labels["wazuh.com/cluster"]).To(Equal(clusterName))
 		})
 

@@ -133,7 +133,7 @@ All CRDs use this single API group for consistency.
 ```yaml
 app.kubernetes.io/name: wazuh-manager
 app.kubernetes.io/instance: my-cluster
-app.kubernetes.io/component: wazuh-manager # or wazuh-indexer, wazuh-dashboard
+app.kubernetes.io/component: manager # or indexer, dashboard
 app.kubernetes.io/part-of: wazuh
 app.kubernetes.io/managed-by: wazuh-operator
 ```

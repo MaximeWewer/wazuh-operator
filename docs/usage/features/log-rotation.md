@@ -107,7 +107,7 @@ logRotation:
 The CronJob selects manager pods using the label:
 
 ```text
-app.kubernetes.io/component=wazuh-manager
+app.kubernetes.io/component=manager
 ```
 
 This matches both master and worker manager pods.

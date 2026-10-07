@@ -151,7 +151,7 @@ func (b *ManagerPVCBuilder) BuildVolumeClaimTemplate() corev1.PersistentVolumeCl
 
 // buildLabels builds the complete label set
 func (b *ManagerPVCBuilder) buildLabels() map[string]string {
-	labels := constants.CommonLabels(b.clusterName, "wazuh-manager", b.version)
+	labels := constants.CommonLabels(b.clusterName, constants.ComponentManager, b.version)
 	labels[constants.LabelManagerNodeType] = b.nodeType
 	maps.Copy(labels, b.labels)
 	return labels
@@ -159,7 +159,7 @@ func (b *ManagerPVCBuilder) buildLabels() map[string]string {
 
 // buildSelectorLabels builds the selector labels
 func (b *ManagerPVCBuilder) buildSelectorLabels() map[string]string {
-	labels := constants.SelectorLabels(b.clusterName, "wazuh-manager")
+	labels := constants.SelectorLabels(b.clusterName, constants.ComponentManager)
 	labels[constants.LabelManagerNodeType] = b.nodeType
 	return labels
 }

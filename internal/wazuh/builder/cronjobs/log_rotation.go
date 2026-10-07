@@ -181,7 +181,7 @@ echo "Combination mode: %s"
 echo "Paths: %s"
 
 # Get all Wazuh Manager pods
-MANAGER_PODS=$(kubectl get pods -n %s -l app.kubernetes.io/component=wazuh-manager,app.kubernetes.io/instance=%s -o jsonpath='{.items[*].metadata.name}')
+MANAGER_PODS=$(kubectl get pods -n %s -l app.kubernetes.io/component=manager,app.kubernetes.io/instance=%s -o jsonpath='{.items[*].metadata.name}')
 
 if [ -z "$MANAGER_PODS" ]; then
     echo "No Wazuh Manager pods found"

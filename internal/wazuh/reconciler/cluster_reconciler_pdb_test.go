@@ -253,7 +253,7 @@ func TestClusterReconciler_ReconcileManagerPDB(t *testing.T) {
 					t.Error("expected minAvailable to be set")
 				}
 				// Verify selector targets manager pods
-				expectedLabels := constants.SelectorLabels(tt.cluster.Name, "wazuh-manager")
+				expectedLabels := constants.SelectorLabels(tt.cluster.Name, constants.ComponentManager)
 				for k, v := range expectedLabels {
 					if foundPDB.Spec.Selector.MatchLabels[k] != v {
 						t.Errorf("expected selector label %s=%s, got %s", k, v, foundPDB.Spec.Selector.MatchLabels[k])

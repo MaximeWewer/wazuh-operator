@@ -847,6 +847,21 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		return nil, fmt.Errorf("failed to get master statefulset: %w", err)
 	}
 
+	// The selector is immutable: move the StatefulSet to the new one without stopping its
+	// pods (orphan delete + relabel); the next reconcile recreates it from the NotFound path.
+	if migrating, merr := utils.MigrateStatefulSetSelector(ctx, r.Client, r.Recorder, sts, found); merr != nil {
+		return nil, merr
+	} else if migrating {
+		return &utils.PendingRollout{
+			Component: "manager-master",
+			Namespace: sts.Namespace,
+			Name:      sts.Name,
+			Type:      utils.RolloutTypeStatefulSet,
+			StartTime: time.Now(),
+			Reason:    "selector-migration",
+		}, nil
+	}
+
 	// Check if recreation is needed due to immutable field changes (SecurityContext, PodManagementPolicy)
 	needsRecreation, recreationReason := patch.NeedsStatefulSetRecreation(found, sts)
 	if needsRecreation {
@@ -1502,6 +1517,21 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 		return nil, fmt.Errorf("failed to get worker statefulset: %w", err)
 	}
 
+	// The selector is immutable: move the StatefulSet to the new one without stopping its
+	// pods (orphan delete + relabel); the next reconcile recreates it from the NotFound path.
+	if migrating, merr := utils.MigrateStatefulSetSelector(ctx, r.Client, r.Recorder, sts, found); merr != nil {
+		return nil, merr
+	} else if migrating {
+		return &utils.PendingRollout{
+			Component: "manager-worker",
+			Namespace: sts.Namespace,
+			Name:      sts.Name,
+			Type:      utils.RolloutTypeStatefulSet,
+			StartTime: time.Now(),
+			Reason:    "selector-migration",
+		}, nil
+	}
+
 	// Check if recreation is needed due to immutable field changes (SecurityContext, PodManagementPolicy)
 	needsRecreation, recreationReason := patch.NeedsStatefulSetRecreation(found, sts)
 	if needsRecreation {
@@ -2030,6 +2060,11 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 		return fmt.Errorf("failed to get master statefulset: %w", err)
 	}
 
+	// The selector is immutable: see reconcileMasterNonBlocking.
+	if migrating, merr := utils.MigrateStatefulSetSelector(ctx, r.Client, r.Recorder, sts, found); merr != nil || migrating {
+		return merr
+	}
+
 	// Check if update is needed (cert hash changed)
 	existingCertHash := ""
 	existingConfigHash := ""
@@ -2383,6 +2418,11 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 		return nil
 	} else if err != nil {
 		return fmt.Errorf("failed to get worker statefulset: %w", err)
+	}
+
+	// The selector is immutable: see reconcileWorkersNonBlocking.
+	if migrating, merr := utils.MigrateStatefulSetSelector(ctx, r.Client, r.Recorder, sts, found); merr != nil || migrating {
+		return merr
 	}
 
 	// Check if update is needed (cert hash changed or replicas changed)
