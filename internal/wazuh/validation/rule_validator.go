@@ -76,6 +76,12 @@ func (v *RuleValidator) Validate(ctx context.Context, rule *wazuhv1.WazuhRule) *
 		result.Errors = append(result.Errors, fmt.Sprintf("invalid XML syntax: %v", err))
 	}
 
+	// Validate the rule structure and options against what wazuh-analysisd accepts
+	if errs := validateRuleStructure(rule.Spec.Rules); len(errs) > 0 {
+		result.Valid = false
+		result.Errors = append(result.Errors, errs...)
+	}
+
 	// Validate rule IDs
 	if errs := v.validateRuleIDs(rule.Spec.Rules, rule.Spec.RuleID); len(errs) > 0 {
 		result.Valid = false
@@ -131,6 +137,107 @@ func (v *RuleValidator) validateXMLSyntax(content string) error {
 	}
 
 	return nil
+}
+
+// ruleOptions are the elements wazuh-analysisd accepts inside a <rule> (the xml_* option
+// names in src/analysisd/rules.c, identical in Wazuh 4.9 and 4.14). analysisd compares them
+// case-insensitively and rejects any other element, failing the whole ruleset at startup.
+var ruleOptions = map[string]bool{
+	"regex": true, "match": true, "decoded_as": true, "category": true, "cve": true,
+	"info": true, "time": true, "weekday": true, "description": true, "ignore": true,
+	"check_if_ignored": true, "srcip": true, "srcgeoip": true, "srcport": true,
+	"dstip": true, "dstgeoip": true, "dstport": true, "user": true, "url": true, "id": true,
+	"data": true, "extra_data": true, "hostname": true, "program_name": true, "status": true,
+	"protocol": true, "system_name": true, "action": true, "compiled_rule": true,
+	"field": true, "location": true, "list": true, "group": true, "options": true,
+	"mitre":  true,
+	"if_sid": true, "if_group": true, "if_level": true, "if_fts": true,
+	"if_matched_regex": true, "if_matched_group": true, "if_matched_sid": true,
+	"same_source_ip": true, "same_srcip": true, "same_src_port": true, "same_srcport": true,
+	"same_dst_port": true, "same_dstport": true, "same_srcuser": true, "same_user": true,
+	"same_location": true, "same_id": true, "check_diff": true, "same_field": true,
+	"same_dstip": true, "same_agent": true, "same_url": true, "same_srcgeoip": true,
+	"same_protocol": true, "same_action": true, "same_data": true, "same_extra_data": true,
+	"same_status": true, "same_system_name": true, "same_dstgeoip": true,
+	"different_url": true, "different_srcip": true, "different_srcgeoip": true,
+	"different_dstip": true, "different_src_port": true, "different_srcport": true,
+	"different_dst_port": true, "different_dstport": true, "different_location": true,
+	"different_protocol": true, "different_action": true, "different_srcuser": true,
+	"different_user": true, "different_id": true, "different_data": true,
+	"different_extra_data": true, "different_status": true, "different_system_name": true,
+	"different_dstgeoip": true, "different_field": true,
+	"not_same_source_ip": true, "not_same_user": true, "not_same_agent": true,
+	"not_same_id": true, "not_same_field": true, "global_frequency": true,
+}
+
+// mitreOptions are the elements analysisd accepts inside a rule's <mitre> block.
+var mitreOptions = map[string]bool{"id": true, "tacticid": true, "techniqueid": true}
+
+// validateRuleStructure mirrors the structural checks wazuh-analysisd applies when loading a
+// rule file: root elements must be <group> (<var> definitions are expanded beforehand), a
+// group may only contain <rule> elements and at least one of them, and a rule may only use
+// known options. Any of these errors stops analysisd, so the manager crash-loops while the
+// CR would otherwise report Applied. Malformed XML is left to validateXMLSyntax.
+func validateRuleStructure(content string) []string {
+	var errs []string
+	dec := xml.NewDecoder(strings.NewReader(content))
+	var stack []string // lowercased open elements
+	ruleID := ""
+	rulesInGroup := 0
+
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			// io.EOF ends the walk; syntax errors are reported by validateXMLSyntax.
+			return errs
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			name := strings.ToLower(t.Name.Local)
+			switch {
+			case len(stack) == 0:
+				if name == "var" {
+					if err := dec.Skip(); err != nil {
+						return errs
+					}
+					continue
+				}
+				if name != "group" {
+					errs = append(errs, fmt.Sprintf("invalid root element <%s>: only <group> is allowed", t.Name.Local))
+				}
+				rulesInGroup = 0
+			case len(stack) == 1 && stack[0] == "group":
+				if name != "rule" {
+					errs = append(errs, fmt.Sprintf("invalid element <%s> in group: only <rule> is allowed", t.Name.Local))
+					break
+				}
+				rulesInGroup++
+				ruleID = ""
+				for _, a := range t.Attr {
+					if strings.EqualFold(a.Name.Local, "id") {
+						ruleID = a.Value
+					}
+				}
+			case len(stack) == 2 && stack[1] == "rule":
+				if !ruleOptions[name] {
+					errs = append(errs, fmt.Sprintf("rule %s: invalid option <%s>", ruleID, t.Name.Local))
+				}
+			case len(stack) == 3 && stack[1] == "rule" && stack[2] == "mitre":
+				if !mitreOptions[name] {
+					errs = append(errs, fmt.Sprintf("rule %s: invalid option <%s> in <mitre>", ruleID, t.Name.Local))
+				}
+			}
+			stack = append(stack, name)
+		case xml.EndElement:
+			if len(stack) == 0 {
+				return errs
+			}
+			if len(stack) == 1 && stack[0] == "group" && rulesInGroup == 0 {
+				errs = append(errs, "group without any rule")
+			}
+			stack = stack[:len(stack)-1]
+		}
+	}
 }
 
 // validateRuleIDs validates that rule IDs are in the custom range (100000-999999)

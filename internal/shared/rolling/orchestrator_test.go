@@ -385,3 +385,92 @@ func TestIsPodReady(t *testing.T) {
 		t.Error("expected pod with no conditions to not be ready")
 	}
 }
+
+// runOrchestrator builds a fake client with the StatefulSet and pods and runs one step.
+func runOrchestrator(t *testing.T, sts *appsv1.StatefulSet, hc HealthChecker, pods ...*corev1.Pod) (*RestartResult, *corev1.PodList) {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	objects := []runtime.Object{sts}
+	for _, p := range pods {
+		objects = append(objects, p)
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objects...).Build()
+	result, err := NewOrchestrator(c).OrchestrateRestart(context.Background(), sts, hc, true)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	remaining := &corev1.PodList{}
+	if err := c.List(context.Background(), remaining); err != nil {
+		t.Fatalf("list pods: %v", err)
+	}
+	return result, remaining
+}
+
+func podNames(list *corev1.PodList) map[string]bool {
+	names := map[string]bool{}
+	for _, p := range list.Items {
+		names[p.Name] = true
+	}
+	return names
+}
+
+// TestOrchestrateRestart_OutdatedNotReady_DeletedDespiteUnhealthy guards recovery from a bad
+// revision: a pod crash-looping on an old revision (e.g. an invalid rule) must be replaced
+// as soon as a fixed revision exists, without waiting for it to become ready (it never
+// will) nor for the health check (which counts this very pod as unhealthy).
+func TestOrchestrateRestart_OutdatedNotReady_DeletedDespiteUnhealthy(t *testing.T) {
+	sts := newSTS("manager", "ns", "rev-1", "rev-3", 2)
+	result, remaining := runOrchestrator(t, sts,
+		&mockHealthChecker{healthy: false, message: "manager-1 not ready"},
+		newPod("manager-0", "ns", "manager", "rev-1", true),
+		newPod("manager-1", "ns", "manager", "rev-2", false), // crash-looping on the bad revision
+	)
+	if result.Phase != RestartPhaseInProgress || result.CurrentPod != "manager-1" {
+		t.Fatalf("expected InProgress deleting manager-1, got %+v", result)
+	}
+	names := podNames(remaining)
+	if names["manager-1"] {
+		t.Error("not-ready outdated pod manager-1 was not deleted")
+	}
+	if !names["manager-0"] {
+		t.Error("ready pod manager-0 must not be deleted in the same step")
+	}
+}
+
+// TestOrchestrateRestart_UpdatedNotReady_DoesNotSpread asserts a new revision whose pod does
+// not come up is never rolled to the remaining (ready, outdated) pods.
+func TestOrchestrateRestart_UpdatedNotReady_DoesNotSpread(t *testing.T) {
+	sts := newSTS("manager", "ns", "rev-1", "rev-2", 2)
+	result, remaining := runOrchestrator(t, sts, &mockHealthChecker{healthy: true},
+		newPod("manager-0", "ns", "manager", "rev-1", true),
+		newPod("manager-1", "ns", "manager", "rev-2", false),
+	)
+	if result.Phase != RestartPhaseInProgress || result.CurrentPod != "manager-1" {
+		t.Fatalf("expected InProgress waiting on manager-1, got %+v", result)
+	}
+	if len(remaining.Items) != 2 {
+		t.Errorf("no pod should be deleted while the updated pod is not ready, %d left", len(remaining.Items))
+	}
+}
+
+// TestOrchestrateRestart_Terminating_Waits asserts no further deletion happens while a pod is
+// still terminating.
+func TestOrchestrateRestart_Terminating_Waits(t *testing.T) {
+	sts := newSTS("manager", "ns", "rev-1", "rev-2", 2)
+	terminating := newPod("manager-1", "ns", "manager", "rev-1", false)
+	now := metav1.Now()
+	terminating.DeletionTimestamp = &now
+	terminating.Finalizers = []string{"test/keep"}
+	result, remaining := runOrchestrator(t, sts, &mockHealthChecker{healthy: true},
+		newPod("manager-0", "ns", "manager", "rev-1", true),
+		terminating,
+	)
+	if result.Phase != RestartPhaseInProgress || result.CurrentPod != "manager-1" {
+		t.Fatalf("expected InProgress waiting on terminating manager-1, got %+v", result)
+	}
+	if !podNames(remaining)["manager-0"] {
+		t.Error("manager-0 must not be deleted while manager-1 is terminating")
+	}
+}

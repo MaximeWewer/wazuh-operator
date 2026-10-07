@@ -47,7 +47,9 @@ func NewOrchestrator(c client.Client) *RollingRestartOrchestrator {
 //  1. Compare UpdateRevision vs CurrentRevision - if equal, no restart needed.
 //  2. List pods and compare each pod's controller-revision-hash label to UpdateRevision.
 //  3. If all pods are on target revision → Complete.
-//  4. If any pod is not ready → InProgress (wait for replacement to become ready).
+//  4. If a pod is terminating → InProgress (wait). If an outdated pod is not ready →
+//     delete it now (it serves nothing; waiting would deadlock recovery from a bad
+//     revision). If an updated pod is not ready → InProgress (wait for it).
 //  5. Call healthChecker.IsHealthyForRestart() → if unhealthy, InProgress (wait).
 //  6. Delete ONE outdated pod (highest ordinal first when deleteHighestFirst=true).
 //  7. Return InProgress with CurrentPod set.
@@ -120,7 +122,48 @@ func (o *RollingRestartOrchestrator) OrchestrateRestart(
 		}, nil
 	}
 
-	// Step 4: Check if any pod is not ready (wait for in-flight replacement)
+	// Step 4a: Wait while a deletion is still in flight, so a terminating pod is never
+	// deleted twice nor counted as a candidate.
+	for _, pod := range ownedPods {
+		if pod.DeletionTimestamp != nil {
+			return &RestartResult{
+				Phase:       RestartPhaseInProgress,
+				TotalPods:   totalPods,
+				UpdatedPods: updatedCount,
+				CurrentPod:  pod.Name,
+				Message:     fmt.Sprintf("waiting for pod %s to terminate", pod.Name),
+			}, nil
+		}
+	}
+
+	// Step 4b: Replace an outdated pod that is not ready right away. It serves nothing, so
+	// deleting it costs no availability, and it is how the cluster recovers when a bad
+	// revision (e.g. an invalid rule) crash-looped a pod and a fixed revision followed:
+	// waiting for it to become ready first would deadlock forever. The health check is
+	// skipped for the same reason - it would count this very pod as unhealthy.
+	sortByOrdinal(outdatedPods, deleteHighestFirst)
+	for _, pod := range outdatedPods {
+		if isPodReady(&pod) {
+			continue
+		}
+		log.Info("Deleting outdated pod that is not ready",
+			"pod", pod.Name,
+			"currentRevision", pod.Labels["controller-revision-hash"],
+			"targetRevision", targetRevision)
+		if err := o.client.Delete(ctx, &pod); err != nil {
+			return nil, fmt.Errorf("failed to delete pod %s: %w", pod.Name, err)
+		}
+		return &RestartResult{
+			Phase:       RestartPhaseInProgress,
+			TotalPods:   totalPods,
+			UpdatedPods: updatedCount,
+			CurrentPod:  pod.Name,
+			Message:     fmt.Sprintf("deleted not-ready outdated pod %s (%d/%d updated)", pod.Name, updatedCount, totalPods),
+		}, nil
+	}
+
+	// Step 4c: Wait for an updated pod that is not ready yet (in-flight replacement, or a
+	// new revision that does not come up - never spread it to the remaining pods).
 	for _, pod := range ownedPods {
 		if !isPodReady(&pod) {
 			log.V(1).Info("Waiting for pod to become ready",
@@ -151,16 +194,7 @@ func (o *RollingRestartOrchestrator) OrchestrateRestart(
 		}, nil
 	}
 
-	// Step 6: Sort outdated pods by ordinal and delete one
-	sort.Slice(outdatedPods, func(i, j int) bool {
-		oi := extractOrdinal(outdatedPods[i].Name)
-		oj := extractOrdinal(outdatedPods[j].Name)
-		if deleteHighestFirst {
-			return oi > oj // descending: highest ordinal first
-		}
-		return oi < oj // ascending: lowest ordinal first
-	})
-
+	// Step 6: Delete one outdated pod (already sorted by ordinal in step 4b)
 	podToDelete := outdatedPods[0]
 	log.Info("Deleting outdated pod for rolling restart",
 		"pod", podToDelete.Name,
@@ -180,6 +214,18 @@ func (o *RollingRestartOrchestrator) OrchestrateRestart(
 		CurrentPod:  podToDelete.Name,
 		Message:     fmt.Sprintf("deleted pod %s (%d/%d updated)", podToDelete.Name, updatedCount, totalPods),
 	}, nil
+}
+
+// sortByOrdinal sorts pods by StatefulSet ordinal, highest first when highestFirst is set.
+func sortByOrdinal(pods []corev1.Pod, highestFirst bool) {
+	sort.Slice(pods, func(i, j int) bool {
+		oi := extractOrdinal(pods[i].Name)
+		oj := extractOrdinal(pods[j].Name)
+		if highestFirst {
+			return oi > oj // descending: highest ordinal first
+		}
+		return oi < oj // ascending: lowest ordinal first
+	})
 }
 
 // isPodReady checks if a pod has the Ready condition set to True.

@@ -18,6 +18,7 @@ package validation
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -398,6 +399,85 @@ func TestFormatValidationErrors(t *testing.T) {
 			got := FormatValidationErrors(tt.errors)
 			if got != tt.want {
 				t.Errorf("FormatValidationErrors() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestValidateRuleStructure guards against rule content that is well-formed XML but makes
+// wazuh-analysisd refuse the ruleset at startup ("Invalid option ..."), crash-looping the
+// manager while the CR reported Applied.
+func TestValidateRuleStructure(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		wantErr string
+	}{
+		{
+			name: "valid rule with mitre, list and options",
+			content: `<var name="BAD">1.2.3.4</var>
+<group name="sshd,custom">
+  <!-- comment -->
+  <rule id="100100" level="10" frequency="5" timeframe="120">
+    <if_matched_sid>5710</if_matched_sid>
+    <same_source_ip />
+    <list field="srcip" lookup="address_match_key">etc/lists/bad</list>
+    <Description>Brute force</Description>
+    <mitre><id>T1110</id><tacticID>TA0006</tacticID></mitre>
+    <options>no_full_log</options>
+    <group>attack,</group>
+  </rule>
+</group>`,
+		},
+		{
+			name: "unknown rule option (removed geoip_src)",
+			content: `<group name="custom">
+  <rule id="100102" level="8">
+    <geoip_src>CN</geoip_src>
+    <description>x</description>
+  </rule>
+</group>`,
+			wantErr: "rule 100102: invalid option <geoip_src>",
+		},
+		{
+			name:    "rule outside a group",
+			content: `<rule id="100100" level="3"><description>x</description></rule>`,
+			wantErr: "invalid root element <rule>",
+		},
+		{
+			name:    "non-rule element in group",
+			content: `<group name="g"><decoder name="d"/><rule id="100100" level="3"><description>x</description></rule></group>`,
+			wantErr: "invalid element <decoder> in group",
+		},
+		{
+			name:    "group without rules",
+			content: `<group name="empty"></group>`,
+			wantErr: "group without any rule",
+		},
+		{
+			name:    "unknown mitre option",
+			content: `<group name="g"><rule id="100100" level="3"><description>x</description><mitre><tactic>TA0006</tactic></mitre></rule></group>`,
+			wantErr: "rule 100100: invalid option <tactic> in <mitre>",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validateRuleStructure(tt.content)
+			if tt.wantErr == "" {
+				if len(errs) != 0 {
+					t.Fatalf("unexpected errors: %v", errs)
+				}
+				return
+			}
+			found := false
+			for _, e := range errs {
+				if strings.Contains(e, tt.wantErr) {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("errors %v do not contain %q", errs, tt.wantErr)
 			}
 		})
 	}
