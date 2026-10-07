@@ -25,6 +25,7 @@ import (
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
+	"github.com/MaximeWewer/wazuh-operator/pkg/versions"
 )
 
 const (
@@ -230,6 +231,24 @@ func DefaultRulesetConfig() *RulesetConfig {
 		RuleDirs:    []string{"ruleset/rules", "etc/rules"},
 		DecoderDirs: []string{"ruleset/decoders", "etc/decoders"},
 	}
+}
+
+// StockRulesetLists returns the CDB lists the stock Wazuh ossec.conf declares in <ruleset>
+// for a manager version: etc/lists/audit-keys, plus the malicious-ioc lists shipped since
+// 4.14. analysisd only compiles declared lists, so without them the default rules that look
+// them up (e.g. the audit rules 80789/80792) are ignored. Unparseable versions get the
+// 4.9-4.13 set.
+func StockRulesetLists(wazuhVersion string) []string {
+	lists := []string{"etc/lists/audit-keys"}
+	v, err := versions.ParseVersion(wazuhVersion)
+	if err == nil && v.GreaterThanOrEqual(&versions.Version{Major: 4, Minor: 14}) {
+		lists = append(lists,
+			"etc/lists/malicious-ioc/malware-hashes",
+			"etc/lists/malicious-ioc/malicious-ip",
+			"etc/lists/malicious-ioc/malicious-domains",
+		)
+	}
+	return lists
 }
 
 // IndexerConfig holds configuration for the <indexer> section

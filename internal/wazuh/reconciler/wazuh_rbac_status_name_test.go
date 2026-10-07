@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/config"
 )
 
 // TestRBACStatusReportsEffectiveName guards the kubectl printer columns of WazuhRole and
@@ -50,4 +51,17 @@ func TestRBACStatusReportsEffectiveName(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestWithStockRulesetLists asserts the stock lists are declared by default and that
+// manager.config.ruleset.lists, when set, replaces them.
+func TestWithStockRulesetLists(t *testing.T) {
+	got := withStockRulesetLists("4.9.0", nil)
+	if len(got.Lists) != 1 || got.Lists[0] != "etc/lists/audit-keys" {
+		t.Errorf("default lists = %v, want [etc/lists/audit-keys]", got.Lists)
+	}
+	user := &config.RulesetConfig{Lists: []string{"etc/lists/mine"}}
+	if got := withStockRulesetLists("4.9.0", user); len(got.Lists) != 1 || got.Lists[0] != "etc/lists/mine" {
+		t.Errorf("user lists overridden: %v", got.Lists)
+	}
 }

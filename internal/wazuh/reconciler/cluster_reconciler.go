@@ -2777,12 +2777,25 @@ func (r *ClusterReconciler) withCDBListEntries(ctx context.Context, cluster *waz
 	return rulesetCfg
 }
 
+// withStockRulesetLists declares the CDB lists of the stock Wazuh ossec.conf (see
+// config.StockRulesetLists) unless manager.config.ruleset.lists is set, which replaces them.
+func withStockRulesetLists(wazuhVersion string, rulesetCfg *config.RulesetConfig) *config.RulesetConfig {
+	if rulesetCfg == nil {
+		rulesetCfg = config.DefaultRulesetConfig()
+	}
+	if len(rulesetCfg.Lists) == 0 {
+		rulesetCfg.Lists = config.StockRulesetLists(wazuhVersion)
+	}
+	return rulesetCfg
+}
+
 // buildMasterOSSECConfig builds ossec.conf for manager master, honoring manager.config and authd secret refs.
 func (r *ClusterReconciler) buildMasterOSSECConfig(ctx context.Context, cluster *wazuhv1.WazuhCluster, extraConfig string) (string, error) {
 	sections, authdPassword := r.resolveManagerConfig(ctx, cluster)
 
 	extraConfig = r.appendIntegrationBlocks(ctx, cluster, extraConfig, config.NodeTypeMaster)
 	extraConfig = r.appendActiveResponseBlocks(ctx, cluster, extraConfig, config.NodeTypeMaster)
+	sections.Ruleset = withStockRulesetLists(cluster.Spec.Version, sections.Ruleset)
 	sections.Ruleset = r.withCDBListEntries(ctx, cluster, sections.Ruleset)
 
 	ossecConfig := config.DefaultOSSECConfig(cluster.Name, cluster.Name+"-manager-master")
@@ -2805,6 +2818,7 @@ func (r *ClusterReconciler) buildWorkerOSSECConfig(ctx context.Context, cluster 
 
 	extraConfig = r.appendIntegrationBlocks(ctx, cluster, extraConfig, config.NodeTypeWorker)
 	extraConfig = r.appendActiveResponseBlocks(ctx, cluster, extraConfig, config.NodeTypeWorker)
+	sections.Ruleset = withStockRulesetLists(cluster.Spec.Version, sections.Ruleset)
 	sections.Ruleset = r.withCDBListEntries(ctx, cluster, sections.Ruleset)
 
 	ossecConfig := config.DefaultOSSECConfig(cluster.Name, cluster.Name+"-manager-worker")
