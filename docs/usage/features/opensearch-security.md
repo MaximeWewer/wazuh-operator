@@ -2,9 +2,9 @@
 
 This guide covers all OpenSearch Security CRDs for managing users, roles, and access control.
 
-[![Who sees what, declared](../../assets/videos/03-access-as-code.jpg)](../../assets/videos/03-access-as-code.mp4)
+[![Who sees what, declared](../../assets/videos/03-access-as-code.webp)](../../assets/videos/03-access-as-code.mp4)
 
-*`OpenSearchUser` / `OpenSearchRoleMapping` and `WazuhRole` / `WazuhUser` in action (20s) - click to play.*
+*`OpenSearchUser` / `OpenSearchRoleMapping` and `WazuhRole` / `WazuhUser` in action (20s). Click for the full-resolution MP4 with sound.*
 
 ## Overview
 

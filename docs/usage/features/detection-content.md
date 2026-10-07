@@ -9,9 +9,9 @@ follow - how content reaches the manager pods and how it is wired into
 For the exhaustive per-field API, see the [CRD Reference](../CRD-REFERENCE.md).
 Ready-to-apply manifests live in [examples/wazuh-content/](../examples/wazuh-content/).
 
-[![Detection rules live in Git now](../../assets/videos/02-detection-as-code.jpg)](../../assets/videos/02-detection-as-code.mp4)
+[![Detection rules live in Git now](../../assets/videos/02-detection-as-code.webp)](../../assets/videos/02-detection-as-code.mp4)
 
-*`WazuhRule`, `WazuhCDBList` and `WazuhActiveResponse` in action (21s) - click to play.*
+*`WazuhRule`, `WazuhCDBList` and `WazuhActiveResponse` in action (21s). Click for the full-resolution MP4 with sound.*
 
 ## Content CRDs at a glance
 

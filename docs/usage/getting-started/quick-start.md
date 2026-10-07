@@ -2,9 +2,9 @@
 
 Quick start guide to deploy and test the Wazuh operator locally.
 
-[![One manifest, a whole SIEM](../../assets/videos/01-one-manifest.jpg)](../../assets/videos/01-one-manifest.mp4)
+[![One manifest, a whole SIEM](../../assets/videos/01-one-manifest.webp)](../../assets/videos/01-one-manifest.mp4)
 
-*What this guide ends with: one `WazuhCluster` manifest, a running Wazuh stack (20s) - click to play.*
+*What this guide ends with: one `WazuhCluster` manifest, a running Wazuh stack (20s). Click for the full-resolution MP4 with sound.*
 
 ## Quick Start (2 commands)
 

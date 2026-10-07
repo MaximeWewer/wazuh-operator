@@ -1,8 +1,8 @@
 # Wazuh Manager API RBAC (`WazuhRole` / `WazuhUser`)
 
-[![Who sees what, declared](../../assets/videos/03-access-as-code.jpg)](../../assets/videos/03-access-as-code.mp4)
+[![Who sees what, declared](../../assets/videos/03-access-as-code.webp)](../../assets/videos/03-access-as-code.mp4)
 
-*Indexer and Manager API access declared as CRDs (20s) - click to play.*
+*Indexer and Manager API access declared as CRDs (20s). Click for the full-resolution MP4 with sound.*
 
 The Wazuh dashboard talks to two backends:
 
