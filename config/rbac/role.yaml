@@ -30,6 +30,7 @@ rules:
   - ""
   resources:
   - persistentvolumeclaims
+  - pods
   verbs:
   - delete
   - get
@@ -39,18 +40,18 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - pods
+  - pods/exec
+  verbs:
+  - create
+- apiGroups:
+  - apps
+  resources:
+  - controllerrevisions
   verbs:
   - delete
   - get
   - list
   - watch
-- apiGroups:
-  - ""
-  resources:
-  - pods/exec
-  verbs:
-  - create
 - apiGroups:
   - apps
   resources:

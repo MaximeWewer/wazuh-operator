@@ -832,6 +832,11 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 			}, nil
 		}
 		log.Info("Creating Master StatefulSet", "name", sts.Name, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash), "ruleHash", utils.ShortHash(ruleHash), "decoderHash", utils.ShortHash(decoderHash), "agentGroupFilesHash", utils.ShortHash(agentGroupFilesHash), "integrationHash", utils.ShortHash(integrationHash))
+		// Pods left by an interrupted selector migration keep running without a controller:
+		// relabel them so the new StatefulSet adopts them instead of colliding on their names.
+		if err := utils.AdoptOrphanedStatefulSetPods(ctx, r.Client, sts, ""); err != nil {
+			return nil, err
+		}
 		if err := r.Create(ctx, sts); err != nil {
 			return nil, fmt.Errorf("failed to create master statefulset: %w", err)
 		}
@@ -1502,6 +1507,11 @@ func (r *ClusterReconciler) reconcileWorkersNonBlocking(ctx context.Context, clu
 			}, nil
 		}
 		log.Info("Creating Worker StatefulSet", "name", sts.Name, "replicas", replicas, "certHash", utils.ShortHash(certHash), "configHash", utils.ShortHash(configHash), "specHash", utils.ShortHash(specHash), "ruleHash", utils.ShortHash(ruleHash), "decoderHash", utils.ShortHash(decoderHash), "agentGroupFilesHash", utils.ShortHash(agentGroupFilesHash), "integrationHash", utils.ShortHash(integrationHash))
+		// Pods left by an interrupted selector migration keep running without a controller:
+		// relabel them so the new StatefulSet adopts them instead of colliding on their names.
+		if err := utils.AdoptOrphanedStatefulSetPods(ctx, r.Client, sts, ""); err != nil {
+			return nil, err
+		}
 		if err := r.Create(ctx, sts); err != nil {
 			return nil, fmt.Errorf("failed to create worker statefulset: %w", err)
 		}
@@ -2052,6 +2062,11 @@ func (r *ClusterReconciler) reconcileMasterWithCertHash(ctx context.Context, clu
 	err = r.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 		log.Info("Creating Master StatefulSet", "name", sts.Name, "certHash", utils.ShortHash(certHash))
+		// Pods left by an interrupted selector migration keep running without a controller:
+		// relabel them so the new StatefulSet adopts them instead of colliding on their names.
+		if err := utils.AdoptOrphanedStatefulSetPods(ctx, r.Client, sts, ""); err != nil {
+			return err
+		}
 		if err := r.Create(ctx, sts); err != nil {
 			return fmt.Errorf("failed to create master statefulset: %w", err)
 		}
@@ -2412,6 +2427,11 @@ func (r *ClusterReconciler) reconcileWorkersWithCertHash(ctx context.Context, cl
 	err = r.Get(ctx, types.NamespacedName{Name: sts.Name, Namespace: sts.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 		log.Info("Creating Worker StatefulSet", "name", sts.Name, "replicas", workerReplicas2, "certHash", utils.ShortHash(certHash))
+		// Pods left by an interrupted selector migration keep running without a controller:
+		// relabel them so the new StatefulSet adopts them instead of colliding on their names.
+		if err := utils.AdoptOrphanedStatefulSetPods(ctx, r.Client, sts, ""); err != nil {
+			return err
+		}
 		if err := r.Create(ctx, sts); err != nil {
 			return fmt.Errorf("failed to create worker statefulset: %w", err)
 		}

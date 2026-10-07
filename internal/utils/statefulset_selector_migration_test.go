@@ -100,6 +100,7 @@ func TestMigrateStatefulSetSelector_SameSelectorIsNoop(t *testing.T) {
 	sel := map[string]string{"app.kubernetes.io/name": "wazuh-manager"}
 	existing := selectorSTS("s", sel, sel)
 	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
 	_ = appsv1.AddToScheme(scheme)
 	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()
 
@@ -120,5 +121,51 @@ func TestIsStatefulSetPodName(t *testing.T) {
 		if got := isStatefulSetPodName("c-manager-master", name); got != want {
 			t.Errorf("isStatefulSetPodName(%q) = %v, want %v", name, got, want)
 		}
+	}
+}
+
+// TestMigrateStatefulSetSelector_ResumesAfterRecreation reproduces an interrupted migration
+// seen on a live cluster: the StatefulSet was already recreated with the new selector but its
+// pods kept the old labels with no controller, so the StatefulSet could not create its pods
+// (names taken) and nothing retried the relabel. The next call must adopt them, and must not
+// touch a pod owned by another controller.
+func TestMigrateStatefulSetSelector_ResumesAfterRecreation(t *testing.T) {
+	oldLabels := map[string]string{"app.kubernetes.io/name": "wazuh-wazuh-manager", "node-type": "master"}
+	newSel := map[string]string{"app.kubernetes.io/name": "wazuh-manager", "node-type": "master"}
+	newTemplate := map[string]string{"app.kubernetes.io/name": "wazuh-manager", "app.kubernetes.io/component": "manager", "node-type": "master"}
+
+	sts := selectorSTS("c-manager-master", newSel, newTemplate)
+	owned := labeledPod("c-manager-master-1", oldLabels)
+	ctrl := true
+	owned.OwnerReferences = []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "StatefulSet", Name: "other", UID: "other-uid", Controller: &ctrl}}
+
+	scheme := runtime.NewScheme()
+	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(sts, labeledPod("c-manager-master-0", oldLabels), owned).Build()
+	ctx := context.Background()
+
+	migrating, err := MigrateStatefulSetSelector(ctx, c, nil, sts, sts)
+	if err != nil || migrating {
+		t.Fatalf("MigrateStatefulSetSelector() = %v, %v; want false, nil", migrating, err)
+	}
+	pod := &corev1.Pod{}
+	_ = c.Get(ctx, types.NamespacedName{Name: "c-manager-master-0", Namespace: "ns"}, pod)
+	if pod.Labels["app.kubernetes.io/name"] != "wazuh-manager" || pod.Labels["app.kubernetes.io/component"] != "manager" {
+		t.Errorf("orphaned pod not relabeled for adoption: %v", pod.Labels)
+	}
+	_ = c.Get(ctx, types.NamespacedName{Name: "c-manager-master-1", Namespace: "ns"}, pod)
+	if pod.Labels["app.kubernetes.io/name"] != "wazuh-wazuh-manager" {
+		t.Errorf("pod owned by another controller was relabeled: %v", pod.Labels)
+	}
+
+	// Also when the StatefulSet does not exist yet (create path).
+	c2 := fake.NewClientBuilder().WithScheme(scheme).WithObjects(labeledPod("c-manager-master-0", oldLabels)).Build()
+	if err := AdoptOrphanedStatefulSetPods(ctx, c2, sts, ""); err != nil {
+		t.Fatal(err)
+	}
+	_ = c2.Get(ctx, types.NamespacedName{Name: "c-manager-master-0", Namespace: "ns"}, pod)
+	if pod.Labels["app.kubernetes.io/name"] != "wazuh-manager" {
+		t.Errorf("orphaned pod not relabeled before create: %v", pod.Labels)
 	}
 }

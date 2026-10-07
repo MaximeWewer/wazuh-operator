@@ -30,6 +30,7 @@ rules:
   - delete
   - get
   - list
+  - patch
   - watch
 - apiGroups:
   - ""
@@ -76,6 +77,16 @@ rules:
   - list
   - patch
   - update
+  - watch
+# ControllerRevisions of a StatefulSet migrated to a new selector (cleanup)
+- apiGroups:
+  - apps
+  resources:
+  - controllerrevisions
+  verbs:
+  - delete
+  - get
+  - list
   - watch
 # Batch resources
 - apiGroups:
