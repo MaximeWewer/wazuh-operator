@@ -1651,7 +1651,7 @@ The `format` field selects the converter applied to raw `content`/`source` text.
 | `format`  | Converter                                                                                             | Use for                                            |
 | --------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
 | `cdb`     | Passthrough - normalizes whitespace, drops blank lines. Content is already `key:value` / `key:` lines. | Hand-written CDB lists                             |
-| `iplist`  | IP/CIDR list → key-only entries, keeping the network prefix for `/8`, `/16`, `/24`, `/32` masks (unsupported masks skipped). Go port of Wazuh's `iplist-to-cdblist.py`. | Firewall / threat-intel IP lists                   |
+| `iplist`  | IP/CIDR list → key-only entries, keeping the network prefix for `/8`, `/16`, `/24`, `/32` masks. Other masks expand to the covering prefixes (`10.0.0.0/23` → `10.0.0.`, `10.0.1.`; at most 128 per line) instead of being dropped as Wazuh's `iplist-to-cdblist.py` does. | Firewall / threat-intel IP lists                   |
 | `keylist` | One key per line → key-only entry (`key:`). Lines already containing `:` are kept as-is. | Hash lists (VirusShare MD5 dumps), domain lists, user lists, any newline-separated key set |
 
 `skipLines` drops the first N lines before conversion - e.g. VirusShare hash dumps start with a commented header (their own script skips the first 6 lines).

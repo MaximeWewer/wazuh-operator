@@ -764,8 +764,11 @@ func buildConfigInitContainer(certInstall string, mounts []corev1.VolumeMount) c
 // so an init-fetched large list yields the same CDB content the operator would have baked
 // into a ConfigMap. They avoid POSIX interval regex ({n}) which busybox awk lacks.
 const (
-	// cdbFetchAWKIPList mirrors cdblist.IPListToCDB.
-	cdbFetchAWKIPList = `{ sub(/\r$/,""); if (match($0, "^[0-9][0-9]?[0-9]?\\.[0-9][0-9]?[0-9]?\\.[0-9][0-9]?[0-9]?\\.[0-9][0-9]?[0-9]?(/[0-9][0-9]?)?")) { tok=substr($0,RSTART,RLENGTH); s=index(tok,"/"); if(s>0){ip=substr(tok,1,s-1);mask=substr(tok,s+1)}else{ip=tok;mask=""}; if(mask!=""){keep=0; if(mask=="32")keep=4; else if(mask=="24")keep=3; else if(mask=="16")keep=2; else if(mask=="8")keep=1; if(keep==0)next; m=split(ip,o,"."); if(keep>m)next; ip=o[1]; for(i=2;i<=keep;i++)ip=ip"."o[i]; if(mask!="32")ip=ip"."} print ip":" } }`
+	// cdbFetchAWKIPList mirrors cdblist.IPListToCDB, including the expansion of masks that
+	// are not on an octet boundary into the covering prefixes. Address arithmetic uses
+	// plain numbers (exact below 2^53) and powers of two are built with loops: busybox awk
+	// may be built without its math library, which rejects the ^ operator.
+	cdbFetchAWKIPList = `{ sub(/\r$/,""); if (!match($0, "^[0-9][0-9]?[0-9]?\\.[0-9][0-9]?[0-9]?\\.[0-9][0-9]?[0-9]?\\.[0-9][0-9]?[0-9]?(/[0-9][0-9]?)?")) next; tok=substr($0,RSTART,RLENGTH); s=index(tok,"/"); if(s==0){print tok":"; next}; ip=substr(tok,1,s-1); bits=substr(tok,s+1)+0; if(bits>32)next; split(ip,o,"."); if(o[1]>255||o[2]>255||o[3]>255||o[4]>255)next; keep=int((bits+7)/8); if(keep<1)keep=1; v=((o[1]*256+o[2])*256+o[3])*256+o[4]; blk=1; for(e=bits;e<32;e++)blk*=2; v=v-(v%blk); step=1; for(e=keep*8;e<32;e++)step*=2; n=1; for(e=bits;e<keep*8;e++)n*=2; for(i=0;i<n;i++){a=v+i*step; p=int(a/16777216)%256; if(keep>=2)p=p"."int(a/65536)%256; if(keep>=3)p=p"."int(a/256)%256; if(keep==4)p=p"."a%256; else p=p"."; print p":"} }`
 
 	// cdbFetchAWKKeyList mirrors cdblist.KeyListToCDB.
 	cdbFetchAWKKeyList = `{ sub(/^[ \t\r]+/,""); sub(/[ \t\r]+$/,""); if($0==""||substr($0,1,1)=="#")next; if(index($0,":")==0)$0=$0":"; print }`

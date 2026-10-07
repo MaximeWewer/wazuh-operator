@@ -22,6 +22,7 @@ package cdblist
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -30,18 +31,21 @@ import (
 // Wazuh's iplist-to-cdblist.py conversion script.
 var ipLineRegex = regexp.MustCompile(`^((?:\d{1,3}\.){3}\d{1,3})(?:/(\d{1,2}))?`)
 
-// cidrOctets maps a supported CIDR mask to the number of leading octets kept.
-var cidrOctets = map[string]int{"32": 4, "24": 3, "16": 2, "8": 1}
-
-// IPListToCDB converts a plain IP/CIDR list into CDB list content, reproducing the
-// behavior of Wazuh's iplist-to-cdblist.py script:
+// IPListToCDB converts a plain IP/CIDR list into CDB list content, following Wazuh's
+// iplist-to-cdblist.py script:
 //
 //   - only lines that start with an IPv4 address are considered;
-//   - a supported CIDR mask (/8, /16, /24, /32) truncates the address to the network
-//     prefix and - for anything other than /32 - leaves a trailing dot so Wazuh matches
-//     the whole subnet (e.g. "10.0.0.0/24" -> "10.0.0.");
-//   - unsupported masks skip the line;
+//   - a /8, /16, /24 or /32 mask truncates the address to the network prefix and - for
+//     anything other than /32 - leaves a trailing dot so Wazuh matches the whole subnet
+//     (e.g. "10.0.0.0/24" -> "10.0.0.");
 //   - each resulting address becomes a key-only entry ("ip:").
+//
+// Unlike the upstream script, which silently drops every other mask (about half of a feed
+// like FireHOL level1), any other mask is expanded into the covering prefixes of the next
+// octet boundary that address_match_key lookups understand: "10.0.0.0/23" yields
+// "10.0.0." and "10.0.1.", a /12 yields 16 two-octet prefixes, a /30 yields 4 addresses.
+// A mask covers at most 128 prefixes (/0 yields the 256 one-octet prefixes). Lines with a
+// mask above 32 or an octet above 255 are skipped.
 //
 // Output entries are newline-separated with a trailing newline.
 func IPListToCDB(input string) string {
@@ -52,22 +56,53 @@ func IPListToCDB(input string) string {
 		if m == nil {
 			continue // read just lines that start with an IP
 		}
-		ip := m[1]
-		mask := m[2]
-		if mask != "" {
-			octets := strings.Split(ip, ".")
-			keep, ok := cidrOctets[mask]
-			if !ok || keep > len(octets) {
-				continue // convert only allowed masks (32, 24, 16, 8)
-			}
-			ip = strings.Join(octets[:keep], ".")
-			if mask != "32" {
-				ip += "."
-			}
+		if m[2] == "" {
+			entries = append(entries, m[1]+":")
+			continue
 		}
-		entries = append(entries, ip+":")
+		for _, prefix := range cidrPrefixes(m[1], m[2]) {
+			entries = append(entries, prefix+":")
+		}
 	}
 	return joinLines(entries)
+}
+
+// cidrPrefixes returns the address_match_key prefixes covering ip/mask, at the octet
+// boundary at or below the mask. It returns nil for an invalid mask or address.
+func cidrPrefixes(ip, mask string) []string {
+	bits, err := strconv.Atoi(mask)
+	if err != nil || bits > 32 {
+		return nil
+	}
+	var addr uint32
+	for o := range strings.SplitSeq(ip, ".") {
+		v, err := strconv.Atoi(o)
+		if err != nil || v > 255 {
+			return nil
+		}
+		addr = addr<<8 | uint32(v)
+	}
+
+	keepOctets := max((bits+7)/8, 1)
+	boundary := keepOctets * 8
+	addr &^= uint32(uint64(1)<<(32-bits) - 1) // network address
+	step := uint64(1) << (32 - boundary)
+	count := 1 << (boundary - bits)
+
+	prefixes := make([]string, 0, count)
+	for i := range count {
+		a := uint64(addr) + uint64(i)*step
+		octets := make([]string, keepOctets)
+		for j := range keepOctets {
+			octets[j] = strconv.FormatUint(a>>(24-8*j)&0xff, 10)
+		}
+		prefix := strings.Join(octets, ".")
+		if keepOctets < 4 {
+			prefix += "."
+		}
+		prefixes = append(prefixes, prefix)
+	}
+	return prefixes
 }
 
 // KeyListToCDB converts a plain list of keys (one per line) into CDB list content:

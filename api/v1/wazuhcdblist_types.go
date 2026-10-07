@@ -28,7 +28,8 @@ const (
 	// CDBListFormatCDB means the content is already in CDB list format (key:value lines).
 	CDBListFormatCDB CDBListFormat = "cdb"
 	// CDBListFormatIPList means the content is a plain IP/CIDR list that the operator
-	// converts to CDB list format (equivalent to Wazuh's iplist-to-cdblist.py script).
+	// converts to CDB list format (like Wazuh's iplist-to-cdblist.py script, except that
+	// masks off an octet boundary are expanded to the covering prefixes, not dropped).
 	CDBListFormatIPList CDBListFormat = "iplist"
 	// CDBListFormatKeyList means the content is a plain list of keys (one per line) that
 	// the operator converts to key-only CDB entries ("key:"). Generic converter for hash

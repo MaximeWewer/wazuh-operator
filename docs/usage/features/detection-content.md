@@ -106,7 +106,7 @@ optional `skipLines` header strip:
 | `format` | Converts | For |
 | -------- | -------- | --- |
 | `cdb` (default) | passthrough / normalize | hand-written `key:value` lists |
-| `iplist` | IP/CIDR list → key-only, keeping the prefix for `/8 /16 /24 /32` | firewall / threat-intel IP lists |
+| `iplist` | IP/CIDR list → key-only, keeping the prefix for `/8 /16 /24 /32` and expanding any other mask to the covering prefixes | firewall / threat-intel IP lists |
 | `keylist` | one key per line → `key:` | hash lists (VirusShare MD5 dumps), domain lists, user lists |
 
 The operator auto-injects `<list>etc/lists/<listName></list>`; reference the list

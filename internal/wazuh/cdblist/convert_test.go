@@ -35,8 +35,28 @@ func TestIPListToCDB(t *testing.T) {
 			want: "10.:\n172.16.:\n192.168.1.:\n203.0.113.5:\n",
 		},
 		{
-			name: "unsupported mask skipped",
-			in:   "10.0.0.0/25\n8.8.8.8",
+			name: "mask between octets expands to the covering /24 prefixes",
+			in:   "10.0.0.0/23\n8.8.8.8",
+			want: "10.0.0.:\n10.0.1.:\n8.8.8.8:\n",
+		},
+		{
+			name: "mask between octets expands to /16 and /8 prefixes",
+			in:   "172.16.0.0/14\n224.0.0.0/7",
+			want: "172.16.:\n172.17.:\n172.18.:\n172.19.:\n224.:\n225.:\n",
+		},
+		{
+			name: "host bits are masked to the network address",
+			in:   "192.168.3.77/22\n10.9.8.7/24",
+			want: "192.168.0.:\n192.168.1.:\n192.168.2.:\n192.168.3.:\n10.9.8.:\n",
+		},
+		{
+			name: "mask above /24 expands to single addresses",
+			in:   "198.51.100.9/30",
+			want: "198.51.100.8:\n198.51.100.9:\n198.51.100.10:\n198.51.100.11:\n",
+		},
+		{
+			name: "invalid mask or octet skipped",
+			in:   "10.0.0.0/33\n300.1.1.0/24\n8.8.8.8",
 			want: "8.8.8.8:\n",
 		},
 		{
