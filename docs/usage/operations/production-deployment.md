@@ -2,6 +2,10 @@
 
 This guide covers best practices for deploying the Wazuh Operator in production environments.
 
+[![Day 2, handled](../../assets/videos/04-day-two.jpg)](../../assets/videos/04-day-two.mp4)
+
+*Scaling, TLS, backups and index lifecycle handled by the operator (22s) - click to play.*
+
 ## Table of Contents
 
 - [High Availability](#high-availability)

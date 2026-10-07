@@ -2,6 +2,12 @@
 
 A Kubernetes operator for managing Wazuh clusters, providing a declarative way to deploy and configure Wazuh security monitoring platforms.
 
+[![One manifest, a whole SIEM](docs/assets/videos/01-one-manifest.jpg)](docs/assets/videos/01-one-manifest.mp4)
+
+*One `WazuhCluster` manifest deploys the indexer, managers and dashboard (20s) - click to play.*
+
+More short videos (detection-as-code, access-as-code, day-2 operations) in the [documentation](docs/index.md#videos).
+
 ## Features
 
 - **Declarative Cluster Management** - Define your entire Wazuh cluster using Kubernetes custom resources

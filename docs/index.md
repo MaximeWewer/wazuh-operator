@@ -17,6 +17,17 @@ helm template wazuh-cluster oci://ghcr.io/maximewewer/charts/wazuh-cluster \
 kubectl get wazuhcluster -n wazuh
 ```
 
+## Videos
+
+Short (~20s) videos recorded on a minikube lab - every terminal line is real `kubectl` output. Click a poster to play.
+
+| | |
+| --- | --- |
+| [![One manifest. A whole SIEM.](assets/videos/01-one-manifest.jpg)](assets/videos/01-one-manifest.mp4) | [![Detection rules live in Git now.](assets/videos/02-detection-as-code.jpg)](assets/videos/02-detection-as-code.mp4) |
+| **One manifest, a whole SIEM** - a `WazuhCluster` deploys indexer, managers and dashboard; everything else is a CRD too | **Detection as code** - `WazuhRule`, `WazuhCDBList` fed from a threat-intel URL, `WazuhActiveResponse` |
+| [![Who sees what, declared.](assets/videos/03-access-as-code.jpg)](assets/videos/03-access-as-code.mp4) | [![Day 2, handled.](assets/videos/04-day-two.jpg)](assets/videos/04-day-two.mp4) |
+| **Access as code** - `OpenSearchUser` / `OpenSearchRoleMapping` for the indexer, `WazuhRole` / `WazuhUser` for the Manager API | **Day 2, handled** - scaling workers, generated TLS certificates, backups and index lifecycle |
+
 ## Project Overview
 
 | Property        | Value                                       |
