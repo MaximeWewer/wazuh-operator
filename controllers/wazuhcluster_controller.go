@@ -1213,7 +1213,7 @@ func (r *WazuhClusterReconciler) updateStatus(ctx context.Context, cluster *wazu
 			latestCluster.Status.Indexer = status
 			if status != nil {
 				metrics.SetClusterReplicas(cluster.Name, cluster.Namespace, "indexer", status.ReadyReplicas, status.Replicas)
-				if status.ReadyReplicas < status.Replicas {
+				if componentNotReady(status) {
 					allReady = false
 					if status.ReadyReplicas == 0 {
 						componentHealths["indexer"] = metrics.ClusterHealthRed
@@ -1238,7 +1238,7 @@ func (r *WazuhClusterReconciler) updateStatus(ctx context.Context, cluster *wazu
 			latestCluster.Status.Manager = status
 			if status != nil {
 				metrics.SetClusterReplicas(cluster.Name, cluster.Namespace, "manager", status.ReadyReplicas, status.Replicas)
-				if status.ReadyReplicas < status.Replicas {
+				if componentNotReady(status) {
 					allReady = false
 					if status.ReadyReplicas == 0 {
 						componentHealths["manager"] = metrics.ClusterHealthRed
@@ -1263,7 +1263,7 @@ func (r *WazuhClusterReconciler) updateStatus(ctx context.Context, cluster *wazu
 			latestCluster.Status.Dashboard = status
 			if status != nil {
 				metrics.SetClusterReplicas(cluster.Name, cluster.Namespace, "dashboard", status.ReadyReplicas, status.Replicas)
-				if status.ReadyReplicas < status.Replicas {
+				if componentNotReady(status) {
 					allReady = false
 					if status.ReadyReplicas == 0 {
 						componentHealths["dashboard"] = metrics.ClusterHealthRed
@@ -2595,4 +2595,14 @@ func hasIngressEnabled(cluster *wazuhv1.WazuhCluster) bool {
 	}
 
 	return false
+}
+
+// componentNotReady reports whether a component runs fewer ready pods than it should: the
+// desired count when known, else the pods that exist. A component without any pod - e.g.
+// a StatefulSet just created, whose status still reports 0 replicas - is never ready;
+// comparing ReadyReplicas to the observed Replicas alone (0 < 0) marked the whole cluster
+// Ready before the indexer pod even existed.
+func componentNotReady(s *wazuhv1.ComponentStatus) bool {
+	want := max(s.Replicas, s.DesiredReplicas)
+	return want == 0 || s.ReadyReplicas < want
 }
