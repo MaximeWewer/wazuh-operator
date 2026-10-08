@@ -98,9 +98,11 @@ Who can see the imported dashboards is governed by the usual OpenSearch security
   The one exception is a JWT-only setup with a custom header (`OpenSearchAuthConfig`
   `jwt.jwtHeader`, e.g. Teleport's `Teleport-Jwt-Assertion`): the dashboard then only
   recognizes that header and answers 401 to the operator. On **Wazuh 4.12+**, enable
-  `basicAuth` next to `jwt` in the `OpenSearchAuthConfig`: the dashboard switches to multiple
-  authentication, where the basic handler accepts the operator's `Authorization` header
-  whatever the JWT header is. Side effect: the dashboard login page also offers the
+  `basicAuth` next to `jwt` in the `OpenSearchAuthConfig`, with a higher `order` than `jwt`
+  (the operator rejects the reverse, which would hide the JWT domain): the dashboard
+  switches to multiple authentication, where the basic handler accepts the operator's
+  `Authorization` header whatever the JWT header is. Verified on Wazuh 4.14 with a custom
+  header: JWT users sign in through the dashboard and the operator imports its objects. Side effect: the dashboard login page also offers the
   username/password form for internal users. This combination is not available on Wazuh 4.9
   to 4.11 (their dashboard cannot combine `jwt` with another method).
 - HTTPS is verified against the dashboard's own CA (`<cluster>-dashboard-certs`), or plain

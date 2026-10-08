@@ -850,7 +850,7 @@ tokens such as Teleport application access.
 | `transportEnabled`          | bool         | No       | `false`         | Enable on transport layer                                                |
 | `signingKeyRef`             | SecretKeyRef | No\*     | -               | Secret with the signing key (see "Signing key format" below)             |
 | `jwksUrl`                   | string       | No\*     | -               | JWKS endpoint to fetch public keys (e.g. Teleport proxy)                 |
-| `jwtHeader`                 | string       | No       | `Authorization` | HTTP header carrying the token                                          |
+| `jwtHeader`                 | string       | No       | `Authorization` | HTTP header carrying the token (a custom header is also forwarded by the dashboard to the indexer) |
 | `jwtUrlParameter`           | string       | No       | -               | Read token from a URL query parameter instead of a header               |
 | `subjectKey`                | string       | No       | (`sub`)         | JWT claim used as the username                                           |
 | `rolesKey`                  | string       | No       | -               | JWT claim containing backend roles                                       |
@@ -893,6 +893,10 @@ kubectl create secret generic teleport-jwt-key -n wazuh --from-file=signing_key=
 ```
 
 **Example - JWT (Teleport JWKS) + local basic auth:**
+
+> **Order matters.** A domain with `challenge: true` answers 401 as soon as it finds no
+> credentials, without trying the domains after it, so `basicAuth` (challenge on) must come
+> after `jwt`, as below. The operator rejects the reverse.
 
 > **Requires Wazuh 4.12+ (OpenSearch Dashboards 2.18+).** Combining `jwt` with another
 > dashboard sign-in method (`basicAuth`, `oidc` or `saml`) renders a multiple-authentication
