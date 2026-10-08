@@ -239,9 +239,7 @@ kubectl delete -f <(helm template wazuh-operator ./charts/wazuh-operator --names
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| updateStrategy.rollingUpdate.maxSurge | int | `1` | Max extra pods during update |
-| updateStrategy.rollingUpdate.maxUnavailable | int | `0` | Max unavailable pods during update |
-| updateStrategy.type | string | `"RollingUpdate"` | Update strategy type |
+| updateStrategy.type | string | `"Recreate"` | Update strategy type. `Recreate` stops the old operator pod before the new one starts, so two operator versions never reconcile at the same time - even when upgrading from a release without leader election. With leader election on, a `RollingUpdate` (add a `rollingUpdate` block) is also safe. |
 
 ### Network Policy Configuration
 

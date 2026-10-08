@@ -382,16 +382,13 @@ leaderElection:
 
 # @section Update Strategy Configuration
 
-# @extra updateStrategy Rolling update strategy
+# @extra updateStrategy Operator Deployment update strategy
 updateStrategy:
-  # -- Update strategy type
-  type: RollingUpdate
-  # @extra updateStrategy.rollingUpdate Rolling update parameters
-  rollingUpdate:
-    # -- Max unavailable pods during update
-    maxUnavailable: 0
-    # -- Max extra pods during update
-    maxSurge: 1
+  # -- Update strategy type. `Recreate` stops the old operator pod before the new one
+  # starts, so two operator versions never reconcile at the same time - even when
+  # upgrading from a release without leader election. With leader election on, a
+  # `RollingUpdate` (add a `rollingUpdate` block) is also safe.
+  type: Recreate
 
 # @section Network Policy Configuration
 
