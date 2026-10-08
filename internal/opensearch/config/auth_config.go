@@ -536,8 +536,8 @@ func (b *AuthConfigBuilder) ValidateMultiAuthJWTSupported() error {
 	if others == 0 {
 		return nil
 	}
-	osVersion, err := versions.WazuhToOpenSearchVersion(b.wazuhVersion)
-	if err != nil || osVersion.GreaterThanOrEqual(versions.MinOpenSearchVersionForMultiAuthJWT) {
+	osVersion, known := openSearchVersionOf(b.wazuhVersion)
+	if !known || osVersion.GreaterThanOrEqual(versions.MinOpenSearchVersionForMultiAuthJWT) {
 		return nil
 	}
 	return fmt.Errorf("jwt cannot be combined with another dashboard sign-in method on Wazuh %s (OpenSearch Dashboards %s): "+
@@ -570,4 +570,11 @@ func (b *AuthConfigBuilder) ValidateMultiAuthRequiresBasic() error {
 		return fmt.Errorf("when more than one dashboard auth method is enabled, basicAuth.enabled must be true (opensearch-dashboards requires basicauth in auth.type array)")
 	}
 	return nil
+}
+
+// openSearchVersionOf maps a Wazuh version to its OpenSearch version; known is false for
+// an unmapped or unparseable version.
+func openSearchVersionOf(wazuhVersion string) (v *versions.Version, known bool) {
+	v, err := versions.WazuhToOpenSearchVersion(wazuhVersion)
+	return v, err == nil
 }

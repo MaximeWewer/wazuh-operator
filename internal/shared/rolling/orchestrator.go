@@ -79,27 +79,9 @@ func (o *RollingRestartOrchestrator) OrchestrateRestart(
 	// controller never replaces it). The pods are therefore always inspected.
 	rolloutInProgress := targetRevision != currentRevision
 
-	// List pods belonging to this StatefulSet
-	podList := &corev1.PodList{}
-	if err := o.client.List(ctx, podList,
-		client.InNamespace(sts.Namespace),
-		client.MatchingLabels(sts.Spec.Selector.MatchLabels),
-	); err != nil {
-		return nil, fmt.Errorf("failed to list pods for StatefulSet %s: %w", sts.Name, err)
-	}
-
-	// Filter pods by owner reference to ensure we only consider pods owned by this StatefulSet.
-	// This is important when multiple StatefulSets share the same label selector (e.g. manager-master
-	// and manager-worker both use the "manager" component labels).
-	stsUID := sts.UID
-	var ownedPods []corev1.Pod
-	for _, pod := range podList.Items {
-		for _, ownerRef := range pod.OwnerReferences {
-			if ownerRef.UID == stsUID {
-				ownedPods = append(ownedPods, pod)
-				break
-			}
-		}
+	ownedPods, err := o.ownedPods(ctx, sts)
+	if err != nil {
+		return nil, err
 	}
 
 	// Step 2: Classify pods as updated or outdated
@@ -156,20 +138,12 @@ func (o *RollingRestartOrchestrator) OrchestrateRestart(
 	// skipped for the same reason - it would count this very pod as unhealthy.
 	managed := sts.Spec.UpdateStrategy.Type == appsv1.OnDeleteStatefulSetStrategyType
 	sortByOrdinal(outdatedPods, deleteHighestFirst)
-	for _, pod := range outdatedPods {
-		if isPodReady(&pod) {
-			continue
-		}
-		// Under RollingUpdate, a pod on the current revision is recreated on that same
-		// revision, so deleting it fixes nothing; only an intermediate revision is stuck.
-		if !managed && pod.Labels["controller-revision-hash"] == currentRevision {
-			continue
-		}
+	if pod := notReadyOutdatedPod(outdatedPods, managed, currentRevision); pod != nil {
 		log.Info("Deleting outdated pod that is not ready",
 			"pod", pod.Name,
 			"currentRevision", pod.Labels["controller-revision-hash"],
 			"targetRevision", targetRevision)
-		if err := o.client.Delete(ctx, &pod); err != nil {
+		if err := o.client.Delete(ctx, pod); err != nil {
 			return nil, fmt.Errorf("failed to delete pod %s: %w", pod.Name, err)
 		}
 		return &RestartResult{
@@ -299,4 +273,45 @@ func extractOrdinal(podName string) int {
 func (o *RollingRestartOrchestrator) ReplaceStrayPods(ctx context.Context, sts *appsv1.StatefulSet) error {
 	_, err := o.OrchestrateRestart(ctx, sts, nil, true)
 	return err
+}
+
+// ownedPods lists the pods owned by sts. The owner reference is checked because several
+// StatefulSets can share a label selector (e.g. manager-master and manager-worker both use
+// the "manager" component labels).
+func (o *RollingRestartOrchestrator) ownedPods(ctx context.Context, sts *appsv1.StatefulSet) ([]corev1.Pod, error) {
+	podList := &corev1.PodList{}
+	if err := o.client.List(ctx, podList,
+		client.InNamespace(sts.Namespace),
+		client.MatchingLabels(sts.Spec.Selector.MatchLabels),
+	); err != nil {
+		return nil, fmt.Errorf("failed to list pods for StatefulSet %s: %w", sts.Name, err)
+	}
+	var owned []corev1.Pod
+	for _, pod := range podList.Items {
+		for _, ownerRef := range pod.OwnerReferences {
+			if ownerRef.UID == sts.UID {
+				owned = append(owned, pod)
+				break
+			}
+		}
+	}
+	return owned, nil
+}
+
+// notReadyOutdatedPod returns the first outdated pod (in the given order) that is not ready
+// and worth replacing, or nil. Under RollingUpdate (managed=false) a pod on the current
+// revision is skipped: it would be recreated on that same revision, fixing nothing; only a
+// pod on an intermediate (abandoned) revision is stuck.
+func notReadyOutdatedPod(outdated []corev1.Pod, managed bool, currentRevision string) *corev1.Pod {
+	for i := range outdated {
+		pod := &outdated[i]
+		if isPodReady(pod) {
+			continue
+		}
+		if !managed && pod.Labels["controller-revision-hash"] == currentRevision {
+			continue
+		}
+		return pod
+	}
+	return nil
 }

@@ -179,65 +179,95 @@ var mitreOptions = map[string]bool{"id": true, "tacticid": true, "techniqueid": 
 // known options. Any of these errors stops analysisd, so the manager crash-loops while the
 // CR would otherwise report Applied. Malformed XML is left to validateXMLSyntax.
 func validateRuleStructure(content string) []string {
-	var errs []string
+	w := &ruleStructureWalker{}
 	dec := xml.NewDecoder(strings.NewReader(content))
-	var stack []string // lowercased open elements
-	ruleID := ""
-	rulesInGroup := 0
-
 	for {
 		tok, err := dec.Token()
 		if err != nil {
 			// io.EOF ends the walk; syntax errors are reported by validateXMLSyntax.
-			return errs
+			return w.errs
 		}
 		switch t := tok.(type) {
 		case xml.StartElement:
-			name := strings.ToLower(t.Name.Local)
-			switch {
-			case len(stack) == 0:
-				if name == "var" {
-					if err := dec.Skip(); err != nil {
-						return errs
-					}
-					continue
+			if w.depth() == 0 && strings.EqualFold(t.Name.Local, "var") {
+				// <var> definitions are expanded by analysisd before the rules are read.
+				if err := dec.Skip(); err != nil {
+					return w.errs
 				}
-				if name != "group" {
-					errs = append(errs, fmt.Sprintf("invalid root element <%s>: only <group> is allowed", t.Name.Local))
-				}
-				rulesInGroup = 0
-			case len(stack) == 1 && stack[0] == "group":
-				if name != "rule" {
-					errs = append(errs, fmt.Sprintf("invalid element <%s> in group: only <rule> is allowed", t.Name.Local))
-					break
-				}
-				rulesInGroup++
-				ruleID = ""
-				for _, a := range t.Attr {
-					if strings.EqualFold(a.Name.Local, "id") {
-						ruleID = a.Value
-					}
-				}
-			case len(stack) == 2 && stack[1] == "rule":
-				if !ruleOptions[name] {
-					errs = append(errs, fmt.Sprintf("rule %s: invalid option <%s>", ruleID, t.Name.Local))
-				}
-			case len(stack) == 3 && stack[1] == "rule" && stack[2] == "mitre":
-				if !mitreOptions[name] {
-					errs = append(errs, fmt.Sprintf("rule %s: invalid option <%s> in <mitre>", ruleID, t.Name.Local))
-				}
+				continue
 			}
-			stack = append(stack, name)
+			w.start(t)
 		case xml.EndElement:
-			if len(stack) == 0 {
-				return errs
+			if !w.end() {
+				return w.errs
 			}
-			if len(stack) == 1 && stack[0] == "group" && rulesInGroup == 0 {
-				errs = append(errs, "group without any rule")
-			}
-			stack = stack[:len(stack)-1]
 		}
 	}
+}
+
+// ruleStructureWalker tracks the open elements of a rule file and collects the
+// structural errors analysisd would reject.
+type ruleStructureWalker struct {
+	errs         []string
+	stack        []string // lowercased open elements
+	ruleID       string
+	rulesInGroup int
+}
+
+func (w *ruleStructureWalker) depth() int { return len(w.stack) }
+
+func (w *ruleStructureWalker) errorf(format string, args ...any) {
+	w.errs = append(w.errs, fmt.Sprintf(format, args...))
+}
+
+// start checks an opening element against its position in the file.
+func (w *ruleStructureWalker) start(t xml.StartElement) {
+	name := strings.ToLower(t.Name.Local)
+	switch {
+	case w.depth() == 0:
+		if name != "group" {
+			w.errorf("invalid root element <%s>: only <group> is allowed", t.Name.Local)
+		}
+		w.rulesInGroup = 0
+	case w.depth() == 1 && w.stack[0] == "group":
+		w.startGroupChild(t, name)
+	case w.depth() == 2 && w.stack[1] == "rule":
+		if !ruleOptions[name] {
+			w.errorf("rule %s: invalid option <%s>", w.ruleID, t.Name.Local)
+		}
+	case w.depth() == 3 && w.stack[1] == "rule" && w.stack[2] == "mitre":
+		if !mitreOptions[name] {
+			w.errorf("rule %s: invalid option <%s> in <mitre>", w.ruleID, t.Name.Local)
+		}
+	}
+	w.stack = append(w.stack, name)
+}
+
+// startGroupChild checks a direct child of <group>: only <rule> is allowed.
+func (w *ruleStructureWalker) startGroupChild(t xml.StartElement, name string) {
+	if name != "rule" {
+		w.errorf("invalid element <%s> in group: only <rule> is allowed", t.Name.Local)
+		return
+	}
+	w.rulesInGroup++
+	w.ruleID = ""
+	for _, a := range t.Attr {
+		if strings.EqualFold(a.Name.Local, "id") {
+			w.ruleID = a.Value
+		}
+	}
+}
+
+// end closes the current element; it returns false on an unbalanced closing tag.
+func (w *ruleStructureWalker) end() bool {
+	if w.depth() == 0 {
+		return false
+	}
+	if w.depth() == 1 && w.stack[0] == "group" && w.rulesInGroup == 0 {
+		w.errorf("group without any rule")
+	}
+	w.stack = w.stack[:len(w.stack)-1]
+	return true
 }
 
 // validateRuleIDs validates that rule IDs are in the custom range (100000-999999)

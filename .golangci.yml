@@ -99,6 +99,9 @@ linters:
 
     misspell:
       locale: US
+      # "mitre" is the Wazuh rule element (MITRE ATT&CK), not a misspelling of "miter".
+      ignore-rules:
+        - mitre
 
     nakedret:
       max-func-lines: 30

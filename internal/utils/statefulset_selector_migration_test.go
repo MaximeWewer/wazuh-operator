@@ -2,6 +2,7 @@ package utils //nolint:revive // utils is a common package name
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -26,9 +27,7 @@ func selectorSTS(name string, selector, templateLabels map[string]string) *appsv
 
 func labeledPod(name string, labels map[string]string) *corev1.Pod {
 	l := map[string]string{"controller-revision-hash": "rev-old"}
-	for k, v := range labels {
-		l[k] = v
-	}
+	maps.Copy(l, labels)
 	return &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns", Labels: l}}
 }
 

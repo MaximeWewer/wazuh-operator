@@ -4,8 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"k8s.io/utils/ptr"
-
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
@@ -17,13 +15,13 @@ import (
 func TestBuildWazuhConfigRendersBoolPointers(t *testing.T) {
 	_ = dns.InitializeWithDomain("cluster.local")
 	plugin := &wazuhv1.WazuhPluginConfig{
-		IPSelector: ptr.To(false),
+		IPSelector: new(false),
 		Monitoring: &wazuhv1.WazuhMonitoringConfig{},
 		Checks: &wazuhv1.WazuhChecksConfig{
-			Pattern:    ptr.To(false),
-			MaxBuckets: ptr.To(true),
+			Pattern:    new(false),
+			MaxBuckets: new(true),
 		},
-		CronStatistics: &wazuhv1.WazuhCronStatisticsConfig{Status: ptr.To(false)},
+		CronStatistics: &wazuhv1.WazuhCronStatisticsConfig{Status: new(false)},
 	}
 
 	build := func() string {

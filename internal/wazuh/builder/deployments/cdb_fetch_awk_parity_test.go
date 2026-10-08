@@ -35,7 +35,7 @@ func TestCDBFetchAWKIPListParity(t *testing.T) {
 	}
 	input := strings.Join(lines, "\n") + "\n"
 
-	cmd := exec.Command(busybox, "awk", cdbFetchAWKIPList)
+	cmd := exec.CommandContext(t.Context(), busybox, "awk", cdbFetchAWKIPList)
 	cmd.Stdin = strings.NewReader(input)
 	out, err := cmd.Output()
 	if err != nil {

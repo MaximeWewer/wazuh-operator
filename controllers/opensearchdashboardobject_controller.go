@@ -100,8 +100,8 @@ func (r *OpenSearchDashboardObjectReconciler) Reconcile(ctx context.Context, req
 func (r *OpenSearchDashboardObjectReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &wazuhv1.OpenSearchDashboardObject{}, dashboardObjectConfigMapIndex,
 		func(o client.Object) []string {
-			obj := o.(*wazuhv1.OpenSearchDashboardObject)
-			if obj.Spec.Source.ConfigMapRef == nil {
+			obj, ok := o.(*wazuhv1.OpenSearchDashboardObject)
+			if !ok || obj.Spec.Source.ConfigMapRef == nil {
 				return nil
 			}
 			return []string{obj.Spec.Source.ConfigMapRef.Name}

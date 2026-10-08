@@ -18,7 +18,6 @@ package rolling
 
 import (
 	appsv1 "k8s.io/api/apps/v1"
-	"k8s.io/utils/ptr"
 )
 
 // StatefulSetUpdateStrategy returns the update strategy to render for a StatefulSet.
@@ -34,7 +33,7 @@ import (
 func StatefulSetUpdateStrategy(strategyType appsv1.StatefulSetUpdateStrategyType) appsv1.StatefulSetUpdateStrategy {
 	strategy := appsv1.StatefulSetUpdateStrategy{Type: strategyType}
 	if strategyType == appsv1.RollingUpdateStatefulSetStrategyType {
-		strategy.RollingUpdate = &appsv1.RollingUpdateStatefulSetStrategy{Partition: ptr.To(int32(0))}
+		strategy.RollingUpdate = &appsv1.RollingUpdateStatefulSetStrategy{Partition: new(int32(0))}
 	}
 	return strategy
 }
