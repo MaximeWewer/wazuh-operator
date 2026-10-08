@@ -89,6 +89,18 @@ They are auto-loaded from `etc/rules/` and `etc/decoders/` - no `ossec.conf` edi
 needed. Use custom rule IDs in the `100000`–`999999` range; the operator
 validates XML and flags duplicate IDs across CRs on overlapping clusters.
 
+Content `wazuh-analysisd` would refuse to load is rejected before it reaches the
+managers - the CR goes `Failed` with a `ValidationFailed` event and the managers keep
+the last valid content, instead of crash-looping:
+
+- rule structure: unknown rule options, elements other than `<rule>` in a `<group>`;
+- OS_Regex patterns (`<regex>` and `<prematch>` in decoders, `<regex>`, `<field>` and
+  `<if_matched_regex>` in rules, unless `type` selects another engine): only the
+  escapes `\w \W \d \D \s \S \p \t \. \$ \( \) \| \< \\` exist, parentheses
+  cannot nest and `|` cannot appear inside them. A pattern written for a full regex
+  engine, e.g. `\"level\":\"(\w+)\"`, fails here; set `type="pcre2"` on the element
+  for PCRE2 syntax.
+
 See: [wazuhrule-basic.yaml](../examples/wazuh-content/wazuhrule-basic.yaml),
 [wazuhdecoder-basic.yaml](../examples/wazuh-content/wazuhdecoder-basic.yaml).
 

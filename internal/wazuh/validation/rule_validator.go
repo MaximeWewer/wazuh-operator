@@ -82,6 +82,12 @@ func (v *RuleValidator) Validate(ctx context.Context, rule *wazuhv1.WazuhRule) *
 		result.Errors = append(result.Errors, errs...)
 	}
 
+	// Validate the OS_Regex patterns: analysisd stops on one it cannot compile
+	if errs := osRegexFieldErrors(rule.Spec.Rules, ruleOSRegexFields, "rule", "id"); len(errs) > 0 {
+		result.Valid = false
+		result.Errors = append(result.Errors, errs...)
+	}
+
 	// Validate rule IDs
 	if errs := v.validateRuleIDs(rule.Spec.Rules, rule.Spec.RuleID); len(errs) > 0 {
 		result.Valid = false
@@ -172,6 +178,9 @@ var ruleOptions = map[string]bool{
 
 // mitreOptions are the elements analysisd accepts inside a rule's <mitre> block.
 var mitreOptions = map[string]bool{"id": true, "tacticid": true, "techniqueid": true}
+
+// ruleOSRegexFields are the rule options whose pattern is an OS_Regex by default.
+var ruleOSRegexFields = map[string]bool{"regex": true, "field": true, "if_matched_regex": true}
 
 // validateRuleStructure mirrors the structural checks wazuh-analysisd applies when loading a
 // rule file: root elements must be <group> (<var> definitions are expanded beforehand), a

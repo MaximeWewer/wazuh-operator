@@ -78,6 +78,12 @@ func (v *DecoderValidator) Validate(ctx context.Context, decoder *wazuhv1.WazuhD
 		result.Errors = append(result.Errors, errs...)
 	}
 
+	// Validate the OS_Regex patterns: analysisd stops on one it cannot compile
+	if errs := osRegexFieldErrors(decoder.Spec.Decoders, decoderOSRegexFields, "decoder", "name"); len(errs) > 0 {
+		result.Valid = false
+		result.Errors = append(result.Errors, errs...)
+	}
+
 	// Check for duplicate decoder names in the same cluster
 	if v.client != nil {
 		if errs := v.checkDuplicateDecoderNames(ctx, decoder); len(errs) > 0 {
@@ -88,6 +94,9 @@ func (v *DecoderValidator) Validate(ctx context.Context, decoder *wazuhv1.WazuhD
 
 	return result
 }
+
+// decoderOSRegexFields are the decoder options whose pattern is an OS_Regex by default.
+var decoderOSRegexFields = map[string]bool{"regex": true, "prematch": true}
 
 // validateXMLSyntax validates that the decoder content is valid XML
 func (v *DecoderValidator) validateXMLSyntax(content string) error {
