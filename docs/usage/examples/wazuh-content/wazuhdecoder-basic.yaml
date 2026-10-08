@@ -24,17 +24,11 @@ spec:
 
   # Decoder definitions in XML format
   decoders: |
-    <!-- Parent decoder for custom application JSON logs -->
+    <!-- Custom application JSON logs: JSON_Decoder extracts every field
+         (e.g. level, message), no regex needed -->
     <decoder name="custom-app-json">
       <prematch>^{"app":</prematch>
       <plugin_decoder>JSON_Decoder</plugin_decoder>
-    </decoder>
-
-    <!-- Child decoder to extract specific fields -->
-    <decoder name="custom-app-json-fields">
-      <parent>custom-app-json</parent>
-      <regex offset="after_parent">\"level\":\"(\w+)\",\"message\":\"(.+?)\"</regex>
-      <order>level,message</order>
     </decoder>
 
     <!-- Decoder for nginx access logs in JSON format -->
