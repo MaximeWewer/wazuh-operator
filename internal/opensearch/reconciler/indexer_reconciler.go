@@ -1323,6 +1323,15 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 		sts.Annotations[constants.AnnotationSpecHash] = specHash
 	}
 
+	// Stamp a hash of the rendered pod template, as the blocking path does: changes the
+	// operator makes to the generated template (init-container resources, probes, plugin
+	// version...) carry no spec-hash change and would otherwise never reach an existing
+	// indexer.
+	templateHash, hashErr := patch.StampPodTemplateHash(&sts.Spec.Template, constants.AnnotationPodTemplateHash)
+	if hashErr != nil {
+		return nil, fmt.Errorf("failed to compute indexer pod template hash: %w", hashErr)
+	}
+
 	if err := controllerutil.SetControllerReference(cluster, sts, r.Scheme); err != nil {
 		return nil, fmt.Errorf("failed to set controller reference for indexer statefulset: %w", err)
 	}
@@ -1377,6 +1386,13 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 	// Check if update is needed
 	needsUpdate := false
 	updateReason := ""
+
+	// Pod template drift (operator upgrade): see the template hash stamped above.
+	if patch.PodTemplateHashChanged(&found.Spec.Template, templateHash, constants.AnnotationPodTemplateHash) {
+		log.Info("Indexer pod template changed", "name", sts.Name, "newHash", utils.ShortHash(templateHash))
+		needsUpdate = true
+		updateReason = "pod-template-change"
+	}
 
 	// Check spec hash (version, resources, replicas, javaOpts changes)
 	existingSpecHash := ""
