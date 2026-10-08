@@ -246,13 +246,10 @@ deploy_operator() {
     log_info "Creating operator namespace: ${OPERATOR_NAMESPACE}"
     kubectl create namespace "${OPERATOR_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
-    # Delete if already exists
-    log_info "Cleaning up previous operator resources (if any)..."
-    helm template wazuh-operator ./charts/wazuh-operator \
-        --namespace "${OPERATOR_NAMESPACE}" 2>/dev/null | kubectl delete -f - 2>/dev/null || true
-    sleep 5
-
-    # Install operator
+    # Install or upgrade the operator in place. The previous operator is deliberately not
+    # deleted first: removing it (and its CRDs) while custom resources still carry its
+    # finalizers leaves those resources and CRDs stuck terminating, and the delete hangs.
+    # A server-side apply updates everything, and the new image tag rolls the deployment.
     log_info "Installing Wazuh Operator Helm chart..."
     helm template wazuh-operator \
         ./charts/wazuh-operator \
@@ -294,11 +291,16 @@ deploy_wazuh_cluster() {
     log_info "Creating cluster namespace: ${CLUSTER_NAMESPACE}"
     kubectl create namespace "${CLUSTER_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
 
-    # Delete if already exists
+    # Delete the previous cluster while the operator is running, so it can process the
+    # finalizers of the custom resources (PVCs are kept by design).
     log_info "Cleaning up previous cluster resources (if any)..."
-    helm template "${CLUSTER_NAME}" ./charts/wazuh-cluster \
-        --namespace "${CLUSTER_NAMESPACE}" 2>/dev/null | kubectl delete -f - 2>/dev/null || true
-    sleep 10
+    if ! helm template "${CLUSTER_NAME}" ./charts/wazuh-cluster \
+        --namespace "${CLUSTER_NAMESPACE}" 2>/dev/null \
+        | kubectl delete -f - --ignore-not-found --timeout=5m; then
+        log_error "Previous cluster resources were not deleted within 5 minutes (finalizers pending?)"
+        kubectl get wazuhcluster -n "${CLUSTER_NAMESPACE}" -o wide || true
+        exit 1
+    fi
 
     # Install cluster
     log_info "Installing Wazuh Cluster Helm chart with sizing profile: ${SIZING_PROFILE}"
