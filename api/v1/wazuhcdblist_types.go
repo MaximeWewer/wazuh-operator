@@ -182,6 +182,11 @@ type WazuhCDBListStatus struct {
 	// +optional
 	LastFetchTime *metav1.Time `json:"lastFetchTime,omitempty"`
 
+	// ConverterVersion is the operator's format converter version the fetched content was
+	// converted with; a URL source is fetched again when the operator's version differs.
+	// +optional
+	ConverterVersion int32 `json:"converterVersion,omitempty"`
+
 	// ClusterStatuses reports per-target-cluster reconciliation state.
 	// +listType=map
 	// +listMapKey=name

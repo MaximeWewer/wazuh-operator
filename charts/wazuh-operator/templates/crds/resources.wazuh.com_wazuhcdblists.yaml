@@ -343,6 +343,12 @@ spec:
                 description: ContentHash is a short hash of the resolved list content,
                   used for change detection.
                 type: string
+              converterVersion:
+                description: |-
+                  ConverterVersion is the operator's format converter version the fetched content was
+                  converted with; a URL source is fetched again when the operator's version differs.
+                format: int32
+                type: integer
               entryCount:
                 description: EntryCount is the number of key/value entries in the
                   resolved list.

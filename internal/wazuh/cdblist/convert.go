@@ -26,6 +26,12 @@ import (
 	"strings"
 )
 
+// ConverterVersion identifies the output of the format converters. Bump it whenever a
+// converter produces different content for the same input: URL-sourced lists record the
+// version they were converted with and are fetched again when it changes, instead of
+// keeping the old conversion until the next refresh interval.
+const ConverterVersion = 2
+
 // ipLineRegex matches lines that start with an IPv4 address and an optional CIDR mask.
 // Group 1 is the address, group 2 (optional) is the mask. Mirrors the regex used by
 // Wazuh's iplist-to-cdblist.py conversion script.

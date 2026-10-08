@@ -165,6 +165,7 @@ func (r *CDBListReconciler) Reconcile(ctx context.Context, list *wazuhv1.WazuhCD
 		if fetched {
 			now := metav1.Now()
 			list.Status.LastFetchTime = &now
+			list.Status.ConverterVersion = cdblist.ConverterVersion
 		}
 	}
 
@@ -288,6 +289,10 @@ func (r *CDBListReconciler) formatRaw(raw string, format wazuhv1.CDBListFormat, 
 func (r *CDBListReconciler) shouldRefetch(list *wazuhv1.WazuhCDBList) bool {
 	// Spec changed since last observed generation, or never fetched.
 	if list.Status.ObservedGeneration != list.Generation || list.Status.ContentHash == "" || list.Status.LastFetchTime == nil {
+		return true
+	}
+	// Converted by an older operator whose converter output differs: convert it again now.
+	if list.Status.ConverterVersion != cdblist.ConverterVersion {
 		return true
 	}
 	interval := r.refreshInterval(list)

@@ -1750,7 +1750,7 @@ The `format` field selects the converter applied to raw `content`/`source` text.
 
 #### Status
 
-`status.phase` aggregates per-cluster state (`Pending`/`Applied`/`Failed`/`Updating`); `status.clusterStatuses[]` reports each target. `status.entryCount` and `status.contentHash` reflect the resolved list; `status.lastFetchTime` records the last successful URL fetch.
+`status.phase` aggregates per-cluster state (`Pending`/`Applied`/`Failed`/`Updating`); `status.clusterStatuses[]` reports each target. `status.entryCount` and `status.contentHash` reflect the resolved list; `status.lastFetchTime` records the last successful URL fetch. `status.converterVersion` records the operator format converter a URL source was converted with: after an operator upgrade that changes a converter, the source is fetched and converted again right away instead of at the next `refreshInterval`.
 
 #### Examples
 
