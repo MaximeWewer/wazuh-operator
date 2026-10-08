@@ -894,6 +894,13 @@ kubectl create secret generic teleport-jwt-key -n wazuh --from-file=signing_key=
 
 **Example - JWT (Teleport JWKS) + local basic auth:**
 
+> **Requires Wazuh 4.12+ (OpenSearch Dashboards 2.18+).** Combining `jwt` with another
+> dashboard sign-in method (`basicAuth`, `oidc` or `saml`) renders a multiple-authentication
+> `auth.type` list, and the dashboard security plugin accepts `jwt` in it only from 2.18. On
+> Wazuh 4.9 to 4.11 the dashboard would fail to start with `Unsupported authentication type:
+> jwt`, so the operator rejects the resource (`Failed`, "jwt cannot be combined...") and keeps
+> the dashboard on basic auth. Enable `jwt` alone on those versions.
+
 ```yaml
 apiVersion: resources.wazuh.com/v1
 kind: OpenSearchAuthConfig

@@ -195,6 +195,12 @@ var MinOpenSearchVersionForAutoHotReload = &Version{Major: 2, Minor: 19, Patch: 
 // openid_connect_url). See the JWT authentication backend docs (3.2 vs 3.3).
 var MinOpenSearchVersionForJwtJwks = &Version{Major: 3, Minor: 3, Patch: 0}
 
+// MinOpenSearchVersionForMultiAuthJWT is the first OpenSearch Dashboards version whose
+// security plugin accepts "jwt" in a multiple authentication auth.type list. Older
+// dashboards (Wazuh 4.9 to 4.11) only combine basicauth, openid and saml, and fail to
+// start with "Unsupported authentication type: jwt".
+var MinOpenSearchVersionForMultiAuthJWT = &Version{Major: 2, Minor: 18, Patch: 0}
+
 // MinWazuhVersionForHotReload is the minimum Wazuh version that supports hot reload
 var MinWazuhVersionForHotReload = &Version{Major: 4, Minor: 9, Patch: 0}
 

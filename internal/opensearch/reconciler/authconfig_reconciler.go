@@ -84,8 +84,19 @@ func (r *AuthConfigReconciler) Reconcile(ctx context.Context, authConfig *wazuhv
 		return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Failed to resolve secrets: %v", err))
 	}
 
-	// Validate configuration
-	if err := r.validateConfig(authConfig, secrets); err != nil {
+	// Validate configuration, including against each target cluster's dashboard version
+	err = r.validateConfig(authConfig, secrets)
+	for _, ref := range authConfig.Spec.ClusterRefs {
+		if err != nil {
+			break
+		}
+		if verr := config.NewAuthConfigBuilder(&authConfig.Spec).
+			WithWazuhVersion(r.clusterWazuhVersion(ctx, ref.Name, ref.Namespace)).
+			ValidateMultiAuthJWTSupported(); verr != nil {
+			err = fmt.Errorf("cluster %s/%s: %w", ref.Namespace, ref.Name, verr)
+		}
+	}
+	if err != nil {
 		r.recordEvent(authConfig, corev1.EventTypeWarning, "SyncFailed", fmt.Sprintf("Validation failed: %v", err))
 		return r.updateStatus(ctx, authConfig, wazuhv1.OpenSearchResourcePhaseFailed, fmt.Sprintf("Validation failed: %v", err))
 	}

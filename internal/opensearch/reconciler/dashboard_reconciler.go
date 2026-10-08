@@ -239,7 +239,11 @@ func (r *DashboardReconciler) reconcileConfigMap(ctx context.Context, cluster *w
 		log.Error(err, "Failed to list OpenSearchAuthConfigs, dashboard will use basicauth fallback")
 	} else if authConfig != nil {
 		authSecrets, secErr := opensearchconfig.ResolveAuthSecrets(ctx, r.Client, authConfig)
-		if secErr != nil {
+		if verr := opensearchconfig.NewAuthConfigBuilder(&authConfig.Spec).WithWazuhVersion(cluster.Spec.Version).ValidateMultiAuthJWTSupported(); verr != nil {
+			// Rendering it would crash-loop the dashboard; the OpenSearchAuthConfig reports
+			// the same error in its status.
+			log.Error(verr, "Auth config not supported by this dashboard version, dashboard will use basicauth fallback", "authConfig", authConfig.Name)
+		} else if secErr != nil {
 			log.Error(secErr, "Failed to resolve auth secrets, dashboard will use basicauth fallback", "authConfig", authConfig.Name)
 		} else {
 			// Ensure a stable OIDC cookie password exists when the user did not supply one.

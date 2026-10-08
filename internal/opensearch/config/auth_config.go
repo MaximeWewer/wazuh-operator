@@ -482,6 +482,37 @@ func (b *AuthConfigBuilder) ValidateChallengeSettings() error {
 	return nil
 }
 
+// ValidateMultiAuthJWTSupported rejects JWT combined with another dashboard sign-in method
+// (multiple authentication) when the target dashboard is older than OpenSearch Dashboards
+// 2.18 (Wazuh < 4.12): its security plugin only combines basicauth, openid and saml, so the
+// rendered auth.type list makes the dashboard fail to start with "Unsupported
+// authentication type: jwt". An unknown version is not rejected.
+func (b *AuthConfigBuilder) ValidateMultiAuthJWTSupported() error {
+	if b.authConfig.JWT == nil || !b.authConfig.JWT.Enabled || b.wazuhVersion == "" {
+		return nil
+	}
+	others := 0
+	if b.authConfig.BasicAuth != nil && ptr.Deref(b.authConfig.BasicAuth.Enabled, true) {
+		others++
+	}
+	if b.authConfig.OIDC != nil && b.authConfig.OIDC.Enabled {
+		others++
+	}
+	if b.authConfig.SAML != nil && b.authConfig.SAML.Enabled {
+		others++
+	}
+	if others == 0 {
+		return nil
+	}
+	osVersion, err := versions.WazuhToOpenSearchVersion(b.wazuhVersion)
+	if err != nil || osVersion.GreaterThanOrEqual(versions.MinOpenSearchVersionForMultiAuthJWT) {
+		return nil
+	}
+	return fmt.Errorf("jwt cannot be combined with another dashboard sign-in method on Wazuh %s (OpenSearch Dashboards %s): "+
+		"multiple authentication supports jwt from OpenSearch Dashboards %s (Wazuh 4.12); enable jwt alone or upgrade",
+		b.wazuhVersion, osVersion, versions.MinOpenSearchVersionForMultiAuthJWT)
+}
+
 // ValidateMultiAuthRequiresBasic enforces the constraint from
 // security-dashboards-plugin (server/index.ts) that rejects any
 // opensearch_security.auth.type array longer than one entry unless it
