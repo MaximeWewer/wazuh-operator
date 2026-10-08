@@ -541,3 +541,30 @@ func TestStatefulSetUpdateStrategyHasPartition(t *testing.T) {
 		t.Fatalf("OnDelete must not carry a rollingUpdate block, got %+v", s)
 	}
 }
+
+// TestOrchestrateRestart_RevertedChange_ReplacesStrayPod reproduces the lab scenario: a bad
+// change left worker-1 Pending on revision B, then the change was reverted, so the template
+// is back to the current revision A (UpdateRevision == CurrentRevision). The StatefulSet
+// controller never replaces worker-1; the orchestrator must, without touching ready pods.
+func TestOrchestrateRestart_RevertedChange_ReplacesStrayPod(t *testing.T) {
+	sts := rollingUpdateSTS("worker", "rev-a", "rev-a", 2)
+	result, remaining := runOrchestrator(t, sts, nil,
+		newPod("worker-0", "ns", "worker", "rev-a", true),
+		newPod("worker-1", "ns", "worker", "rev-b", false),
+	)
+	if result.CurrentPod != "worker-1" || podNames(remaining)["worker-1"] {
+		t.Fatalf("stray pod worker-1 not replaced: %+v", result)
+	}
+	if !podNames(remaining)["worker-0"] {
+		t.Error("ready pod worker-0 must not be deleted")
+	}
+
+	// A ready pod on another revision while no rollout runs is left alone.
+	_, remaining = runOrchestrator(t, sts, nil,
+		newPod("worker-0", "ns", "worker", "rev-a", true),
+		newPod("worker-1", "ns", "worker", "rev-b", true),
+	)
+	if len(remaining.Items) != 2 {
+		t.Errorf("ready pods deleted while no rollout is in progress: %d left", len(remaining.Items))
+	}
+}

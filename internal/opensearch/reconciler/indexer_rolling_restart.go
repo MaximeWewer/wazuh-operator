@@ -74,6 +74,10 @@ func (r *IndexerReconciler) OrchestrateRollingRestart(ctx context.Context, clust
 
 	// Quick check: if no update pending, skip
 	if sts.Status.UpdateRevision == sts.Status.CurrentRevision {
+		// No rollout, but replace pods left on an abandoned revision (reverted change).
+		if err := rolling.NewOrchestrator(r.Client).ReplaceStrayPods(ctx, sts); err != nil {
+			return nil, fmt.Errorf("failed to replace stray indexer pods: %w", err)
+		}
 		return nil, nil
 	}
 
@@ -144,6 +148,9 @@ func (r *IndexerReconciler) orchestrateNodePoolRollingRestart(ctx context.Contex
 
 		// If this pool needs no update, count all pods as updated
 		if sts.Status.UpdateRevision == sts.Status.CurrentRevision {
+			if err := orchestrator.ReplaceStrayPods(ctx, sts); err != nil {
+				return nil, fmt.Errorf("failed to replace stray pods of nodePool %s: %w", pool.Name, err)
+			}
 			aggregatedUpdatedPods += sts.Status.Replicas
 			continue
 		}

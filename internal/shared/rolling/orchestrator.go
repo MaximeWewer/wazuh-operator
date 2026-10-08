@@ -51,7 +51,8 @@ func NewOrchestrator(c client.Client) *RollingRestartOrchestrator {
 // (step 4b), which the StatefulSet controller never does on its own.
 //
 // Algorithm (one pod per call):
-//  1. Compare UpdateRevision vs CurrentRevision - if equal, no restart needed.
+//  1. Compare UpdateRevision vs CurrentRevision (equal: no rollout, but stray pods on an
+//     abandoned revision are still handled by step 4b).
 //  2. List pods and compare each pod's controller-revision-hash label to UpdateRevision.
 //  3. If all pods are on target revision → Complete.
 //  4. If a pod is terminating → InProgress (wait). If an outdated pod is not ready →
@@ -72,15 +73,11 @@ func (o *RollingRestartOrchestrator) OrchestrateRestart(
 	targetRevision := sts.Status.UpdateRevision
 	currentRevision := sts.Status.CurrentRevision
 
-	// Step 1: If revisions match, no restart is needed
-	if targetRevision == currentRevision {
-		return &RestartResult{
-			Phase:       RestartPhaseIdle,
-			TotalPods:   sts.Status.Replicas,
-			UpdatedPods: sts.Status.Replicas,
-			Message:     "all pods are on current revision",
-		}, nil
-	}
+	// Step 1: Matching revisions mean no rollout is in progress, but pods may still sit on
+	// an abandoned revision: reverting a bad change brings the template back to the current
+	// revision while the pod already started on the bad one stays stuck (the StatefulSet
+	// controller never replaces it). The pods are therefore always inspected.
+	rolloutInProgress := targetRevision != currentRevision
 
 	// List pods belonging to this StatefulSet
 	podList := &corev1.PodList{}
@@ -119,8 +116,16 @@ func (o *RollingRestartOrchestrator) OrchestrateRestart(
 	totalPods := int32(len(ownedPods))
 	updatedCount := int32(len(updatedPods))
 
-	// Step 3: All pods on target revision → Complete
+	// Step 3: All pods on target revision → Idle (nothing was rolling) or Complete
 	if len(outdatedPods) == 0 {
+		if !rolloutInProgress {
+			return &RestartResult{
+				Phase:       RestartPhaseIdle,
+				TotalPods:   totalPods,
+				UpdatedPods: updatedCount,
+				Message:     "all pods are on current revision",
+			}, nil
+		}
 		log.Info("Rolling restart complete", "totalPods", totalPods)
 		return &RestartResult{
 			Phase:       RestartPhaseComplete,
@@ -173,6 +178,17 @@ func (o *RollingRestartOrchestrator) OrchestrateRestart(
 			UpdatedPods: updatedCount,
 			CurrentPod:  pod.Name,
 			Message:     fmt.Sprintf("deleted not-ready outdated pod %s (%d/%d updated)", pod.Name, updatedCount, totalPods),
+		}, nil
+	}
+
+	// No rollout in progress: only stray not-ready pods were of interest (step 4b); ready
+	// pods on another revision are left to the StatefulSet controller.
+	if !rolloutInProgress {
+		return &RestartResult{
+			Phase:       RestartPhaseIdle,
+			TotalPods:   totalPods,
+			UpdatedPods: updatedCount,
+			Message:     "no rollout in progress",
 		}, nil
 	}
 
@@ -274,4 +290,13 @@ func extractOrdinal(podName string) int {
 		return 0
 	}
 	return ordinal
+}
+
+// ReplaceStrayPods replaces the not-ready pods of a StatefulSet that is not rolling
+// (UpdateRevision == CurrentRevision) but still has pods on an abandoned revision - the
+// state left by reverting a change whose pod never came up. Callers run it on the path
+// where no rollout is in progress; no health check is involved.
+func (o *RollingRestartOrchestrator) ReplaceStrayPods(ctx context.Context, sts *appsv1.StatefulSet) error {
+	_, err := o.OrchestrateRestart(ctx, sts, nil, true)
+	return err
 }

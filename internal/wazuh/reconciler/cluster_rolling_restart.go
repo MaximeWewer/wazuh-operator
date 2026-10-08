@@ -115,6 +115,10 @@ func (r *ClusterReconciler) orchestrateWorkerRestart(ctx context.Context, cluste
 
 	// Quick check: if no update pending, skip
 	if workerSts.Status.UpdateRevision == workerSts.Status.CurrentRevision {
+		// No rollout, but replace pods left on an abandoned revision (reverted change).
+		if err := orchestrator.ReplaceStrayPods(ctx, workerSts); err != nil {
+			return nil, fmt.Errorf("failed to replace stray pods of %s: %w", workerSts.Name, err)
+		}
 		return nil, nil
 	}
 
@@ -157,6 +161,10 @@ func (r *ClusterReconciler) orchestrateMasterRestart(ctx context.Context, cluste
 
 	// Quick check: if no update pending, skip
 	if masterSts.Status.UpdateRevision == masterSts.Status.CurrentRevision {
+		// No rollout, but replace pods left on an abandoned revision (reverted change).
+		if err := orchestrator.ReplaceStrayPods(ctx, masterSts); err != nil {
+			return nil, fmt.Errorf("failed to replace stray pods of %s: %w", masterSts.Name, err)
+		}
 		return nil, nil
 	}
 
