@@ -101,8 +101,9 @@ func TestImportHTTPError(t *testing.T) {
 	c := newTLSClient(t, func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, `{"message":"Unauthorized"}`, http.StatusUnauthorized)
 	})
-	if _, err := c.Import(context.Background(), "", []byte(sampleExport)); err == nil || !strings.Contains(err.Error(), "HTTP 401") {
-		t.Fatalf("Import() error = %v, want HTTP 401", err)
+	_, err := c.Import(context.Background(), "", []byte(sampleExport))
+	if err == nil || !strings.Contains(err.Error(), "HTTP 401") || !strings.Contains(err.Error(), "custom jwtHeader") {
+		t.Fatalf("Import() error = %v, want HTTP 401 with the custom JWT header hint", err)
 	}
 }
 

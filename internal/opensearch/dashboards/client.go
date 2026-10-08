@@ -125,7 +125,13 @@ func (c *Client) Import(ctx context.Context, tenant string, ndjson []byte) (int,
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("import failed: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		err := fmt.Errorf("import failed: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		if resp.StatusCode == http.StatusUnauthorized {
+			// The dashboard forwards any Authorization header to the indexer, except when its
+			// JWT authentication reads the token from a custom header.
+			err = fmt.Errorf("%w (the dashboard ignores the Authorization header: JWT with a custom jwtHeader is not supported)", err)
+		}
+		return 0, err
 	}
 
 	var result importResponse

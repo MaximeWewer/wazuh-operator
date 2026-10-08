@@ -91,8 +91,13 @@ Who can see the imported dashboards is governed by the usual OpenSearch security
 
 - The operator calls the Dashboards saved objects API
   (`POST /api/saved_objects/_import?overwrite=true`) on the in-cluster dashboard Service, with
-  the indexer admin credentials it already manages. The dashboard must therefore keep basic
-  authentication enabled (the default; SSO-only dashboards are not supported yet).
+  the indexer admin credentials it already manages, sent as an `Authorization: Basic` header.
+  The dashboard forwards any `Authorization` header to the indexer, which always keeps its
+  internal basic-auth domain, so this works whatever the dashboard sign-in method: basic auth,
+  OIDC, SAML, or JWT with the default `Authorization` header (verified on a JWT-only dashboard).
+  The one exception is a JWT setup with a custom header (`OpenSearchAuthConfig`
+  `jwt.jwtHeader`, e.g. Teleport's `Teleport-Jwt-Assertion`): the dashboard then only
+  recognizes that header and answers 401 to the operator.
 - HTTPS is verified against the dashboard's own CA (`<cluster>-dashboard-certs`), or plain
   HTTP is used when `spec.dashboard.enableSSL: false` on the `WazuhCluster`.
 - The export is validated before anything is sent: each line must be a JSON object with a
@@ -114,7 +119,7 @@ kubectl get osdashobj soc-overview -n wazuh -o jsonpath='{.status.clusterStatuse
 | Message | Cause |
 | ------- | ----- |
 | `Dashboard not reachable: ... has no dashboard` | The target `WazuhCluster` has no dashboard |
-| `import failed: HTTP 401` | The dashboard does not accept basic authentication |
+| `import failed: HTTP 401` | The dashboard uses JWT with a custom `jwtHeader`, or the indexer admin credentials were rejected |
 | `import rejected N object(s): visualization/x (missing_references)` | The export lacks an object it references - export again with related objects included |
 | `invalid NDJSON export: ...` | The source is not a saved objects export |
 | `failed to get ConfigMap ...` | The ConfigMap is missing or in another namespace |
