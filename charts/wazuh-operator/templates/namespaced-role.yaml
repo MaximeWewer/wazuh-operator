@@ -207,6 +207,7 @@ rules:
   - opensearchrolemappings
   - opensearchroles
   - opensearchsnapshotpolicies
+  - opensearchdashboardobjects
   - opensearchtenants
   - opensearchusers
   - opensearchsnapshots
@@ -246,6 +247,7 @@ rules:
   - opensearchrolemappings/finalizers
   - opensearchroles/finalizers
   - opensearchsnapshotpolicies/finalizers
+  - opensearchdashboardobjects/finalizers
   - opensearchtenants/finalizers
   - opensearchusers/finalizers
   - opensearchsnapshots/finalizers
@@ -279,6 +281,7 @@ rules:
   - opensearchrolemappings/status
   - opensearchroles/status
   - opensearchsnapshotpolicies/status
+  - opensearchdashboardobjects/status
   - opensearchtenants/status
   - opensearchusers/status
   - opensearchsnapshots/status

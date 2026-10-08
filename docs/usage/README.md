@@ -36,6 +36,7 @@ Documentation for users of the Wazuh Operator.
 
 - [OpenSearch Security](features/opensearch-security.md) - Users, roles, tenants
 - [OpenSearch Indices](features/opensearch-indices.md) - Templates and ISM policies
+- [Dashboards as code](features/dashboards-as-code.md) - Dashboards, visualizations and index patterns from Git
 
 ### Networking
 

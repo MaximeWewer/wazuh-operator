@@ -511,6 +511,15 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchTenant")
 		os.Exit(1)
 	}
+	if err := (&controllers.OpenSearchDashboardObjectReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		DashboardObjectReconciler: opensearchreconciler.NewDashboardObjectReconciler(mgr.GetClient(), mgr.GetScheme(), mgr.GetEventRecorderFor("opensearchdashboardobject-controller")).
+			WithClientFactory(osClientFactory),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "OpenSearchDashboardObject")
+		os.Exit(1)
+	}
 	if err := (&controllers.OpenSearchAuthConfigReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),

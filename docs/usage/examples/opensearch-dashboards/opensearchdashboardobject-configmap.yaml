@@ -1,0 +1,48 @@
+# Sample OpenSearchDashboardObject - a "SOC overview" dashboard managed as code.
+#
+# The ConfigMap holds a saved objects export (OpenSearch Dashboards > Dashboards Management >
+# Saved objects > Export, "Include related objects" checked). Commit the export to Git and let
+# the operator import it: Git is the source of truth, so a change made in the Dashboards UI to
+# one of these objects is reverted at the next sync (spec.resyncInterval), and an object removed
+# from the export is deleted (spec.prune).
+#
+# Tip: generate the ConfigMap straight from an export file:
+#   kubectl create configmap soc-dashboards -n wazuh --from-file=export.ndjson=soc.ndjson \
+#     --dry-run=client -o yaml > soc-dashboards-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: soc-dashboards
+  namespace: wazuh
+data:
+  export.ndjson: |
+    {"type":"index-pattern","id":"soc-wazuh-alerts","attributes":{"title":"wazuh-alerts-*","timeFieldName":"timestamp"},"references":[]}
+    {"type":"visualization","id":"soc-alert-count","attributes":{"title":"SOC - Alert count","description":"","version":1,"uiStateJSON":"{}","visState":"{\"title\":\"SOC - Alert count\",\"type\":\"metric\",\"aggs\":[{\"id\":\"1\",\"enabled\":true,\"type\":\"count\",\"schema\":\"metric\",\"params\":{}}],\"params\":{\"addTooltip\":true,\"addLegend\":false,\"type\":\"metric\",\"metric\":{\"percentageMode\":false,\"useRanges\":false,\"colorSchema\":\"Green to Red\",\"metricColorMode\":\"None\",\"colorsRange\":[{\"from\":0,\"to\":10000}],\"labels\":{\"show\":true},\"invertColors\":false,\"style\":{\"bgFill\":\"#000\",\"bgColor\":false,\"labelColor\":false,\"subText\":\"\",\"fontSize\":60}}}}","kibanaSavedObjectMeta":{"searchSourceJSON":"{\"query\":{\"query\":\"\",\"language\":\"kuery\"},\"filter\":[],\"indexRefName\":\"kibanaSavedObjectMeta.searchSourceJSON.index\"}"}},"references":[{"name":"kibanaSavedObjectMeta.searchSourceJSON.index","type":"index-pattern","id":"soc-wazuh-alerts"}]}
+    {"type":"visualization","id":"soc-top-rules","attributes":{"title":"SOC - Top rules","description":"","version":1,"uiStateJSON":"{}","visState":"{\"title\":\"SOC - Top rules\",\"type\":\"table\",\"aggs\":[{\"id\":\"1\",\"enabled\":true,\"type\":\"count\",\"schema\":\"metric\",\"params\":{}},{\"id\":\"2\",\"enabled\":true,\"type\":\"terms\",\"schema\":\"bucket\",\"params\":{\"field\":\"rule.description\",\"orderBy\":\"1\",\"order\":\"desc\",\"size\":10,\"otherBucket\":false,\"missingBucket\":false}},{\"id\":\"3\",\"enabled\":true,\"type\":\"terms\",\"schema\":\"bucket\",\"params\":{\"field\":\"rule.level\",\"orderBy\":\"1\",\"order\":\"desc\",\"size\":1,\"otherBucket\":false,\"missingBucket\":false}}],\"params\":{\"perPage\":10,\"showPartialRows\":false,\"showMetricsAtAllLevels\":false,\"showTotal\":false,\"totalFunc\":\"sum\",\"percentageCol\":\"\"}}","kibanaSavedObjectMeta":{"searchSourceJSON":"{\"query\":{\"query\":\"\",\"language\":\"kuery\"},\"filter\":[],\"indexRefName\":\"kibanaSavedObjectMeta.searchSourceJSON.index\"}"}},"references":[{"name":"kibanaSavedObjectMeta.searchSourceJSON.index","type":"index-pattern","id":"soc-wazuh-alerts"}]}
+    {"type":"dashboard","id":"soc-overview","attributes":{"title":"SOC overview","description":"Managed by the Wazuh operator (OpenSearchDashboardObject) - edits made here are reverted at the next sync.","panelsJSON":"[{\"panelIndex\":\"1\",\"gridData\":{\"x\":0,\"y\":0,\"w\":16,\"h\":12,\"i\":\"1\"},\"version\":\"2.13.0\",\"panelRefName\":\"panel_0\",\"embeddableConfig\":{}},{\"panelIndex\":\"2\",\"gridData\":{\"x\":16,\"y\":0,\"w\":32,\"h\":12,\"i\":\"2\"},\"version\":\"2.13.0\",\"panelRefName\":\"panel_1\",\"embeddableConfig\":{}}]","optionsJSON":"{\"hidePanelTitles\":false,\"useMargins\":true}","version":1,"timeRestore":true,"timeFrom":"now-24h","timeTo":"now","refreshInterval":{"pause":true,"value":0},"kibanaSavedObjectMeta":{"searchSourceJSON":"{\"query\":{\"query\":\"\",\"language\":\"kuery\"},\"filter\":[]}"}},"references":[{"name":"panel_0","type":"visualization","id":"soc-alert-count"},{"name":"panel_1","type":"visualization","id":"soc-top-rules"}]}
+---
+apiVersion: resources.wazuh.com/v1
+kind: OpenSearchDashboardObject
+metadata:
+  name: soc-overview
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+
+  # Import into the global tenant (visible to every user allowed to read it).
+  # Empty = dashboard default tenant; "private" or a custom OpenSearchTenant name also work
+  # when multi-tenancy is enabled on the dashboard.
+  tenant: global
+
+  source:
+    configMapRef:
+      name: soc-dashboards
+      key: export.ndjson
+
+  # Re-import (and revert UI edits) every 10 minutes even when the export did not change.
+  resyncInterval: 10m
+
+  # Delete the objects that were removed from the export.
+  prune: true

@@ -26,6 +26,9 @@ const (
 	// TenantFinalizer is the finalizer for OpenSearch tenants
 	TenantFinalizer = "opensearchtenant.resources.wazuh.com/finalizer"
 
+	// DashboardObjectFinalizer is the finalizer for OpenSearch Dashboards saved objects
+	DashboardObjectFinalizer = "opensearchdashboardobject.resources.wazuh.com/finalizer"
+
 	// ISMPolicyFinalizer is the finalizer for OpenSearch ISM policies
 	ISMPolicyFinalizer = "opensearchismpolicy.resources.wazuh.com/finalizer"
 

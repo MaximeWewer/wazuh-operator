@@ -309,7 +309,7 @@ wazuh-operator/
 1. **Operator Startup**: `cmd/wazuh-operator/main.go:main()`
 
    - Initializes controller-runtime manager
-   - Registers all 27 controllers
+   - Registers all 29 controllers
    - Starts metrics server
    - Runs controller loops
 

@@ -21,7 +21,8 @@ examples/
 │
 ├── opensearch-security/  # OpenSearch users, roles, mappings, tenants, action groups, auth
 ├── opensearch-index/     # OpenSearch indices, templates, ISM policies
-└── opensearch-backup/    # OpenSearch snapshot repositories, snapshots, policies, restore
+├── opensearch-backup/    # OpenSearch snapshot repositories, snapshots, policies, restore
+└── opensearch-dashboards/ # Dashboards, visualizations, index patterns as code
 ```
 
 ## CRD Coverage
@@ -48,6 +49,7 @@ Every CRD has at least one example. Find the example for a given CRD here:
 | OpenSearchRole | [opensearch-security/opensearchrole-basic.yaml](opensearch-security/opensearchrole-basic.yaml) |
 | OpenSearchRoleMapping | [opensearch-security/opensearchrolemapping-basic.yaml](opensearch-security/opensearchrolemapping-basic.yaml) |
 | OpenSearchTenant | [opensearch-security/opensearchtenant-basic.yaml](opensearch-security/opensearchtenant-basic.yaml) |
+| OpenSearchDashboardObject | [opensearch-dashboards/opensearchdashboardobject-configmap.yaml](opensearch-dashboards/opensearchdashboardobject-configmap.yaml) |
 | OpenSearchActionGroup | [opensearch-security/opensearchactiongroup-basic.yaml](opensearch-security/opensearchactiongroup-basic.yaml) |
 | OpenSearchAuthConfig | [opensearch-security/opensearchauthconfig-basic.yaml](opensearch-security/opensearchauthconfig-basic.yaml) |
 | OpenSearchIndex | [opensearch-index/opensearchindex-basic.yaml](opensearch-index/opensearchindex-basic.yaml) |

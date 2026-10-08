@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Wazuh Operator defines 27 Custom Resource Definitions (CRDs) organized into 7 logical categories. All CRDs use API group `resources.wazuh.com` with version `v1` (the storage and served version).
+The Wazuh Operator defines 29 Custom Resource Definitions (CRDs) organized into 8 logical categories. All CRDs use API group `resources.wazuh.com` with version `v1` (the storage and served version).
 
 ## CRD Categories
 
@@ -321,6 +321,20 @@ These CRDs handle OpenSearch snapshot-based backup and restore.
   - `indices`: Indices to restore
   - `renamePattern`/`renameReplacement`: Rename restored indices
 - **Short Name**: `osrest`
+
+### 8. OpenSearch Dashboards CRDs (1)
+
+#### OpenSearchDashboardObject
+
+- **Purpose**: Dashboards, visualizations, index patterns and saved searches as code, imported from an NDJSON saved objects export (Git is the source of truth)
+- **Key Fields**:
+  - `clusterRefs`: Target clusters
+  - `tenant`: Dashboards tenant (`global` by default, `private`, or a custom tenant)
+  - `source.ndjson` / `source.configMapRef`: The export, inline or from a ConfigMap
+  - `resyncInterval`: Period of the forced re-import that reverts UI edits (default `10m`)
+  - `prune`: Delete objects removed from the export (default `true`)
+- **Status**: managed `objects`, `objectCount`, `tenant`, per-cluster `clusterStatuses`
+- **Short Name**: `osdashobj`
 
 ## Common Type Patterns
 

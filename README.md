@@ -18,6 +18,7 @@ More short videos (detection-as-code, access-as-code, day-2 operations) in the [
 - **OpenSearch Security CRDs** - Manage users, roles, role mappings, and tenants declaratively
 - **Wazuh API RBAC CRDs** - Manage Manager API roles, policies, rules, and users; restrict dashboard menus per user via run_as
 - **Index Lifecycle Management** - Configure ISM policies, index templates, and snapshot policies
+- **Dashboards as Code** - Import dashboards, visualizations, and index patterns from a Git-tracked export; UI edits are reverted at the next sync
 - **Backup & Restore** - OpenSearch snapshots and Wazuh Manager backups to S3, GCS, Azure, HDFS
 - **TLS Automation** - Auto-generated certificates with hot reload support (Wazuh 4.9+)
 - **High Availability** - Multi-node deployments with pod disruption budgets
@@ -113,6 +114,7 @@ Open <https://localhost:5601> - Credentials are auto-generated in secrets.
 | **OpenSearch Security** | OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchActionGroup, OpenSearchTenant, OpenSearchAuthConfig           | osuser, osrole, osrmap, osag, ostenant, osauth                     |
 | **OpenSearch Index**    | OpenSearchIndex, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchISMPolicy, OpenSearchSnapshotPolicy           | osidx, osidxt, osctpl, osism, ossnap                               |
 | **OpenSearch Backup**   | OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore                                                            | osrepo, ossnapshot, osrestore                                      |
+| **OpenSearch Dashboards** | OpenSearchDashboardObject (dashboards, visualizations, index patterns as code)                                             | osdashobj                                                          |
 
 > See [CRD Reference](docs/usage/CRD-REFERENCE.md) for complete API documentation.
 
@@ -129,6 +131,7 @@ Open <https://localhost:5601> - Credentials are auto-generated in secrets.
 | [Wazuh API RBAC](docs/usage/features/wazuh-api-rbac.md)               | Manager API roles/users, run_as restriction |
 | [Monitoring](docs/usage/features/monitoring.md)                       | Prometheus integration                      |
 | [Backup & Restore](docs/usage/features/backup-restore.md)             | Data protection (S3, GCS, Azure, HDFS)      |
+| [Dashboards as code](docs/usage/features/dashboards-as-code.md)       | Dashboards and visualizations from Git      |
 | [Repository Plugins](docs/usage/features/repository-plugins.md)       | Auto plugin install & keystore              |
 | [OpenSearch Security](docs/usage/features/opensearch-security.md)     | Indexer users, roles, tenants               |
 | [Gateway API & Ingress](docs/usage/features/gateway-api.md)           | Expose dashboard/manager                    |

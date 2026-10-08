@@ -161,6 +161,7 @@ rules:
   - opensearchactiongroups
   - opensearchauthconfigs
   - opensearchcomponenttemplates
+  - opensearchdashboardobjects
   - opensearchindextemplates
   - opensearchindices
   - opensearchismpolicies
@@ -200,6 +201,7 @@ rules:
   - opensearchactiongroups/finalizers
   - opensearchauthconfigs/finalizers
   - opensearchcomponenttemplates/finalizers
+  - opensearchdashboardobjects/finalizers
   - opensearchindextemplates/finalizers
   - opensearchindices/finalizers
   - opensearchismpolicies/finalizers
@@ -233,6 +235,7 @@ rules:
   - opensearchactiongroups/status
   - opensearchauthconfigs/status
   - opensearchcomponenttemplates/status
+  - opensearchdashboardobjects/status
   - opensearchindextemplates/status
   - opensearchindices/status
   - opensearchismpolicies/status

@@ -11,7 +11,7 @@ references are supported.
 
 | Form | CRDs |
 |------|------|
-| `clusterRefs: [{name, namespace}]` (MinItems=1) | WazuhAgentGroup, WazuhRule, WazuhDecoder, WazuhFilebeat, WazuhIntegration, WazuhCDBList, WazuhActiveResponse, WazuhRole, WazuhUser, OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchTenant, OpenSearchActionGroup, OpenSearchAuthConfig, OpenSearchISMPolicy, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchIndex, OpenSearchSnapshotPolicy, OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore |
+| `clusterRefs: [{name, namespace}]` (MinItems=1) | WazuhAgentGroup, WazuhRule, WazuhDecoder, WazuhFilebeat, WazuhIntegration, WazuhCDBList, WazuhActiveResponse, WazuhRole, WazuhUser, OpenSearchUser, OpenSearchRole, OpenSearchRoleMapping, OpenSearchTenant, OpenSearchActionGroup, OpenSearchAuthConfig, OpenSearchISMPolicy, OpenSearchIndexTemplate, OpenSearchComponentTemplate, OpenSearchIndex, OpenSearchSnapshotPolicy, OpenSearchSnapshotRepository, OpenSearchSnapshot, OpenSearchRestore, OpenSearchDashboardObject |
 | `clusterRef: {name, namespace}` | WazuhBackup, WazuhRestore, WazuhCertificate |
 
 Multi-cluster CRDs report per-target-cluster reconciliation state via
@@ -44,6 +44,8 @@ additional cluster when targeting more than one.
   - [OpenSearchSnapshotRepository](#opensearchsnapshotrepository)
   - [OpenSearchSnapshot](#opensearchsnapshot)
   - [OpenSearchRestore](#opensearchrestore)
+- [OpenSearch Dashboards CRDs](#opensearch-dashboards-crds)
+  - [OpenSearchDashboardObject](#opensearchdashboardobject)
 - [Wazuh Configuration CRDs](#wazuh-configuration-crds)
   - [WazuhRule](#wazuhrule)
   - [WazuhAgentGroup](#wazuhagentgroup)
@@ -1370,6 +1372,47 @@ renameReplacement: "restored-$1"
 
 ---
 
+## OpenSearch Dashboards CRDs
+
+### OpenSearchDashboardObject
+
+Manages OpenSearch Dashboards saved objects - dashboards, visualizations, index patterns,
+saved searches - from an NDJSON saved objects export kept in Git. See
+[Dashboards as code](features/dashboards-as-code.md) for the workflow.
+
+**Short Name:** `osdashobj`
+
+| Field                     | Type                    | Required | Default         | Description |
+| ------------------------- | ----------------------- | -------- | --------------- | ----------- |
+| `clusterRefs`             | []WazuhClusterReference | **Yes**  | -               | Target clusters (each must have a dashboard) |
+| `tenant`                  | string                  | No       | `global`        | Tenant to import into: `global`, `private` (the operator admin's private tenant) or a custom tenant name |
+| `source.ndjson`           | string                  | One of   | -               | Inline NDJSON export |
+| `source.configMapRef.name`| string                  | One of   | -               | ConfigMap holding the export, in the same namespace; changes are picked up immediately |
+| `source.configMapRef.key` | string                  | No       | `export.ndjson` | Key of the export in the ConfigMap |
+| `resyncInterval`          | duration                | No       | `10m`           | Forced re-import period, even when the source did not change |
+| `prune`                   | bool                    | No       | `true`          | Delete previously imported objects that were removed from the source |
+
+Exactly one of `source.ndjson` and `source.configMapRef` must be set.
+
+> **Git is the source of truth.** Every sync re-imports the export with `overwrite=true`, so a
+> change made in the Dashboards UI to a managed object is lost at the next sync. Objects that
+> were never in the export are never touched. Deleting the resource deletes its objects.
+
+#### Status Fields
+
+| Field                | Type                      | Description |
+| -------------------- | ------------------------- | ----------- |
+| `phase`              | string                    | `Pending`, `Ready` or `Failed` |
+| `message`            | string                    | Additional information |
+| `tenant`             | string                    | Tenant the objects were imported into |
+| `objectCount`        | int                       | Number of managed saved objects |
+| `objects`            | []{type, id}              | Managed saved objects (used for pruning and cleanup) |
+| `lastSyncTime`       | time                      | Last successful import on every target cluster |
+| `lastAppliedHash`    | string                    | Hash of the last imported export and tenant |
+| `clusterStatuses`    | []OpenSearchClusterStatus | Per-cluster state |
+
+---
+
 ## Wazuh Configuration CRDs
 
 ### WazuhRule
@@ -2332,4 +2375,5 @@ Ready-to-use manifests for every CRD live under [`docs/usage/examples/`](example
 | OpenSearch security | [examples/opensearch-security/](examples/opensearch-security/) |
 | OpenSearch index management | [examples/opensearch-index/](examples/opensearch-index/) |
 | OpenSearch backup & restore | [examples/opensearch-backup/](examples/opensearch-backup/) |
+| OpenSearch Dashboards saved objects (dashboards as code) | [examples/opensearch-dashboards/](examples/opensearch-dashboards/) |
 | GitOps (ArgoCD, Flux) | [examples/gitops/](examples/gitops/) |

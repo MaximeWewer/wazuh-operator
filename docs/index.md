@@ -35,8 +35,8 @@ Short (~20s) videos recorded on a minikube lab - every terminal line is real `ku
 | **Type**        | Kubernetes Operator                         |
 | **Language**    | Go 1.26                                   |
 | **Framework**   | Kubebuilder v4 + controller-runtime         |
-| **CRDs**        | 27 Custom Resource Definitions              |
-| **Controllers** | 27 reconciliation controllers               |
+| **CRDs**        | 29 Custom Resource Definitions              |
+| **Controllers** | 29 reconciliation controllers               |
 | **API Group**   | `resources.wazuh.com/v1`                    |
 | **Target**      | Kubernetes 1.25+                            |
 
@@ -51,7 +51,7 @@ Short (~20s) videos recorded on a minikube lab - every terminal line is real `ku
 ### User Guide
 
 - [User Documentation](usage/README.md) - Complete user guide index
-- [CRD Reference](usage/CRD-REFERENCE.md) - API documentation for all 27 CRDs
+- [CRD Reference](usage/CRD-REFERENCE.md) - API documentation for all 29 CRDs
 - [Examples](usage/examples/README.md) - Ready-to-use configurations
 
 ### Key Features
@@ -62,7 +62,7 @@ Short (~20s) videos recorded on a minikube lab - every terminal line is real `ku
 | Detection Content | [Detection Content](usage/features/detection-content.md) - rules, decoders, CDB lists, active response, integrations, agent groups        |
 | Security         | [Credentials](usage/features/credentials.md), [TLS](usage/features/tls.md)                                                                 |
 | Observability    | [Monitoring](usage/features/monitoring.md), [OpenTelemetry](usage/features/opentelemetry.md)                                               |
-| OpenSearch       | [Security CRDs](usage/features/opensearch-security.md), [Index Management](usage/features/opensearch-indices.md)                           |
+| OpenSearch       | [Security CRDs](usage/features/opensearch-security.md), [Index Management](usage/features/opensearch-indices.md), [Dashboards as code](usage/features/dashboards-as-code.md) |
 | Operations       | [Backup/Restore](usage/features/backup-restore.md), [Sizing](usage/features/sizing.md), [Drain Strategy](usage/features/drain-strategy.md) |
 
 ### Operations
@@ -95,7 +95,7 @@ Short (~20s) videos recorded on a minikube lab - every terminal line is real `ku
 | Path                      | Description                                                          |
 | ------------------------- | -------------------------------------------------------------------- |
 | `api/v1/`                 | CRD type definitions (v1 storage version)                            |
-| `controllers/`            | 27 Kubernetes controllers                                            |
+| `controllers/`            | 29 Kubernetes controllers                                            |
 | `internal/wazuh/`         | Wazuh reconcilers, config, builders, drain                           |
 | `internal/opensearch/`    | OpenSearch reconcilers, API clients, config, builders                |
 | `internal/certificates/`  | TLS certificate reconciler and generation                            |

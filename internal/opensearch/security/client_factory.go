@@ -282,3 +282,56 @@ func computeCredsHash(username, password string, caCert []byte) string {
 	h.Write(caCert)
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
+
+// DashboardConnectionInfo holds what is needed to call the OpenSearch Dashboards HTTP API
+// of a cluster: its in-cluster URL, the indexer admin credentials (the dashboard
+// authenticates them against the indexer) and the CA of its HTTPS certificate.
+type DashboardConnectionInfo struct {
+	BaseURL  string
+	Username string
+	Password string
+	// CACert is empty when the dashboard serves plain HTTP (spec.dashboard.enableSSL: false).
+	CACert []byte
+}
+
+// GetDashboardConnectionInfoForRef returns the Dashboards API connection info for a cluster
+// addressed by a WazuhClusterRef. It fails when the cluster has no dashboard.
+func (f *OpenSearchClientFactory) GetDashboardConnectionInfoForRef(ctx context.Context, ref wazuhv1.WazuhClusterRef) (*DashboardConnectionInfo, error) {
+	var cluster wazuhv1.WazuhCluster
+	if err := f.k8sClient.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: ref.Namespace}, &cluster); err != nil {
+		return nil, fmt.Errorf("failed to get WazuhCluster %s/%s: %w", ref.Namespace, ref.Name, err)
+	}
+	if cluster.Spec.Dashboard == nil {
+		return nil, fmt.Errorf("WazuhCluster %s/%s has no dashboard", ref.Namespace, ref.Name)
+	}
+
+	username, password, err := f.getCredentials(ctx, &cluster)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get credentials: %w", err)
+	}
+
+	info := &DashboardConnectionInfo{Username: username, Password: password}
+	host := constants.DashboardServiceFQDN(cluster.Name, cluster.Namespace)
+	if cluster.Spec.Dashboard.EnableSSL != nil && !*cluster.Spec.Dashboard.EnableSSL {
+		info.BaseURL = fmt.Sprintf("http://%s:%d", host, constants.PortDashboardHTTP)
+		return info, nil
+	}
+
+	// The CA of the dashboard HTTPS certificate is stored next to it: "ca.crt" (layout
+	// written by the certificate reconciler), or "root-ca.pem" (legacy builder layout).
+	secretName := constants.DashboardCertsName(cluster.Name)
+	var secret corev1.Secret
+	if err := f.k8sClient.Get(ctx, types.NamespacedName{Name: secretName, Namespace: cluster.Namespace}, &secret); err != nil {
+		return nil, fmt.Errorf("failed to get dashboard certs secret %s: %w", secretName, err)
+	}
+	caCert, ok := secret.Data[constants.SecretKeyCACert]
+	if !ok {
+		caCert, ok = secret.Data[constants.SecretKeyRootCA]
+	}
+	if !ok {
+		return nil, fmt.Errorf("no CA certificate (%s or %s) in secret %s", constants.SecretKeyCACert, constants.SecretKeyRootCA, secretName)
+	}
+	info.CACert = caCert
+	info.BaseURL = fmt.Sprintf("https://%s:%d", host, constants.PortDashboardHTTP)
+	return info, nil
+}
