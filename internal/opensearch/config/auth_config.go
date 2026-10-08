@@ -482,6 +482,38 @@ func (b *AuthConfigBuilder) ValidateChallengeSettings() error {
 	return nil
 }
 
+// ValidateChallengeIsLast rejects a challenging HTTP domain that is evaluated before other
+// HTTP domains. When the security plugin meets a domain with challenge=true that finds no
+// credentials in the request, it answers 401 right away and never tries the domains after
+// it: a basicAuth domain with challenge=true placed before JWT/OIDC/SAML silently rejects
+// every token. The challenging domain must therefore come after every domain that reads
+// another kind of credentials (domains reading HTTP Basic, such as LDAP, are not affected).
+func (b *AuthConfigBuilder) ValidateChallengeIsLast() error {
+	var challenger *AuthDomainConfig
+	domains := b.buildAuthDomains()
+	for i := range domains {
+		if domains[i].HTTPEnabled && domains[i].Challenge {
+			challenger = &domains[i]
+		}
+	}
+	if challenger == nil {
+		return nil
+	}
+	for _, d := range domains {
+		// Domains that also read HTTP Basic credentials (internal users, LDAP) are not
+		// hidden: the credentials are present, so no early challenge is sent.
+		if d.AuthenticatorType == "basic" {
+			continue
+		}
+		if d.HTTPEnabled && d.Name != challenger.Name && d.Order > challenger.Order {
+			return fmt.Errorf("%s has challenge=true but order %d, before %s (order %d): the security plugin "+
+				"would answer 401 before trying %s; give the challenging domain the highest order or set its challenge to false",
+				challenger.Name, challenger.Order, d.Name, d.Order, d.Name)
+		}
+	}
+	return nil
+}
+
 // ValidateMultiAuthJWTSupported rejects JWT combined with another dashboard sign-in method
 // (multiple authentication) when the target dashboard is older than OpenSearch Dashboards
 // 2.18 (Wazuh < 4.12): its security plugin only combines basicauth, openid and saml, so the

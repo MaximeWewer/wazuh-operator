@@ -218,6 +218,11 @@ func (r *AuthConfigReconciler) validateConfig(authConfig *wazuhv1.OpenSearchAuth
 		return err
 	}
 
+	// A challenging domain evaluated before the others hides them (401 on first miss).
+	if err := builder.ValidateChallengeIsLast(); err != nil {
+		return err
+	}
+
 	// Validate OIDC config
 	if authConfig.Spec.OIDC != nil && authConfig.Spec.OIDC.Enabled {
 		oidcBuilder := config.NewOIDCConfigBuilder(authConfig.Spec.OIDC)

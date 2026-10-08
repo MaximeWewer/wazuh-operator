@@ -43,3 +43,27 @@ func TestValidateMultiAuthJWTSupported(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateChallengeIsLast guards a lab finding: basicAuth (challenge=true, order 0)
+// before jwt (order 1) made the indexer answer 401 to every token without trying JWT.
+func TestValidateChallengeIsLast(t *testing.T) {
+	jwt1 := &v1.JWTAuthSpec{Enabled: true, Order: ptr.To(1)}
+	tests := []struct {
+		name    string
+		spec    v1.OpenSearchAuthConfigSpec
+		wantErr bool
+	}{
+		{"basic challenge before jwt", v1.OpenSearchAuthConfigSpec{BasicAuth: &v1.BasicAuthSpec{Enabled: ptr.To(true), Order: 0}, JWT: jwt1}, true},
+		{"basic challenge after jwt", v1.OpenSearchAuthConfigSpec{BasicAuth: &v1.BasicAuthSpec{Enabled: ptr.To(true), Order: 2}, JWT: jwt1}, false},
+		{"basic before jwt without challenge", v1.OpenSearchAuthConfigSpec{BasicAuth: &v1.BasicAuthSpec{Enabled: ptr.To(true), Order: 0, Challenge: ptr.To(false)}, JWT: jwt1}, false},
+		{"jwt only (basic placed after automatically)", v1.OpenSearchAuthConfigSpec{JWT: jwt1}, false},
+		{"basic challenge before ldap", v1.OpenSearchAuthConfigSpec{BasicAuth: &v1.BasicAuthSpec{Enabled: ptr.To(true), Order: 0}, LDAP: &v1.LDAPAuthSpec{Enabled: true, Order: ptr.To(1)}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := NewAuthConfigBuilder(&tt.spec).ValidateChallengeIsLast(); (err != nil) != tt.wantErr {
+				t.Fatalf("ValidateChallengeIsLast() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
