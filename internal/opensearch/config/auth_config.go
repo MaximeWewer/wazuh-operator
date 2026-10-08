@@ -274,10 +274,23 @@ func (b *AuthConfigBuilder) formatAuthzDomain(domain AuthDomainConfig) string {
 func (b *AuthConfigBuilder) buildBasicAuthDomain(spec *v1.BasicAuthSpec) AuthDomainConfig {
 	domain := DefaultBasicAuthDomain()
 
-	if spec != nil {
+	samlOn := b.authConfig.SAML != nil && b.authConfig.SAML.Enabled
+	switch {
+	case spec != nil:
 		domain.Order = spec.Order
-		domain.Challenge = ptr.Deref(spec.Challenge, true)
-	} else if maxOrder, ok := b.maxNonBasicOrder(); ok {
+		// With SAML the SAML domain owns the challenge; basic must not challenge first.
+		domain.Challenge = ptr.Deref(spec.Challenge, !samlOn)
+	case samlOn:
+		// SAML must be evaluated last: requests carrying Basic credentials (the dashboard
+		// kibanaserver, the operator) are authenticated by basic first, while requests
+		// without credentials fall through to the SAML challenge that starts the login.
+		domain.Order = ptr.Deref(b.authConfig.SAML.Order, 2) - 1
+		domain.Challenge = false
+	default:
+		maxOrder, ok := b.maxNonBasicOrder()
+		if !ok {
+			break
+		}
 		// No explicit basicAuth: evaluate it right after the SSO domain(s) so SSO
 		// owns the front door while basic stays the interactive fallback. Mirrors the
 		// canonical "SSO order 0 (challenge=false) + basic order N+1 (challenge=true)"
@@ -483,33 +496,35 @@ func (b *AuthConfigBuilder) ValidateChallengeSettings() error {
 }
 
 // ValidateChallengeIsLast rejects a challenging HTTP domain that is evaluated before other
-// HTTP domains. When the security plugin meets a domain with challenge=true that finds no
-// credentials in the request, it answers 401 right away and never tries the domains after
-// it: a basicAuth domain with challenge=true placed before JWT/OIDC/SAML silently rejects
-// every token. The challenging domain must therefore come after every domain that reads
-// another kind of credentials (domains reading HTTP Basic, such as LDAP, are not affected).
+// HTTP domains it would hide. When the security plugin meets a domain with challenge=true
+// that finds no credentials of its kind in the request, it answers 401 right away and never
+// tries the domains after it. A basicAuth domain challenging before JWT/OIDC silently
+// rejects every token; a SAML domain challenging before basic rejects every Basic request,
+// including the dashboard service account and the operator itself. Only domains reading
+// the same HTTP Basic credentials (internal users, LDAP) can follow a basic challenger.
 func (b *AuthConfigBuilder) ValidateChallengeIsLast() error {
-	var challenger *AuthDomainConfig
 	domains := b.buildAuthDomains()
+	sort.SliceStable(domains, func(i, j int) bool { return domains[i].Order < domains[j].Order })
+	var challenger *AuthDomainConfig
 	for i := range domains {
 		if domains[i].HTTPEnabled && domains[i].Challenge {
 			challenger = &domains[i]
+			break
 		}
 	}
 	if challenger == nil {
 		return nil
 	}
 	for _, d := range domains {
-		// Domains that also read HTTP Basic credentials (internal users, LDAP) are not
-		// hidden: the credentials are present, so no early challenge is sent.
-		if d.AuthenticatorType == "basic" {
+		if !d.HTTPEnabled || d.Name == challenger.Name || d.Order < challenger.Order {
 			continue
 		}
-		if d.HTTPEnabled && d.Name != challenger.Name && d.Order > challenger.Order {
-			return fmt.Errorf("%s has challenge=true but order %d, before %s (order %d): the security plugin "+
-				"would answer 401 before trying %s; give the challenging domain the highest order or set its challenge to false",
-				challenger.Name, challenger.Order, d.Name, d.Order, d.Name)
+		if challenger.AuthenticatorType == "basic" && d.AuthenticatorType == "basic" {
+			continue
 		}
+		return fmt.Errorf("%s has challenge=true but order %d, before %s (order %d): the security plugin "+
+			"would answer 401 before trying %s; order the challenging domain last or set its challenge to false",
+			challenger.Name, challenger.Order, d.Name, d.Order, d.Name)
 	}
 	return nil
 }

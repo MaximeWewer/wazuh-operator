@@ -94,7 +94,8 @@ Who can see the imported dashboards is governed by the usual OpenSearch security
   the indexer admin credentials it already manages, sent as an `Authorization: Basic` header.
   The dashboard forwards any `Authorization` header to the indexer, which always keeps its
   internal basic-auth domain, so this works whatever the dashboard sign-in method: basic auth,
-  OIDC, SAML, or JWT with the default `Authorization` header (verified on a JWT-only dashboard).
+  OIDC, SAML, or JWT with the default `Authorization` header (verified against Keycloak in
+  OIDC-only and SAML-only modes, and on a JWT-only dashboard).
   The one exception is a JWT-only setup with a custom header (`OpenSearchAuthConfig`
   `jwt.jwtHeader`, e.g. Teleport's `Teleport-Jwt-Assertion`): the dashboard then only
   recognizes that header and answers 401 to the operator. On **Wazuh 4.12+**, enable

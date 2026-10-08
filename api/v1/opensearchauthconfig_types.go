@@ -234,9 +234,11 @@ type SAMLAuthSpec struct {
 	// +kubebuilder:default=2
 	Order *int `json:"order,omitempty"`
 
-	// Challenge enables authentication challenge
-	// Should typically be false when multiple auth methods are enabled
-	// +kubebuilder:default=false
+	// Challenge is ignored for SAML: the SAML domain always challenges, because the
+	// dashboard starts a SAML login by reading that challenge from the indexer. The operator
+	// also evaluates SAML after basic auth (which then does not challenge), so Basic
+	// requests from the dashboard and the operator are not answered with the SAML challenge.
+	// +optional
 	Challenge bool `json:"challenge,omitempty"`
 
 	// HTTPEnabled enables authentication on HTTP layer
@@ -267,8 +269,9 @@ type SAMLAuthSpec struct {
 	// +kubebuilder:validation:Required
 	KibanaURL string `json:"kibanaUrl"`
 
-	// SubjectKey is the SAML attribute to use as the username
-	// +kubebuilder:default="NameID"
+	// SubjectKey is the SAML attribute to use as the username. Leave it empty (or "NameID")
+	// to use the NameID of the assertion; any other value names an assertion attribute.
+	// +optional
 	SubjectKey string `json:"subjectKey,omitempty"`
 
 	// RolesKey is the SAML attribute containing user roles

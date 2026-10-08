@@ -65,3 +65,40 @@ func TestValidateChallengeIsLast(t *testing.T) {
 		})
 	}
 }
+
+// TestSAMLLayout guards the SAML defects found against a live Keycloak: SAML must own the
+// challenge and come last (basic before it, not challenging), and the NameID must be used
+// when subjectKey is empty or "NameID".
+func TestSAMLLayout(t *testing.T) {
+	saml := &v1.SAMLAuthSpec{Enabled: true, Order: new(2), SubjectKey: "NameID"}
+	b := NewAuthConfigBuilder(&v1.OpenSearchAuthConfigSpec{SAML: saml})
+	domains := map[string]AuthDomainConfig{}
+	for _, d := range b.buildAuthDomains() {
+		domains[d.Name] = d
+	}
+	basic, s := domains["basic_internal_auth_domain"], domains["saml_auth_domain"]
+	if !s.Challenge || basic.Challenge || basic.Order >= s.Order {
+		t.Fatalf("SAML must challenge and come after a non-challenging basic: basic=%+v saml order=%d challenge=%v", basic, s.Order, s.Challenge)
+	}
+	if _, ok := s.AuthenticatorConfig["subject_key"]; ok {
+		t.Errorf("subjectKey NameID must not be rendered as an attribute name: %v", s.AuthenticatorConfig["subject_key"])
+	}
+	if err := b.ValidateChallengeIsLast(); err != nil {
+		t.Errorf("automatic SAML layout rejected: %v", err)
+	}
+
+	// Explicit basic placed after SAML: every Basic request would get the SAML challenge.
+	bad := NewAuthConfigBuilder(&v1.OpenSearchAuthConfigSpec{SAML: &v1.SAMLAuthSpec{Enabled: true, Order: new(0)},
+		BasicAuth: &v1.BasicAuthSpec{Enabled: new(true), Order: 1}})
+	if err := bad.ValidateChallengeIsLast(); err == nil {
+		t.Error("SAML challenging before basic must be rejected")
+	}
+
+	// An attribute subject key is kept.
+	attr := NewAuthConfigBuilder(&v1.OpenSearchAuthConfigSpec{SAML: &v1.SAMLAuthSpec{Enabled: true, SubjectKey: "email"}})
+	for _, d := range attr.buildAuthDomains() {
+		if d.Name == "saml_auth_domain" && d.AuthenticatorConfig["subject_key"] != "email" {
+			t.Errorf("attribute subject key lost: %v", d.AuthenticatorConfig["subject_key"])
+		}
+	}
+}

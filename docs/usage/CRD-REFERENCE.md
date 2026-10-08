@@ -988,18 +988,26 @@ SAML 2.0 authentication. Drives both the indexer `authc` domain and the dashboar
 `opensearch_security.auth.type: saml`. Supply IdP metadata via `idpMetadataUrl`
 **or** `idpMetadataFile`. `idpEntityId`, `spEntityId` and `kibanaUrl` are required.
 
+> **Domain layout (automatic).** The dashboard starts a SAML login by reading the indexer's
+> SAML challenge, so the SAML domain always challenges and is evaluated **after** basic
+> auth, which then does not challenge. Requests carrying Basic credentials (the dashboard
+> service account, the operator) are handled by basic; requests without credentials get the
+> SAML challenge. An explicit `basicAuth` placed after SAML is rejected, since every Basic
+> request would receive the SAML challenge. Verified end to end against Keycloak (login,
+> roles, dashboard saved objects imported by the operator).
+
 | Field             | Type              | Required | Default  | Description                                                             |
 | ----------------- | ----------------- | -------- | -------- | ----------------------------------------------------------------------- |
 | `enabled`         | bool              | No       | `false`  | Enable SAML auth domain                                                  |
 | `order`           | int               | No       | `2`      | Evaluation order among auth domains                                      |
-| `challenge`       | bool              | No       | `false`  | Issue auth challenge (keep `false` alongside basic)                     |
+| `challenge`       | bool              | No       | -        | Ignored: the SAML domain always challenges (see the note below)         |
 | `httpEnabled`     | bool              | No       | `true`   | Enable on HTTP layer                                                     |
 | `idpMetadataUrl`  | string            | No\*     | -        | URL to fetch IdP metadata from                                         |
 | `idpMetadataFile` | string            | No\*     | -        | Path to an IdP metadata XML file                                       |
 | `idpEntityId`     | string            | **Yes**  | -        | Entity ID of the Identity Provider                                     |
 | `spEntityId`      | string            | **Yes**  | -        | Entity ID of this Service Provider (usually the dashboard URL)         |
 | `kibanaUrl`       | string            | **Yes**  | -        | Base URL of OpenSearch Dashboard (assertion consumer service URL)      |
-| `subjectKey`      | string            | No       | `NameID` | SAML attribute used as the username                                    |
+| `subjectKey`      | string            | No       | -        | Assertion attribute used as the username; empty or `NameID` uses the NameID |
 | `rolesKey`        | string            | No       | -        | SAML attribute containing user roles                                   |
 | `exchangeKeyRef`  | SecretKeyRef      | No       | -        | Secret with the HMAC256 exchange key (signs/encrypts SAML messages)    |
 | `idpTLS`          | IdpTLSSpec        | No       | -        | TLS trust for the plugin→IdP metadata-URL connection (private CA)      |

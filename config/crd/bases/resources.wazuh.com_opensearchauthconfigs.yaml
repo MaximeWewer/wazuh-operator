@@ -667,10 +667,11 @@ spec:
                 description: SAML configures SAML 2.0 authentication
                 properties:
                   challenge:
-                    default: false
                     description: |-
-                      Challenge enables authentication challenge
-                      Should typically be false when multiple auth methods are enabled
+                      Challenge is ignored for SAML: the SAML domain always challenges, because the
+                      dashboard starts a SAML login by reading that challenge from the indexer. The operator
+                      also evaluates SAML after basic auth (which then does not challenge), so Basic
+                      requests from the dashboard and the operator are not answered with the SAML challenge.
                     type: boolean
                   dashboard:
                     description: Dashboard configures SAML-specific dashboard settings
@@ -773,8 +774,9 @@ spec:
                       Usually the Kibana/Dashboard URL
                     type: string
                   subjectKey:
-                    default: NameID
-                    description: SubjectKey is the SAML attribute to use as the username
+                    description: |-
+                      SubjectKey is the SAML attribute to use as the username. Leave it empty (or "NameID")
+                      to use the NameID of the assertion; any other value names an assertion attribute.
                     type: string
                 required:
                 - idpEntityId

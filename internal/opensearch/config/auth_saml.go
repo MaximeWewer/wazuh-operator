@@ -18,6 +18,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	"k8s.io/utils/ptr"
 
@@ -47,7 +48,7 @@ func (b *AuthConfigBuilder) buildSAMLAuthDomain(spec *v1.SAMLAuthSpec) AuthDomai
 	config["kibana_url"] = spec.KibanaURL
 
 	// Subject and roles mapping
-	if spec.SubjectKey != "" {
+	if samlSubjectKeyIsAttribute(spec.SubjectKey) {
 		config["subject_key"] = spec.SubjectKey
 	}
 	if spec.RolesKey != "" {
@@ -72,11 +73,13 @@ func (b *AuthConfigBuilder) buildSAMLAuthDomain(spec *v1.SAMLAuthSpec) AuthDomai
 	}
 
 	return AuthDomainConfig{
-		Name:                "saml_auth_domain",
-		Order:               ptr.Deref(spec.Order, 2),
-		HTTPEnabled:         ptr.Deref(spec.HTTPEnabled, true),
-		TransportEnabled:    false, // SAML is HTTP only
-		Challenge:           spec.Challenge,
+		Name:             "saml_auth_domain",
+		Order:            ptr.Deref(spec.Order, 2),
+		HTTPEnabled:      ptr.Deref(spec.HTTPEnabled, true),
+		TransportEnabled: false, // SAML is HTTP only
+		// The dashboard starts a SAML login by reading the indexer's SAML challenge, so the
+		// SAML domain always challenges (it must also come last, see buildBasicAuthDomain).
+		Challenge:           true,
 		AuthenticatorType:   "saml",
 		AuthenticatorConfig: config,
 		BackendType:         "noop",
@@ -123,7 +126,7 @@ func (b *SAMLConfigBuilder) BuildAuthenticatorConfig() map[string]any {
 	config["kibana_url"] = b.spec.KibanaURL
 
 	// Subject and roles
-	if b.spec.SubjectKey != "" {
+	if samlSubjectKeyIsAttribute(b.spec.SubjectKey) {
 		config["subject_key"] = b.spec.SubjectKey
 	}
 	if b.spec.RolesKey != "" {
@@ -187,4 +190,12 @@ func (b *SAMLConfigBuilder) GetSLOEndpoint() string {
 		return ""
 	}
 	return fmt.Sprintf("%s/_opendistro/_security/saml/logout", b.spec.KibanaURL)
+}
+
+// samlSubjectKeyIsAttribute reports whether subjectKey names an assertion attribute. The
+// security plugin reads subject_key as an attribute name and falls back to the NameID only
+// when it is unset: writing "NameID" (the former CRD default) makes it look for an attribute
+// of that name, so every SAML user ends up without a subject ("No subject found in JWT").
+func samlSubjectKeyIsAttribute(subjectKey string) bool {
+	return subjectKey != "" && !strings.EqualFold(subjectKey, "NameID")
 }
