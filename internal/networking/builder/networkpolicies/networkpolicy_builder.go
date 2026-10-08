@@ -29,7 +29,7 @@ import (
 // BuildIndexerNetworkPolicy builds a NetworkPolicy for the Indexer component
 // Default rules: allow ingress from indexer/manager/dashboard pods on 9200,9300,9600
 // Egress: DNS + indexer peers
-func BuildIndexerNetworkPolicy(clusterName, namespace string, spec *wazuhv1.NetworkPolicySpec) *networkingv1.NetworkPolicy {
+func BuildIndexerNetworkPolicy(clusterName, namespace, operatorNamespace string, spec *wazuhv1.NetworkPolicySpec) *networkingv1.NetworkPolicy {
 	tcp := corev1.ProtocolTCP
 	udp := corev1.ProtocolUDP
 	portREST := intstr.FromInt(int(constants.PortIndexerREST))
@@ -54,6 +54,9 @@ func BuildIndexerNetworkPolicy(clusterName, namespace string, spec *wazuhv1.Netw
 			},
 		},
 	}
+	// The operator configures OpenSearch (security, ISM, templates, snapshots) through the
+	// REST API from its own namespace.
+	ingress = append(ingress, operatorIngressRule(operatorNamespace, portREST)...)
 
 	egress := []networkingv1.NetworkPolicyEgressRule{
 		{
@@ -100,7 +103,7 @@ func BuildIndexerNetworkPolicy(clusterName, namespace string, spec *wazuhv1.Netw
 // BuildManagerNetworkPolicy builds a NetworkPolicy for the Manager component
 // Default rules: ingress from managers/dashboard on cluster/API/agent ports
 // Egress: DNS + indexer + manager peers
-func BuildManagerNetworkPolicy(clusterName, namespace string, spec *wazuhv1.NetworkPolicySpec) *networkingv1.NetworkPolicy {
+func BuildManagerNetworkPolicy(clusterName, namespace, operatorNamespace string, spec *wazuhv1.NetworkPolicySpec) *networkingv1.NetworkPolicy {
 	tcp := corev1.ProtocolTCP
 	udp := corev1.ProtocolUDP
 	portAPI := intstr.FromInt(int(constants.PortManagerAPI))
@@ -132,6 +135,9 @@ func BuildManagerNetworkPolicy(clusterName, namespace string, spec *wazuhv1.Netw
 			},
 		},
 	}
+	// The operator manages the Wazuh API RBAC (WazuhRole/WazuhUser), agent groups and
+	// health checks through the manager API from its own namespace.
+	ingress = append(ingress, operatorIngressRule(operatorNamespace, portAPI)...)
 
 	egress := []networkingv1.NetworkPolicyEgressRule{
 		{
@@ -309,4 +315,22 @@ func convertEgressRules(rules []wazuhv1.NetworkPolicyEgressRule) []networkingv1.
 		})
 	}
 	return result
+}
+
+// operatorIngressRule allows the operator pods (any pod of the operator namespace) to reach
+// port. Without it, enabling network policies on a CNI that enforces them cuts the operator
+// off from the APIs it drives. It returns nil when the operator namespace is unknown.
+func operatorIngressRule(operatorNamespace string, port intstr.IntOrString) []networkingv1.NetworkPolicyIngressRule {
+	if operatorNamespace == "" {
+		return nil
+	}
+	tcp := corev1.ProtocolTCP
+	return []networkingv1.NetworkPolicyIngressRule{{
+		From: []networkingv1.NetworkPolicyPeer{{
+			NamespaceSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"kubernetes.io/metadata.name": operatorNamespace},
+			},
+		}},
+		Ports: []networkingv1.NetworkPolicyPort{{Protocol: &tcp, Port: &port}},
+	}}
 }

@@ -21,6 +21,7 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"os"
 
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -41,13 +42,18 @@ import (
 type NetworkPolicyReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+
+	// OperatorNamespace is the namespace of the operator pods, allowed to reach the indexer
+	// and manager APIs. Read from POD_NAMESPACE (set by the Helm chart).
+	OperatorNamespace string
 }
 
 // NewNetworkPolicyReconciler creates a new NetworkPolicyReconciler
 func NewNetworkPolicyReconciler(c client.Client, scheme *runtime.Scheme) *NetworkPolicyReconciler {
 	return &NetworkPolicyReconciler{
-		Client: c,
-		Scheme: scheme,
+		Client:            c,
+		Scheme:            scheme,
+		OperatorNamespace: os.Getenv("POD_NAMESPACE"),
 	}
 }
 
@@ -103,7 +109,7 @@ func (r *NetworkPolicyReconciler) reconcileIndexerNetworkPolicy(ctx context.Cont
 
 	log.Info("Reconciling Indexer NetworkPolicy", "name", npName)
 
-	np := networkpolicies.BuildIndexerNetworkPolicy(cluster.Name, cluster.Namespace, npSpec)
+	np := networkpolicies.BuildIndexerNetworkPolicy(cluster.Name, cluster.Namespace, r.OperatorNamespace, npSpec)
 	if err := controllerutil.SetControllerReference(cluster, np, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for indexer NetworkPolicy: %w", err)
 	}
@@ -128,7 +134,7 @@ func (r *NetworkPolicyReconciler) reconcileManagerNetworkPolicy(ctx context.Cont
 
 	log.Info("Reconciling Manager NetworkPolicy", "name", npName)
 
-	np := networkpolicies.BuildManagerNetworkPolicy(cluster.Name, cluster.Namespace, npSpec)
+	np := networkpolicies.BuildManagerNetworkPolicy(cluster.Name, cluster.Namespace, r.OperatorNamespace, npSpec)
 	if err := controllerutil.SetControllerReference(cluster, np, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for manager NetworkPolicy: %w", err)
 	}
