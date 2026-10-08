@@ -239,9 +239,7 @@ opensearch.ssl.certificateAuthorities:
   - /usr/share/wazuh-dashboard/config/certs/root-ca.pem
 
 opensearch.requestHeadersAllowlist:
-  - securitytenant
-  - Authorization
-
+%s
 # Authentication
 opensearch.username: "${INDEXER_USERNAME}"
 opensearch.password: "${INDEXER_PASSWORD}"
@@ -255,7 +253,7 @@ opensearch.password: "${INDEXER_PASSWORD}"
 opensearch_security.auth.unauthenticated_routes:
   - /api/status
 
-`, b.serverHost, b.serverPort, b.clusterName, indexerHost, b.indexerPort)
+`, b.serverHost, b.serverPort, b.clusterName, indexerHost, b.indexerPort, b.requestHeadersAllowlist())
 
 	if b.enableSSL {
 		baseConfig += `# Dashboard server SSL
@@ -551,4 +549,23 @@ EOF
 
 echo "Wazuh APP configured with default host"
 `
+}
+
+// requestHeadersAllowlist renders the request headers the dashboard forwards to the
+// indexer: the tenant and Authorization headers, plus the JWT header when JWT
+// authentication reads the token from a custom header (e.g. Teleport's
+// Teleport-Jwt-Assertion). Without it the dashboard drops that header and the indexer
+// rejects every JWT user with "Authentication Exception".
+func (b *DashboardConfigMapBuilder) requestHeadersAllowlist() string {
+	headers := []string{"securitytenant", "Authorization"}
+	if b.authConfig != nil && b.authConfig.JWT != nil && b.authConfig.JWT.Enabled {
+		if h := strings.TrimSpace(b.authConfig.JWT.JwtHeader); h != "" && !strings.EqualFold(h, "Authorization") {
+			headers = append(headers, h)
+		}
+	}
+	var sb strings.Builder
+	for _, h := range headers {
+		fmt.Fprintf(&sb, "  - %s\n", h)
+	}
+	return sb.String()
 }

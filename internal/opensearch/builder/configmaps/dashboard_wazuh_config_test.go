@@ -51,3 +51,21 @@ func TestBuildWazuhConfigRendersBoolPointers(t *testing.T) {
 		}
 	}
 }
+
+// TestRequestHeadersAllowlistForwardsCustomJWTHeader guards SSO through a custom JWT header
+// (Teleport): the dashboard must forward that header to the indexer, or every JWT user gets
+// "Authentication Exception".
+func TestRequestHeadersAllowlistForwardsCustomJWTHeader(t *testing.T) {
+	b := &DashboardConfigMapBuilder{}
+	if got := b.requestHeadersAllowlist(); got != "  - securitytenant\n  - Authorization\n" {
+		t.Fatalf("default allowlist = %q", got)
+	}
+	b.authConfig = &wazuhv1.OpenSearchAuthConfigSpec{JWT: &wazuhv1.JWTAuthSpec{Enabled: true, JwtHeader: "Teleport-Jwt-Assertion"}}
+	if got := b.requestHeadersAllowlist(); !strings.Contains(got, "  - Teleport-Jwt-Assertion\n") {
+		t.Fatalf("custom JWT header not forwarded: %q", got)
+	}
+	b.authConfig.JWT.JwtHeader = "Authorization"
+	if got := b.requestHeadersAllowlist(); strings.Count(got, "Authorization") != 1 {
+		t.Fatalf("Authorization listed twice: %q", got)
+	}
+}
