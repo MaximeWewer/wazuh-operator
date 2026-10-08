@@ -528,3 +528,16 @@ func TestOrchestrateRestart_RollingUpdate_KeepsNotReadyCurrentRevisionPod(t *tes
 		t.Errorf("not-ready current-revision pod deleted under RollingUpdate, %d left", len(remaining.Items))
 	}
 }
+
+// TestStatefulSetUpdateStrategyHasPartition guards the rollout loop seen on a live cluster:
+// without an explicit rollingUpdate.partition the StatefulSet controller recreated pods on
+// the old revision every ~90s during a rollout.
+func TestStatefulSetUpdateStrategyHasPartition(t *testing.T) {
+	s := StatefulSetUpdateStrategy(appsv1.RollingUpdateStatefulSetStrategyType)
+	if s.RollingUpdate == nil || s.RollingUpdate.Partition == nil || *s.RollingUpdate.Partition != 0 {
+		t.Fatalf("RollingUpdate strategy must carry partition 0, got %+v", s)
+	}
+	if s := StatefulSetUpdateStrategy(appsv1.OnDeleteStatefulSetStrategyType); s.RollingUpdate != nil {
+		t.Fatalf("OnDelete must not carry a rollingUpdate block, got %+v", s)
+	}
+}

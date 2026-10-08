@@ -28,6 +28,7 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/rolling"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -322,9 +323,7 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			MinReadySeconds: 30,
 			// Parallel allows all pods to start simultaneously during initial deployment
 			PodManagementPolicy: appsv1.ParallelPodManagement,
-			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-				Type: b.resolveUpdateStrategy(),
-			},
+			UpdateStrategy:      rolling.StatefulSetUpdateStrategy(b.resolveUpdateStrategy()),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,
 			},

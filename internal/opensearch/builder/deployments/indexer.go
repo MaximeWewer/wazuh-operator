@@ -31,6 +31,7 @@ import (
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/plugins"
+	"github.com/MaximeWewer/wazuh-operator/internal/shared/rolling"
 	"github.com/MaximeWewer/wazuh-operator/pkg/config"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
@@ -474,9 +475,7 @@ func (b *IndexerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 			// Parallel allows all pods to start simultaneously, which is required for
 			// OpenSearch cluster formation - nodes need to discover each other at startup
 			PodManagementPolicy: appsv1.ParallelPodManagement,
-			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
-				Type: b.resolveUpdateStrategy(),
-			},
+			UpdateStrategy:      rolling.StatefulSetUpdateStrategy(b.resolveUpdateStrategy()),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: selectorLabels,
 			},
