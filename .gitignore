@@ -38,3 +38,5 @@ bin/
 # Test and coverage artifacts
 cover.out
 *.test
+# Helm dependency build artifacts
+*.tgz
