@@ -214,6 +214,45 @@ rules:
 
 ### Network Policies
 
+#### Wazuh cluster policies
+
+Set `networkPolicy.enabled: true` on `spec.indexer`, `spec.manager` and `spec.dashboard` of
+the `WazuhCluster` to have the operator create one `NetworkPolicy` per component. They only
+take effect with a CNI that enforces policies (Calico, Cilium...). What they allow:
+
+| Component | Ingress | Egress |
+| --------- | ------- | ------ |
+| Indexer | 9200/9300/9600 from the indexer, manager and dashboard pods; 9200 from the operator namespace | DNS; indexer peers; TCP 80/443 to any destination (`allowInternetEgress`) |
+| Manager | 55000/1516 from manager and dashboard pods; 55000 from the operator namespace; 1514/1515 (agents) from anywhere | DNS; indexer 9200; manager peers 1516/55000; TCP 80/443 to any destination (`allowInternetEgress`) |
+| Dashboard | 5601 from anywhere | not restricted |
+
+The operator namespace is read from the `POD_NAMESPACE` variable set by the Helm chart.
+
+`allowInternetEgress` (default `true`) opens outbound HTTP/HTTPS for what the components
+fetch from outside: URL-fed CDB lists, vulnerability detection feeds and integrations
+(Slack, VirusTotal, PagerDuty...) on the manager; snapshot repositories (S3, GCS, Azure) and
+the Prometheus exporter plugin download on the indexer. Set it to `false` to keep only the
+in-cluster flows, and list the destinations you need under `egress`:
+
+```yaml
+spec:
+  manager:
+    networkPolicy:
+      enabled: true
+      allowInternetEgress: false
+      egress:
+        - to:
+            - ipBlock:
+                cidr: 203.0.113.0/24   # your proxy or feed mirror
+          ports:
+            - protocol: TCP
+              port: 443
+```
+
+Other outbound ports (e.g. SMTP for email alerts, syslog forwarding) also go under `egress`.
+
+#### Operator policy
+
 Example network policy for the operator:
 
 ```yaml

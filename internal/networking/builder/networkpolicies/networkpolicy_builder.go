@@ -78,6 +78,10 @@ func BuildIndexerNetworkPolicy(clusterName, namespace, operatorNamespace string,
 		},
 	}
 
+	// Outbound HTTP/HTTPS to external services (feeds, integrations, snapshot
+	// repositories, plugin downloads) unless disabled.
+	egress = append(egress, internetEgressRule(spec)...)
+
 	// Append user-defined rules
 	ingress = append(ingress, convertIngressRules(spec.Ingress)...)
 	egress = append(egress, convertEgressRules(spec.Egress)...)
@@ -167,6 +171,10 @@ func BuildManagerNetworkPolicy(clusterName, namespace, operatorNamespace string,
 			},
 		},
 	}
+
+	// Outbound HTTP/HTTPS to external services (feeds, integrations, snapshot
+	// repositories, plugin downloads) unless disabled.
+	egress = append(egress, internetEgressRule(spec)...)
 
 	// Append user-defined rules
 	ingress = append(ingress, convertIngressRules(spec.Ingress)...)
@@ -267,10 +275,7 @@ func convertIngressRules(rules []wazuhv1.NetworkPolicyIngressRule) []networkingv
 	for _, rule := range rules {
 		var peers []networkingv1.NetworkPolicyPeer
 		for _, from := range rule.From {
-			peers = append(peers, networkingv1.NetworkPolicyPeer{
-				PodSelector:       from.PodSelector,
-				NamespaceSelector: from.NamespaceSelector,
-			})
+			peers = append(peers, convertPeer(from))
 		}
 		var ports []networkingv1.NetworkPolicyPort
 		for _, port := range rule.Ports {
@@ -295,10 +300,7 @@ func convertEgressRules(rules []wazuhv1.NetworkPolicyEgressRule) []networkingv1.
 	for _, rule := range rules {
 		var peers []networkingv1.NetworkPolicyPeer
 		for _, to := range rule.To {
-			peers = append(peers, networkingv1.NetworkPolicyPeer{
-				PodSelector:       to.PodSelector,
-				NamespaceSelector: to.NamespaceSelector,
-			})
+			peers = append(peers, convertPeer(to))
 		}
 		var ports []networkingv1.NetworkPolicyPort
 		for _, port := range rule.Ports {
@@ -333,4 +335,35 @@ func operatorIngressRule(operatorNamespace string, port intstr.IntOrString) []ne
 		}},
 		Ports: []networkingv1.NetworkPolicyPort{{Protocol: &tcp, Port: &port}},
 	}}
+}
+
+// internetEgressRule allows TCP 80/443 to any destination unless spec.allowInternetEgress
+// is false. Without it an enforcing CNI cuts the manager off from URL-fed CDB lists,
+// vulnerability feeds and integrations, and the indexer from snapshot repositories and
+// its plugin download.
+func internetEgressRule(spec *wazuhv1.NetworkPolicySpec) []networkingv1.NetworkPolicyEgressRule {
+	if spec != nil && spec.AllowInternetEgress != nil && !*spec.AllowInternetEgress {
+		return nil
+	}
+	tcp := corev1.ProtocolTCP
+	http := intstr.FromInt(80)
+	https := intstr.FromInt(443)
+	return []networkingv1.NetworkPolicyEgressRule{{
+		Ports: []networkingv1.NetworkPolicyPort{
+			{Protocol: &tcp, Port: &http},
+			{Protocol: &tcp, Port: &https},
+		},
+	}}
+}
+
+// convertPeer converts a CRD network policy peer, including an IP block.
+func convertPeer(peer wazuhv1.NetworkPolicyPeer) networkingv1.NetworkPolicyPeer {
+	out := networkingv1.NetworkPolicyPeer{
+		PodSelector:       peer.PodSelector,
+		NamespaceSelector: peer.NamespaceSelector,
+	}
+	if peer.IPBlock != nil {
+		out.IPBlock = &networkingv1.IPBlock{CIDR: peer.IPBlock.CIDR, Except: peer.IPBlock.Except}
+	}
+	return out
 }

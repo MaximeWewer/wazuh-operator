@@ -651,6 +651,16 @@ type NetworkPolicySpec struct {
 	// +optional
 	Enabled bool `json:"enabled,omitempty"`
 
+	// AllowInternetEgress allows outbound HTTP/HTTPS (TCP 80 and 443) to any destination
+	// from the manager and indexer pods. The manager needs it for URL-fed CDB lists, the
+	// vulnerability detection feeds and integrations (Slack, VirusTotal, PagerDuty...);
+	// the indexer for snapshot repositories (S3, GCS, Azure) and the Prometheus exporter
+	// plugin download. Set it to false to keep only the in-cluster flows and add your own
+	// destinations with egress rules.
+	// +optional
+	// +kubebuilder:default=true
+	AllowInternetEgress *bool `json:"allowInternetEgress,omitempty"`
+
 	// Ingress rules
 	// +optional
 	Ingress []NetworkPolicyIngressRule `json:"ingress,omitempty"`
@@ -691,6 +701,22 @@ type NetworkPolicyPeer struct {
 	// Namespace selector
 	// +optional
 	NamespaceSelector *metav1.LabelSelector `json:"namespaceSelector,omitempty"`
+
+	// IPBlock selects an IP range, typically an external destination (feed mirror, proxy,
+	// SMTP relay, snapshot endpoint). Cannot be combined with the selectors.
+	// +optional
+	IPBlock *NetworkPolicyIPBlock `json:"ipBlock,omitempty"`
+}
+
+// NetworkPolicyIPBlock is a CIDR, optionally minus some sub-ranges.
+type NetworkPolicyIPBlock struct {
+	// CIDR such as 203.0.113.0/24
+	// +kubebuilder:validation:MinLength=1
+	CIDR string `json:"cidr"`
+
+	// Except lists CIDRs excluded from the range
+	// +optional
+	Except []string `json:"except,omitempty"`
 }
 
 // NetworkPolicyPort defines network policy port
