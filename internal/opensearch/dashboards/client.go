@@ -129,7 +129,7 @@ func (c *Client) Import(ctx context.Context, tenant string, ndjson []byte) (int,
 		if resp.StatusCode == http.StatusUnauthorized {
 			// The dashboard forwards any Authorization header to the indexer, except when its
 			// JWT authentication reads the token from a custom header.
-			err = fmt.Errorf("%w (the dashboard ignores the Authorization header: JWT with a custom jwtHeader is not supported)", err)
+			err = fmt.Errorf("%w (the dashboard ignores the Authorization header: with JWT on a custom jwtHeader, also enable basicAuth in the OpenSearchAuthConfig, Wazuh 4.12+)", err)
 		}
 		return 0, err
 	}
