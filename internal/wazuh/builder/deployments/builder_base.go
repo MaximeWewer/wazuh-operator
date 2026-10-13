@@ -614,14 +614,14 @@ func (b *baseStatefulSetBuilder[T]) configMapMounts() []corev1.VolumeMount {
 		})
 	}
 
-	// Add CDB list mounts at /var/ossec/etc/lists/<path>. FileName may include a
-	// subdirectory; the subPath is the ConfigMap key (basename). kubelet creates any
-	// intermediate directory of the mount path.
+	// Mount each CDB list ConfigMap as a directory under PathWazuhCDBListSources; the
+	// init container links etc/lists/<path> to it (see cdbListLinkScript). Unlike a subPath
+	// mount, the kubelet updates the file in the running pod when the list content changes.
 	for _, ref := range b.cdbListConfigMaps {
+		volumeName := boundedVolumeName("wazuh-cdblist", ref.Name)
 		mounts = append(mounts, corev1.VolumeMount{
-			Name:      boundedVolumeName("wazuh-cdblist", ref.Name),
-			MountPath: fmt.Sprintf("/var/ossec/etc/lists/%s", ref.FileName),
-			SubPath:   ref.Key,
+			Name:      volumeName,
+			MountPath: constants.PathWazuhCDBListSources + "/" + volumeName,
 			ReadOnly:  true,
 		})
 	}
@@ -717,13 +717,59 @@ chown -R 999:999 /wazuh-config-mount
 echo "Ownership fix complete"`
 
 // buildInitContainer creates the busybox "fix-permissions" init container, staging the
-// operator-issued API certificate on the master (installAPICert).
+// operator-issued API certificate on the master (installAPICert) and linking the CDB lists.
 func (b *baseStatefulSetBuilder[T]) buildInitContainer() corev1.Container {
-	certInstall := ""
+	extra := cdbListLinkScript(b.cdbListConfigMaps)
 	if b.installAPICert {
-		certInstall = apiCertInstallScript
+		extra = joinScripts(extra, apiCertInstallScript)
 	}
-	return buildConfigInitContainer(certInstall, b.buildInitContainerVolumeMounts())
+	return buildConfigInitContainer(extra, b.buildInitContainerVolumeMounts())
+}
+
+// joinScripts joins the non-empty script fragments with a newline.
+func joinScripts(parts ...string) string {
+	var nonEmpty []string
+	for _, p := range parts {
+		if p != "" {
+			nonEmpty = append(nonEmpty, p)
+		}
+	}
+	return strings.Join(nonEmpty, "\n")
+}
+
+// cdbListLinkScript links /var/ossec/etc/lists/<path> to each CDB list ConfigMap mounted
+// under PathWazuhCDBListSources. The links are relative so they resolve the same from
+// any root, and they replace the empty file a former subPath mount left on the PVC. Links
+// to lists no longer mounted are removed first. analysisd writes the compiled <path>.cdb
+// next to the link, in the writable etc/lists, and recompiles it when the source is newer.
+// On a worker the Wazuh cluster sync may replace a link with a copy of the master's file;
+// the next pod start restores the link.
+// Returns "" when no list is mounted, which leaves the init container unchanged.
+func cdbListLinkScript(refs []CDBListConfigMapRef) string {
+	if len(refs) == 0 {
+		return ""
+	}
+	sorted := make([]CDBListConfigMapRef, len(refs))
+	copy(sorted, refs)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].FileName < sorted[j].FileName })
+
+	sourceDir := strings.TrimPrefix(constants.PathWazuhCDBListSources, constants.PathWazuhBase+"/")
+	var sb strings.Builder
+	sb.WriteString("# Link the CDB lists to their ConfigMap directories\n")
+	sb.WriteString("find /var/ossec/etc/lists -type l | while read -r l; do\n")
+	fmt.Fprintf(&sb, "    case \"$(readlink \"$l\")\" in *%s/*) rm -f \"$l\" ;; esac\n", sourceDir)
+	sb.WriteString("done\n")
+	for _, ref := range sorted {
+		link := "/var/ossec/etc/lists/" + ref.FileName
+		// etc/lists/<FileName> sits 2 + (slashes in FileName) levels below /var/ossec.
+		up := strings.Repeat("../", 2+strings.Count(ref.FileName, "/"))
+		target := up + sourceDir + "/" + boundedVolumeName("wazuh-cdblist", ref.Name) + "/" + ref.Key
+		qLink := shellSingleQuote(link)
+		fmt.Fprintf(&sb, "mkdir -p \"$(dirname %s)\" && rm -f %s && ln -s %s %s\n",
+			qLink, qLink, shellSingleQuote(target), qLink)
+	}
+	sb.WriteString("echo \"Linked CDB lists\"")
+	return sb.String()
 }
 
 // buildInitContainerVolumeMounts returns the init-container volume mounts, adding the
@@ -744,12 +790,12 @@ func (b *baseStatefulSetBuilder[T]) buildInitContainerVolumeMounts() []corev1.Vo
 	return mounts
 }
 
-// buildConfigInitContainer builds the busybox "fix-permissions" init container. certInstall
-// is inserted between the config-copy and ownership-fix sections (empty for workers).
-func buildConfigInitContainer(certInstall string, mounts []corev1.VolumeMount) corev1.Container {
+// buildConfigInitContainer builds the busybox "fix-permissions" init container. extra
+// is inserted between the config-copy and ownership-fix sections (may be empty).
+func buildConfigInitContainer(extra string, mounts []corev1.VolumeMount) corev1.Container {
 	script := initScriptHead
-	if certInstall != "" {
-		script += "\n" + certInstall
+	if extra != "" {
+		script += "\n" + extra
 	}
 	script += "\n" + initScriptTail
 	return corev1.Container{

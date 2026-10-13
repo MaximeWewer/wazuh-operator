@@ -28,6 +28,7 @@ import (
 	"io"
 	"math/rand/v2"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -652,6 +653,58 @@ func (a *WazuhAPIAdapter) RestartNode(ctx context.Context, nodeName string) (*Re
 	}
 
 	return &result.Data, nil
+}
+
+// GetListFile returns the raw content of the CDB list file the master serves under
+// etc/lists. The API looks the name up in the etc/lists subdirectories as well.
+func (a *WazuhAPIAdapter) GetListFile(ctx context.Context, filename string) (string, error) {
+	resp, err := a.doRequest(ctx, "GET", "/lists/files/"+url.PathEscape(filename)+"?raw=true", nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get list file %s: %w", filename, err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read list file %s: %w", filename, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("get list file %s failed with status %d: %s", filename, resp.StatusCode, string(body))
+	}
+	return string(body), nil
+}
+
+// RulesetSynchronized reports whether every cluster node holds the master's ruleset
+// files (rules, decoders and CDB lists).
+func (a *WazuhAPIAdapter) RulesetSynchronized(ctx context.Context) (bool, error) {
+	resp, err := a.doRequest(ctx, "GET", "/cluster/ruleset/synchronization", nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to get ruleset synchronization: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("ruleset synchronization request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Data struct {
+			AffectedItems []struct {
+				Name   string `json:"name"`
+				Synced bool   `json:"synced"`
+			} `json:"affected_items"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return false, fmt.Errorf("failed to decode ruleset synchronization: %w", err)
+	}
+	for _, node := range result.Data.AffectedItems {
+		if !node.Synced {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // ReloadRules reloads the rules on the Wazuh manager without a full restart

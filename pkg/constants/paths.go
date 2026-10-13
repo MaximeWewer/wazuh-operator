@@ -57,6 +57,11 @@ const (
 	// PathWazuhActiveResponse is the active response scripts directory
 	PathWazuhActiveResponse = "/var/ossec/active-response/bin"
 
+	// PathWazuhCDBListSources is where the CDB list ConfigMaps are mounted as directories;
+	// etc/lists/<name> is a relative symlink into it so the kubelet can update a list in
+	// a running pod. It sits outside etc/ so the Wazuh cluster does not sync it.
+	PathWazuhCDBListSources = "/var/ossec/cdblists"
+
 	// PathWazuhAgentless is the agentless configs directory
 	PathWazuhAgentless = "/var/ossec/agentless"
 

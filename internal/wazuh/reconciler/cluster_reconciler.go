@@ -774,16 +774,21 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 	// Mount CDB list ConfigMaps if CDBListReconciler is configured
 	var cdbListHash string
+	var cdbListInfos []CDBListConfigMapInfo
+	cdbListsResolved := false
 	if r.CDBListReconciler != nil {
-		cdbListInfos, hash, err := r.CDBListReconciler.GetCDBListConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace)
+		infos, hash, err := r.CDBListReconciler.GetCDBListConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace)
 		if err != nil {
 			log.Error(err, "Failed to get CDB list ConfigMaps for cluster, continuing without CDB lists")
-		} else if len(cdbListInfos) > 0 {
-			stsBuilder.WithCDBListConfigMaps(convertCDBListConfigMaps(cdbListInfos))
-			stsBuilder.WithCDBListInitFetches(convertCDBListInitFetches(cdbListInfos))
-			stsBuilder.WithCDBListHash(hash)
-			cdbListHash = hash
-			log.V(1).Info("Mounting CDB list content to master", "count", len(cdbListInfos), "hash", utils.ShortHash(hash))
+		} else {
+			cdbListInfos, cdbListsResolved = infos, true
+			if len(infos) > 0 {
+				stsBuilder.WithCDBListConfigMaps(convertCDBListConfigMaps(infos))
+				stsBuilder.WithCDBListInitFetches(convertCDBListInitFetches(infos))
+				stsBuilder.WithCDBListHash(hash)
+				cdbListHash = hash
+				log.V(1).Info("Mounting CDB list content to master", "count", len(infos), "hash", utils.ShortHash(hash))
+			}
 		}
 	}
 
@@ -1041,6 +1046,14 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		} else {
 			updateReason = "cdblist-change"
 		}
+		if cdbListsResolved {
+			// A list was added or removed: the master and the workers roll and load the
+			// current content, so no API restart is needed on top of it.
+			if sts.Annotations == nil {
+				sts.Annotations = map[string]string{}
+			}
+			sts.Annotations[constants.AnnotationCDBListContentHash] = CDBListContentHash(cdbListInfos)
+		}
 		log.Info("Master StatefulSet needs update due to CDB list hash change",
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingCDBListHash),
@@ -1083,6 +1096,17 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 			StartTime: time.Now(),
 			Reason:    updateReason,
 		}, nil
+	}
+
+	if cdbListsResolved {
+		// Non-fatal: a failed reload is retried on the next reconcile.
+		if err := r.reconcileCDBListReload(ctx, cluster, found, cdbListInfos); err != nil {
+			if IsAPIUnavailable(err) {
+				log.V(1).Info("Wazuh API unavailable, CDB list reload retried on the next reconcile", "error", err.Error())
+			} else {
+				log.Error(err, "Failed to reload CDB list content on the manager nodes")
+			}
+		}
 	}
 
 	return nil, nil

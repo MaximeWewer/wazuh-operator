@@ -55,7 +55,7 @@ type DecoderConfigMapRef struct {
 type CDBListConfigMapRef struct {
 	Name     string // ConfigMap name
 	FileName string // CDB list path relative to etc/lists (e.g. "blocked-ips" or "malicious-ioc/malicious-ip")
-	Key      string // ConfigMap data key and mount subPath (basename of FileName)
+	Key      string // ConfigMap data key (basename of FileName)
 }
 
 // CDBListInitFetchRef describes a large CDB list (over the ConfigMap size limit) delivered

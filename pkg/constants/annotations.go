@@ -112,9 +112,21 @@ const (
 	// This triggers rolling update when custom integrations are added, modified, or deleted
 	AnnotationIntegrationHash = "wazuh.com/integration-hash"
 
-	// AnnotationCDBListHash stores the hash of WazuhCDBList content for pod restart detection
-	// This triggers rolling update when CDB lists are added, modified, or deleted
+	// AnnotationCDBListHash stores the hash of the set of WazuhCDBLists mounted on the
+	// manager pods. It triggers a rolling update when a list is added or removed, or when
+	// an init-fetch list's source changes. A content change of a ConfigMap-delivered list
+	// is applied in place instead (see AnnotationCDBListContentHash).
 	AnnotationCDBListHash = "wazuh.com/cdblist-hash"
+
+	// AnnotationCDBListContentHash, on the master StatefulSet, stores the hash of the
+	// ConfigMap-delivered CDB list content the manager nodes last loaded. When the content
+	// changes, the operator waits for the kubelet to project the new files and restarts the
+	// manager nodes through the Wazuh API, instead of recreating the pods.
+	AnnotationCDBListContentHash = "wazuh.com/cdblist-content-hash"
+
+	// AnnotationCDBListReloadPendingSince, on the master StatefulSet, records when the
+	// operator first saw CDB list content waiting to be loaded (RFC 3339).
+	AnnotationCDBListReloadPendingSince = "wazuh.com/cdblist-reload-pending-since"
 
 	// AnnotationActiveResponseHash stores the hash of WazuhActiveResponse scripts and config
 	// for pod restart detection. Triggers rolling update when active responses change.

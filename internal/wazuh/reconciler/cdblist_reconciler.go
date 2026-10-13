@@ -710,8 +710,9 @@ func (r *CDBListReconciler) ListCDBListsForCluster(ctx context.Context, clusterN
 // CDBListConfigMapInfo holds information about a CDB list for mounting or init-fetching.
 type CDBListConfigMapInfo struct {
 	ConfigMapName string // empty for init-fetch lists
-	FileName      string // list path relative to etc/lists (may contain a subdir), used for the mount path and <list> entry
-	Key           string // ConfigMap data key and mount subPath (basename of FileName)
+	FileName      string // list path relative to etc/lists (may contain a subdir), used for the link path and <list> entry
+	Key           string // ConfigMap data key (basename of FileName)
+	ContentHash   string // hash of the ConfigMap content (empty for init-fetch lists)
 	TargetNodes   string
 	ListCRName    string
 
@@ -725,9 +726,14 @@ type CDBListConfigMapInfo struct {
 	InsecureSkipVerify bool
 }
 
-// GetCDBListConfigMapsForCluster returns ConfigMap references and a content hash for
+// GetCDBListConfigMapsForCluster returns ConfigMap references and a restart hash for
 // all CDB lists applied on a cluster. Only lists whose per-cluster status is Applied
 // are returned so half-reconciled lists are not mounted.
+//
+// The restart hash covers which lists are mounted and how, not the content of the
+// ConfigMap-delivered ones: the kubelet updates a mounted ConfigMap in place and the
+// operator then restarts the manager nodes through the Wazuh API (see CDBListContentHash),
+// which is much shorter than recreating the pods.
 func (r *CDBListReconciler) GetCDBListConfigMapsForCluster(ctx context.Context, clusterName, namespace string) ([]CDBListConfigMapInfo, string, error) {
 	lists, err := r.ListCDBListsForCluster(ctx, clusterName, namespace)
 	if err != nil {
@@ -790,11 +796,12 @@ func (r *CDBListReconciler) GetCDBListConfigMapsForCluster(ctx context.Context, 
 			ConfigMapName: cdbListConfigMapName(l.Namespace, l.Name),
 			FileName:      l.Spec.ListName,
 			Key:           cdbListDataKey(l.Spec.ListName),
+			ContentHash:   l.Status.ContentHash,
 			TargetNodes:   l.Spec.TargetNodes,
 			ListCRName:    l.Name,
 			Mode:          cdbDeliveryConfigMap,
 		})
-		hashInputs = append(hashInputs, l.Spec.ListName+"="+l.Status.ContentHash)
+		hashInputs = append(hashInputs, l.Spec.ListName+"=configmap:"+cdbListConfigMapName(l.Namespace, l.Name))
 	}
 
 	sort.Slice(configMaps, func(i, j int) bool {
@@ -819,6 +826,23 @@ func (r *CDBListReconciler) GetCDBListNamesForCluster(ctx context.Context, clust
 	}
 	sort.Strings(names)
 	return names, nil
+}
+
+// CDBListContentHash returns a hash of the content of the ConfigMap-delivered lists in
+// infos, the content a manager node loads from the mounted ConfigMaps. Returns "" when
+// there is none.
+func CDBListContentHash(infos []CDBListConfigMapInfo) string {
+	var inputs []string
+	for _, info := range infos {
+		if info.Mode == cdbDeliveryConfigMap {
+			inputs = append(inputs, info.FileName+"="+info.ContentHash)
+		}
+	}
+	if len(inputs) == 0 {
+		return ""
+	}
+	sort.Strings(inputs)
+	return computeCDBListHash(joinStrings(inputs))
 }
 
 // computeCDBListHash computes a short hash of the given content for change detection.

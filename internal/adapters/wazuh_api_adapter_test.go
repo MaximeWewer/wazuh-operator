@@ -198,3 +198,36 @@ func TestGetUserRunAs(t *testing.T) {
 		t.Errorf("GetUserRunAs(missing) = %d, %v; want 0, nil", id, err)
 	}
 }
+
+func TestGetListFileAndRulesetSynchronized(t *testing.T) {
+	synced := `true`
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/security/user/authenticate":
+			_, _ = w.Write([]byte(`{"data":{"token":"t"},"error":0}`))
+		case r.URL.Path == "/lists/files/ip-list" && r.URL.Query().Get("raw") == "true":
+			_, _ = w.Write([]byte("1.2.3.4:\n"))
+		case r.URL.Path == "/cluster/ruleset/synchronization":
+			_, _ = w.Write([]byte(`{"data":{"affected_items":[{"name":"master","synced":true},{"name":"worker","synced":` + synced + `}]},"error":0}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	a := NewWazuhAPIAdapter(WazuhAPIConfig{BaseURL: srv.URL, Username: "u", Password: "p", Insecure: true})
+	ctx := context.Background()
+
+	if got, err := a.GetListFile(ctx, "ip-list"); err != nil || got != "1.2.3.4:\n" {
+		t.Errorf("GetListFile = %q, %v; want the raw content", got, err)
+	}
+	if _, err := a.GetListFile(ctx, "missing"); err == nil {
+		t.Error("GetListFile(missing) returned no error")
+	}
+	if ok, err := a.RulesetSynchronized(ctx); err != nil || !ok {
+		t.Errorf("RulesetSynchronized = %v, %v; want true", ok, err)
+	}
+	synced = `false`
+	if ok, err := a.RulesetSynchronized(ctx); err != nil || ok {
+		t.Errorf("RulesetSynchronized with a worker out of sync = %v, %v; want false", ok, err)
+	}
+}

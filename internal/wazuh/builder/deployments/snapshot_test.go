@@ -24,7 +24,7 @@ func TestSharedConfigMapContent(t *testing.T) {
 		"wazuh-decoder-cm-dec":       "/var/ossec/etc/decoders/d.xml",
 		"agentgroup-files-cm-g":      "/var/ossec/etc/shared/g1/agent.conf",
 		"wazuh-integration-cm-int":   "/var/ossec/integrations/custom-x",
-		"wazuh-cdblist-cm-cdb":       "/var/ossec/etc/lists/ioc/ip",
+		"wazuh-cdblist-cm-cdb":       "/var/ossec/cdblists/wazuh-cdblist-cm-cdb",
 		"wazuh-activeresponse-cm-ar": "/var/ossec/active-response/bin/fw.sh",
 	}
 
