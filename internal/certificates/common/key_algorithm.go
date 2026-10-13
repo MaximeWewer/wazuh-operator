@@ -77,20 +77,15 @@ func GeneratePrivateKey(algorithm KeyAlgorithm, keySize int, curve ECDSACurve) (
 	}
 }
 
-// EncodePrivateKeyToPEM encodes a private key to PEM format
-// Uses PKCS#8 format for ECDSA keys for OpenSearch compatibility
+// EncodePrivateKeyToPEM encodes a private key to PEM in PKCS#8 format. The Wazuh indexer
+// 4.14+ (OpenSearch security plugin) only reads PKCS#8 keys; it rejects a PKCS#1 RSA key
+// ("BEGIN RSA PRIVATE KEY") at startup.
 func EncodePrivateKeyToPEM(key crypto.PrivateKey) ([]byte, error) {
 	switch k := key.(type) {
-	case *rsa.PrivateKey:
-		return pem.EncodeToMemory(&pem.Block{
-			Type:  "RSA PRIVATE KEY",
-			Bytes: x509.MarshalPKCS1PrivateKey(k),
-		}), nil
-	case *ecdsa.PrivateKey:
-		// Use PKCS#8 format for ECDSA keys - OpenSearch/Java requires this format
+	case *rsa.PrivateKey, *ecdsa.PrivateKey:
 		der, err := x509.MarshalPKCS8PrivateKey(k)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal ECDSA private key to PKCS#8: %w", err)
+			return nil, fmt.Errorf("failed to marshal private key to PKCS#8: %w", err)
 		}
 		return pem.EncodeToMemory(&pem.Block{
 			Type:  "PRIVATE KEY",

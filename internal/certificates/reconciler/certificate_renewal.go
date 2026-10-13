@@ -380,17 +380,7 @@ func (r *CertificateReconciler) reconcileAdminCerts(ctx context.Context, cluster
 				}
 				if !needsRenewal {
 					// Migrate existing admin key to PKCS#8 to guarantee securityadmin.sh compatibility.
-					convertedKey, convErr := certcommon.ConvertPrivateKeyPEMToPKCS8(found.Data[constants.SecretKeyTLSKey])
-					if convErr != nil {
-						log.V(1).Info("Failed to convert existing admin key to PKCS#8", "secret", secretName, "error", convErr.Error())
-					} else if !bytes.Equal(found.Data[constants.SecretKeyTLSKey], convertedKey) {
-						found.Data[constants.SecretKeyTLSKey] = convertedKey
-						if err := r.Update(ctx, found); err != nil {
-							return fmt.Errorf("failed to migrate admin key to PKCS#8 in secret %s: %w", secretName, err)
-						}
-						log.Info("Migrated admin key to PKCS#8 format", "secret", secretName)
-					}
-					return nil
+					return r.migrateKeyToPKCS8(ctx, found)
 				}
 			}
 		}
@@ -535,7 +525,13 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 					r.emitTypedCertRenewingEvent(cluster, CertEventTypeNode, secretName)
 				}
 				if !needsRenewal {
-					return false, nil // Certificate is still valid, no renewal
+					// Certificate is still valid, no renewal. An indexer key generated in PKCS#1
+					// by an older operator is rewritten in PKCS#8, which the 4.14+ indexer
+					// requires; the same key in another encoding needs no pod restart.
+					if componentName == constants.CertComponentIndexer {
+						return false, r.migrateKeyToPKCS8(ctx, found)
+					}
+					return false, nil
 				}
 			}
 		}
@@ -641,4 +637,25 @@ func hasLoopbackIPSAN(ips []net.IP) bool {
 		}
 	}
 	return false
+}
+
+// migrateKeyToPKCS8 rewrites the tls.key of a certificate secret in PKCS#8 when it is in
+// another format (older operators generated RSA keys in PKCS#1). A key that cannot be
+// parsed is left untouched.
+func (r *CertificateReconciler) migrateKeyToPKCS8(ctx context.Context, secret *corev1.Secret) error {
+	log := logf.FromContext(ctx)
+	converted, err := certcommon.ConvertPrivateKeyPEMToPKCS8(secret.Data[constants.SecretKeyTLSKey])
+	if err != nil {
+		log.V(1).Info("Failed to convert existing key to PKCS#8", "secret", secret.Name, "error", err.Error())
+		return nil
+	}
+	if bytes.Equal(secret.Data[constants.SecretKeyTLSKey], converted) {
+		return nil
+	}
+	secret.Data[constants.SecretKeyTLSKey] = converted
+	if err := r.Update(ctx, secret); err != nil {
+		return fmt.Errorf("failed to migrate key to PKCS#8 in secret %s: %w", secret.Name, err)
+	}
+	log.Info("Migrated key to PKCS#8 format", "secret", secret.Name)
+	return nil
 }
