@@ -176,3 +176,25 @@ func TestWazuhAPIAdapterRateLimit(t *testing.T) {
 		t.Error("IsHealthy = false for a rate-limited API, want true")
 	}
 }
+
+func TestGetUserRunAs(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/security/user/authenticate" {
+			_, _ = w.Write([]byte(`{"data":{"token":"t"},"error":0}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":{"affected_items":[` +
+			`{"id":1,"username":"wazuh","allow_run_as":false},` +
+			`{"id":100,"username":"wazuh-wui","allow_run_as":true}]},"error":0}`))
+	}))
+	t.Cleanup(srv.Close)
+	a := NewWazuhAPIAdapter(WazuhAPIConfig{BaseURL: srv.URL, Username: "u", Password: "p", Insecure: true})
+
+	id, runAs, err := a.GetUserRunAs(context.Background(), "wazuh-wui")
+	if err != nil || id != 100 || !runAs {
+		t.Errorf("GetUserRunAs(wazuh-wui) = %d, %v, %v; want 100, true, nil", id, runAs, err)
+	}
+	if id, _, err := a.GetUserRunAs(context.Background(), "missing"); err != nil || id != 0 {
+		t.Errorf("GetUserRunAs(missing) = %d, %v; want 0, nil", id, err)
+	}
+}

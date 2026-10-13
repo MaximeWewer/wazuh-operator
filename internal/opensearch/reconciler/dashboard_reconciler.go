@@ -1583,9 +1583,14 @@ func (r *DashboardReconciler) ensureAPIUserRunAs(ctx context.Context, cluster *w
 		return
 	}
 
-	id, err := apiClient.GetUserByName(ctx, username)
+	id, current, err := apiClient.GetUserRunAs(ctx, username)
 	if err != nil || id == 0 {
 		log.V(1).Info("Skipping allow_run_as: API user not resolved", "user", username, "error", err)
+		return
+	}
+	// Setting allow_run_as revokes every token of the user - the operator's own included,
+	// as it uses the same API user - so only write it when it actually changes.
+	if current == runAs {
 		return
 	}
 	if err := apiClient.SetUserRunAs(ctx, id, runAs); err != nil {

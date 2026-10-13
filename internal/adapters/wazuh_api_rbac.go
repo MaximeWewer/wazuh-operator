@@ -35,9 +35,10 @@ const ReservedRBACIDThreshold = 100
 // rbacItem is a minimal RBAC object as returned in affected_items. Roles,
 // policies and rules use "name"; users use "username". Both carry "id".
 type rbacItem struct {
-	ID       int    `json:"id"`
-	Name     string `json:"name"`
-	Username string `json:"username"`
+	ID         int    `json:"id"`
+	Name       string `json:"name"`
+	Username   string `json:"username"`
+	AllowRunAs bool   `json:"allow_run_as"`
 }
 
 // rbacResponse is the common Wazuh API envelope for /security operations.
@@ -304,7 +305,33 @@ func (a *WazuhAPIAdapter) EnsureUser(ctx context.Context, username, password str
 	return id, nil
 }
 
-// SetUserRunAs enables or disables run_as impersonation for the user.
+// GetUserRunAs returns the ID and the allow_run_as flag of a user; the ID is 0 when the
+// user does not exist.
+func (a *WazuhAPIAdapter) GetUserRunAs(ctx context.Context, username string) (int, bool, error) {
+	resp, err := a.doRequest(ctx, "GET", "/security/users", nil)
+	if err != nil {
+		return 0, false, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		return 0, false, fmt.Errorf("list /security/users failed (status %d): %s", resp.StatusCode, string(raw))
+	}
+	var r rbacResponse
+	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+		return 0, false, fmt.Errorf("decode /security/users list: %w", err)
+	}
+	for _, it := range r.Data.AffectedItems {
+		if it.Username == username {
+			return it.ID, it.AllowRunAs, nil
+		}
+	}
+	return 0, false, nil
+}
+
+// SetUserRunAs enables or disables run_as impersonation for the user. The API revokes every
+// token of the user on this call, even when the flag does not change: check it first with
+// GetUserRunAs.
 func (a *WazuhAPIAdapter) SetUserRunAs(ctx context.Context, userID int, allow bool) error {
 	path := fmt.Sprintf("/security/users/%d/run_as?allow_run_as=%t", userID, allow)
 	resp, err := a.doRequest(ctx, "PUT", path, nil)
