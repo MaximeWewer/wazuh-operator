@@ -19,26 +19,148 @@ package adapters
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
-// WazuhAPIAdapter provides access to the Wazuh Manager API
+// WazuhAPIAdapter provides access to the Wazuh Manager API. It is safe for concurrent use:
+// adapters returned by SharedWazuhAPIAdapter are shared by every controller.
 type WazuhAPIAdapter struct {
 	baseURL    string
 	username   string
 	password   string
 	httpClient *http.Client
-	token      string
-	tokenExp   time.Time
+
+	// mu guards the token and the availability state below.
+	mu       sync.Mutex
+	token    string
+	tokenExp time.Time
+	// unavailableUntil holds back every call after the API was unreachable or overloaded,
+	// so the controllers do not hammer a restarting manager; failures sizes the next pause.
+	unavailableUntil time.Time
+	failures         int
+	// rateLimited marks a back-off started by a 429: the API is up, only over its quota.
+	rateLimited bool
+}
+
+// ErrAPIUnavailable is returned while the Wazuh API is unreachable, overloaded (429) or
+// behind a failing proxy (502/503/504), and for every call during the following back-off.
+var ErrAPIUnavailable = errors.New("wazuh API unavailable")
+
+// ErrAPIRateLimited is returned on a 429 and during the back-off it starts. It wraps
+// ErrAPIUnavailable: callers retry later, but the API itself is healthy.
+var ErrAPIRateLimited = fmt.Errorf("%w: rate limited (HTTP 429)", ErrAPIUnavailable)
+
+const (
+	apiUnavailableMinBackoff = 5 * time.Second
+	apiUnavailableMaxBackoff = time.Minute
+	// apiRateLimitBackoff matches the API quota window (max_request_per_minute); the
+	// random extra of up to apiRateLimitJitter spreads the callers' return.
+	apiRateLimitBackoff = time.Minute
+	apiRateLimitJitter  = 15 * time.Second
+	// tokenRenewMargin renews the token before the API expires it.
+	tokenRenewMargin = time.Minute
+)
+
+var (
+	sharedWazuhAPIAdaptersMu sync.Mutex
+	sharedWazuhAPIAdapters   = map[string]*WazuhAPIAdapter{}
+)
+
+// SharedWazuhAPIAdapter returns the process-wide adapter for an API endpoint and identity,
+// creating it on first use. Sharing it keeps one token per manager API instead of a login
+// per reconcile, and one availability back-off that every controller honors. A changed
+// password replaces the adapter of the same endpoint and user.
+func SharedWazuhAPIAdapter(config WazuhAPIConfig) *WazuhAPIAdapter {
+	identity := config.BaseURL + "|" + config.Username
+	sum := sha256.Sum256([]byte(config.Password))
+	key := fmt.Sprintf("%s|%s|%t|%s", identity, hex.EncodeToString(sum[:]), config.Insecure, config.Timeout)
+
+	sharedWazuhAPIAdaptersMu.Lock()
+	defer sharedWazuhAPIAdaptersMu.Unlock()
+	if a, ok := sharedWazuhAPIAdapters[key]; ok {
+		return a
+	}
+	for k := range sharedWazuhAPIAdapters {
+		if strings.HasPrefix(k, identity+"|") {
+			delete(sharedWazuhAPIAdapters, k)
+		}
+	}
+	a := NewWazuhAPIAdapter(config)
+	sharedWazuhAPIAdapters[key] = a
+	return a
+}
+
+// checkAvailable fails fast while the API is in its unavailability back-off.
+func (a *WazuhAPIAdapter) checkAvailable() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if wait := time.Until(a.unavailableUntil); wait > 0 {
+		cause := ErrAPIUnavailable
+		if a.rateLimited {
+			cause = ErrAPIRateLimited
+		}
+		return fmt.Errorf("%w: retrying in %s", cause, wait.Round(time.Second))
+	}
+	return nil
+}
+
+// markUnavailable starts or extends the back-off and returns the error to report; status
+// is the HTTP status that caused it, 0 for a transport error.
+func (a *WazuhAPIAdapter) markUnavailable(status int, cause error) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.startBackoffLocked(status, cause)
+}
+
+// markAvailable ends the back-off after a successful exchange with the API.
+func (a *WazuhAPIAdapter) markAvailable() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.failures = 0
+	a.unavailableUntil = time.Time{}
+	a.rateLimited = false
+}
+
+// unavailableStatus reports the HTTP statuses that mean the API cannot serve requests now.
+func unavailableStatus(code int) bool {
+	switch code {
+	case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	}
+	return false
+}
+
+// do sends a request and feeds the availability back-off: a transport error or an
+// unavailable status starts it, any other response ends it. A canceled context is the
+// caller's doing and leaves it untouched.
+func (a *WazuhAPIAdapter) do(req *http.Request) (*http.Response, error) {
+	resp, err := a.httpClient.Do(req)
+	if err != nil {
+		if req.Context().Err() != nil {
+			return nil, err
+		}
+		return nil, a.markUnavailable(0, err)
+	}
+	if unavailableStatus(resp.StatusCode) {
+		resp.Body.Close()
+		return nil, a.markUnavailable(resp.StatusCode, fmt.Errorf("HTTP %d from %s", resp.StatusCode, req.URL.Path))
+	}
+	a.markAvailable()
+	return resp, nil
 }
 
 // WazuhAPIConfig holds Wazuh API configuration
@@ -85,38 +207,84 @@ type AuthResponse struct {
 
 // Authenticate authenticates with the Wazuh API
 func (a *WazuhAPIAdapter) Authenticate(ctx context.Context) error {
-	if a.token != "" && time.Now().Before(a.tokenExp) {
-		return nil
-	}
+	_, err := a.currentToken(ctx)
+	return err
+}
 
+// currentToken returns a valid token, logging in when there is none. The lock is held
+// during the login so concurrent callers wait for one login instead of each sending one.
+func (a *WazuhAPIAdapter) currentToken(ctx context.Context) (string, error) {
+	if err := a.checkAvailable(); err != nil {
+		return "", err
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.token != "" && time.Now().Before(a.tokenExp) {
+		return a.token, nil
+	}
+	token, err := a.login(ctx)
+	if err != nil {
+		return "", err
+	}
+	a.token = token
+	a.tokenExp = time.Now().Add(constants.TokenValidityDuration - tokenRenewMargin)
+	return token, nil
+}
+
+// login requests a new token; the caller holds a.mu.
+func (a *WazuhAPIAdapter) login(ctx context.Context) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, "POST", a.baseURL+"/security/user/authenticate", http.NoBody)
 	if err != nil {
-		return fmt.Errorf("failed to create auth request: %w", err)
+		return "", fmt.Errorf("failed to create auth request: %w", err)
 	}
 
 	req.SetBasicAuth(a.username, a.password)
 	req.Header.Set("Content-Type", "application/json")
 
+	// The availability helpers take a.mu, already held here: send directly.
 	resp, err := a.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to authenticate: %w", err)
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("failed to authenticate: %w", err)
+		}
+		return "", fmt.Errorf("failed to authenticate: %w", a.startBackoffLocked(0, err))
 	}
 	defer resp.Body.Close()
 
+	if unavailableStatus(resp.StatusCode) {
+		return "", fmt.Errorf("failed to authenticate: %w",
+			a.startBackoffLocked(resp.StatusCode, fmt.Errorf("HTTP %d", resp.StatusCode)))
+	}
+	a.failures = 0
+	a.unavailableUntil = time.Time{}
+	a.rateLimited = false
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("authentication failed: %s", string(body))
+		return "", fmt.Errorf("authentication failed: %s", string(body))
 	}
 
 	var authResp AuthResponse
 	if err := json.NewDecoder(resp.Body).Decode(&authResp); err != nil {
-		return fmt.Errorf("failed to decode auth response: %w", err)
+		return "", fmt.Errorf("failed to decode auth response: %w", err)
 	}
+	return authResp.Data.Token, nil
+}
 
-	a.token = authResp.Data.Token
-	a.tokenExp = time.Now().Add(constants.TokenValidityDuration)
-
-	return nil
+// startBackoffLocked is markUnavailable for a caller that holds a.mu. A 429 waits out the
+// API quota window (1m plus up to 15s of jitter); an unreachable or failing API is retried
+// after 5s, doubling up to 1m.
+func (a *WazuhAPIAdapter) startBackoffLocked(status int, cause error) error {
+	if status == http.StatusTooManyRequests {
+		a.rateLimited = true
+		a.unavailableUntil = time.Now().Add(apiRateLimitBackoff + rand.N(apiRateLimitJitter)) //nolint:gosec // jitter does not need crypto randomness
+		return fmt.Errorf("%w: %w", ErrAPIRateLimited, cause)
+	}
+	backoff := min(apiUnavailableMinBackoff<<min(a.failures, 4), apiUnavailableMaxBackoff)
+	a.failures++
+	a.rateLimited = false
+	a.unavailableUntil = time.Now().Add(backoff)
+	return fmt.Errorf("%w: %w", ErrAPIUnavailable, cause)
 }
 
 // doRequest performs an authenticated request with JSON content type
@@ -139,8 +307,10 @@ func (a *WazuhAPIAdapter) doRequestWithContentType(ctx context.Context, method, 
 		}
 	}
 
+	var token string
 	send := func() (*http.Response, error) {
-		if err := a.Authenticate(ctx); err != nil {
+		var err error
+		if token, err = a.currentToken(ctx); err != nil {
 			return nil, err
 		}
 
@@ -153,10 +323,10 @@ func (a *WazuhAPIAdapter) doRequestWithContentType(ctx context.Context, method, 
 			return nil, fmt.Errorf("failed to create request: %w", err)
 		}
 
-		req.Header.Set("Authorization", "Bearer "+a.token)
+		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Content-Type", contentType)
 
-		return a.httpClient.Do(req)
+		return a.do(req)
 	}
 
 	resp, err := send()
@@ -166,8 +336,12 @@ func (a *WazuhAPIAdapter) doRequestWithContentType(ctx context.Context, method, 
 	if resp.StatusCode == http.StatusUnauthorized {
 		// Token rejected server-side; force a fresh authentication and retry once.
 		resp.Body.Close()
-		a.token = ""
-		a.tokenExp = time.Time{}
+		a.mu.Lock()
+		if a.token == token { // not already replaced by a concurrent caller
+			a.token = ""
+			a.tokenExp = time.Time{}
+		}
+		a.mu.Unlock()
 		return send()
 	}
 	return resp, nil
@@ -269,7 +443,8 @@ func (a *WazuhAPIAdapter) GetManagerInfo(ctx context.Context) (*ManagerInfo, err
 // IsHealthy checks if the Wazuh API is healthy
 func (a *WazuhAPIAdapter) IsHealthy(ctx context.Context) bool {
 	_, err := a.GetManagerInfo(ctx)
-	return err == nil
+	// A rate-limited API is up: over its quota, not down.
+	return err == nil || errors.Is(err, ErrAPIRateLimited)
 }
 
 // QueueStatus represents the status of a Wazuh queue

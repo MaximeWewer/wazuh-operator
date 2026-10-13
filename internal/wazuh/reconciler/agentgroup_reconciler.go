@@ -365,7 +365,7 @@ func (r *AgentGroupReconciler) buildAPIClient(ctx context.Context, cluster *wazu
 		return nil, fmt.Errorf("failed to get Wazuh API credentials: %w", err)
 	}
 
-	return adapters.NewWazuhAPIAdapter(adapters.WazuhAPIConfig{
+	return adapters.SharedWazuhAPIAdapter(adapters.WazuhAPIConfig{
 		BaseURL:  baseURL,
 		Username: username,
 		Password: password,

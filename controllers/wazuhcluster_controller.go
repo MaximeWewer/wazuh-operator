@@ -1418,8 +1418,8 @@ func (r *WazuhClusterReconciler) collectWazuhAgentMetrics(cluster *wazuhv1.Wazuh
 		return
 	}
 
-	// Create API adapter
-	wazuhClient := adapters.NewWazuhAPIAdapter(adapters.WazuhAPIConfig{
+	// Shared API adapter: reuses its token instead of logging in at every reconcile
+	wazuhClient := adapters.SharedWazuhAPIAdapter(adapters.WazuhAPIConfig{
 		BaseURL:  baseURL,
 		Username: username,
 		Password: password,

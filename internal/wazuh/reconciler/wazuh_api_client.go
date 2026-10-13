@@ -43,7 +43,7 @@ func buildWazuhAPIClient(ctx context.Context, c client.Client, cluster *wazuhv1.
 		return nil, fmt.Errorf("failed to get Wazuh API credentials: %w", err)
 	}
 
-	return adapters.NewWazuhAPIAdapter(adapters.WazuhAPIConfig{
+	return adapters.SharedWazuhAPIAdapter(adapters.WazuhAPIConfig{
 		BaseURL:  baseURL,
 		Username: username,
 		Password: password,

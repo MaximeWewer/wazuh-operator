@@ -19,6 +19,8 @@ package reconciler
 import (
 	"errors"
 	"fmt"
+
+	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
 )
 
 // WazuhAPIUnavailableError indicates the Wazuh API is not reachable yet.
@@ -35,8 +37,9 @@ func (e *WazuhAPIUnavailableError) Unwrap() error {
 	return e.Err
 }
 
-// IsAPIUnavailable returns true if the error (or any wrapped error) is a WazuhAPIUnavailableError.
+// IsAPIUnavailable returns true if the error (or any wrapped error) is a WazuhAPIUnavailableError
+// or comes from an API call refused while the API is down, overloaded or backing off.
 func IsAPIUnavailable(err error) bool {
 	var target *WazuhAPIUnavailableError
-	return errors.As(err, &target)
+	return errors.As(err, &target) || errors.Is(err, adapters.ErrAPIUnavailable)
 }

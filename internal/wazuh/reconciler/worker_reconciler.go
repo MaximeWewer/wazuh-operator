@@ -357,7 +357,7 @@ func (r *WorkerReconciler) ensureWazuhClient(ctx context.Context, cluster *wazuh
 		return nil
 	}
 
-	r.wazuhClient = adapters.NewWazuhAPIAdapter(adapters.WazuhAPIConfig{
+	r.wazuhClient = adapters.SharedWazuhAPIAdapter(adapters.WazuhAPIConfig{
 		BaseURL:  baseURL,
 		Username: username,
 		Password: password,

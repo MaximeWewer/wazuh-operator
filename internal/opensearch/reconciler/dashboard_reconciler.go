@@ -1572,7 +1572,7 @@ func (r *DashboardReconciler) ensureAPIUserRunAs(ctx context.Context, cluster *w
 	}
 
 	baseURL := fmt.Sprintf("https://%s:%d", constants.ManagerMasterServiceFQDN(cluster.Name, cluster.Namespace), constants.PortManagerAPI)
-	apiClient := adapters.NewWazuhAPIAdapter(adapters.WazuhAPIConfig{
+	apiClient := adapters.SharedWazuhAPIAdapter(adapters.WazuhAPIConfig{
 		BaseURL:  baseURL,
 		Username: username,
 		Password: password,
