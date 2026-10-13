@@ -145,7 +145,7 @@ func (r *WazuhAgentGroupAssignmentReconciler) Reconcile(ctx context.Context, req
 	if err := r.AssignmentReconciler.Reconcile(ctx, assignment); err != nil {
 		if wazuhreconciler.IsAPIUnavailable(err) {
 			log.Info("Wazuh API unavailable, requeuing", "error", err)
-			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: apiUnavailableRequeue()}, nil
 		}
 		log.Error(err, "Failed to reconcile WazuhAgentGroupAssignment")
 		return ctrl.Result{}, err
@@ -164,7 +164,7 @@ func (r *WazuhAgentGroupAssignmentReconciler) Reconcile(ctx context.Context, req
 // SetupWithManager sets up the controller with the Manager
 func (r *WazuhAgentGroupAssignmentReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1.WazuhAgentGroupAssignment{}).
+		For(&wazuhv1.WazuhAgentGroupAssignment{}, builder.WithPredicates(specChangedPredicate())).
 		WithEventFilter(eventLogPredicate("WazuhAgentGroupAssignment", &wazuhv1.WazuhAgentGroupAssignment{})).
 		Watches(
 			&wazuhv1.WazuhCluster{},

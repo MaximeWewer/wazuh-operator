@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -108,7 +109,7 @@ func (r *OpenSearchAuthConfigReconciler) Reconcile(ctx context.Context, req ctrl
 // SetupWithManager sets up the controller with the Manager
 func (r *OpenSearchAuthConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1.OpenSearchAuthConfig{}).
+		For(&wazuhv1.OpenSearchAuthConfig{}, builder.WithPredicates(specChangedPredicate())).
 		WithEventFilter(eventLogPredicate("OpenSearchAuthConfig", &wazuhv1.OpenSearchAuthConfig{})).
 		// Watch secrets for secret references (client secret, exchange key, etc.)
 		Watches(

@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -105,7 +106,7 @@ func (r *OpenSearchSnapshotRepositoryReconciler) Reconcile(ctx context.Context, 
 // SetupWithManager sets up the controller with the Manager
 func (r *OpenSearchSnapshotRepositoryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1.OpenSearchSnapshotRepository{}).
+		For(&wazuhv1.OpenSearchSnapshotRepository{}, builder.WithPredicates(specChangedPredicate())).
 		WithEventFilter(eventLogPredicate("OpenSearchSnapshotRepository", &wazuhv1.OpenSearchSnapshotRepository{})).
 		// Watch Secrets that may contain credentials
 		Watches(

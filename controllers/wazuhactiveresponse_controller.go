@@ -151,7 +151,7 @@ func (r *WazuhActiveResponseReconciler) Reconcile(ctx context.Context, req ctrl.
 // SetupWithManager sets up the controller with the Manager.
 func (r *WazuhActiveResponseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1.WazuhActiveResponse{}).
+		For(&wazuhv1.WazuhActiveResponse{}, builder.WithPredicates(specChangedPredicate())).
 		WithEventFilter(eventLogPredicate("WazuhActiveResponse", &wazuhv1.WazuhActiveResponse{})).
 		Owns(&corev1.ConfigMap{}).
 		Watches(

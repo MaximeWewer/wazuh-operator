@@ -154,7 +154,7 @@ func (r *WazuhCDBListReconciler) Reconcile(ctx context.Context, req ctrl.Request
 // SetupWithManager sets up the controller with the Manager.
 func (r *WazuhCDBListReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1.WazuhCDBList{}).
+		For(&wazuhv1.WazuhCDBList{}, builder.WithPredicates(specChangedPredicate())).
 		WithEventFilter(eventLogPredicate("WazuhCDBList", &wazuhv1.WazuhCDBList{})).
 		Owns(&corev1.ConfigMap{}).
 		// Re-reconcile CDB lists when a referenced cluster changes.

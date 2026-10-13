@@ -140,7 +140,7 @@ func (r *WazuhRoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	if err := r.RoleReconciler.Reconcile(ctx, role); err != nil {
 		if wazuhreconciler.IsAPIUnavailable(err) {
 			log.Info("Wazuh API unavailable, requeuing", "error", err)
-			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: apiUnavailableRequeue()}, nil
 		}
 		log.Error(err, "Failed to reconcile WazuhRole")
 		return ctrl.Result{}, err
@@ -153,7 +153,7 @@ func (r *WazuhRoleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 // SetupWithManager sets up the controller with the Manager
 func (r *WazuhRoleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1.WazuhRole{}).
+		For(&wazuhv1.WazuhRole{}, builder.WithPredicates(specChangedPredicate())).
 		WithEventFilter(eventLogPredicate("WazuhRole", &wazuhv1.WazuhRole{})).
 		Watches(
 			&wazuhv1.WazuhCluster{},

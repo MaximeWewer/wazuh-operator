@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -104,7 +105,7 @@ func (r *OpenSearchComponentTemplateReconciler) Reconcile(ctx context.Context, r
 // SetupWithManager sets up the controller with the Manager
 func (r *OpenSearchComponentTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1.OpenSearchComponentTemplate{}).
+		For(&wazuhv1.OpenSearchComponentTemplate{}, builder.WithPredicates(specChangedPredicate())).
 		WithEventFilter(eventLogPredicate("OpenSearchComponentTemplate", &wazuhv1.OpenSearchComponentTemplate{})).
 		Named("opensearchcomponenttemplate").
 		Complete(r)

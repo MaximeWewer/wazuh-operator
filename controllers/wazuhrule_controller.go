@@ -160,7 +160,7 @@ func (r *WazuhRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 // SetupWithManager sets up the controller with the Manager
 func (r *WazuhRuleReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1.WazuhRule{}).
+		For(&wazuhv1.WazuhRule{}, builder.WithPredicates(specChangedPredicate())).
 		WithEventFilter(eventLogPredicate("WazuhRule", &wazuhv1.WazuhRule{})).
 		Owns(&corev1.ConfigMap{}).
 		// Watch for WazuhCluster spec changes to re-reconcile rules when cluster changes

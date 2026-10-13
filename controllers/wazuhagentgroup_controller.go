@@ -148,7 +148,7 @@ func (r *WazuhAgentGroupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if err := r.AgentGroupReconciler.Reconcile(ctx, group); err != nil {
 		if wazuhreconciler.IsAPIUnavailable(err) {
 			log.Info("Wazuh API unavailable, requeuing", "error", err)
-			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: apiUnavailableRequeue()}, nil
 		}
 		log.Error(err, "Failed to reconcile WazuhAgentGroup")
 		return ctrl.Result{}, err
@@ -161,7 +161,7 @@ func (r *WazuhAgentGroupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 // SetupWithManager sets up the controller with the Manager
 func (r *WazuhAgentGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1.WazuhAgentGroup{}).
+		For(&wazuhv1.WazuhAgentGroup{}, builder.WithPredicates(specChangedPredicate())).
 		WithEventFilter(eventLogPredicate("WazuhAgentGroup", &wazuhv1.WazuhAgentGroup{})).
 		Owns(&corev1.ConfigMap{}).
 		Watches(

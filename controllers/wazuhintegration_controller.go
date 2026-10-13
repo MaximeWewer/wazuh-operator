@@ -153,7 +153,7 @@ func (r *WazuhIntegrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 // SetupWithManager sets up the controller with the Manager.
 func (r *WazuhIntegrationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1.WazuhIntegration{}).
+		For(&wazuhv1.WazuhIntegration{}, builder.WithPredicates(specChangedPredicate())).
 		WithEventFilter(eventLogPredicate("WazuhIntegration", &wazuhv1.WazuhIntegration{})).
 		Owns(&corev1.ConfigMap{}).
 		// Watch for WazuhCluster spec changes to re-reconcile integrations when cluster changes

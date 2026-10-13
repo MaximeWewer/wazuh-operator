@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -104,7 +105,7 @@ func (r *OpenSearchRoleMappingReconciler) Reconcile(ctx context.Context, req ctr
 // SetupWithManager sets up the controller with the Manager
 func (r *OpenSearchRoleMappingReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&wazuhv1.OpenSearchRoleMapping{}).
+		For(&wazuhv1.OpenSearchRoleMapping{}, builder.WithPredicates(specChangedPredicate())).
 		WithEventFilter(eventLogPredicate("OpenSearchRoleMapping", &wazuhv1.OpenSearchRoleMapping{})).
 		Named("opensearchrolemapping").
 		Complete(r)
