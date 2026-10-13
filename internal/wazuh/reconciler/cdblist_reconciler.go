@@ -730,10 +730,10 @@ type CDBListConfigMapInfo struct {
 // all CDB lists applied on a cluster. Only lists whose per-cluster status is Applied
 // are returned so half-reconciled lists are not mounted.
 //
-// The restart hash covers which lists are mounted and how, not the content of the
-// ConfigMap-delivered ones: the kubelet updates a mounted ConfigMap in place and the
-// operator then restarts the manager nodes through the Wazuh API (see CDBListContentHash),
-// which is much shorter than recreating the pods.
+// The restart hash covers which lists are installed and how, not the content of the lists
+// the Wazuh API can update (see apiUpdatableCDBList): the operator uploads their new
+// content and reloads the manager nodes through the API (see CDBListContentHash), which is
+// much shorter than recreating the pods.
 func (r *CDBListReconciler) GetCDBListConfigMapsForCluster(ctx context.Context, clusterName, namespace string) ([]CDBListConfigMapInfo, string, error) {
 	lists, err := r.ListCDBListsForCluster(ctx, clusterName, namespace)
 	if err != nil {
@@ -801,7 +801,12 @@ func (r *CDBListReconciler) GetCDBListConfigMapsForCluster(ctx context.Context, 
 			ListCRName:    l.Name,
 			Mode:          cdbDeliveryConfigMap,
 		})
-		hashInputs = append(hashInputs, l.Spec.ListName+"=configmap:"+cdbListConfigMapName(l.Namespace, l.Name))
+		info := configMaps[len(configMaps)-1]
+		if apiUpdatableCDBList(info) {
+			hashInputs = append(hashInputs, l.Spec.ListName+"=configmap:"+info.ConfigMapName)
+		} else {
+			hashInputs = append(hashInputs, l.Spec.ListName+"="+l.Status.ContentHash)
+		}
 	}
 
 	sort.Slice(configMaps, func(i, j int) bool {
@@ -828,13 +833,12 @@ func (r *CDBListReconciler) GetCDBListNamesForCluster(ctx context.Context, clust
 	return names, nil
 }
 
-// CDBListContentHash returns a hash of the content of the ConfigMap-delivered lists in
-// infos, the content a manager node loads from the mounted ConfigMaps. Returns "" when
-// there is none.
+// CDBListContentHash returns a hash of the content of the lists in infos the Wazuh API can
+// update (see apiUpdatableCDBList). Returns "" when there is none.
 func CDBListContentHash(infos []CDBListConfigMapInfo) string {
 	var inputs []string
 	for _, info := range infos {
-		if info.Mode == cdbDeliveryConfigMap {
+		if apiUpdatableCDBList(info) {
 			inputs = append(inputs, info.FileName+"="+info.ContentHash)
 		}
 	}

@@ -8,8 +8,9 @@ import (
 
 // TestSharedConfigMapContent asserts that both the master and worker builders render the
 // shared ConfigMap-backed volumes and mounts (rules, decoders, agent-group files,
-// integrations, CDB lists, active responses) through the shared base helpers. It guards
-// against the shared configMapVolumes/configMapMounts wiring regressing in one builder.
+// integrations, active responses) through the shared base helpers. CDB lists are copied by
+// the init container (see TestCDBListConfigMapsOnlyInInitContainer). It guards against the
+// shared configMapVolumes/configMapMounts wiring regressing in one builder.
 func TestSharedConfigMapContent(t *testing.T) {
 	rules := []RuleConfigMapRef{{Name: "cm-rule", FileName: "r.xml"}}
 	decoders := []DecoderConfigMapRef{{Name: "cm-dec", FileName: "d.xml"}}
@@ -24,7 +25,6 @@ func TestSharedConfigMapContent(t *testing.T) {
 		"wazuh-decoder-cm-dec":       "/var/ossec/etc/decoders/d.xml",
 		"agentgroup-files-cm-g":      "/var/ossec/etc/shared/g1/agent.conf",
 		"wazuh-integration-cm-int":   "/var/ossec/integrations/custom-x",
-		"wazuh-cdblist-cm-cdb":       "/var/ossec/cdblists/wazuh-cdblist-cm-cdb",
 		"wazuh-activeresponse-cm-ar": "/var/ossec/active-response/bin/fw.sh",
 	}
 

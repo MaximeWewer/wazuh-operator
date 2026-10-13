@@ -614,18 +614,6 @@ func (b *baseStatefulSetBuilder[T]) configMapMounts() []corev1.VolumeMount {
 		})
 	}
 
-	// Mount each CDB list ConfigMap as a directory under PathWazuhCDBListSources; the
-	// init container links etc/lists/<path> to it (see cdbListLinkScript). Unlike a subPath
-	// mount, the kubelet updates the file in the running pod when the list content changes.
-	for _, ref := range b.cdbListConfigMaps {
-		volumeName := boundedVolumeName("wazuh-cdblist", ref.Name)
-		mounts = append(mounts, corev1.VolumeMount{
-			Name:      volumeName,
-			MountPath: constants.PathWazuhCDBListSources + "/" + volumeName,
-			ReadOnly:  true,
-		})
-	}
-
 	// Add active response script mounts at /var/ossec/active-response/bin/<filename>.
 	// Read-only subPath mount; DefaultMode 0750 + fsGroup give root:wazuh 0750.
 	for _, ref := range b.activeResponseConfigMaps {
@@ -717,9 +705,9 @@ chown -R 999:999 /wazuh-config-mount
 echo "Ownership fix complete"`
 
 // buildInitContainer creates the busybox "fix-permissions" init container, staging the
-// operator-issued API certificate on the master (installAPICert) and linking the CDB lists.
+// operator-issued API certificate on the master (installAPICert) and installing the CDB lists.
 func (b *baseStatefulSetBuilder[T]) buildInitContainer() corev1.Container {
-	extra := cdbListLinkScript(b.cdbListConfigMaps)
+	extra := cdbListInstallScript(b.cdbListConfigMaps)
 	if b.installAPICert {
 		extra = joinScripts(extra, apiCertInstallScript)
 	}
@@ -737,15 +725,15 @@ func joinScripts(parts ...string) string {
 	return strings.Join(nonEmpty, "\n")
 }
 
-// cdbListLinkScript links /var/ossec/etc/lists/<path> to each CDB list ConfigMap mounted
-// under PathWazuhCDBListSources. The links are relative so they resolve the same from
-// any root, and they replace the empty file a former subPath mount left on the PVC. Links
-// to lists no longer mounted are removed first. analysisd writes the compiled <path>.cdb
-// next to the link, in the writable etc/lists, and recompiles it when the source is newer.
-// On a worker the Wazuh cluster sync may replace a link with a copy of the master's file;
-// the next pod start restores the link.
+// cdbListInstallScript copies each CDB list from its ConfigMap, mounted in the init
+// container under PathWazuhCDBListSources, to /var/ossec/etc/lists/<path> as a regular
+// file: since 4.14 the Wazuh API ignores a list whose real path leaves etc/lists, so a
+// link to the mount would hide it from the API. The operator later updates a list in
+// place through the API (see the reconciler's CDB list reload). The copy goes through a
+// .tmp file, which the Wazuh cluster does not sync. cdbListManifest records the installed
+// paths so the lists removed since the previous start are deleted with their compiled .cdb.
 // Returns "" when no list is mounted, which leaves the init container unchanged.
-func cdbListLinkScript(refs []CDBListConfigMapRef) string {
+func cdbListInstallScript(refs []CDBListConfigMapRef) string {
 	if len(refs) == 0 {
 		return ""
 	}
@@ -753,29 +741,46 @@ func cdbListLinkScript(refs []CDBListConfigMapRef) string {
 	copy(sorted, refs)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].FileName < sorted[j].FileName })
 
-	sourceDir := strings.TrimPrefix(constants.PathWazuhCDBListSources, constants.PathWazuhBase+"/")
+	manifest := shellSingleQuote(cdbListManifest)
+	newManifest := shellSingleQuote(cdbListManifest + ".new")
 	var sb strings.Builder
-	sb.WriteString("# Link the CDB lists to their ConfigMap directories\n")
-	sb.WriteString("find /var/ossec/etc/lists -type l | while read -r l; do\n")
-	fmt.Fprintf(&sb, "    case \"$(readlink \"$l\")\" in *%s/*) rm -f \"$l\" ;; esac\n", sourceDir)
-	sb.WriteString("done\n")
+	sb.WriteString("# Install the CDB lists from their ConfigMaps\n")
+	fmt.Fprintf(&sb, ": > %s\n", newManifest)
 	for _, ref := range sorted {
-		link := "/var/ossec/etc/lists/" + ref.FileName
-		// etc/lists/<FileName> sits 2 + (slashes in FileName) levels below /var/ossec.
-		up := strings.Repeat("../", 2+strings.Count(ref.FileName, "/"))
-		target := up + sourceDir + "/" + boundedVolumeName("wazuh-cdblist", ref.Name) + "/" + ref.Key
-		qLink := shellSingleQuote(link)
-		fmt.Fprintf(&sb, "mkdir -p \"$(dirname %s)\" && rm -f %s && ln -s %s %s\n",
-			qLink, qLink, shellSingleQuote(target), qLink)
+		src := shellSingleQuote(constants.PathWazuhCDBListSources + "/" + boundedVolumeName("wazuh-cdblist", ref.Name) + "/" + ref.Key)
+		dest := shellSingleQuote("/var/ossec/etc/lists/" + ref.FileName)
+		tmp := shellSingleQuote("/var/ossec/etc/lists/" + ref.FileName + ".tmp")
+		fmt.Fprintf(&sb, "mkdir -p \"$(dirname %s)\" && rm -rf %s && cp %s %s && mv %s %s\n", dest, dest, src, tmp, tmp, dest)
+		fmt.Fprintf(&sb, "printf '%%s\\n' %s >> %s\n", shellSingleQuote(ref.FileName), newManifest)
 	}
-	sb.WriteString("echo \"Linked CDB lists\"")
+	fmt.Fprintf(&sb, "if [ -f %s ]; then\n", manifest)
+	fmt.Fprintf(&sb, "    while IFS= read -r f; do\n")
+	fmt.Fprintf(&sb, "        case \"$f\" in ''|/*|*..*) continue ;; esac\n")
+	fmt.Fprintf(&sb, "        grep -qxF -- \"$f\" %s || rm -f \"/var/ossec/etc/lists/$f\" \"/var/ossec/etc/lists/$f.cdb\"\n", newManifest)
+	fmt.Fprintf(&sb, "    done < %s\n", manifest)
+	sb.WriteString("fi\n")
+	fmt.Fprintf(&sb, "mv %s %s\n", newManifest, manifest)
+	sb.WriteString("echo \"Installed CDB lists\"")
 	return sb.String()
 }
+
+// cdbListManifest lists the CDB list paths the init container installed. It sits in the
+// PVC-backed etc/, outside the directories the Wazuh cluster syncs.
+const cdbListManifest = constants.PathWazuhConfig + "/.operator-cdblists"
 
 // buildInitContainerVolumeMounts returns the init-container volume mounts, adding the
 // operator cert dir on the master (installAPICert) so the cert install can read it.
 func (b *baseStatefulSetBuilder[T]) buildInitContainerVolumeMounts() []corev1.VolumeMount {
 	mounts := initBaseVolumeMounts()
+	// CDB list ConfigMaps, copied into etc/lists by cdbListInstallScript.
+	for _, ref := range b.cdbListConfigMaps {
+		volumeName := boundedVolumeName("wazuh-cdblist", ref.Name)
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      volumeName,
+			MountPath: constants.PathWazuhCDBListSources + "/" + volumeName,
+			ReadOnly:  true,
+		})
+	}
 	if b.installAPICert {
 		mounts = append(mounts,
 			// Operator-issued cert (signed by the common CA, SAN localhost) - copied into

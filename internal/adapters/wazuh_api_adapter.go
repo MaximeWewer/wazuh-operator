@@ -656,7 +656,8 @@ func (a *WazuhAPIAdapter) RestartNode(ctx context.Context, nodeName string) (*Re
 }
 
 // GetListFile returns the raw content of the CDB list file the master serves under
-// etc/lists. The API looks the name up in the etc/lists subdirectories as well.
+// etc/lists. The API looks the name up in the etc/lists subdirectories as well, and since
+// 4.14 ignores a file whose real path leaves etc/lists (e.g. a link to a mount).
 func (a *WazuhAPIAdapter) GetListFile(ctx context.Context, filename string) (string, error) {
 	resp, err := a.doRequest(ctx, "GET", "/lists/files/"+url.PathEscape(filename)+"?raw=true", nil)
 	if err != nil {
@@ -672,6 +673,35 @@ func (a *WazuhAPIAdapter) GetListFile(ctx context.Context, filename string) (str
 		return "", fmt.Errorf("get list file %s failed with status %d: %s", filename, resp.StatusCode, string(body))
 	}
 	return string(body), nil
+}
+
+// UploadListFile writes a CDB list file directly under etc/lists on the master, replacing
+// it if it exists; the Wazuh cluster syncs it to the workers.
+func (a *WazuhAPIAdapter) UploadListFile(ctx context.Context, filename, content string) error {
+	resp, err := a.doRequestWithContentType(ctx, "PUT", "/lists/files/"+url.PathEscape(filename)+"?overwrite=true",
+		strings.NewReader(content), "application/octet-stream")
+	if err != nil {
+		return fmt.Errorf("failed to upload list file %s: %w", filename, err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("upload list file %s failed with status %d: %s", filename, resp.StatusCode, string(body))
+	}
+	var result struct {
+		Data struct {
+			TotalFailedItems int             `json:"total_failed_items"`
+			FailedItems      json.RawMessage `json:"failed_items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return fmt.Errorf("failed to decode list upload response: %w", err)
+	}
+	if result.Data.TotalFailedItems > 0 {
+		return fmt.Errorf("upload list file %s failed: %s", filename, string(result.Data.FailedItems))
+	}
+	return nil
 }
 
 // RulesetSynchronized reports whether every cluster node holds the master's ruleset
@@ -705,6 +735,41 @@ func (a *WazuhAPIAdapter) RulesetSynchronized(ctx context.Context) (bool, error)
 		}
 	}
 	return true, nil
+}
+
+// ErrEndpointNotFound reports an API endpoint the manager does not have (an older version).
+var ErrEndpointNotFound = errors.New("wazuh API endpoint not found")
+
+// ReloadAnalysisd reloads the ruleset (rules, decoders and CDB lists) of wazuh-analysisd
+// on every cluster node without restarting it (Wazuh 4.13+). The master reloads before
+// answering, the workers right after. Returns ErrEndpointNotFound on an older manager.
+func (a *WazuhAPIAdapter) ReloadAnalysisd(ctx context.Context) error {
+	resp, err := a.doRequest(ctx, "PUT", "/cluster/analysisd/reload", nil)
+	if err != nil {
+		return fmt.Errorf("failed to reload analysisd: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("analysisd reload: %w", ErrEndpointNotFound)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("analysisd reload failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	var result struct {
+		Data struct {
+			TotalFailedItems int             `json:"total_failed_items"`
+			FailedItems      json.RawMessage `json:"failed_items"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return fmt.Errorf("failed to decode analysisd reload response: %w", err)
+	}
+	if result.Data.TotalFailedItems > 0 {
+		return fmt.Errorf("analysisd reload failed on %d node(s): %s", result.Data.TotalFailedItems, string(result.Data.FailedItems))
+	}
+	return nil
 }
 
 // ReloadRules reloads the rules on the Wazuh manager without a full restart
