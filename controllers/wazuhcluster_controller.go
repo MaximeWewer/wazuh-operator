@@ -64,7 +64,6 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/wazuh/drain"
 	wazuhreconciler "github.com/MaximeWewer/wazuh-operator/internal/wazuh/reconciler"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
-	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 	"github.com/MaximeWewer/wazuh-operator/pkg/logging"
 )
 
@@ -1381,10 +1380,9 @@ func (r *WazuhClusterReconciler) collectWazuhAgentMetrics(cluster *wazuhv1.Wazuh
 
 	log := logf.FromContext(ctx).WithValues("cluster", cluster.Name)
 
-	// Get manager service URL
-	managerServiceName := cluster.Name + "-manager"
+	// The API is served by the master Service: there is no "<cluster>-manager" Service.
 	baseURL := fmt.Sprintf("https://%s:%d",
-		dns.ServiceFQDN(managerServiceName, cluster.Namespace), constants.PortManagerAPI)
+		constants.ManagerMasterServiceFQDN(cluster.Name, cluster.Namespace), constants.PortManagerAPI)
 
 	// Get credentials from secret
 	credSecret := &corev1.Secret{}
