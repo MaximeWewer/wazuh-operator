@@ -281,16 +281,17 @@ type WazuhVersionInfo struct {
 var wazuhVersionMapping = map[string]WazuhVersionInfo{
 	// BEGIN generated-mapping (managed by hack/version-sync - do not remove markers)
 	// Wazuh 4.14.x - OpenSearch 2.19.3+
-	"4.14.9": {WazuhVersion: "4.14.9", OpenSearchVersion: "2.19.6", PrometheusExporterPluginVersion: "2.19.6.0"},
-	"4.14.8": {WazuhVersion: "4.14.8", OpenSearchVersion: "2.19.6", PrometheusExporterPluginVersion: "2.19.6.0"},
-	"4.14.7": {WazuhVersion: "4.14.7", OpenSearchVersion: "2.19.5", PrometheusExporterPluginVersion: "2.19.5.0"},
-	"4.14.6": {WazuhVersion: "4.14.6", OpenSearchVersion: "2.19.5", PrometheusExporterPluginVersion: "2.19.5.0"},
-	"4.14.5": {WazuhVersion: "4.14.5", OpenSearchVersion: "2.19.5", PrometheusExporterPluginVersion: "2.19.5.0"},
-	"4.14.4": {WazuhVersion: "4.14.4", OpenSearchVersion: "2.19.4", PrometheusExporterPluginVersion: "2.19.4.0"},
-	"4.14.3": {WazuhVersion: "4.14.3", OpenSearchVersion: "2.19.4", PrometheusExporterPluginVersion: "2.19.4.0"},
-	"4.14.2": {WazuhVersion: "4.14.2", OpenSearchVersion: "2.19.4", PrometheusExporterPluginVersion: "2.19.4.0"},
-	"4.14.1": {WazuhVersion: "4.14.1", OpenSearchVersion: "2.19.3", PrometheusExporterPluginVersion: "2.19.3.0"},
-	"4.14.0": {WazuhVersion: "4.14.0", OpenSearchVersion: "2.19.3", PrometheusExporterPluginVersion: "2.19.3.0"},
+	"4.14.10": {WazuhVersion: "4.14.10", OpenSearchVersion: "2.19.6", PrometheusExporterPluginVersion: "2.19.6.0"},
+	"4.14.9":  {WazuhVersion: "4.14.9", OpenSearchVersion: "2.19.6", PrometheusExporterPluginVersion: "2.19.6.0"},
+	"4.14.8":  {WazuhVersion: "4.14.8", OpenSearchVersion: "2.19.6", PrometheusExporterPluginVersion: "2.19.6.0"},
+	"4.14.7":  {WazuhVersion: "4.14.7", OpenSearchVersion: "2.19.5", PrometheusExporterPluginVersion: "2.19.5.0"},
+	"4.14.6":  {WazuhVersion: "4.14.6", OpenSearchVersion: "2.19.5", PrometheusExporterPluginVersion: "2.19.5.0"},
+	"4.14.5":  {WazuhVersion: "4.14.5", OpenSearchVersion: "2.19.5", PrometheusExporterPluginVersion: "2.19.5.0"},
+	"4.14.4":  {WazuhVersion: "4.14.4", OpenSearchVersion: "2.19.4", PrometheusExporterPluginVersion: "2.19.4.0"},
+	"4.14.3":  {WazuhVersion: "4.14.3", OpenSearchVersion: "2.19.4", PrometheusExporterPluginVersion: "2.19.4.0"},
+	"4.14.2":  {WazuhVersion: "4.14.2", OpenSearchVersion: "2.19.4", PrometheusExporterPluginVersion: "2.19.4.0"},
+	"4.14.1":  {WazuhVersion: "4.14.1", OpenSearchVersion: "2.19.3", PrometheusExporterPluginVersion: "2.19.3.0"},
+	"4.14.0":  {WazuhVersion: "4.14.0", OpenSearchVersion: "2.19.3", PrometheusExporterPluginVersion: "2.19.3.0"},
 	// Wazuh 4.13.x - OpenSearch 2.19.2
 	"4.13.1": {WazuhVersion: "4.13.1", OpenSearchVersion: "2.19.2", PrometheusExporterPluginVersion: "2.19.2.0"},
 	"4.13.0": {WazuhVersion: "4.13.0", OpenSearchVersion: "2.19.2", PrometheusExporterPluginVersion: "2.19.2.0"},
