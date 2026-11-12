@@ -636,6 +636,12 @@ const initScriptHead = `echo "Initializing PVC directories and copying configura
 mkdir -p /wazuh-config-mount/etc
 # Create required subdirectories on PVC-backed /var/ossec/etc
 mkdir -p /var/ossec/etc/shared /var/ossec/etc/rules /var/ossec/etc/decoders /var/ossec/etc/lists
+# Remove the empty rule and decoder files left by a removed WazuhRule or WazuhDecoder: kubelet
+# creates an empty file on the volume as the mount point of a subPath mount and never deletes
+# it, and analysisd stops on an empty ruleset file ("(1202): Configuration error"), so the
+# manager never comes up. kubelet recreates the mount points of this pod's files when the
+# manager container starts.
+find /var/ossec/etc/rules /var/ossec/etc/decoders -maxdepth 1 -type f -name '*.xml' -size 0 -print -delete
 # Create ar.conf in shared directory (required by wazuh-analysisd)
 touch /var/ossec/etc/shared/ar.conf
 chown 0:999 /var/ossec/etc/shared/ar.conf

@@ -107,3 +107,46 @@ func TestCDBListConfigMapsOnlyInInitContainer(t *testing.T) {
 		t.Errorf("init script changed for a cluster without CDB lists:\n%s", s)
 	}
 }
+
+// TestInitRemovesEmptyRulesetFiles runs the init script's cleanup of the empty rule and
+// decoder files kubelet leaves as subPath mount points: analysisd stops on an empty
+// ruleset file, so a removed WazuhDecoder would keep every manager down.
+func TestInitRemovesEmptyRulesetFiles(t *testing.T) {
+	var cleanup string
+	for _, line := range strings.Split(initScriptHead, "\n") {
+		if strings.HasPrefix(line, "find /var/ossec/etc/rules /var/ossec/etc/decoders") {
+			cleanup = line
+		}
+	}
+	if cleanup == "" {
+		t.Fatal("init script does not remove the empty ruleset files")
+	}
+	root := t.TempDir()
+	files := map[string]string{
+		"etc/decoders/removed.xml":       "",
+		"etc/decoders/local_decoder.xml": "<decoder/>",
+		"etc/rules/removed.xml":          "",
+		"etc/rules/local_rules.xml":      "<group/>",
+		"etc/rules/notes.txt":            "",
+	}
+	for rel, content := range files {
+		p := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	script := strings.ReplaceAll(cleanup, "/var/ossec", root)
+	if out, err := exec.CommandContext(t.Context(), "sh", "-c", script).CombinedOutput(); err != nil {
+		t.Fatalf("cleanup failed: %v\n%s", err, out)
+	}
+	for rel := range files {
+		_, err := os.Stat(filepath.Join(root, rel))
+		wantGone := strings.HasSuffix(rel, "removed.xml")
+		if gone := os.IsNotExist(err); gone != wantGone {
+			t.Errorf("%s removed = %v, want %v", rel, gone, wantGone)
+		}
+	}
+}
