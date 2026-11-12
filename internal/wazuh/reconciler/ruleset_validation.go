@@ -108,9 +108,8 @@ var rulesetValidationLocks sync.Map // cluster key -> *sync.Mutex
 var ErrRulesetRestoreFailed = errors.New("could not restore the ruleset file on the master")
 
 // validateRulesetFile writes candidate to etc/<kind>/<filename> on the master and checks
-// that every manager node would load the resulting ruleset (GET
-// /cluster/configuration/validation, the check analysisd runs at startup). installed is the
-// version the managers run (the ConfigMap content, "" when hasInstalled is false): a
+// that the managers would load the resulting ruleset (see ValidateConfiguration, the check
+// analysisd runs at startup). installed is the version the managers run (the ConfigMap content, "" when hasInstalled is false): a
 // rejected candidate is replaced by it, or removed, and a *RulesetRejectedError carries the
 // Wazuh message. The candidate then never reaches the ConfigMap the manager pods install
 // their files from, so a pod never starts on it and stops (1202).

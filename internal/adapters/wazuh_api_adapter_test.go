@@ -284,7 +284,7 @@ func TestRulesetFilesAndValidation(t *testing.T) {
 		switch {
 		case r.URL.Path == "/security/user/authenticate":
 			_, _ = w.Write([]byte(`{"data":{"token":"t"},"error":0}`))
-		case r.URL.Path == "/cluster/configuration/validation" && r.Method == http.MethodGet:
+		case r.URL.Path == "/manager/configuration/validation" && r.Method == http.MethodGet:
 			if valid {
 				_, _ = w.Write([]byte(`{"data":{"affected_items":[{"name":"master","status":"OK"}],"total_failed_items":0,"failed_items":[]},"error":0}`))
 				return

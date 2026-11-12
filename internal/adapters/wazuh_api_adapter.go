@@ -741,11 +741,16 @@ func (a *WazuhAPIAdapter) DeleteRulesetFile(ctx context.Context, kind RulesetKin
 // carries the Wazuh error (e.g. "(2101): Parent decoder name invalid").
 var ErrInvalidConfiguration = errors.New("wazuh rejected the configuration")
 
-// ValidateConfiguration checks the configuration and ruleset every cluster node holds on
-// disk, as wazuh-analysisd would load them, without restarting anything. Returns an error
-// wrapping ErrInvalidConfiguration with the Wazuh messages when a node rejects them.
+// ValidateConfiguration checks the configuration and ruleset the master holds on disk, as
+// wazuh-analysisd would load them, without restarting anything. Returns an error wrapping
+// ErrInvalidConfiguration with the Wazuh messages when the master rejects them.
+//
+// The master alone is checked (GET /manager/configuration/validation, which answers in
+// cluster mode too): rules, decoders and CDB lists are the same on every node, while
+// /cluster/configuration/validation fans out to the workers and fails as a whole (500
+// after the 10s distributed request timeout) as soon as one worker answers late.
 func (a *WazuhAPIAdapter) ValidateConfiguration(ctx context.Context) error {
-	resp, err := a.doRequest(ctx, "GET", "/cluster/configuration/validation", nil)
+	resp, err := a.doRequest(ctx, "GET", "/manager/configuration/validation", nil)
 	if err != nil {
 		return fmt.Errorf("failed to validate the configuration: %w", err)
 	}
