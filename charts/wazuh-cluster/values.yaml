@@ -1012,8 +1012,14 @@ cluster:
         #   key: ca.crt
         # -- Exporter log level (trace, debug, info, warn, error)
         logLevel: "info"
-        # -- Metrics cache TTL (keep >= Prometheus scrape interval), e.g. "30s"
+        # -- Metrics cache TTL (WAZUH_CACHE_TTL, 5s to 5m). Empty: twice the ServiceMonitor interval
         cacheTTL: ""
+        # -- How long past cacheTTL a cached response is still served while a background refresh runs (WAZUH_CACHE_MAX_STALE, 0 to 1h). Empty: exporter default (2m)
+        cacheMaxStale: ""
+        # -- Time budget of a background cache refresh (WAZUH_BACKGROUND_FETCH_TIMEOUT, 1s to 5m). Empty: exporter default (30s)
+        backgroundFetchTimeout: ""
+        # -- Time budget of the Wazuh API calls of one scrape, below the ServiceMonitor scrapeTimeout (WAZUH_SCRAPE_TIMEOUT, 1s to 5m). Empty: exporter default (10s)
+        scrapeTimeout: ""
         # -- Quiet-startup window (WAZUH_STARTUP_GRACE): collection failures log as
         #    warn instead of error until the first success, letting a slow Wazuh API
         #    boot without noise. 0 (off) to 10m.

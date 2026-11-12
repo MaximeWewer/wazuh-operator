@@ -417,7 +417,10 @@ kubectl delete -f <(helm template my-wazuh-cluster ./charts/wazuh-cluster --name
 | cluster.spec.monitoring.serviceMonitor.scrapeTimeout | string | `"10s"` | Scrape timeout |
 | cluster.spec.monitoring.wazuhExporter.apiProtocol | string | `"https"` | API protocol for connecting to Wazuh API |
 | cluster.spec.monitoring.wazuhExporter.apiVerifySSL | bool | `true` | Verify SSL when connecting to Wazuh API (false skips TLS verification) |
-| cluster.spec.monitoring.wazuhExporter.cacheTTL | string | `""` | Metrics cache TTL (keep >= Prometheus scrape interval), e.g. "30s" |
+| cluster.spec.monitoring.wazuhExporter.cacheTTL | string | `""` | Metrics cache TTL (WAZUH_CACHE_TTL, 5s to 5m). Empty: twice the ServiceMonitor interval |
+| cluster.spec.monitoring.wazuhExporter.cacheMaxStale | string | `""` | How long past cacheTTL a cached response is still served while a background refresh runs (WAZUH_CACHE_MAX_STALE, 0 to 1h). Empty: exporter default (2m) |
+| cluster.spec.monitoring.wazuhExporter.backgroundFetchTimeout | string | `""` | Time budget of a background cache refresh (WAZUH_BACKGROUND_FETCH_TIMEOUT, 1s to 5m). Empty: exporter default (30s) |
+| cluster.spec.monitoring.wazuhExporter.scrapeTimeout | string | `""` | Time budget of the Wazuh API calls of one scrape, below the ServiceMonitor scrapeTimeout (WAZUH_SCRAPE_TIMEOUT, 1s to 5m). Empty: exporter default (10s) |
 | cluster.spec.monitoring.wazuhExporter.enabled | bool | `true` | Enable Wazuh exporter |
 | cluster.spec.monitoring.wazuhExporter.image | string | `"ghcr.io/maximewewer/wazuh-prometheus-exporter:2026.11.1"` | Wazuh exporter image |
 | cluster.spec.monitoring.wazuhExporter.logLevel | string | `"info"` | Exporter log level (trace, debug, info, warn, error) |

@@ -19,6 +19,7 @@ package monitoring
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -54,16 +55,21 @@ const (
 // Targets github.com/MaximeWewer/wazuh-prometheus-exporter (Go binary), which is
 // configured entirely through WAZUH_* environment variables.
 type WazuhExporterConfig struct {
-	ClusterName       string
-	Image             string
-	Port              int32
-	APIProtocol       string
-	APIVerifySSL      bool
-	LogLevel          string
-	CacheTTL          string
-	StartupGrace      string
-	Resources         *corev1.ResourceRequirements
-	APICredentialsRef string
+	ClusterName  string
+	Image        string
+	Port         int32
+	APIProtocol  string
+	APIVerifySSL bool
+	LogLevel     string
+	CacheTTL     string
+	StartupGrace string
+	// CacheMaxStale, BackgroundFetchTimeout and ScrapeTimeout are passed through when set;
+	// the exporter has its own defaults.
+	CacheMaxStale          string
+	BackgroundFetchTimeout string
+	ScrapeTimeout          string
+	Resources              *corev1.ResourceRequirements
+	APICredentialsRef      string
 	// CASecretName/CASecretKey identify the CA bundle mounted to verify the API cert
 	// (only set when APIVerifySSL is true).
 	CASecretName string
@@ -103,6 +109,12 @@ func NewWazuhExporterConfig(cluster *wazuhv1.WazuhCluster) *WazuhExporterConfig 
 		config.LogLevel = exporterSpec.LogLevel
 	}
 	config.CacheTTL = exporterSpec.CacheTTL
+	if config.CacheTTL == "" {
+		config.CacheTTL = defaultExporterCacheTTL(cluster)
+	}
+	config.CacheMaxStale = exporterSpec.CacheMaxStale
+	config.BackgroundFetchTimeout = exporterSpec.BackgroundFetchTimeout
+	config.ScrapeTimeout = exporterSpec.ScrapeTimeout
 	if exporterSpec.StartupGrace != "" {
 		config.StartupGrace = exporterSpec.StartupGrace
 	}
@@ -263,11 +275,15 @@ func (c *WazuhExporterConfig) buildEnvVars() []corev1.EnvVar {
 		},
 	}
 
-	if c.CacheTTL != "" {
-		env = append(env, corev1.EnvVar{
-			Name:  "WAZUH_CACHE_TTL",
-			Value: c.CacheTTL,
-		})
+	for _, opt := range []struct{ name, value string }{
+		{"WAZUH_CACHE_TTL", c.CacheTTL},
+		{"WAZUH_CACHE_MAX_STALE", c.CacheMaxStale},
+		{"WAZUH_BACKGROUND_FETCH_TIMEOUT", c.BackgroundFetchTimeout},
+		{"WAZUH_SCRAPE_TIMEOUT", c.ScrapeTimeout},
+	} {
+		if opt.value != "" {
+			env = append(env, corev1.EnvVar{Name: opt.name, Value: opt.value})
+		}
 	}
 
 	// Quiet-startup window so a slow-to-boot Wazuh API logs warn (not error) until
@@ -337,4 +353,30 @@ func GetExporterMetricsPort(cluster *wazuhv1.WazuhCluster) int32 {
 		return cluster.Spec.Monitoring.WazuhExporter.Port
 	}
 	return DefaultWazuhExporterPort
+}
+
+// Bounds the exporter clamps WAZUH_CACHE_TTL to.
+const (
+	minExporterCacheTTL = 5 * time.Second
+	maxExporterCacheTTL = 5 * time.Minute
+)
+
+// defaultExporterCacheTTL returns the cache TTL used when cacheTTL is not set: twice the
+// ServiceMonitor scrape interval, as the exporter recommends, so every scrape is served
+// from the cache instead of querying the Wazuh API again. Returns "" (the exporter's own
+// 30s default) when the ServiceMonitor is off or its interval cannot be parsed.
+func defaultExporterCacheTTL(cluster *wazuhv1.WazuhCluster) string {
+	sm := cluster.Spec.Monitoring.ServiceMonitor
+	if sm == nil || !sm.Enabled {
+		return ""
+	}
+	interval := constants.ServiceMonitorIntervalDefault
+	if sm.Interval != "" {
+		interval = sm.Interval
+	}
+	d, err := time.ParseDuration(interval)
+	if err != nil || d <= 0 {
+		return ""
+	}
+	return min(max(2*d, minExporterCacheTTL), maxExporterCacheTTL).String()
 }

@@ -38923,10 +38923,26 @@ spec:
                           issues the Wazuh API certificate from the cluster's common CA, which the
                           exporter verifies against (mounted as WAZUH_API_CA_FILE).
                         type: boolean
+                      backgroundFetchTimeout:
+                        description: |-
+                          BackgroundFetchTimeout is the time budget of a background cache refresh, detached
+                          from the scrape timeout so an endpoint slower than ScrapeTimeout still completes and
+                          fills the cache. Maps to WAZUH_BACKGROUND_FETCH_TIMEOUT (e.g. "30s", 1s to 5m). The
+                          exporter defaults to 30s.
+                        type: string
+                      cacheMaxStale:
+                        description: |-
+                          CacheMaxStale is how long past CacheTTL a cached response may still be served while
+                          a background refresh runs (stale-while-revalidate), so a slow Wazuh API endpoint
+                          never blocks a scrape. Maps to WAZUH_CACHE_MAX_STALE (e.g. "2m", 0 disables stale
+                          serving, up to 1h). The exporter defaults to 2m.
+                        type: string
                       cacheTTL:
                         description: |-
-                          CacheTTL is how long collected metrics are cached. Keep it >= the Prometheus
-                          scrape interval. Maps to WAZUH_CACHE_TTL (e.g. "30s").
+                          CacheTTL is how long collected metrics are cached. Maps to WAZUH_CACHE_TTL (e.g.
+                          "60s", 5s to 5m). Defaults to twice the ServiceMonitor interval (30s when the
+                          ServiceMonitor is off), so each scrape is served from the cache instead of querying
+                          the Wazuh API again.
                         type: string
                       enabled:
                         description: Enable Wazuh exporter sidecar
@@ -39003,6 +39019,12 @@ spec:
                               More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                             type: object
                         type: object
+                      scrapeTimeout:
+                        description: |-
+                          ScrapeTimeout is the time budget the exporter gives the Wazuh API calls of one scrape.
+                          Keep it below the ServiceMonitor scrapeTimeout. Maps to WAZUH_SCRAPE_TIMEOUT (e.g.
+                          "10s", 1s to 5m). The exporter defaults to 10s.
+                        type: string
                       startupGrace:
                         default: 60s
                         description: |-

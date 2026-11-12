@@ -175,7 +175,10 @@ Configuration for safe scale-down operations. See [Drain Strategy](features/drai
 | `apiVerifySSL` | bool                 | No       | `true`                                               | Verify Wazuh API TLS cert (false skips verify)   |
 | `apiCASecretRef` | SecretKeyRef       | No       | cluster common CA                                    | CA bundle to verify the API cert (when apiVerifySSL=true); defaults to the manager certs `ca.crt` |
 | `logLevel`     | string               | No       | `info`                                               | Log level (trace/debug/info/warn/error)          |
-| `cacheTTL`     | string               | No       | -                                                    | Metrics cache TTL (>= scrape interval), e.g. 30s |
+| `cacheTTL`     | string               | No       | 2 × ServiceMonitor interval                          | Metrics cache TTL (WAZUH_CACHE_TTL, 5s–5m); the exporter's 30s without a ServiceMonitor |
+| `cacheMaxStale` | string              | No       | exporter's 2m                                        | Serve a cached response this long past the TTL while it refreshes in the background (WAZUH_CACHE_MAX_STALE, 0–1h) |
+| `backgroundFetchTimeout` | string     | No       | exporter's 30s                                       | Time budget of a background cache refresh (WAZUH_BACKGROUND_FETCH_TIMEOUT, 1s–5m) |
+| `scrapeTimeout` | string              | No       | exporter's 10s                                       | Time budget of the Wazuh API calls of one scrape; keep it below the ServiceMonitor scrapeTimeout (WAZUH_SCRAPE_TIMEOUT) |
 | `startupGrace` | string               | No       | `60s`                                                | Quiet-startup window (warn vs error) for a slow Wazuh API; 0–10m |
 | `resources`    | ResourceRequirements | No       | -                                                    | Container resources                              |
 

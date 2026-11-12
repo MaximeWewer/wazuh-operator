@@ -873,10 +873,32 @@ type WazuhExporterConfig struct {
 	// +kubebuilder:default="info"
 	LogLevel string `json:"logLevel,omitempty"`
 
-	// CacheTTL is how long collected metrics are cached. Keep it >= the Prometheus
-	// scrape interval. Maps to WAZUH_CACHE_TTL (e.g. "30s").
+	// CacheTTL is how long collected metrics are cached. Maps to WAZUH_CACHE_TTL (e.g.
+	// "60s", 5s to 5m). Defaults to twice the ServiceMonitor interval (30s when the
+	// ServiceMonitor is off), so each scrape is served from the cache instead of querying
+	// the Wazuh API again.
 	// +optional
 	CacheTTL string `json:"cacheTTL,omitempty"`
+
+	// CacheMaxStale is how long past CacheTTL a cached response may still be served while
+	// a background refresh runs (stale-while-revalidate), so a slow Wazuh API endpoint
+	// never blocks a scrape. Maps to WAZUH_CACHE_MAX_STALE (e.g. "2m", 0 disables stale
+	// serving, up to 1h). The exporter defaults to 2m.
+	// +optional
+	CacheMaxStale string `json:"cacheMaxStale,omitempty"`
+
+	// BackgroundFetchTimeout is the time budget of a background cache refresh, detached
+	// from the scrape timeout so an endpoint slower than ScrapeTimeout still completes and
+	// fills the cache. Maps to WAZUH_BACKGROUND_FETCH_TIMEOUT (e.g. "30s", 1s to 5m). The
+	// exporter defaults to 30s.
+	// +optional
+	BackgroundFetchTimeout string `json:"backgroundFetchTimeout,omitempty"`
+
+	// ScrapeTimeout is the time budget the exporter gives the Wazuh API calls of one scrape.
+	// Keep it below the ServiceMonitor scrapeTimeout. Maps to WAZUH_SCRAPE_TIMEOUT (e.g.
+	// "10s", 1s to 5m). The exporter defaults to 10s.
+	// +optional
+	ScrapeTimeout string `json:"scrapeTimeout,omitempty"`
 
 	// StartupGrace is a quiet-startup window (WAZUH_STARTUP_GRACE) during which
 	// collection failures are logged at warn ("waiting for Wazuh API") instead of

@@ -55,7 +55,10 @@ The Wazuh exporter is deployed as a sidecar container on the manager master pod.
 | `apiVerifySSL`            | bool                 | `true`                                                 | Verify Wazuh API TLS cert (false skips verify)|
 | `apiCASecretRef`          | SecretKeyRef         | cluster common CA                                      | CA to verify the API cert (apiVerifySSL=true) |
 | `logLevel`                | string               | `info`                                                 | Log level (trace/debug/info/warn/error)       |
-| `cacheTTL`                | string               | -                                                      | Metrics cache TTL (>= scrape interval)        |
+| `cacheTTL`                | string               | 2 × ServiceMonitor interval                            | Metrics cache TTL (WAZUH_CACHE_TTL, 5s–5m)    |
+| `cacheMaxStale`           | string               | exporter's 2m                                          | Stale-while-revalidate window (WAZUH_CACHE_MAX_STALE) |
+| `backgroundFetchTimeout`  | string               | exporter's 30s                                         | Background refresh budget (WAZUH_BACKGROUND_FETCH_TIMEOUT) |
+| `scrapeTimeout`           | string               | exporter's 10s                                         | Per-scrape Wazuh API budget, below the ServiceMonitor scrapeTimeout (WAZUH_SCRAPE_TIMEOUT) |
 | `startupGrace`            | string               | `60s`                                                   | Quiet-startup window (warn vs error), 0–10m   |
 | `resources`               | ResourceRequirements | -                                                      | Container resources                           |
 
