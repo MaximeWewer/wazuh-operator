@@ -113,7 +113,7 @@ func TestCDBListConfigMapsOnlyInInitContainer(t *testing.T) {
 // ruleset file, so a removed WazuhDecoder would keep every manager down.
 func TestInitRemovesEmptyRulesetFiles(t *testing.T) {
 	var cleanup string
-	for _, line := range strings.Split(initScriptHead, "\n") {
+	for line := range strings.SplitSeq(initScriptHead, "\n") {
 		if strings.HasPrefix(line, "find /var/ossec/etc/rules /var/ossec/etc/decoders") {
 			cleanup = line
 		}
