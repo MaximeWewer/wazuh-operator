@@ -38933,7 +38933,7 @@ spec:
                         description: Enable Wazuh exporter sidecar
                         type: boolean
                       image:
-                        default: ghcr.io/maximewewer/wazuh-prometheus-exporter:latest
+                        default: ghcr.io/maximewewer/wazuh-prometheus-exporter:2026.11.1
                         description: Image for the exporter
                         type: string
                       logLevel:

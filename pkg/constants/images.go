@@ -28,7 +28,7 @@ const (
 // Monitoring images
 const (
 	// ImageWazuhExporter is the default Wazuh Prometheus exporter image
-	ImageWazuhExporter = "ghcr.io/maximewewer/wazuh-prometheus-exporter:latest"
+	ImageWazuhExporter = "ghcr.io/maximewewer/wazuh-prometheus-exporter:2026.11.1"
 )
 
 // Exporter ports

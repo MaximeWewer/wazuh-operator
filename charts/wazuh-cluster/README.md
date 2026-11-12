@@ -419,7 +419,7 @@ kubectl delete -f <(helm template my-wazuh-cluster ./charts/wazuh-cluster --name
 | cluster.spec.monitoring.wazuhExporter.apiVerifySSL | bool | `true` | Verify SSL when connecting to Wazuh API (false skips TLS verification) |
 | cluster.spec.monitoring.wazuhExporter.cacheTTL | string | `""` | Metrics cache TTL (keep >= Prometheus scrape interval), e.g. "30s" |
 | cluster.spec.monitoring.wazuhExporter.enabled | bool | `true` | Enable Wazuh exporter |
-| cluster.spec.monitoring.wazuhExporter.image | string | `"ghcr.io/maximewewer/wazuh-prometheus-exporter:latest"` | Wazuh exporter image |
+| cluster.spec.monitoring.wazuhExporter.image | string | `"ghcr.io/maximewewer/wazuh-prometheus-exporter:2026.11.1"` | Wazuh exporter image |
 | cluster.spec.monitoring.wazuhExporter.logLevel | string | `"info"` | Exporter log level (trace, debug, info, warn, error) |
 | cluster.spec.monitoring.wazuhExporter.port | int | `9555` | Wazuh exporter metrics port |
 | cluster.spec.monitoring.wazuhExporter.startupGrace | string | `"60s"` | Quiet-startup window (WAZUH_STARTUP_GRACE): collection failures log as    warn instead of error until the first success, letting a slow Wazuh API    boot without noise. 0 (off) to 10m. |

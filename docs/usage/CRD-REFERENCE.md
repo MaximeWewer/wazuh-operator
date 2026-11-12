@@ -169,7 +169,7 @@ Configuration for safe scale-down operations. See [Drain Strategy](features/drai
 | Field          | Type                 | Required | Default                              | Description         |
 | -------------- | -------------------- | -------- | ------------------------------------ | ------------------- |
 | `enabled`      | bool                 | No       | `false`                                              | Enable exporter                                  |
-| `image`        | string               | No       | `ghcr.io/maximewewer/wazuh-prometheus-exporter:latest` | Exporter image                                 |
+| `image`        | string               | No       | `ghcr.io/maximewewer/wazuh-prometheus-exporter:2026.11.1` | Exporter image                                 |
 | `port`         | int32                | No       | `9555`                                               | Metrics port                                     |
 | `apiProtocol`  | string               | No       | `https`                                              | API protocol (builds the Wazuh API URL)          |
 | `apiVerifySSL` | bool                 | No       | `true`                                               | Verify Wazuh API TLS cert (false skips verify)   |

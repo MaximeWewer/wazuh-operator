@@ -24,7 +24,7 @@ spec:
     wazuhExporter:
       enabled: true
       # Docker image for the exporter
-      image: "ghcr.io/maximewewer/wazuh-prometheus-exporter:latest"
+      image: "ghcr.io/maximewewer/wazuh-prometheus-exporter:2026.11.1"
       # Port for metrics endpoint
       port: 9555
       # Wazuh API protocol (https or http)

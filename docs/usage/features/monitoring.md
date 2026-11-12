@@ -25,7 +25,7 @@ spec:
     enabled: true
     wazuhExporter:
       enabled: true
-      image: "ghcr.io/maximewewer/wazuh-prometheus-exporter:latest"
+      image: "ghcr.io/maximewewer/wazuh-prometheus-exporter:2026.11.1"
       port: 9555
       apiProtocol: "https"
       apiVerifySSL: true
@@ -49,7 +49,7 @@ The Wazuh exporter is deployed as a sidecar container on the manager master pod.
 | Field                     | Type                 | Default                                     | Description                        |
 | ------------------------- | -------------------- | ------------------------------------------- | ---------------------------------- |
 | `enabled`                 | bool                 | `false`                                                | Enable Wazuh exporter sidecar                 |
-| `image`                   | string               | `ghcr.io/maximewewer/wazuh-prometheus-exporter:latest` | Exporter image                                |
+| `image`                   | string               | `ghcr.io/maximewewer/wazuh-prometheus-exporter:2026.11.1` | Exporter image                                |
 | `port`                    | int32                | `9555`                                                 | Metrics port                                  |
 | `apiProtocol`             | string               | `https`                                                | Wazuh API protocol (builds the API URL)       |
 | `apiVerifySSL`            | bool                 | `true`                                                 | Verify Wazuh API TLS cert (false skips verify)|

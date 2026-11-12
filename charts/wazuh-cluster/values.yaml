@@ -998,7 +998,7 @@ cluster:
         # -- Enable Wazuh exporter
         enabled: true
         # -- Wazuh exporter image
-        image: "ghcr.io/maximewewer/wazuh-prometheus-exporter:latest"
+        image: "ghcr.io/maximewewer/wazuh-prometheus-exporter:2026.11.1"
         # -- Wazuh exporter metrics port
         port: 9555
         # -- API protocol for connecting to Wazuh API

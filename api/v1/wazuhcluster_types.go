@@ -836,7 +836,7 @@ type WazuhExporterConfig struct {
 
 	// Image for the exporter
 	// +optional
-	// +kubebuilder:default="ghcr.io/maximewewer/wazuh-prometheus-exporter:latest"
+	// +kubebuilder:default="ghcr.io/maximewewer/wazuh-prometheus-exporter:2026.11.1"
 	Image string `json:"image,omitempty"`
 
 	// Port for metrics endpoint
