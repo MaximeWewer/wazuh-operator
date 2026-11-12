@@ -68,4 +68,19 @@ func TestCDBListShouldRefetch(t *testing.T) {
 			t.Errorf("list converted with version %d must be fetched again", v)
 		}
 	}
+
+	// A list not applied on one of its clusters (e.g. failed with an older operator) is
+	// resolved again right away instead of keeping its stale status until the next refresh.
+	targeted := func(phase wazuhv1.CDBListPhase) *wazuhv1.WazuhCDBList {
+		l := fresh(cdblist.ConverterVersion)
+		l.Spec.ClusterRefs = []wazuhv1.WazuhClusterRef{{Name: "c", Namespace: "ns"}}
+		l.Status.ClusterStatuses = []wazuhv1.CDBListClusterStatus{{Name: "c", Namespace: "ns", Phase: phase}}
+		return l
+	}
+	if r.shouldRefetch(targeted(wazuhv1.CDBListPhaseApplied)) {
+		t.Error("list applied on its cluster must not be fetched again")
+	}
+	if !r.shouldRefetch(targeted(wazuhv1.CDBListPhaseFailed)) {
+		t.Error("list failed on its cluster must be resolved again")
+	}
 }

@@ -287,6 +287,22 @@ func (r *CDBListReconciler) formatRaw(raw string, format wazuhv1.CDBListFormat, 
 }
 
 // shouldRefetch reports whether a URL source is due for a new fetch.
+// cdbListAppliedEverywhere reports whether the list is Applied on every cluster it targets.
+func cdbListAppliedEverywhere(list *wazuhv1.WazuhCDBList) bool {
+	applied := map[string]bool{}
+	for _, st := range list.Status.ClusterStatuses {
+		if st.Phase == wazuhv1.CDBListPhaseApplied {
+			applied[clusterKey(st.Name, st.Namespace)] = true
+		}
+	}
+	for _, ref := range list.Spec.ClusterRefs {
+		if !applied[clusterKey(ref.Name, ref.Namespace)] {
+			return false
+		}
+	}
+	return true
+}
+
 func (r *CDBListReconciler) shouldRefetch(list *wazuhv1.WazuhCDBList) bool {
 	// Spec changed since last observed generation, or never fetched.
 	if list.Status.ObservedGeneration != list.Generation || list.Status.ContentHash == "" || list.Status.LastFetchTime == nil {
@@ -294,6 +310,12 @@ func (r *CDBListReconciler) shouldRefetch(list *wazuhv1.WazuhCDBList) bool {
 	}
 	// Converted by an older operator whose converter output differs: convert it again now.
 	if list.Status.ConverterVersion != cdblist.ConverterVersion {
+		return true
+	}
+	// Not applied on every target cluster yet (e.g. failed with an older operator): resolve
+	// the delivery again now, otherwise an init-fetch list, which keeps no ConfigMap to
+	// reuse, would keep its stale status until the next refresh.
+	if !cdbListAppliedEverywhere(list) {
 		return true
 	}
 	interval := r.refreshInterval(list)
