@@ -108,6 +108,9 @@ func (r *WazuhRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 			// Perform cleanup
 			if err := r.RuleReconciler.Delete(ctx, rule); err != nil {
+				if contentStillMounted(err) {
+					return ctrl.Result{RequeueAfter: contentReleaseRequeue}, nil
+				}
 				log.Error(err, "Failed to cleanup WazuhRule")
 				return ctrl.Result{}, err
 			}

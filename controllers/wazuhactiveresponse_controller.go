@@ -102,6 +102,9 @@ func (r *WazuhActiveResponseReconciler) Reconcile(ctx context.Context, req ctrl.
 			log.Info("Handling deletion of WazuhActiveResponse", "name", ar.Name)
 
 			if err := r.ActiveResponseReconciler.Delete(ctx, ar); err != nil {
+				if contentStillMounted(err) {
+					return ctrl.Result{RequeueAfter: contentReleaseRequeue}, nil
+				}
 				log.Error(err, "Failed to cleanup WazuhActiveResponse")
 				return ctrl.Result{}, err
 			}

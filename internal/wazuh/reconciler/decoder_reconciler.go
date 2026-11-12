@@ -363,21 +363,12 @@ func (r *DecoderReconciler) determineAppliedNodes(decoder *wazuhv1.WazuhDecoder,
 
 // Delete handles cleanup when a decoder is deleted.
 func (r *DecoderReconciler) Delete(ctx context.Context, decoder *wazuhv1.WazuhDecoder) error {
-	log := logf.FromContext(ctx)
 	cmName := decoderConfigMapName(decoder.Namespace, decoder.Name)
 
-	for _, ref := range decoder.Spec.ClusterRefs {
-		cm := &corev1.ConfigMap{}
-		err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: ref.Namespace}, cm)
-		if err == nil {
-			if err := r.Client.Delete(ctx, cm); err != nil && !errors.IsNotFound(err) {
-				log.Error(err, "Failed to delete decoder ConfigMap",
-					"configMap", cmName, "namespace", ref.Namespace)
-			}
-		} else if !errors.IsNotFound(err) {
-			log.Error(err, "Failed to lookup decoder ConfigMap",
-				"configMap", cmName, "namespace", ref.Namespace)
-		}
+	// Delete the ConfigMap only once the manager StatefulSets no longer mount it: a
+	// manager pod starting with a missing or emptied file would not come up.
+	if err := deleteContentConfigMap(ctx, r.Client, decoder.Spec.ClusterRefs, cmName); err != nil {
+		return err
 	}
 
 	if r.Recorder != nil {
@@ -396,6 +387,11 @@ func (r *DecoderReconciler) ListDecodersForCluster(ctx context.Context, clusterN
 
 	var matching []wazuhv1.WazuhDecoder
 	for _, decoder := range decoderList.Items {
+		// A resource being deleted is no longer delivered, so the cluster reconcile drops
+		// its mount before its ConfigMap is deleted.
+		if !decoder.DeletionTimestamp.IsZero() {
+			continue
+		}
 		for _, ref := range decoder.Spec.ClusterRefs {
 			if ref.Name == clusterName && ref.Namespace == namespace {
 				matching = append(matching, decoder)

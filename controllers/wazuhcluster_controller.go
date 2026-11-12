@@ -2442,33 +2442,33 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&wazuhv1.WazuhRule{},
 			handler.EnqueueRequestsFromMapFunc(r.findClustersForRule),
-			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+			builder.WithPredicates(contentChangedPredicate()),
 		).
 		// Watch WazuhDecoder CRs - reconcile WazuhCluster when decoders spec changes
 		Watches(
 			&wazuhv1.WazuhDecoder{},
 			handler.EnqueueRequestsFromMapFunc(r.findClustersForDecoder),
-			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+			builder.WithPredicates(contentChangedPredicate()),
 		).
 		// Watch WazuhAgentGroup CRs - reconcile WazuhCluster when agent group spec changes
 		Watches(
 			&wazuhv1.WazuhAgentGroup{},
 			handler.EnqueueRequestsFromMapFunc(r.findClustersForAgentGroup),
-			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+			builder.WithPredicates(contentChangedPredicate()),
 		).
 		// Watch WazuhIntegration CRs - reconcile WazuhCluster when integration spec changes
 		// so the manager picks up the new script mount and ossec.conf <integration> block.
 		Watches(
 			&wazuhv1.WazuhIntegration{},
 			handler.EnqueueRequestsFromMapFunc(r.findClustersForIntegration),
-			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+			builder.WithPredicates(contentChangedPredicate()),
 		).
 		// Watch WazuhCDBList CRs - reconcile WazuhCluster when a CDB list spec changes
 		// so the manager picks up the new list mount and ossec.conf <list> entry.
 		Watches(
 			&wazuhv1.WazuhCDBList{},
 			handler.EnqueueRequestsFromMapFunc(r.findClustersForCDBList),
-			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+			builder.WithPredicates(contentChangedPredicate()),
 		).
 		// Watch WazuhActiveResponse CRs - reconcile WazuhCluster when an active response
 		// spec changes so the manager picks up the new script mount and ossec.conf
@@ -2476,7 +2476,7 @@ func (r *WazuhClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Watches(
 			&wazuhv1.WazuhActiveResponse{},
 			handler.EnqueueRequestsFromMapFunc(r.findClustersForActiveResponse),
-			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+			builder.WithPredicates(contentChangedPredicate()),
 		).
 		// Watch OpenSearchAuthConfig CRs - reconcile WazuhCluster when auth spec changes
 		// so the dashboard ConfigMap (opensearch_dashboards.yml) picks up OIDC / SAML / LDAP

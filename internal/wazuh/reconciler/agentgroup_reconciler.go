@@ -325,20 +325,17 @@ func (r *AgentGroupReconciler) Delete(ctx context.Context, group *wazuhv1.WazuhA
 		} else {
 			log.Info("Skipping deletion of default agent group from Wazuh API")
 		}
+	}
 
-		// Delete file ConfigMap in cluster's namespace (cross-NS, no ownerRef).
-		cmName := agentGroupFilesConfigMapName(group.Namespace, group.Name)
-		cm := &corev1.ConfigMap{}
-		err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: ref.Namespace}, cm)
-		if err == nil {
-			if err := r.Client.Delete(ctx, cm); err != nil && !errors.IsNotFound(err) {
-				log.Error(err, "Failed to delete agent group files ConfigMap",
-					"configMap", cmName, "namespace", ref.Namespace)
-			}
-		} else if !errors.IsNotFound(err) {
-			log.Error(err, "Failed to lookup agent group files ConfigMap",
-				"configMap", cmName, "namespace", ref.Namespace)
+	// Delete the files ConfigMap (cross-NS, no ownerRef) only once the manager
+	// StatefulSets no longer mount it: a manager pod starting with a missing or emptied
+	// file would not come up.
+	cmName := agentGroupFilesConfigMapName(group.Namespace, group.Name)
+	if err := deleteContentConfigMap(ctx, r.Client, group.Spec.ClusterRefs, cmName); err != nil {
+		if len(cleanupErrs) == 0 {
+			return err // e.g. ErrContentStillMounted, retried by the controller
 		}
+		cleanupErrs = append(cleanupErrs, err.Error())
 	}
 
 	if len(cleanupErrs) > 0 {
@@ -615,6 +612,11 @@ func (r *AgentGroupReconciler) GetAgentGroupFilesForCluster(ctx context.Context,
 	var allContents []string
 
 	for _, group := range groupList.Items {
+		// A group being deleted is no longer delivered, so the cluster reconcile drops its
+		// files mount before their ConfigMap is deleted.
+		if !group.DeletionTimestamp.IsZero() {
+			continue
+		}
 		// Match if any clusterRef points to this cluster
 		matched := false
 		for _, ref := range group.Spec.ClusterRefs {

@@ -108,6 +108,9 @@ func (r *WazuhDecoderReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 			// Perform cleanup
 			if err := r.DecoderReconciler.Delete(ctx, decoder); err != nil {
+				if contentStillMounted(err) {
+					return ctrl.Result{RequeueAfter: contentReleaseRequeue}, nil
+				}
 				log.Error(err, "Failed to cleanup WazuhDecoder")
 				return ctrl.Result{}, err
 			}

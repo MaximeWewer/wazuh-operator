@@ -107,6 +107,9 @@ func (r *WazuhAgentGroupReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			log.Info("Handling deletion of WazuhAgentGroup", "name", group.Name)
 
 			if err := r.AgentGroupReconciler.Delete(ctx, group); err != nil {
+				if contentStillMounted(err) {
+					return ctrl.Result{RequeueAfter: contentReleaseRequeue}, nil
+				}
 				log.Error(err, "Failed to cleanup WazuhAgentGroup")
 				return ctrl.Result{}, err
 			}

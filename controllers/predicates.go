@@ -44,3 +44,20 @@ func specChangedPredicate() predicate.Predicate {
 		},
 	)
 }
+
+// contentChangedPredicate passes the changes of a content resource (rule, decoder, CDB
+// list...) a WazuhCluster acts on: a spec change, or a deletion request, which must drop
+// the resource's mount from the manager StatefulSets before its ConfigMap is deleted.
+func contentChangedPredicate() predicate.Predicate {
+	return predicate.Or(
+		predicate.GenerationChangedPredicate{},
+		predicate.Funcs{
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				if e.ObjectOld == nil || e.ObjectNew == nil {
+					return true
+				}
+				return !e.ObjectOld.GetDeletionTimestamp().Equal(e.ObjectNew.GetDeletionTimestamp())
+			},
+		},
+	)
+}

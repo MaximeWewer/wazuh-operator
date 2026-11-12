@@ -103,6 +103,9 @@ func (r *WazuhIntegrationReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			log.Info("Handling deletion of WazuhIntegration", "name", integration.Name)
 
 			if err := r.IntegrationReconciler.Delete(ctx, integration); err != nil {
+				if contentStillMounted(err) {
+					return ctrl.Result{RequeueAfter: contentReleaseRequeue}, nil
+				}
 				log.Error(err, "Failed to cleanup WazuhIntegration")
 				return ctrl.Result{}, err
 			}

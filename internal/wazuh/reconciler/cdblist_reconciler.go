@@ -718,21 +718,12 @@ func (r *CDBListReconciler) determineAppliedNodes(list *wazuhv1.WazuhCDBList, cl
 // Delete handles cleanup when a list is deleted. Deletes the list ConfigMap from
 // each target cluster's namespace (cross-NS, no ownerRef).
 func (r *CDBListReconciler) Delete(ctx context.Context, list *wazuhv1.WazuhCDBList) error {
-	log := logf.FromContext(ctx)
 	cmName := cdbListConfigMapName(list.Namespace, list.Name)
 
-	for _, ref := range list.Spec.ClusterRefs {
-		cm := &corev1.ConfigMap{}
-		err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: ref.Namespace}, cm)
-		if err == nil {
-			if err := r.Client.Delete(ctx, cm); err != nil && !apierrors.IsNotFound(err) {
-				log.Error(err, "Failed to delete CDB list ConfigMap",
-					"configMap", cmName, "namespace", ref.Namespace)
-			}
-		} else if !apierrors.IsNotFound(err) {
-			log.Error(err, "Failed to lookup CDB list ConfigMap",
-				"configMap", cmName, "namespace", ref.Namespace)
-		}
+	// Delete the ConfigMap only once the manager StatefulSets no longer mount it: a
+	// manager pod starting with a missing or emptied file would not come up.
+	if err := deleteContentConfigMap(ctx, r.Client, list.Spec.ClusterRefs, cmName); err != nil {
+		return err
 	}
 
 	if r.Recorder != nil {
@@ -751,6 +742,11 @@ func (r *CDBListReconciler) ListCDBListsForCluster(ctx context.Context, clusterN
 
 	var matching []wazuhv1.WazuhCDBList
 	for _, l := range listList.Items {
+		// A resource being deleted is no longer delivered, so the cluster reconcile drops
+		// its mount before its ConfigMap is deleted.
+		if !l.DeletionTimestamp.IsZero() {
+			continue
+		}
 		for _, ref := range l.Spec.ClusterRefs {
 			if ref.Name == clusterName && ref.Namespace == namespace {
 				matching = append(matching, l)

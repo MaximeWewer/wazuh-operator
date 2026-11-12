@@ -102,6 +102,9 @@ func (r *WazuhCDBListReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			log.Info("Handling deletion of WazuhCDBList", "name", list.Name)
 
 			if err := r.CDBListReconciler.Delete(ctx, list); err != nil {
+				if contentStillMounted(err) {
+					return ctrl.Result{RequeueAfter: contentReleaseRequeue}, nil
+				}
 				log.Error(err, "Failed to cleanup WazuhCDBList")
 				return ctrl.Result{}, err
 			}

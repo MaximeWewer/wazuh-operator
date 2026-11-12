@@ -369,21 +369,12 @@ func (r *RuleReconciler) determineAppliedNodes(rule *wazuhv1.WazuhRule, cluster 
 // Delete handles cleanup when a rule is deleted.
 // Deletes the rule ConfigMap from each target cluster's namespace (cross-NS, no ownerRef).
 func (r *RuleReconciler) Delete(ctx context.Context, rule *wazuhv1.WazuhRule) error {
-	log := logf.FromContext(ctx)
 	cmName := ruleConfigMapName(rule.Namespace, rule.Name)
 
-	for _, ref := range rule.Spec.ClusterRefs {
-		cm := &corev1.ConfigMap{}
-		err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: ref.Namespace}, cm)
-		if err == nil {
-			if err := r.Client.Delete(ctx, cm); err != nil && !errors.IsNotFound(err) {
-				log.Error(err, "Failed to delete rule ConfigMap",
-					"configMap", cmName, "namespace", ref.Namespace)
-			}
-		} else if !errors.IsNotFound(err) {
-			log.Error(err, "Failed to lookup rule ConfigMap",
-				"configMap", cmName, "namespace", ref.Namespace)
-		}
+	// Delete the ConfigMap only once the manager StatefulSets no longer mount it: a
+	// manager pod starting with a missing or emptied file would not come up.
+	if err := deleteContentConfigMap(ctx, r.Client, rule.Spec.ClusterRefs, cmName); err != nil {
+		return err
 	}
 
 	if r.Recorder != nil {
@@ -402,6 +393,11 @@ func (r *RuleReconciler) ListRulesForCluster(ctx context.Context, clusterName, n
 
 	var matching []wazuhv1.WazuhRule
 	for _, rule := range ruleList.Items {
+		// A resource being deleted is no longer delivered, so the cluster reconcile drops
+		// its mount before its ConfigMap is deleted.
+		if !rule.DeletionTimestamp.IsZero() {
+			continue
+		}
 		for _, ref := range rule.Spec.ClusterRefs {
 			if ref.Name == clusterName && ref.Namespace == namespace {
 				matching = append(matching, rule)

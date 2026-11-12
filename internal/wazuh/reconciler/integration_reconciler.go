@@ -367,21 +367,12 @@ func (r *IntegrationReconciler) determineAppliedNodes(integration *wazuhv1.Wazuh
 
 // Delete handles cleanup when an integration is deleted.
 func (r *IntegrationReconciler) Delete(ctx context.Context, integration *wazuhv1.WazuhIntegration) error {
-	log := logf.FromContext(ctx)
 	cmName := integrationConfigMapName(integration.Namespace, integration.Name)
 
-	for _, ref := range integration.Spec.ClusterRefs {
-		cm := &corev1.ConfigMap{}
-		err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: ref.Namespace}, cm)
-		if err == nil {
-			if err := r.Client.Delete(ctx, cm); err != nil && !errors.IsNotFound(err) {
-				log.Error(err, "Failed to delete integration ConfigMap",
-					"configMap", cmName, "namespace", ref.Namespace)
-			}
-		} else if !errors.IsNotFound(err) {
-			log.Error(err, "Failed to lookup integration ConfigMap",
-				"configMap", cmName, "namespace", ref.Namespace)
-		}
+	// Delete the ConfigMap only once the manager StatefulSets no longer mount it: a
+	// manager pod starting with a missing or emptied file would not come up.
+	if err := deleteContentConfigMap(ctx, r.Client, integration.Spec.ClusterRefs, cmName); err != nil {
+		return err
 	}
 
 	if r.Recorder != nil {
@@ -400,6 +391,11 @@ func (r *IntegrationReconciler) ListIntegrationsForCluster(ctx context.Context, 
 
 	var matching []wazuhv1.WazuhIntegration
 	for _, integration := range list.Items {
+		// A resource being deleted is no longer delivered, so the cluster reconcile drops
+		// its mount before its ConfigMap is deleted.
+		if !integration.DeletionTimestamp.IsZero() {
+			continue
+		}
 		for _, ref := range integration.Spec.ClusterRefs {
 			if ref.Name == clusterName && ref.Namespace == namespace {
 				matching = append(matching, integration)

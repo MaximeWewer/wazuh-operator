@@ -339,21 +339,12 @@ func (r *ActiveResponseReconciler) determineAppliedNodes(ar *wazuhv1.WazuhActive
 
 // Delete handles cleanup when an active response is deleted.
 func (r *ActiveResponseReconciler) Delete(ctx context.Context, ar *wazuhv1.WazuhActiveResponse) error {
-	log := logf.FromContext(ctx)
 	cmName := activeResponseConfigMapName(ar.Namespace, ar.Name)
 
-	for _, ref := range ar.Spec.ClusterRefs {
-		cm := &corev1.ConfigMap{}
-		err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: ref.Namespace}, cm)
-		if err == nil {
-			if err := r.Client.Delete(ctx, cm); err != nil && !errors.IsNotFound(err) {
-				log.Error(err, "Failed to delete active response ConfigMap",
-					"configMap", cmName, "namespace", ref.Namespace)
-			}
-		} else if !errors.IsNotFound(err) {
-			log.Error(err, "Failed to lookup active response ConfigMap",
-				"configMap", cmName, "namespace", ref.Namespace)
-		}
+	// Delete the ConfigMap only once the manager StatefulSets no longer mount it: a
+	// manager pod starting with a missing or emptied file would not come up.
+	if err := deleteContentConfigMap(ctx, r.Client, ar.Spec.ClusterRefs, cmName); err != nil {
+		return err
 	}
 
 	if r.Recorder != nil {
@@ -372,6 +363,11 @@ func (r *ActiveResponseReconciler) ListActiveResponsesForCluster(ctx context.Con
 
 	var matching []wazuhv1.WazuhActiveResponse
 	for _, ar := range list.Items {
+		// A resource being deleted is no longer delivered, so the cluster reconcile drops
+		// its mount before its ConfigMap is deleted.
+		if !ar.DeletionTimestamp.IsZero() {
+			continue
+		}
 		for _, ref := range ar.Spec.ClusterRefs {
 			if ref.Name == clusterName && ref.Namespace == namespace {
 				matching = append(matching, ar)
