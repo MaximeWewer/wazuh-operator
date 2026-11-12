@@ -72,6 +72,7 @@ func NewManagerServiceMonitor(cluster *wazuhv1.WazuhCluster) *monitoringv1.Servi
 					constants.LabelWazuhCluster:    cluster.Name,
 					constants.LabelManagerNodeType: "master",
 				},
+				MatchExpressions: notHeadless(),
 			},
 			Endpoints: []monitoringv1.Endpoint{
 				{
@@ -128,7 +129,8 @@ func NewIndexerServiceMonitor(cluster *wazuhv1.WazuhCluster) *monitoringv1.Servi
 		},
 		Spec: monitoringv1.ServiceMonitorSpec{
 			Selector: metav1.LabelSelector{
-				MatchLabels: constants.SelectorLabels(cluster.Name, constants.ComponentIndexer),
+				MatchLabels:      constants.SelectorLabels(cluster.Name, constants.ComponentIndexer),
+				MatchExpressions: notHeadless(),
 			},
 			Endpoints: []monitoringv1.Endpoint{
 				{
@@ -198,3 +200,14 @@ const (
 	schemeHTTP  monitoringv1.Scheme = "http"
 	schemeHTTPS monitoringv1.Scheme = "https"
 )
+
+// notHeadless excludes the headless Services, which select the same pods as the regular
+// ones: selecting both scrapes every pod twice (duplicate series, twice the load on the
+// Wazuh API and OpenSearch).
+func notHeadless() []metav1.LabelSelectorRequirement {
+	return []metav1.LabelSelectorRequirement{{
+		Key:      constants.LabelServiceRole,
+		Operator: metav1.LabelSelectorOpNotIn,
+		Values:   []string{constants.ServiceRoleHeadless},
+	}}
+}

@@ -61,6 +61,11 @@ const (
 	// LabelManagerNodeType identifies the manager node type (master/worker)
 	LabelManagerNodeType = "wazuh.com/manager-node-type"
 
+	// LabelServiceRole marks a headless Service (value ServiceRoleHeadless), so the
+	// ServiceMonitors select the regular Service only: both select the same pods, and
+	// scraping both would scrape every pod twice.
+	LabelServiceRole = "wazuh.com/service-role"
+
 	// LabelNodePool identifies the nodePool name for advanced indexer topology
 	LabelNodePool = "wazuh.com/node-pool"
 )
@@ -134,3 +139,6 @@ func SelectorLabels(clusterName, component string) map[string]string {
 		LabelWazuhCluster: clusterName,
 	}
 }
+
+// ServiceRoleHeadless is the LabelServiceRole value of a headless Service.
+const ServiceRoleHeadless = "headless"

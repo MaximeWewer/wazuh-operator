@@ -138,6 +138,7 @@ func (b *IndexerServiceBuilder) Build() *corev1.Service {
 	// Handle headless service
 	if b.headless {
 		svc.Spec.ClusterIP = corev1.ClusterIPNone
+		svc.Labels[constants.LabelServiceRole] = constants.ServiceRoleHeadless
 		// Add metrics port for headless service (used for discovery)
 		svc.Spec.Ports = append(svc.Spec.Ports, corev1.ServicePort{
 			Name:       constants.PortNameIndexerMetrics,

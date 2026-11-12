@@ -202,6 +202,7 @@ func (b *ManagerServiceBuilder) Build() *corev1.Service {
 	// Handle headless service
 	if b.headless {
 		svc.Spec.ClusterIP = corev1.ClusterIPNone
+		svc.Labels[constants.LabelServiceRole] = constants.ServiceRoleHeadless
 	}
 
 	// Handle LoadBalancer IP

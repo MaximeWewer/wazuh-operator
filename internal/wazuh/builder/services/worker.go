@@ -162,6 +162,7 @@ func (b *WorkerServiceBuilder) Build() *corev1.Service {
 	// Handle headless service
 	if b.headless {
 		svc.Spec.ClusterIP = corev1.ClusterIPNone
+		svc.Labels[constants.LabelServiceRole] = constants.ServiceRoleHeadless
 	}
 
 	// Deprecated: LoadBalancerIP is deprecated in K8s 1.24+, use service annotations instead

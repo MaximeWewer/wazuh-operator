@@ -71,6 +71,8 @@ func (b *NodePoolServiceBuilder) WithAnnotations(annotations map[string]string) 
 func (b *NodePoolServiceBuilder) Build() *corev1.Service {
 	name := constants.IndexerNodePoolHeadlessName(b.clusterName, b.poolName)
 	labels := b.buildLabels()
+	// The pool Service is headless (see LabelServiceRole).
+	labels[constants.LabelServiceRole] = constants.ServiceRoleHeadless
 	selectorLabels := b.buildSelectorLabels()
 
 	return &corev1.Service{
