@@ -655,53 +655,149 @@ func (a *WazuhAPIAdapter) RestartNode(ctx context.Context, nodeName string) (*Re
 	return &result.Data, nil
 }
 
-// GetListFile returns the raw content of the CDB list file the master serves under
-// etc/lists. The API looks the name up in the etc/lists subdirectories as well, and since
-// 4.14 ignores a file whose real path leaves etc/lists (e.g. a link to a mount).
-func (a *WazuhAPIAdapter) GetListFile(ctx context.Context, filename string) (string, error) {
-	resp, err := a.doRequest(ctx, "GET", "/lists/files/"+url.PathEscape(filename)+"?raw=true", nil)
+// RulesetKind names a ruleset file directory the Wazuh API serves: etc/lists, etc/rules
+// or etc/decoders.
+type RulesetKind string
+
+const (
+	RulesetLists    RulesetKind = "lists"
+	RulesetRules    RulesetKind = "rules"
+	RulesetDecoders RulesetKind = "decoders"
+)
+
+// ErrRulesetFileNotFound reports a ruleset file the master does not have.
+var ErrRulesetFileNotFound = errors.New("ruleset file not found")
+
+// GetRulesetFile returns the raw content of a file the master serves under etc/<kind>, or
+// ErrRulesetFileNotFound. For lists the API looks the name up in the etc/lists
+// subdirectories as well, and since 4.14 ignores a file whose real path leaves etc/lists
+// (e.g. a link to a mount).
+func (a *WazuhAPIAdapter) GetRulesetFile(ctx context.Context, kind RulesetKind, filename string) (string, error) {
+	resp, err := a.doRequest(ctx, "GET", "/"+string(kind)+"/files/"+url.PathEscape(filename)+"?raw=true", nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to get list file %s: %w", filename, err)
+		return "", fmt.Errorf("failed to get %s file %s: %w", kind, filename, err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read list file %s: %w", filename, err)
+		return "", fmt.Errorf("failed to read %s file %s: %w", kind, filename, err)
+	}
+	// A file the master does not serve answers with an error document (e.g. 1503 "Decoders
+	// file not found"); a ruleset file never starts like one.
+	if bytes.HasPrefix(bytes.TrimSpace(body), []byte(`{"data"`)) {
+		if failed := failedItems(body); failed != "" {
+			return "", fmt.Errorf("%s file %s: %w: %s", kind, filename, ErrRulesetFileNotFound, failed)
+		}
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("get list file %s failed with status %d: %s", filename, resp.StatusCode, string(body))
+		return "", fmt.Errorf("get %s file %s failed with status %d: %s", kind, filename, resp.StatusCode, string(body))
 	}
 	return string(body), nil
 }
 
-// UploadListFile writes a CDB list file directly under etc/lists on the master, replacing
-// it if it exists; the Wazuh cluster syncs it to the workers.
-func (a *WazuhAPIAdapter) UploadListFile(ctx context.Context, filename, content string) error {
-	resp, err := a.doRequestWithContentType(ctx, "PUT", "/lists/files/"+url.PathEscape(filename)+"?overwrite=true",
+// UploadRulesetFile writes a file directly under etc/<kind> on the master, replacing it if
+// it exists; the Wazuh cluster syncs it to the workers. For rules and decoders the API
+// also checks the new ruleset: the error then names the failure, but the file is written
+// anyway, so the caller restores the previous one (see ValidateConfiguration).
+func (a *WazuhAPIAdapter) UploadRulesetFile(ctx context.Context, kind RulesetKind, filename, content string) error {
+	resp, err := a.doRequestWithContentType(ctx, "PUT", "/"+string(kind)+"/files/"+url.PathEscape(filename)+"?overwrite=true",
 		strings.NewReader(content), "application/octet-stream")
 	if err != nil {
-		return fmt.Errorf("failed to upload list file %s: %w", filename, err)
+		return fmt.Errorf("failed to upload %s file %s: %w", kind, filename, err)
 	}
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("upload list file %s failed with status %d: %s", filename, resp.StatusCode, string(body))
+		return fmt.Errorf("upload %s file %s failed with status %d: %s", kind, filename, resp.StatusCode, string(body))
 	}
+	if failed := failedItems(body); failed != "" {
+		return fmt.Errorf("upload %s file %s failed: %s", kind, filename, failed)
+	}
+	return nil
+}
+
+// DeleteRulesetFile removes a file from etc/<kind> on the master. A missing file is not an
+// error.
+func (a *WazuhAPIAdapter) DeleteRulesetFile(ctx context.Context, kind RulesetKind, filename string) error {
+	resp, err := a.doRequest(ctx, "DELETE", "/"+string(kind)+"/files/"+url.PathEscape(filename), nil)
+	if err != nil {
+		return fmt.Errorf("failed to delete %s file %s: %w", kind, filename, err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if failed := failedItems(body); failed != "" && !strings.Contains(failed, "File does not exist") {
+		return fmt.Errorf("delete %s file %s failed: %s", kind, filename, failed)
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusBadRequest && resp.StatusCode != http.StatusNotFound {
+		return fmt.Errorf("delete %s file %s failed with status %d: %s", kind, filename, resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+// ErrInvalidConfiguration reports a configuration or ruleset Wazuh rejects; its message
+// carries the Wazuh error (e.g. "(2101): Parent decoder name invalid").
+var ErrInvalidConfiguration = errors.New("wazuh rejected the configuration")
+
+// ValidateConfiguration checks the configuration and ruleset every cluster node holds on
+// disk, as wazuh-analysisd would load them, without restarting anything. Returns an error
+// wrapping ErrInvalidConfiguration with the Wazuh messages when a node rejects them.
+func (a *WazuhAPIAdapter) ValidateConfiguration(ctx context.Context) error {
+	resp, err := a.doRequest(ctx, "GET", "/cluster/configuration/validation", nil)
+	if err != nil {
+		return fmt.Errorf("failed to validate the configuration: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("configuration validation failed with status %d: %s", resp.StatusCode, string(body))
+	}
+	if failed := failedItems(body); failed != "" {
+		return fmt.Errorf("%w: %s", ErrInvalidConfiguration, failed)
+	}
+	return nil
+}
+
+// failedItems returns the error messages of a Wazuh API response's failed_items, joined,
+// or "" when there is none.
+func failedItems(body []byte) string {
 	var result struct {
 		Data struct {
-			TotalFailedItems int             `json:"total_failed_items"`
-			FailedItems      json.RawMessage `json:"failed_items"`
+			FailedItems []struct {
+				Error struct {
+					Message string `json:"message"`
+				} `json:"error"`
+				ID []string `json:"id"`
+			} `json:"failed_items"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		return fmt.Errorf("failed to decode list upload response: %w", err)
+		return ""
 	}
-	if result.Data.TotalFailedItems > 0 {
-		return fmt.Errorf("upload list file %s failed: %s", filename, string(result.Data.FailedItems))
+	var msgs []string
+	for _, item := range result.Data.FailedItems {
+		msg := item.Error.Message
+		if len(item.ID) > 0 {
+			msg = strings.Join(item.ID, ",") + ": " + msg
+		}
+		msgs = append(msgs, msg)
 	}
-	return nil
+	return strings.Join(msgs, "; ")
+}
+
+// GetListFile returns the raw content of the CDB list file the master serves under
+// etc/lists (see GetRulesetFile).
+func (a *WazuhAPIAdapter) GetListFile(ctx context.Context, filename string) (string, error) {
+	return a.GetRulesetFile(ctx, RulesetLists, filename)
+}
+
+// UploadListFile writes a CDB list file directly under etc/lists on the master, replacing
+// it if it exists; the Wazuh cluster syncs it to the workers.
+func (a *WazuhAPIAdapter) UploadListFile(ctx context.Context, filename, content string) error {
+	return a.UploadRulesetFile(ctx, RulesetLists, filename, content)
 }
 
 // RulesetSynchronized reports whether every cluster node holds the master's ruleset
@@ -778,7 +874,7 @@ func (a *WazuhAPIAdapter) ReloadAnalysisd(ctx context.Context) error {
 func (a *WazuhAPIAdapter) ReloadRules(ctx context.Context) error {
 	// For Wazuh 4.x, the rules/reload endpoint may not be available
 	// Fall back to manager restart if needed
-	resp, err := a.doRequest(ctx, "PUT", "/manager/configuration/validation", nil)
+	resp, err := a.doRequest(ctx, "GET", "/manager/configuration/validation", nil)
 	if err != nil {
 		return fmt.Errorf("failed to validate configuration: %w", err)
 	}

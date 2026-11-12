@@ -22,6 +22,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -269,5 +270,76 @@ func TestReloadAnalysisd(t *testing.T) {
 	status = http.StatusNotFound
 	if err := a.ReloadAnalysisd(ctx); !errors.Is(err, ErrEndpointNotFound) {
 		t.Errorf("ReloadAnalysisd on an older manager = %v, want ErrEndpointNotFound", err)
+	}
+}
+
+func TestRulesetFilesAndValidation(t *testing.T) {
+	files := map[string]string{"/decoders/files/ok.xml": "<decoder name=\"ok\"/>\n"}
+	valid := true
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fail := func(code int, msg, id string) {
+			w.WriteHeader(code)
+			_, _ = w.Write([]byte(`{"data":{"affected_items":[],"total_failed_items":1,"failed_items":[{"error":{"code":1,"message":"` + msg + `"},"id":["` + id + `"]}]},"error":1}`))
+		}
+		switch {
+		case r.URL.Path == "/security/user/authenticate":
+			_, _ = w.Write([]byte(`{"data":{"token":"t"},"error":0}`))
+		case r.URL.Path == "/cluster/configuration/validation" && r.Method == http.MethodGet:
+			if valid {
+				_, _ = w.Write([]byte(`{"data":{"affected_items":[{"name":"master","status":"OK"}],"total_failed_items":0,"failed_items":[]},"error":0}`))
+				return
+			}
+			fail(http.StatusOK, "Error validating configuration: (2101): Parent decoder name invalid", "master")
+		case r.Method == http.MethodGet:
+			if content, ok := files[r.URL.Path]; ok {
+				_, _ = w.Write([]byte(content))
+				return
+			}
+			fail(http.StatusBadRequest, "Decoders file not found", "x")
+		case r.Method == http.MethodPut:
+			b, _ := io.ReadAll(r.Body)
+			files[r.URL.Path] = string(b)
+			if strings.Contains(string(b), "bad") {
+				fail(http.StatusBadRequest, "XML syntax error", "etc/decoders/x.xml")
+				return
+			}
+			_, _ = w.Write([]byte(`{"data":{"affected_items":["x"],"total_failed_items":0,"failed_items":[]},"error":0}`))
+		case r.Method == http.MethodDelete:
+			if _, ok := files[r.URL.Path]; !ok {
+				fail(http.StatusBadRequest, "File does not exist", "x")
+				return
+			}
+			delete(files, r.URL.Path)
+			_, _ = w.Write([]byte(`{"data":{"affected_items":["x"],"total_failed_items":0,"failed_items":[]},"error":0}`))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	a := NewWazuhAPIAdapter(WazuhAPIConfig{BaseURL: srv.URL, Username: "u", Password: "p", Insecure: true})
+	ctx := context.Background()
+
+	if got, err := a.GetRulesetFile(ctx, RulesetDecoders, "ok.xml"); err != nil || got != files["/decoders/files/ok.xml"] {
+		t.Errorf("GetRulesetFile(ok) = %q, %v", got, err)
+	}
+	if _, err := a.GetRulesetFile(ctx, RulesetDecoders, "missing.xml"); !errors.Is(err, ErrRulesetFileNotFound) {
+		t.Errorf("GetRulesetFile(missing) = %v, want ErrRulesetFileNotFound", err)
+	}
+	if err := a.UploadRulesetFile(ctx, RulesetDecoders, "new.xml", "<decoder name=\"new\"/>"); err != nil {
+		t.Errorf("UploadRulesetFile(valid) = %v", err)
+	}
+	if err := a.UploadRulesetFile(ctx, RulesetDecoders, "new.xml", "bad"); err == nil || !strings.Contains(err.Error(), "XML syntax error") {
+		t.Errorf("UploadRulesetFile(rejected) = %v, want the Wazuh message", err)
+	}
+	if err := a.DeleteRulesetFile(ctx, RulesetDecoders, "new.xml"); err != nil {
+		t.Errorf("DeleteRulesetFile = %v", err)
+	}
+	if err := a.DeleteRulesetFile(ctx, RulesetDecoders, "new.xml"); err != nil {
+		t.Errorf("DeleteRulesetFile(missing) = %v, want nil", err)
+	}
+	if err := a.ValidateConfiguration(ctx); err != nil {
+		t.Errorf("ValidateConfiguration(valid) = %v", err)
+	}
+	valid = false
+	if err := a.ValidateConfiguration(ctx); !errors.Is(err, ErrInvalidConfiguration) || !strings.Contains(err.Error(), "(2101)") {
+		t.Errorf("ValidateConfiguration(invalid) = %v, want ErrInvalidConfiguration with the Wazuh message", err)
 	}
 }

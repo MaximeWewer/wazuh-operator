@@ -36,7 +36,7 @@ import (
 )
 
 type fakeReloadAPI struct {
-	files           map[string]string // list key -> content the master serves
+	files           map[string]string // "<kind>/<file>" -> content the master serves
 	synced          bool
 	clusterRestarts int
 	managerRestarts int
@@ -46,16 +46,16 @@ type fakeReloadAPI struct {
 	uploads         []string
 }
 
-func (f *fakeReloadAPI) UploadListFile(_ context.Context, name, content string) error {
-	f.uploads = append(f.uploads, name)
-	f.files[name] = content
+func (f *fakeReloadAPI) UploadRulesetFile(_ context.Context, kind adapters.RulesetKind, name, content string) error {
+	f.uploads = append(f.uploads, string(kind)+"/"+name)
+	f.files[string(kind)+"/"+name] = content
 	return nil
 }
 
-func (f *fakeReloadAPI) GetListFile(_ context.Context, name string) (string, error) {
-	content, ok := f.files[name]
+func (f *fakeReloadAPI) GetRulesetFile(_ context.Context, kind adapters.RulesetKind, name string) (string, error) {
+	content, ok := f.files[string(kind)+"/"+name]
 	if !ok {
-		return "", errors.New("get list file failed with status 404")
+		return "", fmt.Errorf("x: %w", adapters.ErrRulesetFileNotFound)
 	}
 	return content, nil
 }
@@ -110,21 +110,31 @@ func reloadAnnotations(t *testing.T, r *ClusterReconciler, sts *appsv1.StatefulS
 	return got.Annotations
 }
 
-func TestCDBListContentHash(t *testing.T) {
+func TestRulesetContentHash(t *testing.T) {
 	a, b := cdbInfo("a", "1:x\n"), cdbInfo("b", "2:y\n")
 	fetched := CDBListConfigMapInfo{FileName: "big", Mode: cdbDeliveryInitFetch}
-	if CDBListContentHash([]CDBListConfigMapInfo{a, b, fetched}) != CDBListContentHash([]CDBListConfigMapInfo{b, a}) {
+	rule := RuleConfigMapInfo{ConfigMapName: "cm-r", FileName: "r.xml", ContentHash: computeContentHash("<group/>")}
+	decoder := DecoderConfigMapInfo{ConfigMapName: "cm-d", FileName: "d.xml", ContentHash: computeContentHash("<decoder/>")}
+	hash := func(rules []RuleConfigMapInfo, decoders []DecoderConfigMapInfo, lists ...CDBListConfigMapInfo) string {
+		return rulesetContentHash(rulesetFiles(rules, decoders, lists))
+	}
+	if hash(nil, nil, a, b, fetched) != hash(nil, nil, b, a) {
 		t.Error("hash depends on the order or on init-fetch lists")
 	}
-	if CDBListContentHash([]CDBListConfigMapInfo{a, b}) == CDBListContentHash([]CDBListConfigMapInfo{a, cdbInfo("b", "2:z\n")}) {
-		t.Error("hash ignores a content change")
+	if hash(nil, nil, a, b) == hash(nil, nil, a, cdbInfo("b", "2:z\n")) {
+		t.Error("hash ignores a list content change")
 	}
-	if CDBListContentHash([]CDBListConfigMapInfo{fetched, cdbInfo("dir/c", "3:z\n")}) != "" {
+	changedRule := rule
+	changedRule.ContentHash = computeContentHash("<group name=\"x\"/>")
+	if hash([]RuleConfigMapInfo{rule}, []DecoderConfigMapInfo{decoder}) == hash([]RuleConfigMapInfo{changedRule}, []DecoderConfigMapInfo{decoder}) {
+		t.Error("hash ignores a rule content change")
+	}
+	if hash(nil, nil, fetched, cdbInfo("dir/c", "3:z\n")) != "" {
 		t.Error("hash of lists the API cannot update should be empty")
 	}
 }
 
-// TestReconcileCDBListReloadAdoptsUnknownState asserts a StatefulSet without the content
+// TestReconcileRulesetReloadAdoptsUnknownState asserts a StatefulSet without the content
 // annotation (new, or created by an older operator) records the current content without
 // restarting anything: its pods loaded that content at start.
 func TestSupportsAnalysisdReload(t *testing.T) {
@@ -135,22 +145,22 @@ func TestSupportsAnalysisdReload(t *testing.T) {
 	}
 }
 
-func TestReconcileCDBListReloadAdoptsUnknownState(t *testing.T) {
+func TestReconcileRulesetReloadAdoptsUnknownState(t *testing.T) {
 	r, sts := newReloadFixture(t, nil, nil)
 	infos := []CDBListConfigMapInfo{cdbInfo("a", "1:x\n")}
-	if err := r.reconcileCDBListReload(context.Background(), &wazuhv1.WazuhCluster{}, sts, infos); err != nil {
+	if err := r.reconcileRulesetReload(context.Background(), &wazuhv1.WazuhCluster{}, sts, rulesetFiles(nil, nil, infos)); err != nil {
 		t.Fatal(err)
 	}
-	if got := reloadAnnotations(t, r, sts)[constants.AnnotationCDBListContentHash]; got != CDBListContentHash(infos) {
-		t.Errorf("content hash annotation = %q, want %q", got, CDBListContentHash(infos))
+	if got := reloadAnnotations(t, r, sts)[constants.AnnotationRulesetContentHash]; got != rulesetContentHash(rulesetFiles(nil, nil, infos)) {
+		t.Errorf("content hash annotation = %q, want %q", got, rulesetContentHash(rulesetFiles(nil, nil, infos)))
 	}
 }
 
-func TestReloadCDBLists(t *testing.T) {
+func TestReloadRuleset(t *testing.T) {
 	now := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
 	// "dir/c" sits in a subdirectory: the API cannot update it, a change rolls the pods.
 	infos := []CDBListConfigMapInfo{cdbInfo("a", "1:new\n"), cdbInfo("b", "2:y\n"), cdbInfo("dir/c", "3:z\n")}
-	want := CDBListContentHash(infos)
+	want := rulesetContentHash(rulesetFiles(nil, nil, infos))
 	current := map[string]string{"a": "1:new\n", "b": "2:y\n"}
 	lagging := map[string]string{"a": "1:old\n", "b": "2:y\n"}
 
@@ -172,48 +182,48 @@ func TestReloadCDBLists(t *testing.T) {
 		wantPendingFrom string
 	}{
 		{name: "master serves the old content: upload it, then wait for the workers",
-			configMaps: current, files: map[string]string{"a": "1:old\n", "b": "2:y\n"}, synced: false,
+			configMaps: current, files: map[string]string{"lists/a": "1:old\n", "lists/b": "2:y\n"}, synced: false,
 			wantUploads: 1, wantApplied: "old", wantPendingFrom: now.Format(time.RFC3339)},
 		{name: "list missing on the master: upload it and restart once the nodes are in sync",
-			configMaps: current, files: map[string]string{"b": "2:y\n"}, synced: true,
+			configMaps: current, files: map[string]string{"lists/b": "2:y\n"}, synced: true,
 			wantUploads: 1, wantRestarts: 1, wantApplied: want},
 		{name: "ConfigMap not updated yet: wait",
-			configMaps: lagging, files: map[string]string{"a": "1:old\n", "b": "2:y\n"}, synced: true, pendingSince: now.Add(-time.Minute).Format(time.RFC3339),
+			configMaps: lagging, files: map[string]string{"lists/a": "1:old\n", "lists/b": "2:y\n"}, synced: true, pendingSince: now.Add(-time.Minute).Format(time.RFC3339),
 			wantApplied: "old", wantPendingFrom: now.Add(-time.Minute).Format(time.RFC3339)},
 		{name: "a worker is not in sync yet: wait",
-			configMaps: current, files: map[string]string{"a": "1:new\n", "b": "2:y\n"}, synced: false,
+			configMaps: current, files: map[string]string{"lists/a": "1:new\n", "lists/b": "2:y\n"}, synced: false,
 			wantApplied: "old", wantPendingFrom: now.Format(time.RFC3339)},
 		{name: "every node holds the new content: one cluster restart",
-			configMaps: current, files: map[string]string{"a": "1:new\n", "b": "2:y\n"}, synced: true, pendingSince: now.Add(-time.Minute).Format(time.RFC3339),
+			configMaps: current, files: map[string]string{"lists/a": "1:new\n", "lists/b": "2:y\n"}, synced: true, pendingSince: now.Add(-time.Minute).Format(time.RFC3339),
 			wantRestarts: 1, wantApplied: want},
 		{name: "still stale after the max wait: restart anyway",
-			configMaps: lagging, files: map[string]string{"a": "1:old\n", "b": "2:y\n"}, synced: true, pendingSince: now.Add(-cdbListReloadMaxWait).Format(time.RFC3339),
+			configMaps: lagging, files: map[string]string{"lists/a": "1:old\n", "lists/b": "2:y\n"}, synced: true, pendingSince: now.Add(-rulesetReloadMaxWait).Format(time.RFC3339),
 			wantRestarts: 1, wantApplied: want},
 		{name: "cluster restart rejected: restart the manager",
-			configMaps: current, files: map[string]string{"a": "1:new\n", "b": "2:y\n"}, synced: true, clusterErr: errors.New("cluster restart failed with status 400"),
+			configMaps: current, files: map[string]string{"lists/a": "1:new\n", "lists/b": "2:y\n"}, synced: true, clusterErr: errors.New("cluster restart failed with status 400"),
 			wantRestarts: 1, wantManager: 1, wantApplied: want},
 		{name: "4.13+: ruleset reload, no restart", version: "4.14.8",
-			configMaps: current, files: map[string]string{"a": "1:new\n", "b": "2:y\n"}, synced: true,
+			configMaps: current, files: map[string]string{"lists/a": "1:new\n", "lists/b": "2:y\n"}, synced: true,
 			wantReloads: 1, wantApplied: want},
 		{name: "4.13+ worker not in sync: wait, no reload", version: "4.13.0",
-			configMaps: current, files: map[string]string{"a": "1:new\n", "b": "2:y\n"}, synced: false,
+			configMaps: current, files: map[string]string{"lists/a": "1:new\n", "lists/b": "2:y\n"}, synced: false,
 			wantApplied: "old", wantPendingFrom: now.Format(time.RFC3339)},
 		{name: "reload endpoint missing: restart instead", version: "4.13.0", reloadErr: fmt.Errorf("analysisd reload: %w", adapters.ErrEndpointNotFound),
-			configMaps: current, files: map[string]string{"a": "1:new\n", "b": "2:y\n"}, synced: true,
+			configMaps: current, files: map[string]string{"lists/a": "1:new\n", "lists/b": "2:y\n"}, synced: true,
 			wantReloads: 1, wantRestarts: 1, wantApplied: want},
 		{name: "reload rejected: keep the old state and retry", version: "4.14.8", reloadErr: errors.New("analysisd reload failed on 1 node(s)"),
-			configMaps: current, files: map[string]string{"a": "1:new\n", "b": "2:y\n"}, synced: true,
+			configMaps: current, files: map[string]string{"lists/a": "1:new\n", "lists/b": "2:y\n"}, synced: true,
 			wantErr: true, wantReloads: 1, wantApplied: "old"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ann := map[string]string{constants.AnnotationCDBListContentHash: "old"}
+			ann := map[string]string{constants.AnnotationRulesetContentHash: "old"}
 			if tc.pendingSince != "" {
-				ann[constants.AnnotationCDBListReloadPendingSince] = tc.pendingSince
+				ann[constants.AnnotationRulesetReloadPendingSince] = tc.pendingSince
 			}
 			r, sts := newReloadFixture(t, ann, tc.configMaps)
 			api := &fakeReloadAPI{files: tc.files, synced: tc.synced, clusterErr: tc.clusterErr, reloadErr: tc.reloadErr}
 			cluster := &wazuhv1.WazuhCluster{ObjectMeta: metav1.ObjectMeta{Namespace: "ns"}, Spec: wazuhv1.WazuhClusterSpec{Version: tc.version}}
-			err := r.reloadCDBLists(context.Background(), cluster, sts, api, infos, want, now)
+			err := r.reloadRuleset(context.Background(), cluster, sts, api, rulesetFiles(nil, nil, infos), want, now)
 			if (err != nil) != tc.wantErr {
 				t.Fatalf("reloadCDBLists error = %v, want error %v", err, tc.wantErr)
 			}
@@ -224,11 +234,11 @@ func TestReloadCDBLists(t *testing.T) {
 				t.Errorf("restarts: cluster %d manager %d, want %d %d", api.clusterRestarts, api.managerRestarts, tc.wantRestarts, tc.wantManager)
 			}
 			got := reloadAnnotations(t, r, sts)
-			if got[constants.AnnotationCDBListContentHash] != tc.wantApplied {
-				t.Errorf("applied hash = %q, want %q", got[constants.AnnotationCDBListContentHash], tc.wantApplied)
+			if got[constants.AnnotationRulesetContentHash] != tc.wantApplied {
+				t.Errorf("applied hash = %q, want %q", got[constants.AnnotationRulesetContentHash], tc.wantApplied)
 			}
-			if got[constants.AnnotationCDBListReloadPendingSince] != tc.wantPendingFrom {
-				t.Errorf("pending since = %q, want %q", got[constants.AnnotationCDBListReloadPendingSince], tc.wantPendingFrom)
+			if got[constants.AnnotationRulesetReloadPendingSince] != tc.wantPendingFrom {
+				t.Errorf("pending since = %q, want %q", got[constants.AnnotationRulesetReloadPendingSince], tc.wantPendingFrom)
 			}
 		})
 	}

@@ -21,3 +21,21 @@ const contentReleaseRequeue = 15 * time.Second
 func contentStillMounted(err error) bool {
 	return errors.Is(err, wazuhreconciler.ErrContentStillMounted)
 }
+
+// rulesetRejectedRequeue is when a rule or decoder the managers rejected is validated
+// again: a dependency (e.g. its parent decoder) may have been added meanwhile, and a spec
+// change is reconciled right away anyway.
+const rulesetRejectedRequeue = 5 * time.Minute
+
+// rulesetRequeue returns when to retry a rule or decoder whose validation against the
+// managers did not complete, and false for any other error (reported, with back-off).
+func rulesetRequeue(err error) (time.Duration, bool) {
+	var rejected *wazuhreconciler.RulesetRejectedError
+	switch {
+	case errors.As(err, &rejected):
+		return rulesetRejectedRequeue, true
+	case wazuhreconciler.IsAPIUnavailable(err), errors.Is(err, wazuhreconciler.ErrRulesetRestoreFailed):
+		return apiUnavailableRequeue(), true
+	}
+	return 0, false
+}

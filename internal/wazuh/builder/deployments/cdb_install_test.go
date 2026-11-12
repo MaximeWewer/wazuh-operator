@@ -43,7 +43,7 @@ func TestCDBListInstallScript(t *testing.T) {
 	write("var/ossec/etc/.operator-cdblists", "old\nusers\n") // previous manifest
 
 	script := cdbListInstallScript(refs)
-	script = strings.ReplaceAll(script, constants.PathWazuhCDBListSources, filepath.Join(root, "src"))
+	script = strings.ReplaceAll(script, constants.PathWazuhContentSources, filepath.Join(root, "src"))
 	script = strings.ReplaceAll(script, constants.PathWazuhBase, filepath.Join(root, "var/ossec"))
 	if out, err := exec.CommandContext(t.Context(), "sh", "-c", script).CombinedOutput(); err != nil {
 		t.Fatalf("script failed: %v\n%s", err, out)
@@ -96,15 +96,15 @@ func TestCDBListConfigMapsOnlyInInitContainer(t *testing.T) {
 		return c.Command[len(c.Command)-1], mounts
 	}
 	s, mounts := initScript(sts)
-	if !strings.Contains(s, "cp '/cdblists-src/wazuh-cdblist-cm-cdb/ip' '/var/ossec/etc/lists/ioc/ip.tmp'") {
+	if !strings.Contains(s, "cp '/content-src/wazuh-cdblist-cm-cdb/ip' '/var/ossec/etc/lists/ioc/ip.tmp'") {
 		t.Errorf("fix-permissions does not install the list:\n%s", s)
 	}
-	if !slices.Contains(mounts, "/cdblists-src/wazuh-cdblist-cm-cdb") {
+	if !slices.Contains(mounts, "/content-src/wazuh-cdblist-cm-cdb") {
 		t.Errorf("fix-permissions does not mount the list ConfigMap: %v", mounts)
 	}
 	plain := NewManagerStatefulSetBuilder("cluster", "ns", "master").Build()
-	if s, _ := initScript(plain); strings.Contains(s, "cdblist") {
-		t.Errorf("init script changed for a cluster without CDB lists:\n%s", s)
+	if s, _ := initScript(plain); strings.Contains(s, "/content-src/") {
+		t.Errorf("init script copies content for a cluster without CDB lists:\n%s", s)
 	}
 }
 
@@ -147,6 +147,75 @@ func TestInitRemovesEmptyRulesetFiles(t *testing.T) {
 		wantGone := strings.HasSuffix(rel, "removed.xml")
 		if gone := os.IsNotExist(err); gone != wantGone {
 			t.Errorf("%s removed = %v, want %v", rel, gone, wantGone)
+		}
+	}
+}
+
+// TestContentInstalledByInitContainer asserts rules and decoders, like CDB lists, are copied
+// by the fix-permissions init container from their ConfigMaps and never mounted in the
+// manager container: a subPath mount cannot be updated through the Wazuh API and leaves an
+// empty file behind when it is removed.
+func TestContentInstalledByInitContainer(t *testing.T) {
+	for role, sts := range map[string]*appsv1.StatefulSet{
+		"master": NewManagerStatefulSetBuilder("cluster", "ns", "master").
+			WithRuleConfigMaps([]RuleConfigMapRef{{Name: "cm-rule", FileName: "r.xml"}}).
+			WithDecoderConfigMaps([]DecoderConfigMapRef{{Name: "cm-dec", FileName: "d.xml"}}).Build(),
+		"worker": NewWorkerStatefulSetBuilder("cluster", "ns").
+			WithRuleConfigMaps([]RuleConfigMapRef{{Name: "cm-rule", FileName: "r.xml"}}).
+			WithDecoderConfigMaps([]DecoderConfigMapRef{{Name: "cm-dec", FileName: "d.xml"}}).Build(),
+	} {
+		for _, m := range sts.Spec.Template.Spec.Containers[0].VolumeMounts {
+			if m.Name == "wazuh-rule-cm-rule" || m.Name == "wazuh-decoder-cm-dec" {
+				t.Errorf("%s: %s mounted in the manager container at %s", role, m.Name, m.MountPath)
+			}
+		}
+		c, idx := findInit(sts, constants.InitContainerNamePermissions)
+		if idx < 0 {
+			t.Fatalf("%s: fix-permissions not rendered", role)
+		}
+		script := c.Command[len(c.Command)-1]
+		for _, want := range []string{
+			"cp '/content-src/wazuh-rule-cm-rule/r.xml' '/var/ossec/etc/rules/r.xml.tmp'",
+			"cp '/content-src/wazuh-decoder-cm-dec/d.xml' '/var/ossec/etc/decoders/d.xml.tmp'",
+			"'/var/ossec/etc/.operator-rules'",
+			"'/var/ossec/etc/.operator-decoders'",
+		} {
+			if !strings.Contains(script, want) {
+				t.Errorf("%s: fix-permissions script missing %q", role, want)
+			}
+		}
+		var mounts []string
+		for _, m := range c.VolumeMounts {
+			mounts = append(mounts, m.MountPath)
+		}
+		for _, want := range []string{"/content-src/wazuh-rule-cm-rule", "/content-src/wazuh-decoder-cm-dec"} {
+			if !slices.Contains(mounts, want) {
+				t.Errorf("%s: fix-permissions does not mount %s: %v", role, want, mounts)
+			}
+		}
+	}
+}
+
+// TestContentInstallScriptEmptySet asserts the files an earlier start installed are deleted
+// once the last one of the set is removed, as for any other removed file.
+func TestContentInstallScriptEmptySet(t *testing.T) {
+	root := t.TempDir()
+	set := contentFileSet{what: "decoders", dir: filepath.Join(root, "decoders"), manifest: filepath.Join(root, ".operator-decoders")}
+	for rel, content := range map[string]string{"decoders/gone.xml": "<decoder/>", "decoders/local_decoder.xml": "<decoder/>", ".operator-decoders": "gone.xml\n"} {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, rel), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out, err := exec.CommandContext(t.Context(), "sh", "-c", contentInstallScript(set)).CombinedOutput(); err != nil {
+		t.Fatalf("script failed: %v\n%s", err, out)
+	}
+	for rel, wantGone := range map[string]bool{"decoders/gone.xml": true, "decoders/local_decoder.xml": false, ".operator-decoders": true} {
+		_, err := os.Stat(filepath.Join(root, rel))
+		if os.IsNotExist(err) != wantGone {
+			t.Errorf("%s removed = %v, want %v", rel, os.IsNotExist(err), wantGone)
 		}
 	}
 }

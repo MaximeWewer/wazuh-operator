@@ -787,7 +787,7 @@ type CDBListConfigMapInfo struct {
 //
 // The restart hash covers which lists are installed and how, not the content of the lists
 // the Wazuh API can update (see apiUpdatableCDBList): the operator uploads their new
-// content and reloads the manager nodes through the API (see CDBListContentHash), which is
+// content and reloads the manager nodes through the API (see reconcileRulesetReload), which is
 // much shorter than recreating the pods.
 func (r *CDBListReconciler) GetCDBListConfigMapsForCluster(ctx context.Context, clusterName, namespace string) ([]CDBListConfigMapInfo, string, error) {
 	lists, err := r.ListCDBListsForCluster(ctx, clusterName, namespace)
@@ -889,22 +889,6 @@ func (r *CDBListReconciler) GetCDBListNamesForCluster(ctx context.Context, clust
 	}
 	sort.Strings(names)
 	return names, nil
-}
-
-// CDBListContentHash returns a hash of the content of the lists in infos the Wazuh API can
-// update (see apiUpdatableCDBList). Returns "" when there is none.
-func CDBListContentHash(infos []CDBListConfigMapInfo) string {
-	var inputs []string
-	for _, info := range infos {
-		if apiUpdatableCDBList(info) {
-			inputs = append(inputs, info.FileName+"="+info.ContentHash)
-		}
-	}
-	if len(inputs) == 0 {
-		return ""
-	}
-	sort.Strings(inputs)
-	return computeCDBListHash(joinStrings(inputs))
 }
 
 // computeCDBListHash computes a short hash of the given content for change detection.

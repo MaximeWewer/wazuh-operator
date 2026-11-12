@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	goerrors "errors"
 	"fmt"
 	"sort"
 
@@ -37,6 +38,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
@@ -65,6 +67,9 @@ type RuleReconciler struct {
 	Scheme    *runtime.Scheme
 	Recorder  record.EventRecorder
 	Validator *validation.RuleValidator
+	// RulesetAPI returns the API the rule files are validated with against a cluster's
+	// managers before they reach its ConfigMap; nil uses the cluster's Wazuh API.
+	RulesetAPI RulesetAPIFactory
 }
 
 // NewRuleReconciler creates a new RuleReconciler
@@ -126,6 +131,7 @@ func (r *RuleReconciler) Reconcile(ctx context.Context, rule *wazuhv1.WazuhRule)
 	newStatuses := make([]wazuhv1.RuleClusterStatus, 0, len(rule.Spec.ClusterRefs))
 	anyFailed := false
 	allApplied := true
+	var clusterErrs []error
 
 	for _, ref := range rule.Spec.ClusterRefs {
 		st := existingByKey[clusterKey(ref.Name, ref.Namespace)]
@@ -133,7 +139,11 @@ func (r *RuleReconciler) Reconcile(ctx context.Context, rule *wazuhv1.WazuhRule)
 		st.Namespace = ref.Namespace
 
 		if err := r.reconcileRuleForCluster(ctx, rule, ref, &st); err != nil {
-			anyFailed = true
+			clusterErrs = append(clusterErrs, err)
+			// Waiting for the Wazuh API to validate the rule is not a failure.
+			if !IsAPIUnavailable(err) {
+				anyFailed = true
+			}
 			log.Error(err, "Failed to reconcile rule on cluster",
 				"cluster", ref.Name, "clusterNamespace", ref.Namespace)
 		}
@@ -163,6 +173,12 @@ func (r *RuleReconciler) Reconcile(ctx context.Context, rule *wazuhv1.WazuhRule)
 		r.setCondition(rule, ConditionTypeReady, metav1.ConditionFalse, "ClusterFailures",
 			"One or more target clusters failed to apply the rule")
 		rule.Status.Message = "One or more target clusters failed to apply the rule"
+		for _, st := range newStatuses {
+			if st.Message != "" {
+				rule.Status.Message = st.Message
+				break
+			}
+		}
 	case allApplied:
 		rule.Status.Phase = wazuhv1.RulePhaseApplied
 		r.setCondition(rule, ConditionTypeReady, metav1.ConditionTrue, "RuleApplied",
@@ -180,8 +196,8 @@ func (r *RuleReconciler) Reconcile(ctx context.Context, rule *wazuhv1.WazuhRule)
 		return fmt.Errorf("failed to update rule status: %w", err)
 	}
 
-	if anyFailed {
-		return fmt.Errorf("one or more target clusters failed to apply the rule")
+	if len(clusterErrs) > 0 {
+		return fmt.Errorf("one or more target clusters failed to apply the rule: %w", goerrors.Join(clusterErrs...))
 	}
 	log.Info("Rule reconciliation completed", "name", rule.Name)
 	return nil
@@ -209,6 +225,30 @@ func (r *RuleReconciler) reconcileRuleForCluster(
 		}
 		st.Phase = wazuhv1.RulePhaseFailed
 		st.Message = fmt.Sprintf("failed to get WazuhCluster: %v", err)
+		return err
+	}
+
+	// Validate a changed file against the cluster's managers before it reaches the
+	// ConfigMap the manager pods install it from: a file analysisd rejects would stop every
+	// manager at its next start.
+	fileName := fmt.Sprintf("%s.xml", rule.Spec.RuleName)
+	if err := validateContentForCluster(ctx, r.Client, r.RulesetAPI, cluster,
+		ruleConfigMapName(rule.Namespace, rule.Name), adapters.RulesetRules, fileName, rule.Spec.Rules); err != nil {
+		var rejected *RulesetRejectedError
+		switch {
+		case goerrors.As(err, &rejected):
+			st.Phase = wazuhv1.RulePhaseFailed
+			st.Message = rejected.Error()
+			if r.Recorder != nil {
+				r.Recorder.Event(rule, corev1.EventTypeWarning, "RuleRejected", st.Message)
+			}
+		case IsAPIUnavailable(err):
+			st.Phase = wazuhv1.RulePhasePending
+			st.Message = "Waiting for the Wazuh API to validate the rule"
+		default:
+			st.Phase = wazuhv1.RulePhaseFailed
+			st.Message = fmt.Sprintf("Failed to validate the rule: %v", err)
+		}
 		return err
 	}
 
@@ -416,36 +456,51 @@ func (r *RuleReconciler) GetRuleConfigMapsForCluster(ctx context.Context, cluste
 	}
 
 	var configMaps []RuleConfigMapInfo
-	var ruleContents []string
+	var hashInputs []string
 
 	for _, rule := range rules {
-		// Find the per-cluster status to confirm the rule is applied on this cluster
-		applied := false
+		// A rule is installed once its ConfigMap exists. The ConfigMap only ever holds
+		// content the managers accepted, so a later update they reject (Failed) keeps the
+		// previous version installed instead of removing the rule.
+		installed := false
 		for _, st := range rule.Status.ClusterStatuses {
-			if st.Name == clusterName && st.Namespace == namespace && st.Phase == wazuhv1.RulePhaseApplied && st.ConfigMapRef != nil {
-				applied = true
+			if st.Name == clusterName && st.Namespace == namespace && st.ConfigMapRef != nil {
+				installed = true
 				break
 			}
 		}
-		if !applied {
+		if !installed {
 			continue
 		}
-
+		cmName := ruleConfigMapName(rule.Namespace, rule.Name)
+		cm := &corev1.ConfigMap{}
+		if err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: namespace}, cm); err != nil {
+			if errors.IsNotFound(err) {
+				continue
+			}
+			return nil, "", fmt.Errorf("failed to get rule ConfigMap %s: %w", cmName, err)
+		}
+		fileName, content := singleConfigMapEntry(cm)
+		if fileName == "" {
+			continue
+		}
 		configMaps = append(configMaps, RuleConfigMapInfo{
-			ConfigMapName: ruleConfigMapName(rule.Namespace, rule.Name),
-			FileName:      fmt.Sprintf("%s.xml", rule.Spec.RuleName),
+			ConfigMapName: cmName,
+			FileName:      fileName,
 			RuleName:      rule.Name,
+			ContentHash:   computeContentHash(content),
 		})
-		ruleContents = append(ruleContents, rule.Spec.Rules)
+		// The restart hash covers which files are installed, not their content: a content
+		// change is loaded through the Wazuh API (see reconcileRulesetReload).
+		hashInputs = append(hashInputs, fileName+"="+cmName)
 	}
 
 	sort.Slice(configMaps, func(i, j int) bool {
 		return configMaps[i].RuleName < configMaps[j].RuleName
 	})
-	sort.Strings(ruleContents)
+	sort.Strings(hashInputs)
 
-	hash := computeRulesHash(ruleContents)
-	return configMaps, hash, nil
+	return configMaps, computeRulesHash(hashInputs), nil
 }
 
 // RuleConfigMapInfo holds information about a rule ConfigMap for mounting
@@ -453,6 +508,7 @@ type RuleConfigMapInfo struct {
 	ConfigMapName string
 	FileName      string
 	RuleName      string
+	ContentHash   string // hash of the content the ConfigMap holds
 }
 
 // computeRulesHash computes a hash of all rule contents for change detection

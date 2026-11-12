@@ -718,11 +718,16 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 	// Mount rule ConfigMaps if RuleReconciler is configured
 	var ruleHash string
+	var ruleInfos []RuleConfigMapInfo
+	rulesResolved := r.RuleReconciler == nil
 	if r.RuleReconciler != nil {
 		ruleConfigMaps, hash, err := r.RuleReconciler.GetRuleConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace)
 		if err != nil {
 			log.Error(err, "Failed to get rule ConfigMaps for cluster, continuing without rules")
-		} else if len(ruleConfigMaps) > 0 {
+		} else {
+			ruleInfos, rulesResolved = ruleConfigMaps, true
+		}
+		if err == nil && len(ruleConfigMaps) > 0 {
 			stsBuilder.WithRuleConfigMaps(convertRuleConfigMaps(ruleConfigMaps))
 			stsBuilder.WithRuleHash(hash)
 			ruleHash = hash
@@ -732,11 +737,16 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 
 	// Mount decoder ConfigMaps if DecoderReconciler is configured
 	var decoderHash string
+	var decoderInfos []DecoderConfigMapInfo
+	decodersResolved := r.DecoderReconciler == nil
 	if r.DecoderReconciler != nil {
 		decoderConfigMaps, hash, err := r.DecoderReconciler.GetDecoderConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace)
 		if err != nil {
 			log.Error(err, "Failed to get decoder ConfigMaps for cluster, continuing without decoders")
-		} else if len(decoderConfigMaps) > 0 {
+		} else {
+			decoderInfos, decodersResolved = decoderConfigMaps, true
+		}
+		if err == nil && len(decoderConfigMaps) > 0 {
 			stsBuilder.WithDecoderConfigMaps(convertDecoderConfigMaps(decoderConfigMaps))
 			stsBuilder.WithDecoderHash(hash)
 			decoderHash = hash
@@ -775,7 +785,7 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 	// Mount CDB list ConfigMaps if CDBListReconciler is configured
 	var cdbListHash string
 	var cdbListInfos []CDBListConfigMapInfo
-	cdbListsResolved := false
+	cdbListsResolved := r.CDBListReconciler == nil
 	if r.CDBListReconciler != nil {
 		infos, hash, err := r.CDBListReconciler.GetCDBListConfigMapsForCluster(ctx, cluster.Name, cluster.Namespace)
 		if err != nil {
@@ -1051,14 +1061,6 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		} else {
 			updateReason = "cdblist-change"
 		}
-		if cdbListsResolved {
-			// A list was added or removed: the master and the workers roll and load the
-			// current content, so no API restart is needed on top of it.
-			if sts.Annotations == nil {
-				sts.Annotations = map[string]string{}
-			}
-			sts.Annotations[constants.AnnotationCDBListContentHash] = CDBListContentHash(cdbListInfos)
-		}
 		log.Info("Master StatefulSet needs update due to CDB list hash change",
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingCDBListHash),
@@ -1075,6 +1077,16 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 			"name", sts.Name,
 			"oldHash", utils.ShortHash(existingActiveResponseHash),
 			"newHash", utils.ShortHash(activeResponseHash))
+	}
+
+	rulesetResolved := rulesResolved && decodersResolved && cdbListsResolved
+	if rulesetResolved && (ruleHash != existingRuleHash || decoderHash != existingDecoderHash || cdbListHash != existingCDBListHash) {
+		// A rule, decoder or list was added or removed: the master and the workers roll and
+		// load the current content, so no API reload is needed on top of it.
+		if sts.Annotations == nil {
+			sts.Annotations = map[string]string{}
+		}
+		sts.Annotations[constants.AnnotationRulesetContentHash] = rulesetContentHash(rulesetFiles(ruleInfos, decoderInfos, cdbListInfos))
 	}
 
 	if needsUpdate {
@@ -1103,13 +1115,13 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 		}, nil
 	}
 
-	if cdbListsResolved {
+	if rulesetResolved {
 		// Non-fatal: a failed reload is retried on the next reconcile.
-		if err := r.reconcileCDBListReload(ctx, cluster, found, cdbListInfos); err != nil {
+		if err := r.reconcileRulesetReload(ctx, cluster, found, rulesetFiles(ruleInfos, decoderInfos, cdbListInfos)); err != nil {
 			if IsAPIUnavailable(err) {
-				log.V(1).Info("Wazuh API unavailable, CDB list reload retried on the next reconcile", "error", err.Error())
+				log.V(1).Info("Wazuh API unavailable, ruleset reload retried on the next reconcile", "error", err.Error())
 			} else {
-				log.Error(err, "Failed to reload CDB list content on the manager nodes")
+				log.Error(err, "Failed to reload the ruleset content on the manager nodes")
 			}
 		}
 	}

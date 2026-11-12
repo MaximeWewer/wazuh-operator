@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	goerrors "errors"
 	"fmt"
 	"sort"
 
@@ -37,6 +38,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
+	"github.com/MaximeWewer/wazuh-operator/internal/adapters"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/telemetry"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
@@ -64,6 +66,9 @@ type DecoderReconciler struct {
 	Scheme    *runtime.Scheme
 	Recorder  record.EventRecorder
 	Validator *validation.DecoderValidator
+	// RulesetAPI returns the API the decoder files are validated with against a cluster's
+	// managers before they reach its ConfigMap; nil uses the cluster's Wazuh API.
+	RulesetAPI RulesetAPIFactory
 }
 
 // NewDecoderReconciler creates a new DecoderReconciler
@@ -124,6 +129,7 @@ func (r *DecoderReconciler) Reconcile(ctx context.Context, decoder *wazuhv1.Wazu
 	newStatuses := make([]wazuhv1.DecoderClusterStatus, 0, len(decoder.Spec.ClusterRefs))
 	anyFailed := false
 	allApplied := true
+	var clusterErrs []error
 
 	for _, ref := range decoder.Spec.ClusterRefs {
 		st := existingByKey[clusterKey(ref.Name, ref.Namespace)]
@@ -131,7 +137,11 @@ func (r *DecoderReconciler) Reconcile(ctx context.Context, decoder *wazuhv1.Wazu
 		st.Namespace = ref.Namespace
 
 		if err := r.reconcileDecoderForCluster(ctx, decoder, ref, &st); err != nil {
-			anyFailed = true
+			clusterErrs = append(clusterErrs, err)
+			// Waiting for the Wazuh API to validate the decoder is not a failure.
+			if !IsAPIUnavailable(err) {
+				anyFailed = true
+			}
 			log.Error(err, "Failed to reconcile decoder on cluster",
 				"cluster", ref.Name, "clusterNamespace", ref.Namespace)
 		}
@@ -160,6 +170,12 @@ func (r *DecoderReconciler) Reconcile(ctx context.Context, decoder *wazuhv1.Wazu
 		r.setCondition(decoder, DecoderConditionTypeReady, metav1.ConditionFalse, "ClusterFailures",
 			"One or more target clusters failed to apply the decoder")
 		decoder.Status.Message = "One or more target clusters failed to apply the decoder"
+		for _, st := range newStatuses {
+			if st.Message != "" {
+				decoder.Status.Message = st.Message
+				break
+			}
+		}
 	case allApplied:
 		decoder.Status.Phase = wazuhv1.DecoderPhaseApplied
 		r.setCondition(decoder, DecoderConditionTypeReady, metav1.ConditionTrue, "DecoderApplied",
@@ -177,8 +193,8 @@ func (r *DecoderReconciler) Reconcile(ctx context.Context, decoder *wazuhv1.Wazu
 		return fmt.Errorf("failed to update decoder status: %w", err)
 	}
 
-	if anyFailed {
-		return fmt.Errorf("one or more target clusters failed to apply the decoder")
+	if len(clusterErrs) > 0 {
+		return fmt.Errorf("one or more target clusters failed to apply the decoder: %w", goerrors.Join(clusterErrs...))
 	}
 	log.Info("Decoder reconciliation completed", "name", decoder.Name)
 	return nil
@@ -206,6 +222,30 @@ func (r *DecoderReconciler) reconcileDecoderForCluster(
 		}
 		st.Phase = wazuhv1.DecoderPhaseFailed
 		st.Message = fmt.Sprintf("failed to get WazuhCluster: %v", err)
+		return err
+	}
+
+	// Validate a changed file against the cluster's managers before it reaches the
+	// ConfigMap the manager pods install it from: a file analysisd rejects would stop every
+	// manager at its next start.
+	fileName := fmt.Sprintf("%s.xml", decoder.Spec.DecoderName)
+	if err := validateContentForCluster(ctx, r.Client, r.RulesetAPI, cluster,
+		decoderConfigMapName(decoder.Namespace, decoder.Name), adapters.RulesetDecoders, fileName, decoder.Spec.Decoders); err != nil {
+		var rejected *RulesetRejectedError
+		switch {
+		case goerrors.As(err, &rejected):
+			st.Phase = wazuhv1.DecoderPhaseFailed
+			st.Message = rejected.Error()
+			if r.Recorder != nil {
+				r.Recorder.Event(decoder, corev1.EventTypeWarning, "DecoderRejected", st.Message)
+			}
+		case IsAPIUnavailable(err):
+			st.Phase = wazuhv1.DecoderPhasePending
+			st.Message = "Waiting for the Wazuh API to validate the decoder"
+		default:
+			st.Phase = wazuhv1.DecoderPhaseFailed
+			st.Message = fmt.Sprintf("Failed to validate the decoder: %v", err)
+		}
 		return err
 	}
 
@@ -409,36 +449,52 @@ func (r *DecoderReconciler) GetDecoderConfigMapsForCluster(ctx context.Context, 
 		return nil, "", err
 	}
 
-	configMaps := make([]DecoderConfigMapInfo, 0, len(decoders))
-	decoderContents := make([]string, 0, len(decoders))
+	var configMaps []DecoderConfigMapInfo
+	var hashInputs []string
 
 	for _, decoder := range decoders {
-		applied := false
+		// A decoder is installed once its ConfigMap exists. The ConfigMap only ever holds
+		// content the managers accepted, so a later update they reject (Failed) keeps the
+		// previous version installed instead of removing the decoder.
+		installed := false
 		for _, st := range decoder.Status.ClusterStatuses {
-			if st.Name == clusterName && st.Namespace == namespace && st.Phase == wazuhv1.DecoderPhaseApplied && st.ConfigMapRef != nil {
-				applied = true
+			if st.Name == clusterName && st.Namespace == namespace && st.ConfigMapRef != nil {
+				installed = true
 				break
 			}
 		}
-		if !applied {
+		if !installed {
 			continue
 		}
-
+		cmName := decoderConfigMapName(decoder.Namespace, decoder.Name)
+		cm := &corev1.ConfigMap{}
+		if err := r.Get(ctx, types.NamespacedName{Name: cmName, Namespace: namespace}, cm); err != nil {
+			if errors.IsNotFound(err) {
+				continue
+			}
+			return nil, "", fmt.Errorf("failed to get decoder ConfigMap %s: %w", cmName, err)
+		}
+		fileName, content := singleConfigMapEntry(cm)
+		if fileName == "" {
+			continue
+		}
 		configMaps = append(configMaps, DecoderConfigMapInfo{
-			ConfigMapName: decoderConfigMapName(decoder.Namespace, decoder.Name),
-			FileName:      fmt.Sprintf("%s.xml", decoder.Spec.DecoderName),
+			ConfigMapName: cmName,
+			FileName:      fileName,
 			DecoderName:   decoder.Name,
+			ContentHash:   computeContentHash(content),
 		})
-		decoderContents = append(decoderContents, decoder.Spec.Decoders)
+		// The restart hash covers which files are installed, not their content: a content
+		// change is loaded through the Wazuh API (see reconcileRulesetReload).
+		hashInputs = append(hashInputs, fileName+"="+cmName)
 	}
 
 	sort.Slice(configMaps, func(i, j int) bool {
 		return configMaps[i].DecoderName < configMaps[j].DecoderName
 	})
-	sort.Strings(decoderContents)
+	sort.Strings(hashInputs)
 
-	hash := computeDecodersHash(decoderContents)
-	return configMaps, hash, nil
+	return configMaps, computeDecodersHash(hashInputs), nil
 }
 
 // DecoderConfigMapInfo holds information about a decoder ConfigMap for mounting
@@ -446,6 +502,7 @@ type DecoderConfigMapInfo struct {
 	ConfigMapName string
 	FileName      string
 	DecoderName   string
+	ContentHash   string // hash of the content the ConfigMap holds
 }
 
 // computeDecodersHash computes a hash of all decoder contents for change detection

@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,6 +28,7 @@ func TestDecoderReconciler_Reconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
 
 	tests := []struct {
 		name          string
@@ -293,65 +295,64 @@ func TestDecoderReconciler_ListDecodersForCluster(t *testing.T) {
 func TestDecoderReconciler_GetDecoderConfigMapsForCluster(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
 
-	decoder1 := &wazuhv1.WazuhDecoder{
-		ObjectMeta: metav1.ObjectMeta{Name: "decoder-1", Namespace: "default"},
-		Spec: wazuhv1.WazuhDecoderSpec{
-			ClusterRefs: []wazuhv1.WazuhClusterRef{{Name: "cluster-a", Namespace: "default"}},
-			DecoderName: "decoder_1",
-			Decoders:    `<decoder name="d1"><prematch>^1</prematch></decoder>`,
-		},
-		Status: wazuhv1.WazuhDecoderStatus{
-			Phase: wazuhv1.DecoderPhaseApplied,
-			ClusterStatuses: []wazuhv1.DecoderClusterStatus{
-				{
-					Name:      "cluster-a",
-					Namespace: "default",
-					Phase:     wazuhv1.DecoderPhaseApplied,
-					ConfigMapRef: &wazuhv1.ConfigMapReference{
-						Name:      decoderConfigMapName("default", "decoder-1"),
-						Namespace: "default",
-					},
-				},
+	installed := func(name string, phase wazuhv1.DecoderPhase) *wazuhv1.WazuhDecoder {
+		return &wazuhv1.WazuhDecoder{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: wazuhv1.WazuhDecoderSpec{
+				ClusterRefs: []wazuhv1.WazuhClusterRef{{Name: "cluster-a", Namespace: "default"}},
+				DecoderName: name,
+				Decoders:    `<decoder name="` + name + `-spec"/>`,
 			},
-		},
+			Status: wazuhv1.WazuhDecoderStatus{ClusterStatuses: []wazuhv1.DecoderClusterStatus{{
+				Name: "cluster-a", Namespace: "default", Phase: phase,
+				ConfigMapRef: &wazuhv1.ConfigMapReference{Name: decoderConfigMapName("default", name), Namespace: "default"},
+			}}},
+		}
 	}
-
-	decoder2 := &wazuhv1.WazuhDecoder{
+	cm := func(name, content string) *corev1.ConfigMap {
+		return &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: decoderConfigMapName("default", name), Namespace: "default"},
+			Data:       map[string]string{name + ".xml": content},
+		}
+	}
+	// decoder-1 is applied; decoder-2 was never applied; decoder-3's last update was
+	// rejected, so its ConfigMap keeps the previous, valid version installed.
+	pending := &wazuhv1.WazuhDecoder{
 		ObjectMeta: metav1.ObjectMeta{Name: "decoder-2", Namespace: "default"},
 		Spec: wazuhv1.WazuhDecoderSpec{
 			ClusterRefs: []wazuhv1.WazuhClusterRef{{Name: "cluster-a", Namespace: "default"}},
-			DecoderName: "decoder_2",
-			Decoders:    `<decoder name="d2"><prematch>^2</prematch></decoder>`,
+			DecoderName: "decoder-2",
 		},
-		Status: wazuhv1.WazuhDecoderStatus{
-			Phase: wazuhv1.DecoderPhasePending,
-		},
+		Status: wazuhv1.WazuhDecoderStatus{Phase: wazuhv1.DecoderPhasePending},
+	}
+	get := func(content1 string) ([]DecoderConfigMapInfo, string) {
+		t.Helper()
+		c := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(
+			installed("decoder-1", wazuhv1.DecoderPhaseApplied), pending, installed("decoder-3", wazuhv1.DecoderPhaseFailed),
+			cm("decoder-1", content1), cm("decoder-3", "v1"),
+		).Build()
+		infos, hash, err := NewDecoderReconciler(c, scheme, nil).GetDecoderConfigMapsForCluster(context.Background(), "cluster-a", "default")
+		if err != nil {
+			t.Fatalf("GetDecoderConfigMapsForCluster() error = %v", err)
+		}
+		return infos, hash
 	}
 
-	client := fake.NewClientBuilder().
-		WithScheme(scheme).
-		WithRuntimeObjects(decoder1, decoder2).
-		Build()
-
-	reconciler := NewDecoderReconciler(client, scheme, nil)
-
-	configMaps, hash, err := reconciler.GetDecoderConfigMapsForCluster(context.Background(), "cluster-a", "default")
-	if err != nil {
-		t.Fatalf("GetDecoderConfigMapsForCluster() error = %v", err)
+	infos, hash := get("a")
+	if len(infos) != 2 || infos[0].DecoderName != "decoder-1" || infos[1].DecoderName != "decoder-3" {
+		t.Fatalf("installed decoders = %+v, want decoder-1 and decoder-3", infos)
 	}
-
-	if len(configMaps) != 1 {
-		t.Errorf("GetDecoderConfigMapsForCluster() got %d configMaps, want 1", len(configMaps))
+	if infos[0].FileName != "decoder-1.xml" || infos[0].ContentHash != computeContentHash("a") {
+		t.Errorf("decoder-1 = %+v, want the file and content of its ConfigMap", infos[0])
 	}
-
-	wantName := decoderConfigMapName("default", "decoder-1")
-	if configMaps[0].ConfigMapName != wantName {
-		t.Errorf("GetDecoderConfigMapsForCluster() configMap name = %s, want %s", configMaps[0].ConfigMapName, wantName)
+	infos2, hash2 := get("b")
+	if hash == "" || hash != hash2 {
+		t.Errorf("restart hash %q -> %q changed with the content; only the installed files should change it", hash, hash2)
 	}
-
-	if hash == "" {
-		t.Error("GetDecoderConfigMapsForCluster() hash should not be empty")
+	if infos2[0].ContentHash == infos[0].ContentHash {
+		t.Error("content hash ignores a content change")
 	}
 }
 

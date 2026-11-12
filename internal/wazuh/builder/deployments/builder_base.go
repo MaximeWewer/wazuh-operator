@@ -571,25 +571,8 @@ func (b *baseStatefulSetBuilder[T]) configMapVolumes() []corev1.Volume {
 func (b *baseStatefulSetBuilder[T]) configMapMounts() []corev1.VolumeMount {
 	var mounts []corev1.VolumeMount
 
-	// Add rule ConfigMap mounts at /var/ossec/etc/rules/
-	for _, ref := range b.ruleConfigMaps {
-		mounts = append(mounts, corev1.VolumeMount{
-			Name:      boundedVolumeName("wazuh-rule", ref.Name),
-			MountPath: fmt.Sprintf("/var/ossec/etc/rules/%s", ref.FileName),
-			SubPath:   ref.FileName,
-			ReadOnly:  true,
-		})
-	}
-
-	// Add decoder ConfigMap mounts at /var/ossec/etc/decoders/
-	for _, ref := range b.decoderConfigMaps {
-		mounts = append(mounts, corev1.VolumeMount{
-			Name:      boundedVolumeName("wazuh-decoder", ref.Name),
-			MountPath: fmt.Sprintf("/var/ossec/etc/decoders/%s", ref.FileName),
-			SubPath:   ref.FileName,
-			ReadOnly:  true,
-		})
-	}
+	// Rules and decoders are installed as regular files by the init container (see
+	// contentInstallScript), not mounted.
 
 	// Add agent group file mounts at /var/ossec/etc/shared/<groupName>/<filename>
 	for _, ref := range b.agentGroupFiles {
@@ -713,10 +696,14 @@ echo "Ownership fix complete"`
 // buildInitContainer creates the busybox "fix-permissions" init container, staging the
 // operator-issued API certificate on the master (installAPICert) and installing the CDB lists.
 func (b *baseStatefulSetBuilder[T]) buildInitContainer() corev1.Container {
-	extra := cdbListInstallScript(b.cdbListConfigMaps)
-	if b.installAPICert {
-		extra = joinScripts(extra, apiCertInstallScript)
+	var parts []string
+	for _, set := range b.contentFileSets() {
+		parts = append(parts, contentInstallScript(set))
 	}
+	if b.installAPICert {
+		parts = append(parts, apiCertInstallScript)
+	}
+	extra := joinScripts(parts...)
 	return buildConfigInitContainer(extra, b.buildInitContainerVolumeMounts())
 }
 
@@ -731,61 +718,129 @@ func joinScripts(parts ...string) string {
 	return strings.Join(nonEmpty, "\n")
 }
 
-// cdbListInstallScript copies each CDB list from its ConfigMap, mounted in the init
-// container under PathWazuhCDBListSources, to /var/ossec/etc/lists/<path> as a regular
-// file: since 4.14 the Wazuh API ignores a list whose real path leaves etc/lists, so a
-// link to the mount would hide it from the API. The operator later updates a list in
-// place through the API (see the reconciler's CDB list reload). The copy goes through a
-// .tmp file, which the Wazuh cluster does not sync. cdbListManifest records the installed
-// paths so the lists removed since the previous start are deleted with their compiled .cdb.
-// Returns "" when no list is mounted, which leaves the init container unchanged.
-func cdbListInstallScript(refs []CDBListConfigMapRef) string {
-	if len(refs) == 0 {
-		return ""
-	}
-	sorted := make([]CDBListConfigMapRef, len(refs))
-	copy(sorted, refs)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].FileName < sorted[j].FileName })
+// contentFile is a file the init container installs from a ConfigMap mounted under
+// PathWazuhContentSources/<volume>: its data key, and its path relative to the set's dir.
+type contentFile struct {
+	volume string
+	key    string
+	path   string
+}
 
-	manifest := shellSingleQuote(cdbListManifest)
-	newManifest := shellSingleQuote(cdbListManifest + ".new")
-	var sb strings.Builder
-	sb.WriteString("# Install the CDB lists from their ConfigMaps\n")
-	fmt.Fprintf(&sb, ": > %s\n", newManifest)
-	for _, ref := range sorted {
-		src := shellSingleQuote(constants.PathWazuhCDBListSources + "/" + boundedVolumeName("wazuh-cdblist", ref.Name) + "/" + ref.Key)
-		dest := shellSingleQuote("/var/ossec/etc/lists/" + ref.FileName)
-		tmp := shellSingleQuote("/var/ossec/etc/lists/" + ref.FileName + ".tmp")
-		fmt.Fprintf(&sb, "mkdir -p \"$(dirname %s)\" && rm -rf %s && cp %s %s && mv %s %s\n", dest, dest, src, tmp, tmp, dest)
-		fmt.Fprintf(&sb, "printf '%%s\\n' %s >> %s\n", shellSingleQuote(ref.FileName), newManifest)
+// contentFileSet is a kind of content the init container installs as regular files.
+type contentFileSet struct {
+	what     string // for the log line, e.g. "CDB lists"
+	dir      string // install directory, e.g. /var/ossec/etc/lists
+	manifest string // records the installed paths, to delete the removed ones
+	// removeWith are the suffixes of the files deleted along with a removed one (e.g. the
+	// compiled .cdb of a list).
+	removeWith []string
+	files      []contentFile
+}
+
+// contentInstallScript copies each file of the set from its ConfigMap to <dir>/<path> as a
+// regular file, through a .tmp file the Wazuh cluster does not sync. Regular files, unlike
+// subPath mounts, can be updated in place through the Wazuh API, never leave an empty mount
+// point behind, and since 4.14 a CDB list must be one for the API to serve it (a link
+// leaving etc/lists is ignored). The manifest records the installed paths so the files
+// removed since the previous start are deleted, also when the set is now empty.
+func contentInstallScript(set contentFileSet) string {
+	if len(set.files) == 0 {
+		// Delete what an earlier start installed (the last file of the set was removed).
+		return fmt.Sprintf("# Remove the %s installed by an earlier start\n"+
+			"if [ -f %s ]; then\n"+
+			"    while IFS= read -r f; do\n"+
+			"        case \"$f\" in ''|/*|*..*) continue ;; esac\n"+
+			"        rm -f %s\n"+
+			"    done < %s\n"+
+			"    rm -f %s\n"+
+			"fi", set.what, shellSingleQuote(set.manifest), removeCommandArgs(set), shellSingleQuote(set.manifest), shellSingleQuote(set.manifest))
 	}
+	files := make([]contentFile, len(set.files))
+	copy(files, set.files)
+	sort.Slice(files, func(i, j int) bool { return files[i].path < files[j].path })
+
+	manifest := shellSingleQuote(set.manifest)
+	newManifest := shellSingleQuote(set.manifest + ".new")
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "# Install the %s from their ConfigMaps\n", set.what)
+	fmt.Fprintf(&sb, ": > %s\n", newManifest)
+	for _, f := range files {
+		src := shellSingleQuote(constants.PathWazuhContentSources + "/" + f.volume + "/" + f.key)
+		dest := shellSingleQuote(set.dir + "/" + f.path)
+		tmp := shellSingleQuote(set.dir + "/" + f.path + ".tmp")
+		fmt.Fprintf(&sb, "mkdir -p \"$(dirname %s)\" && rm -rf %s && cp %s %s && mv %s %s\n", dest, dest, src, tmp, tmp, dest)
+		fmt.Fprintf(&sb, "printf '%%s\\n' %s >> %s\n", shellSingleQuote(f.path), newManifest)
+	}
+
 	fmt.Fprintf(&sb, "if [ -f %s ]; then\n", manifest)
-	fmt.Fprintf(&sb, "    while IFS= read -r f; do\n")
-	fmt.Fprintf(&sb, "        case \"$f\" in ''|/*|*..*) continue ;; esac\n")
-	fmt.Fprintf(&sb, "        grep -qxF -- \"$f\" %s || rm -f \"/var/ossec/etc/lists/$f\" \"/var/ossec/etc/lists/$f.cdb\"\n", newManifest)
+	sb.WriteString("    while IFS= read -r f; do\n")
+	sb.WriteString("        case \"$f\" in ''|/*|*..*) continue ;; esac\n")
+	fmt.Fprintf(&sb, "        grep -qxF -- \"$f\" %s || rm -f %s\n", newManifest, removeCommandArgs(set))
 	fmt.Fprintf(&sb, "    done < %s\n", manifest)
 	sb.WriteString("fi\n")
 	fmt.Fprintf(&sb, "mv %s %s\n", newManifest, manifest)
-	sb.WriteString("echo \"Installed CDB lists\"")
+	fmt.Fprintf(&sb, "echo \"Installed %s\"", set.what)
 	return sb.String()
 }
 
-// cdbListManifest lists the CDB list paths the init container installed. It sits in the
-// PVC-backed etc/, outside the directories the Wazuh cluster syncs.
-const cdbListManifest = constants.PathWazuhConfig + "/.operator-cdblists"
+// removeCommandArgs returns the rm arguments of the manifest entry $f and its companions.
+func removeCommandArgs(set contentFileSet) string {
+	var remove strings.Builder
+	fmt.Fprintf(&remove, "\"%s/$f\"", set.dir)
+	for _, suffix := range set.removeWith {
+		fmt.Fprintf(&remove, " \"%s/$f%s\"", set.dir, suffix)
+	}
+	return remove.String()
+}
+
+// Manifests of the files the init container installed. They sit in the PVC-backed etc/,
+// outside the directories the Wazuh cluster syncs.
+const (
+	cdbListManifest = constants.PathWazuhConfig + "/.operator-cdblists"
+	ruleManifest    = constants.PathWazuhConfig + "/.operator-rules"
+	decoderManifest = constants.PathWazuhConfig + "/.operator-decoders"
+)
+
+// contentFileSets returns the rules, decoders and CDB lists the init container installs.
+func (b *baseStatefulSetBuilder[T]) contentFileSets() []contentFileSet {
+	rules := contentFileSet{what: "rules", dir: constants.PathWazuhConfig + "/rules", manifest: ruleManifest}
+	for _, ref := range b.ruleConfigMaps {
+		rules.files = append(rules.files, contentFile{volume: boundedVolumeName("wazuh-rule", ref.Name), key: ref.FileName, path: ref.FileName})
+	}
+	decoders := contentFileSet{what: "decoders", dir: constants.PathWazuhConfig + "/decoders", manifest: decoderManifest}
+	for _, ref := range b.decoderConfigMaps {
+		decoders.files = append(decoders.files, contentFile{volume: boundedVolumeName("wazuh-decoder", ref.Name), key: ref.FileName, path: ref.FileName})
+	}
+	return []contentFileSet{rules, decoders, cdbListFileSet(b.cdbListConfigMaps)}
+}
+
+// cdbListFileSet returns the CDB lists the init container installs into etc/lists.
+func cdbListFileSet(refs []CDBListConfigMapRef) contentFileSet {
+	set := contentFileSet{what: "CDB lists", dir: constants.PathWazuhConfig + "/lists", manifest: cdbListManifest, removeWith: []string{".cdb"}}
+	for _, ref := range refs {
+		set.files = append(set.files, contentFile{volume: boundedVolumeName("wazuh-cdblist", ref.Name), key: ref.Key, path: ref.FileName})
+	}
+	return set
+}
+
+// cdbListInstallScript installs the CDB lists into etc/lists (see contentInstallScript).
+func cdbListInstallScript(refs []CDBListConfigMapRef) string {
+	return contentInstallScript(cdbListFileSet(refs))
+}
 
 // buildInitContainerVolumeMounts returns the init-container volume mounts, adding the
 // operator cert dir on the master (installAPICert) so the cert install can read it.
 func (b *baseStatefulSetBuilder[T]) buildInitContainerVolumeMounts() []corev1.VolumeMount {
 	mounts := initBaseVolumeMounts()
-	// CDB list ConfigMaps, copied into etc/lists by cdbListInstallScript.
-	for _, ref := range b.cdbListConfigMaps {
-		volumeName := boundedVolumeName("wazuh-cdblist", ref.Name)
-		mounts = append(mounts, corev1.VolumeMount{
-			Name:      volumeName,
-			MountPath: constants.PathWazuhCDBListSources + "/" + volumeName,
-			ReadOnly:  true,
-		})
+	// Rule, decoder and CDB list ConfigMaps, copied into etc/ by contentInstallScript.
+	for _, set := range b.contentFileSets() {
+		for _, f := range set.files {
+			mounts = append(mounts, corev1.VolumeMount{
+				Name:      f.volume,
+				MountPath: constants.PathWazuhContentSources + "/" + f.volume,
+				ReadOnly:  true,
+			})
+		}
 	}
 	if b.installAPICert {
 		mounts = append(mounts,

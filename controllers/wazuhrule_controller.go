@@ -152,6 +152,13 @@ func (r *WazuhRuleReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	// Delegate to helper reconciler
 	if err := r.RuleReconciler.Reconcile(ctx, rule); err != nil {
+		// A rule the managers rejected, or not validated yet (API unavailable, master
+		// file being restored), is retried later rather than in a tight back-off loop:
+		// each validation writes the file on the master.
+		if after, ok := rulesetRequeue(err); ok {
+			log.Info("Rule not applied, retried later", "error", err.Error(), "requeueAfter", after)
+			return ctrl.Result{RequeueAfter: after}, nil
+		}
 		log.Error(err, "Failed to reconcile WazuhRule")
 		return ctrl.Result{}, err
 	}

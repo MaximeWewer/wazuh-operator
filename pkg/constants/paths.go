@@ -57,9 +57,9 @@ const (
 	// PathWazuhActiveResponse is the active response scripts directory
 	PathWazuhActiveResponse = "/var/ossec/active-response/bin"
 
-	// PathWazuhCDBListSources is where the fix-permissions init container mounts the CDB
-	// list ConfigMaps it copies into /var/ossec/etc/lists.
-	PathWazuhCDBListSources = "/cdblists-src"
+	// PathWazuhContentSources is where the fix-permissions init container mounts the rule,
+	// decoder and CDB list ConfigMaps it copies into /var/ossec/etc.
+	PathWazuhContentSources = "/content-src"
 
 	// PathWazuhAgentless is the agentless configs directory
 	PathWazuhAgentless = "/var/ossec/agentless"
