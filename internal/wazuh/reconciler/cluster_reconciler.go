@@ -782,6 +782,11 @@ func (r *ClusterReconciler) reconcileMasterNonBlocking(ctx context.Context, clus
 			log.Error(err, "Failed to get CDB list ConfigMaps for cluster, continuing without CDB lists")
 		} else {
 			cdbListInfos, cdbListsResolved = infos, true
+			// Before the StatefulSet: the cdb-download init container mounts this Secret.
+			// It is shared with the workers, which live in the same namespace.
+			if err := r.reconcileCDBFetchSecret(ctx, cluster, infos); err != nil {
+				log.Error(err, "Failed to reconcile the CDB list fetch secret")
+			}
 			if len(infos) > 0 {
 				stsBuilder.WithCDBListConfigMaps(convertCDBListConfigMaps(infos))
 				stsBuilder.WithCDBListInitFetches(convertCDBListInitFetches(infos))
@@ -3461,11 +3466,11 @@ func convertCDBListInitFetches(infos []CDBListConfigMapInfo) []deployments.CDBLi
 			continue
 		}
 		refs = append(refs, deployments.CDBListInitFetchRef{
+			ConfigKey: info.FetchConfigKey,
 			ListName:  info.FileName,
 			URL:       info.URL,
 			Format:    info.Format,
 			SkipLines: info.SkipLines,
-			Insecure:  info.InsecureSkipVerify,
 		})
 	}
 	return refs

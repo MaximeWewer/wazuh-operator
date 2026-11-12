@@ -113,8 +113,11 @@ of three mutually-exclusive sources:
 - `entries` - static inline key/value pairs;
 - `content` - raw inline text;
 - `source` - a URL the operator fetches (Wazuh managers cannot fetch URLs
-  themselves) with an optional `refreshInterval`, auth `headersSecretRef`, and
-  `insecureSkipVerify`.
+  themselves) with an optional `refreshInterval`, auth `headersSecretRef`,
+  `urlSecretRef` (a credential the feed expects in the URL, as `${KEY}`
+  placeholders), and `insecureSkipVerify`. TLS certificates are verified unless
+  `insecureSkipVerify` is set, including for the lists over the ConfigMap size
+  limit, which an init container downloads with `curl` at pod startup.
 
 Raw `content`/`source` runs through a converter selected by `format`, after an
 optional `skipLines` header strip:

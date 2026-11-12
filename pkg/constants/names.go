@@ -302,6 +302,13 @@ func APICredentialsName(clusterName string) string {
 	return clusterName + SuffixAPICredentials
 }
 
+// CDBFetchSecretName returns the name of the Secret holding the curl configs the
+// cdb-download init container fetches the large CDB lists with (URL and headers may
+// carry credentials, so they stay out of the pod spec).
+func CDBFetchSecretName(clusterName string) string {
+	return clusterName + "-cdb-fetch"
+}
+
 // Resource naming functions - ConfigMaps
 
 // FilebeatConfigName returns the name for filebeat configmap

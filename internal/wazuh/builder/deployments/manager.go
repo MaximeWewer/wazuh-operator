@@ -62,11 +62,11 @@ type CDBListConfigMapRef struct {
 // by the cdb-fetch init container: it downloads URL and converts it (per Format, after
 // dropping SkipLines header lines) directly into /var/ossec/etc/lists/<ListName> on the PVC.
 type CDBListInitFetchRef struct {
+	ConfigKey string // key of the list's curl config in the CDBFetchSecretName Secret
 	ListName  string // list path relative to etc/lists (may contain a subdir)
-	URL       string // source URL to fetch at pod startup
+	URL       string // source URL template (no credential), for logs only
 	Format    string // "cdb" | "iplist" | "keylist"
 	SkipLines int32  // header lines dropped before conversion
-	Insecure  bool   // skip TLS certificate verification
 }
 
 // ActiveResponseConfigMapRef holds information about an active response script ConfigMap to mount
@@ -251,11 +251,9 @@ func (b *ManagerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		b.buildInitContainer(),
 	)
 
-	// Insert the cdb-fetch init container (large CDB lists) after fix-permissions creates
+	// Insert the cdb-download and cdb-fetch init containers (large CDB lists) after fix-permissions creates
 	// /var/ossec/etc/lists and before fix-ownership chowns the written files to 999.
-	if cdbFetch, ok := b.buildCDBFetchInitContainer(); ok {
-		initContainers = append(initContainers, cdbFetch)
-	}
+	initContainers = append(initContainers, b.buildCDBFetchInitContainers(image)...)
 
 	initContainers = append(initContainers, buildFixOwnershipInitContainer(image, b.buildVolumeMounts()))
 
@@ -434,6 +432,7 @@ func (b *ManagerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 	// Add ConfigMap-backed content volumes (rules, decoders, agent-group files,
 	// integrations, CDB lists, active responses) - shared with the worker builder.
 	volumes = append(volumes, b.configMapVolumes()...)
+	volumes = append(volumes, b.cdbFetchVolumes()...)
 
 	return volumes
 }

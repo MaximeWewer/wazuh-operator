@@ -76,6 +76,14 @@ type CDBListSource struct {
 	// same namespace as the WazuhCDBList CR.
 	// +optional
 	HeadersSecretRef *SecretReference `json:"headersSecretRef,omitempty"`
+
+	// URLSecretRef references a Secret whose keys replace the ${KEY} placeholders in URL,
+	// so a credential the source expects in the URL (e.g. the abuse.ch Auth-Key path
+	// segment of https://urlhaus-api.abuse.ch/v2/files/exports/${AUTH_KEY}/recent.csv)
+	// stays out of the CR. When Key is set, only that key is used. The Secret must live in
+	// the same namespace as the WazuhCDBList CR unless Namespace is set.
+	// +optional
+	URLSecretRef *SecretReference `json:"urlSecretRef,omitempty"`
 }
 
 // WazuhCDBListSpec defines the desired state of WazuhCDBList.

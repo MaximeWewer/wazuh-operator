@@ -190,6 +190,27 @@ spec:
                     description: URL to fetch the list content from (http or https).
                     pattern: ^https?://.+
                     type: string
+                  urlSecretRef:
+                    description: |-
+                      URLSecretRef references a Secret whose keys replace the ${KEY} placeholders in URL,
+                      so a credential the source expects in the URL (e.g. the abuse.ch Auth-Key path
+                      segment of https://urlhaus-api.abuse.ch/v2/files/exports/${AUTH_KEY}/recent.csv)
+                      stays out of the CR. When Key is set, only that key is used. The Secret must live in
+                      the same namespace as the WazuhCDBList CR unless Namespace is set.
+                    properties:
+                      key:
+                        description: Key is the key in the secret (defaults to "password")
+                        type: string
+                      name:
+                        description: Name is the secret name
+                        type: string
+                      namespace:
+                        description: Namespace of the secret (defaults to the resource
+                          namespace)
+                        type: string
+                    required:
+                    - name
+                    type: object
                 required:
                 - url
                 type: object

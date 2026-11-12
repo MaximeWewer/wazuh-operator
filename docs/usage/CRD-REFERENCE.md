@@ -1698,7 +1698,7 @@ spec:
 
 ### WazuhCDBList
 
-Manages [CDB lists](https://documentation.wazuh.com/current/user-manual/ruleset/cdb-list.html): key/value text files stored under `/var/ossec/etc/lists/` and used by rules (`<list>` lookups) for allow/block lists, user lists, etc. The operator resolves the list content, mounts it into the targeted manager pods, **and** automatically injects the matching `<list>etc/lists/<listName></list>` entry into each manager's `ossec.conf` - no manual ruleset edit is required. Adding or removing a list triggers a rolling restart of the manager pods; an init container copies each list from its ConfigMap into `etc/lists`. A content change (an edit, or a URL source refreshed every `refreshInterval`) of a list directly under `etc/lists` does not recreate the pods: the operator uploads the new content to the master (`PUT /lists/files`), waits until the Wazuh cluster reports every node's ruleset in sync, and loads it with one API call so `wazuh-analysisd` recompiles the list: on Wazuh 4.13+ a ruleset reload (`PUT /cluster/analysisd/reload`, no outage), on older versions an in-place restart of the Wazuh daemons (`PUT /cluster/restart`, a few seconds). If the reload is rejected, analysisd keeps the previous lists, the operator emits a `CDBListReloadFailed` warning event and retries. If the nodes still miss the new content after 5 minutes, the operator reloads or restarts them anyway and emits a `CDBListReloadTimeout` warning event. A content change of a list in a subdirectory (e.g. `listName: ioc/malicious-ip`), which the API cannot write, still triggers a rolling restart. Lists delivered by the `cdb-fetch` init container (over the ConfigMap size limit) are refreshed at the next pod start only.
+Manages [CDB lists](https://documentation.wazuh.com/current/user-manual/ruleset/cdb-list.html): key/value text files stored under `/var/ossec/etc/lists/` and used by rules (`<list>` lookups) for allow/block lists, user lists, etc. The operator resolves the list content, mounts it into the targeted manager pods, **and** automatically injects the matching `<list>etc/lists/<listName></list>` entry into each manager's `ossec.conf` - no manual ruleset edit is required. Adding or removing a list triggers a rolling restart of the manager pods; an init container copies each list from its ConfigMap into `etc/lists`. A content change (an edit, or a URL source refreshed every `refreshInterval`) of a list directly under `etc/lists` does not recreate the pods: the operator uploads the new content to the master (`PUT /lists/files`), waits until the Wazuh cluster reports every node's ruleset in sync, and loads it with one API call so `wazuh-analysisd` recompiles the list: on Wazuh 4.13+ a ruleset reload (`PUT /cluster/analysisd/reload`, no outage), on older versions an in-place restart of the Wazuh daemons (`PUT /cluster/restart`, a few seconds). If the reload is rejected, analysisd keeps the previous lists, the operator emits a `CDBListReloadFailed` warning event and retries. If the nodes still miss the new content after 5 minutes, the operator reloads or restarts them anyway and emits a `CDBListReloadTimeout` warning event. A content change of a list in a subdirectory (e.g. `listName: ioc/malicious-ip`), which the API cannot write, still triggers a rolling restart. Lists over the ConfigMap size limit, fetched by an init container at pod startup (see below), are refreshed at the next pod start only.
 
 **Short Name:** `wcdb`
 
@@ -1743,10 +1743,42 @@ The `format` field selects the converter applied to raw `content`/`source` text.
 
 | Field                | Type            | Required | Default | Description                                                                 |
 | -------------------- | --------------- | -------- | ------- | --------------------------------------------------------------------------- |
-| `url`                | string          | **Yes**  | -       | http/https URL to fetch                                                     |
+| `url`                | string          | **Yes**  | -       | http/https URL to fetch; may contain `${KEY}` placeholders resolved from `urlSecretRef` |
 | `refreshInterval`    | Duration        | No       | `1h`    | Re-fetch cadence (e.g. `30m`, `6h`); `0` = fetch once, re-fetch on spec change |
 | `insecureSkipVerify` | bool            | No       | `false` | Skip TLS verification for https URLs                                        |
 | `headersSecretRef`   | SecretReference | No       | -       | Secret whose key/value pairs are sent as HTTP request headers (e.g. `Authorization`) |
+| `urlSecretRef`       | SecretReference | No       | -       | Secret whose keys replace the `${KEY}` placeholders of `url` (e.g. a credential the feed expects in the path); with `key`, only that key |
+
+A list over the ConfigMap size limit is fetched at pod startup: the `cdb-download` init container (manager image) downloads it with `curl`, which verifies TLS certificates unless `insecureSkipVerify` is set and sends the `headersSecretRef` headers, then the `cdb-fetch` init container converts it. The resolved URL and headers are stored in the `<cluster>-cdb-fetch` Secret, never in the pod spec, the CR status or the logs. A failed download keeps the list file from the previous start.
+
+```yaml
+# A feed that takes its API key in the URL path (as the abuse.ch exports do): keep the
+# key in a Secret, out of the CR
+apiVersion: v1
+kind: Secret
+metadata:
+  name: feed-credentials
+  namespace: wazuh
+stringData:
+  API_KEY: <your API key>
+---
+apiVersion: resources.wazuh.com/v1
+kind: WazuhCDBList
+metadata:
+  name: blocked-ips
+  namespace: wazuh
+spec:
+  clusterRefs:
+    - name: wazuh-cluster
+      namespace: wazuh
+  listName: blocked-ips
+  format: iplist
+  source:
+    url: https://feeds.example.com/v1/${API_KEY}/ip-blocklist.txt
+    urlSecretRef:
+      name: feed-credentials
+    refreshInterval: 1h
+```
 
 #### Status
 

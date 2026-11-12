@@ -845,65 +845,116 @@ func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// buildCDBFetchInitContainer builds the busybox "cdb-fetch" init container that downloads
-// each large CDB list from its URL and converts it directly into the PVC-backed
-// /var/ossec/etc/lists/<listName>. The second return value is false when there are no
-// init-fetch lists (so the caller omits the container). Refs are sorted by ListName for a
-// deterministic script (stable pod hash). A failed fetch leaves any existing file intact.
-func (b *baseStatefulSetBuilder[T]) buildCDBFetchInitContainer() (corev1.Container, bool) {
+// cdbFetchConfigDir is where the cdb-download init container mounts the CDBFetchSecretName
+// Secret, and cdbFetchRawDir the emptyDir where it hands the downloads to cdb-fetch.
+const (
+	cdbFetchConfigDir    = "/cdb-fetch-config"
+	cdbFetchRawDir       = "/cdb-fetch-raw"
+	cdbFetchConfigVolume = "cdb-fetch-config"
+	cdbFetchRawVolume    = "cdb-fetch-raw"
+)
+
+// buildCDBFetchInitContainers builds the init containers that deliver the large CDB lists
+// (over the ConfigMap size limit) at pod startup, or nil when there is none:
+//
+//   - cdb-download (the manager image) fetches each list with curl from the config the
+//     operator wrote to the CDBFetchSecretName Secret: the resolved URL and headers stay out
+//     of the pod spec, and curl verifies TLS certificates (busybox wget does not).
+//   - cdb-fetch (busybox) converts each download into the PVC-backed
+//     /var/ossec/etc/lists/<listName>, with the awk programs that reproduce the operator's
+//     converters byte-for-byte.
+//
+// A failed download leaves the existing file intact. Refs are sorted by ListName for a
+// deterministic script (stable pod hash).
+func (b *baseStatefulSetBuilder[T]) buildCDBFetchInitContainers(image string) []corev1.Container {
 	if len(b.cdbListInitFetches) == 0 {
-		return corev1.Container{}, false
+		return nil
 	}
 
 	refs := make([]CDBListInitFetchRef, len(b.cdbListInitFetches))
 	copy(refs, b.cdbListInitFetches)
 	sort.Slice(refs, func(i, j int) bool { return refs[i].ListName < refs[j].ListName })
 
-	var sb strings.Builder
-	sb.WriteString("set -u\n")
-	sb.WriteString("echo 'cdb-fetch: fetching large CDB lists...' >&2\n")
-	for _, ref := range refs {
-		dest := "/var/ossec/etc/lists/" + ref.ListName
-		raw := dest + ".raw"
-		tmp := dest + ".tmp"
-		qDest := shellSingleQuote(dest)
-		qRaw := shellSingleQuote(raw)
-		qTmp := shellSingleQuote(tmp)
+	var download, convert strings.Builder
+	download.WriteString("set -u\n")
+	download.WriteString("echo 'cdb-download: fetching large CDB lists...' >&2\n")
+	convert.WriteString("set -u\n")
+	for i, ref := range refs {
+		raw := shellSingleQuote(fmt.Sprintf("%s/%d.raw", cdbFetchRawDir, i))
+		config := shellSingleQuote(cdbFetchConfigDir + "/" + ref.ConfigKey)
+		qName := shellSingleQuote(ref.ListName)
 		qURL := shellSingleQuote(ref.URL)
-		insecure := ""
-		if ref.Insecure {
-			insecure = "--no-check-certificate "
-		}
-		awkProg := cdbFetchAWKProgram(ref.Format)
-		skip := ref.SkipLines + 1
 
-		fmt.Fprintf(&sb, "mkdir -p \"$(dirname %s)\"\n", qDest)
-		// Fetch the raw body first; only convert and publish on a successful download so a
-		// failed fetch never clobbers a previously written file with empty content.
-		fmt.Fprintf(&sb, "if wget -q %s-O %s %s; then\n", insecure, qRaw, qURL)
-		fmt.Fprintf(&sb, "  tail -n +%d %s | awk '%s' > %s && mv %s %s\n", skip, qRaw, awkProg, qTmp, qTmp, qDest)
-		fmt.Fprintf(&sb, "  rm -f %s\n", qRaw)
-		fmt.Fprintf(&sb, "  printf 'cdb-fetch: wrote %%s\\n' %s >&2\n", qDest)
-		sb.WriteString("else\n")
-		fmt.Fprintf(&sb, "  rm -f %s\n", qRaw)
-		fmt.Fprintf(&sb, "  printf 'cdb-fetch: failed to fetch %%s, keeping existing file\\n' %s >&2\n", qURL)
-		sb.WriteString("fi\n")
+		fmt.Fprintf(&download, "if [ ! -f %s ]; then\n", config)
+		fmt.Fprintf(&download, "  printf 'cdb-download: no fetch config for %%s, keeping existing file\\n' %s >&2\n", qName)
+		fmt.Fprintf(&download, "elif curl -K %s -o %s; then\n", config, raw)
+		fmt.Fprintf(&download, "  printf 'cdb-download: fetched %%s\\n' %s >&2\n", qName)
+		download.WriteString("else\n")
+		fmt.Fprintf(&download, "  rm -f %s\n", raw)
+		fmt.Fprintf(&download, "  printf 'cdb-download: failed to fetch %%s (%%s), keeping existing file\\n' %s %s >&2\n", qName, qURL)
+		download.WriteString("fi\n")
+
+		dest := "/var/ossec/etc/lists/" + ref.ListName
+		qDest := shellSingleQuote(dest)
+		qTmp := shellSingleQuote(dest + ".tmp")
+		fmt.Fprintf(&convert, "if [ -f %s ]; then\n", raw)
+		fmt.Fprintf(&convert, "  mkdir -p \"$(dirname %s)\"\n", qDest)
+		fmt.Fprintf(&convert, "  tail -n +%d %s | awk '%s' > %s && mv %s %s\n",
+			ref.SkipLines+1, raw, cdbFetchAWKProgram(ref.Format), qTmp, qTmp, qDest)
+		fmt.Fprintf(&convert, "  printf 'cdb-fetch: wrote %%s\\n' %s >&2\n", qDest)
+		convert.WriteString("fi\n")
 	}
+	download.WriteString("exit 0")
 
-	return corev1.Container{
-		Name:    constants.InitContainerNameCDBFetch,
-		Image:   constants.ImageBusyboxInit,
-		Command: []string{"/bin/sh", "-c", sb.String()},
-		VolumeMounts: []corev1.VolumeMount{
-			// PVC-backed /var/ossec/etc (writable) so the list files land under etc/lists
-			// and are chowned to 999 by the following fix-ownership init container.
-			{
-				Name:      constants.VolumeNameWazuhData,
-				MountPath: constants.PathWazuhConfig,
-				SubPath:   constants.SubPathWazuhEtc,
+	rawMount := corev1.VolumeMount{Name: cdbFetchRawVolume, MountPath: cdbFetchRawDir}
+	return []corev1.Container{
+		{
+			Name:    constants.InitContainerNameCDBDownload,
+			Image:   image,
+			Command: []string{"/bin/sh", "-c", download.String()},
+			VolumeMounts: []corev1.VolumeMount{
+				{Name: cdbFetchConfigVolume, MountPath: cdbFetchConfigDir, ReadOnly: true},
+				rawMount,
 			},
 		},
-	}, true
+		{
+			Name:    constants.InitContainerNameCDBFetch,
+			Image:   constants.ImageBusyboxInit,
+			Command: []string{"/bin/sh", "-c", convert.String()},
+			VolumeMounts: []corev1.VolumeMount{
+				rawMount,
+				// PVC-backed /var/ossec/etc (writable) so the list files land under etc/lists
+				// and are chowned to 999 by the following fix-ownership init container.
+				{
+					Name:      constants.VolumeNameWazuhData,
+					MountPath: constants.PathWazuhConfig,
+					SubPath:   constants.SubPathWazuhEtc,
+				},
+			},
+		},
+	}
+}
+
+// cdbFetchVolumes returns the volumes of the CDB fetch init containers, or nil when there
+// is no init-fetch list. The Secret is optional so a pod still starts if the operator has
+// not written it yet; cdb-download then keeps the existing files.
+func (b *baseStatefulSetBuilder[T]) cdbFetchVolumes() []corev1.Volume {
+	if len(b.cdbListInitFetches) == 0 {
+		return nil
+	}
+	mode := int32(0o400)
+	optional := true
+	return []corev1.Volume{
+		{
+			Name: cdbFetchConfigVolume,
+			VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
+				SecretName:  constants.CDBFetchSecretName(b.clusterName),
+				DefaultMode: &mode,
+				Optional:    &optional,
+			}},
+		},
+		{Name: cdbFetchRawVolume, VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+	}
 }
 
 // wazuhDataBaseMounts returns the main-container volume mounts common to the master and

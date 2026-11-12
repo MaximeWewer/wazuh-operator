@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -323,7 +324,12 @@ func (r *CDBListReconciler) fetch(ctx context.Context, list *wazuhv1.WazuhCDBLis
 	reqCtx, cancel := context.WithTimeout(ctx, cdbListFetchTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, src.URL, http.NoBody)
+	url, err := r.resolveURL(ctx, list)
+	if err != nil {
+		return "", err
+	}
+	// Errors name src.URL, the template: the resolved URL may carry a credential.
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to build request for %s: %w", src.URL, err)
 	}
@@ -357,30 +363,67 @@ func (r *CDBListReconciler) fetch(ctx context.Context, list *wazuhv1.WazuhCDBLis
 	return string(body), nil
 }
 
-// resolveHeaders reads the header key/value pairs from the referenced Secret.
-func (r *CDBListReconciler) resolveHeaders(ctx context.Context, crNamespace string, ref *wazuhv1.SecretReference) (map[string]string, error) {
+// urlPlaceholder matches a ${KEY} placeholder of a source URL.
+var urlPlaceholder = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+// resolveURL returns the source URL with its ${KEY} placeholders replaced by the keys of
+// the URLSecretRef Secret. A placeholder left unresolved is an error, so a request never
+// goes out with a literal "${KEY}" in it.
+func (r *CDBListReconciler) resolveURL(ctx context.Context, list *wazuhv1.WazuhCDBList) (string, error) {
+	src := list.Spec.Source
+	values := map[string]string{}
+	if src.URLSecretRef != nil {
+		var err error
+		if values, err = r.readSecretKeys(ctx, list.Namespace, src.URLSecretRef, "URL"); err != nil {
+			return "", err
+		}
+	}
+	var missing []string
+	resolved := urlPlaceholder.ReplaceAllStringFunc(src.URL, func(m string) string {
+		key := urlPlaceholder.FindStringSubmatch(m)[1]
+		v, ok := values[key]
+		if !ok {
+			missing = append(missing, key)
+			return m
+		}
+		return v
+	})
+	if len(missing) > 0 {
+		return "", fmt.Errorf("URL placeholders %v of %s have no value in urlSecretRef", missing, src.URL)
+	}
+	return resolved, nil
+}
+
+// readSecretKeys reads the key/value pairs of a Secret referenced by a source; ref.Key
+// limits them to one key. what names the use in errors.
+func (r *CDBListReconciler) readSecretKeys(ctx context.Context, crNamespace string, ref *wazuhv1.SecretReference, what string) (map[string]string, error) {
 	ns := ref.Namespace
 	if ns == "" {
 		ns = crNamespace
 	}
 	secret := &corev1.Secret{}
 	if err := r.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: ns}, secret); err != nil {
-		return nil, fmt.Errorf("failed to get headers secret %s/%s: %w", ns, ref.Name, err)
+		return nil, fmt.Errorf("failed to get %s secret %s/%s: %w", what, ns, ref.Name, err)
 	}
-	headers := make(map[string]string, len(secret.Data))
+	values := make(map[string]string, len(secret.Data))
 	if ref.Key != "" {
-		// Single header whose name is the key.
 		val, ok := secret.Data[ref.Key]
 		if !ok {
 			return nil, fmt.Errorf("key %q not found in secret %s/%s", ref.Key, ns, ref.Name)
 		}
-		headers[ref.Key] = string(val)
-		return headers, nil
+		values[ref.Key] = string(val)
+		return values, nil
 	}
 	for k, v := range secret.Data {
-		headers[k] = string(v)
+		values[k] = string(v)
 	}
-	return headers, nil
+	return values, nil
+}
+
+// resolveHeaders reads the header key/value pairs from the referenced Secret.
+func (r *CDBListReconciler) resolveHeaders(ctx context.Context, crNamespace string, ref *wazuhv1.SecretReference) (map[string]string, error) {
+	// With Key set, a single header whose name is the key.
+	return r.readSecretKeys(ctx, crNamespace, ref, "headers")
 }
 
 // httpClientFor returns an HTTP client honoring the insecure TLS setting.
@@ -448,17 +491,6 @@ func (r *CDBListReconciler) reconcileListForCluster(
 			st.DeliveryMode = ""
 			st.ConfigMapRef = nil
 			st.Message = "inline CDB list exceeds ConfigMap size limit; use a URL source"
-			if r.Recorder != nil {
-				r.Recorder.Event(list, corev1.EventTypeWarning, "ListTooLarge", st.Message)
-			}
-			return nil
-		}
-		// Init-fetch does not support request headers in v1.
-		if list.Spec.Source.HeadersSecretRef != nil {
-			st.Phase = wazuhv1.CDBListPhaseFailed
-			st.DeliveryMode = ""
-			st.ConfigMapRef = nil
-			st.Message = "large CDB lists with HeadersSecretRef are not supported"
 			if r.Recorder != nil {
 				r.Recorder.Event(list, corev1.EventTypeWarning, "ListTooLarge", st.Message)
 			}
@@ -715,6 +747,11 @@ type CDBListConfigMapInfo struct {
 	ContentHash   string // hash of the ConfigMap content (empty for init-fetch lists)
 	TargetNodes   string
 	ListCRName    string
+	// ListCRNamespace is the namespace of the WazuhCDBList, where its source Secrets live.
+	ListCRNamespace string
+	// FetchConfigKey is the key of the init-fetch list's curl config in the
+	// CDBFetchSecretName Secret (empty for ConfigMap-delivered lists).
+	FetchConfigKey string
 
 	// Mode is the delivery mode: "configmap" (baked into ConfigMapName) or "initFetch".
 	Mode string
@@ -771,6 +808,8 @@ func (r *CDBListReconciler) GetCDBListConfigMapsForCluster(ctx context.Context, 
 				FileName:           l.Spec.ListName,
 				TargetNodes:        l.Spec.TargetNodes,
 				ListCRName:         l.Name,
+				ListCRNamespace:    l.Namespace,
+				FetchConfigKey:     cdbFetchConfigKey(l.Spec.ListName),
 				Mode:               cdbDeliveryInitFetch,
 				URL:                url,
 				Format:             format,
@@ -793,13 +832,14 @@ func (r *CDBListReconciler) GetCDBListConfigMapsForCluster(ctx context.Context, 
 			continue
 		}
 		configMaps = append(configMaps, CDBListConfigMapInfo{
-			ConfigMapName: cdbListConfigMapName(l.Namespace, l.Name),
-			FileName:      l.Spec.ListName,
-			Key:           cdbListDataKey(l.Spec.ListName),
-			ContentHash:   l.Status.ContentHash,
-			TargetNodes:   l.Spec.TargetNodes,
-			ListCRName:    l.Name,
-			Mode:          cdbDeliveryConfigMap,
+			ConfigMapName:   cdbListConfigMapName(l.Namespace, l.Name),
+			FileName:        l.Spec.ListName,
+			Key:             cdbListDataKey(l.Spec.ListName),
+			ContentHash:     l.Status.ContentHash,
+			TargetNodes:     l.Spec.TargetNodes,
+			ListCRName:      l.Name,
+			ListCRNamespace: l.Namespace,
+			Mode:            cdbDeliveryConfigMap,
 		})
 		info := configMaps[len(configMaps)-1]
 		if apiUpdatableCDBList(info) {

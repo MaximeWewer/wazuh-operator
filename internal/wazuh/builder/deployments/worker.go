@@ -187,11 +187,9 @@ func (b *WorkerStatefulSetBuilder) Build() *appsv1.StatefulSet {
 		b.buildInitContainer(),
 	)
 
-	// Insert the cdb-fetch init container (large CDB lists) after fix-permissions creates
+	// Insert the cdb-download and cdb-fetch init containers (large CDB lists) after fix-permissions creates
 	// /var/ossec/etc/lists and before fix-ownership chowns the written files to 999.
-	if cdbFetch, ok := b.buildCDBFetchInitContainer(); ok {
-		initContainers = append(initContainers, cdbFetch)
-	}
+	initContainers = append(initContainers, b.buildCDBFetchInitContainers(image)...)
 
 	initContainers = append(initContainers, buildFixOwnershipInitContainer(image, b.buildVolumeMounts()))
 
@@ -355,6 +353,7 @@ func (b *WorkerStatefulSetBuilder) buildVolumes() []corev1.Volume {
 	// Add ConfigMap-backed content volumes (rules, decoders, agent-group files,
 	// integrations, CDB lists, active responses) - shared with the master builder.
 	volumes = append(volumes, b.configMapVolumes()...)
+	volumes = append(volumes, b.cdbFetchVolumes()...)
 
 	return volumes
 }

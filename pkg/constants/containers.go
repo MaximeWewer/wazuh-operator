@@ -50,9 +50,13 @@ const (
 	// active responses, wodles, agentless) missing from their PVC-backed directories.
 	InitContainerNameSeedDefaults = "seed-defaults"
 
-	// InitContainerNameCDBFetch fetches large CDB lists (over the ConfigMap size limit)
-	// directly into the PVC-backed /var/ossec/etc/lists at pod startup.
+	// InitContainerNameCDBFetch converts the large CDB lists (over the ConfigMap size limit)
+	// cdb-download fetched into the PVC-backed /var/ossec/etc/lists at pod startup.
 	InitContainerNameCDBFetch = "cdb-fetch"
+
+	// InitContainerNameCDBDownload downloads the large CDB lists with curl (TLS verified)
+	// for the cdb-fetch init container to convert.
+	InitContainerNameCDBDownload = "cdb-download"
 
 	// InitContainerNameFixOwnership chowns the files written by the earlier init
 	// containers on the manager volumes to the wazuh user (999).
