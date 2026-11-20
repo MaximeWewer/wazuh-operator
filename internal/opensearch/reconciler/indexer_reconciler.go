@@ -3455,6 +3455,16 @@ func (r *IndexerReconciler) checkNodePoolScaleDownDrain(
 
 			return false, nil // Drain complete, proceed with scale-down
 		}
+		// Shards remain on the target pods: the allocation exclusion that moves them off may
+		// be missing (status left by an earlier drain, operator restart, settings reset).
+		// Apply it again and go back to draining instead of waiting forever.
+		if err := r.drainer.StartNodePoolDrain(ctx, targetPods); err != nil {
+			log.Error(err, "Failed to apply the allocation exclusion again", "pool", pool.Name)
+			return true, nil
+		}
+		log.Info("NodePool drain not complete, allocation exclusion applied again", "pool", pool.Name, "targetPods", targetPods)
+		drainStatus.Phase = wazuhv1.DrainPhaseDraining
+		drainStatus.LastTransitionTime = &metav1.Time{Time: time.Now()}
 		return true, nil
 
 	case wazuhv1.DrainPhaseComplete:
