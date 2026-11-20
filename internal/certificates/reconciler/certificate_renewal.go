@@ -69,11 +69,7 @@ func (r *CertificateReconciler) reconcileManagerCerts(ctx context.Context, clust
 // reconcileIndexerCerts reconciles indexer certificates
 // Returns whether the certificates were renewed (true) or already valid (false)
 func (r *CertificateReconciler) reconcileIndexerCerts(ctx context.Context, cluster *wazuhv1.WazuhCluster, caResult *certificates.CAResult, certOpts *certificates.CertificateOptions) (bool, error) {
-	replicas := int32(1)
-	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Replicas > 0 {
-		replicas = cluster.Spec.Indexer.Replicas
-	}
-	sans := certificates.GenerateIndexerNodeSANs(cluster.Name, cluster.Namespace, replicas)
+	sans := certificates.GenerateClusterIndexerSANs(cluster)
 
 	secretName := constants.IndexerCertsName(cluster.Name)
 	return r.reconcileNodeCertWithRenewalStatus(ctx, cluster, secretName, constants.CertComponentIndexer, sans, caResult, certOpts)
@@ -504,6 +500,9 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 
 			// Manager certs must carry the 127.0.0.1 IP SAN; older certs predate it.
 			missingLoopbackIP := isManagerCert && !hasLoopbackIPSAN(certResult.Certificate.IPAddresses)
+			// A pod added since the certificate was issued (scale-up, nodePools) must
+			// verify under its own name: the operator connects to the pods one by one.
+			missingDNS := missingDNSNames(certResult.Certificate.DNSNames, sans)
 
 			// Check for cluster domain mismatch (e.g., after operator upgrade with new domain)
 			if certificates.RequiresDomainRegeneration(certResult.Certificate, secretName, cluster.Namespace, log) {
@@ -516,6 +515,10 @@ func (r *CertificateReconciler) reconcileNodeCertWithRenewalStatus(ctx context.C
 			} else if missingLoopbackIP {
 				log.Info("Node certificate missing required 127.0.0.1 IP SAN, regenerating",
 					"name", secretName, "component", componentName)
+				// Fall through to regenerate certificate
+			} else if len(missingDNS) > 0 {
+				log.Info("Node certificate missing DNS names, regenerating",
+					"name", secretName, "component", componentName, "missing", missingDNS)
 				// Fall through to regenerate certificate
 			} else {
 				// Check if certificate needs renewal due to expiry
@@ -658,4 +661,19 @@ func (r *CertificateReconciler) migrateKeyToPKCS8(ctx context.Context, secret *c
 	}
 	log.Info("Migrated key to PKCS#8 format", "secret", secret.Name)
 	return nil
+}
+
+// missingDNSNames returns the names of want a certificate's DNS SANs do not cover.
+func missingDNSNames(have, want []string) []string {
+	covered := make(map[string]bool, len(have))
+	for _, n := range have {
+		covered[n] = true
+	}
+	var missing []string
+	for _, n := range want {
+		if !covered[n] {
+			missing = append(missing, n)
+		}
+	}
+	return missing
 }

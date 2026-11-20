@@ -22,9 +22,28 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
 
-// GenerateIndexerNodeSANs generates Subject Alternative Names for indexer nodes.
-// Includes service FQDN, headless service wildcard, and individual pod FQDNs.
+// IndexerNode is an indexer pod and the headless Service that gives it its DNS name.
+type IndexerNode struct {
+	Pod     string
+	Service string
+}
+
+// GenerateIndexerNodeSANs generates Subject Alternative Names for the simple-mode indexer
+// nodes <cluster>-indexer-0..replicas-1 (see GenerateIndexerSANs).
 func GenerateIndexerNodeSANs(clusterName, namespace string, replicas int32) []string {
+	headlessService := clusterName + "-indexer-headless"
+	nodes := make([]IndexerNode, 0, replicas)
+	for i := range replicas {
+		nodes = append(nodes, IndexerNode{Pod: fmt.Sprintf("%s-indexer-%d", clusterName, i), Service: headlessService})
+	}
+	return GenerateIndexerSANs(clusterName, namespace, nodes)
+}
+
+// GenerateIndexerSANs generates Subject Alternative Names for the given indexer nodes:
+// the indexer Service, the wildcard of every headless Service the nodes sit behind (one per
+// nodePool in advanced mode), and each node's name and FQDN. The operator connects pod by
+// pod (securityadmin, certificate hot reload), so each pod's FQDN must verify.
+func GenerateIndexerSANs(clusterName, namespace string, nodes []IndexerNode) []string {
 	indexerService := clusterName + "-indexer"
 	headlessService := clusterName + "-indexer-headless"
 
@@ -36,12 +55,15 @@ func GenerateIndexerNodeSANs(clusterName, namespace string, replicas int32) []st
 		dns.ServiceFQDN(indexerService, namespace),
 		dns.WildcardServiceFQDN(headlessService, namespace),
 	}
-
-	// Add individual pod names
-	for i := range replicas {
-		podName := fmt.Sprintf("%s-indexer-%d", clusterName, i)
-		sans = append(sans, podName, dns.PodFQDN(podName, headlessService, namespace))
+	seen := map[string]bool{headlessService: true}
+	for _, n := range nodes {
+		if !seen[n.Service] {
+			seen[n.Service] = true
+			sans = append(sans, dns.WildcardServiceFQDN(n.Service, namespace))
+		}
 	}
-
+	for _, n := range nodes {
+		sans = append(sans, n.Pod, dns.PodFQDN(n.Pod, n.Service, namespace))
+	}
 	return sans
 }

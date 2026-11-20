@@ -440,16 +440,10 @@ func (r *IndexerReconciler) generateIndexerCertificates(ctx context.Context, clu
 	}
 	log.V(1).Info("Generated CA certificate")
 
-	// Determine replicas for SANs
-	replicas := int32(1)
-	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Replicas > 0 {
-		replicas = cluster.Spec.Indexer.Replicas
-	}
-
 	// Generate node certificate with SANs and DN options
 	// CommonName is derived from the cluster name + component (not user-configurable)
 	nodeConfig := certificates.DefaultNodeCertConfig(fmt.Sprintf("%s-indexer", cluster.Name))
-	nodeConfig.DNSNames = certificates.GenerateIndexerNodeSANs(cluster.Name, cluster.Namespace, replicas)
+	nodeConfig.DNSNames = certificates.GenerateClusterIndexerSANs(cluster)
 	nodeConfig.IPAddresses = []net.IP{net.ParseIP("127.0.0.1")}
 	if dnOpts != nil {
 		if dnOpts.Country != "" {

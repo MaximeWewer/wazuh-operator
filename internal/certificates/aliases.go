@@ -26,10 +26,12 @@ import (
 
 	"github.com/go-logr/logr"
 
+	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	certcommon "github.com/MaximeWewer/wazuh-operator/internal/certificates/common"
 	opensearchcerts "github.com/MaximeWewer/wazuh-operator/internal/certificates/opensearch"
 	"github.com/MaximeWewer/wazuh-operator/internal/certificates/sans"
 	wazuhcerts "github.com/MaximeWewer/wazuh-operator/internal/certificates/wazuh"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/topology"
 )
 
 // --- Type aliases from certcommon ---
@@ -270,6 +272,17 @@ func ParseNodeCert(certPEM, keyPEM []byte) (*NodeCertResult, error) {
 // GenerateIndexerNodeSANs generates Subject Alternative Names for indexer nodes
 func GenerateIndexerNodeSANs(clusterName, namespace string, replicas int32) []string {
 	return sans.GenerateIndexerNodeSANs(clusterName, namespace, replicas)
+}
+
+// GenerateClusterIndexerSANs generates Subject Alternative Names for the indexer pods a
+// cluster declares, in simple mode or per nodePool (see topology.IndexerPods).
+func GenerateClusterIndexerSANs(cluster *wazuhv1.WazuhCluster) []string {
+	pods := topology.IndexerPods(cluster)
+	nodes := make([]sans.IndexerNode, 0, len(pods))
+	for _, p := range pods {
+		nodes = append(nodes, sans.IndexerNode{Pod: p.Name, Service: p.Service})
+	}
+	return sans.GenerateIndexerSANs(cluster.Name, cluster.Namespace, nodes)
 }
 
 // --- OpenSearch admin certificate functions ---
