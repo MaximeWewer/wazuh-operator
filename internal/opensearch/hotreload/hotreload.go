@@ -252,32 +252,25 @@ func (h *HotReloader) TriggerHotReload(ctx context.Context, cluster *wazuhv1.Waz
 	case versions.HotReloadAutomatic:
 		result.Supported = true
 		result.RequiresAPICall = false
-		// Check if force API reload is configured
+		// These versions reload certificates themselves (certificates_hot_reload in
+		// opensearch.yml) and do not expose the reload certificates API, which answers
+		// "no handler found for uri": forceAPIReload cannot apply, so ignore it.
 		if h.ShouldForceAPIReload(cluster) {
-			log.Info("Certificate hot reload starting (forced API mode)",
+			log.Info("Ignoring forceAPIReload: this version reloads certificates automatically and has no reload certificates API",
 				"operation", "hot-reload",
 				"component", "indexer",
 				"cluster", cluster.Name,
-				"version", cluster.Spec.Version,
-				"method", "api-call",
-				"forceAPIReload", true)
-			result.RequiresAPICall = true
-			h.emitHotReloadStartedEvent(cluster)
-			h.callReloadCertificatesAPIPerPod(ctx, cluster, result)
-			result.APICallMade = true
-			h.emitHotReloadResultEvent(cluster, result)
-			h.recordHotReloadMetrics(cluster, result, "api-call", time.Since(startTime))
-		} else {
-			log.Info("Certificate hot reload automatic (file-watch mode)",
-				"operation", "hot-reload",
-				"component", "indexer",
-				"cluster", cluster.Name,
-				"version", cluster.Spec.Version,
-				"method", "automatic-file-watch",
-				"apiCallNeeded", false)
-			h.emitHotReloadSkippedEvent(cluster, "automatic reload enabled for version "+cluster.Spec.Version)
-			metrics.RecordHotReloadSuccess(cluster.Name, cluster.Namespace, "indexer", "automatic-file-watch", time.Since(startTime).Seconds())
+				"version", cluster.Spec.Version)
 		}
+		log.Info("Certificate hot reload automatic (file-watch mode)",
+			"operation", "hot-reload",
+			"component", "indexer",
+			"cluster", cluster.Name,
+			"version", cluster.Spec.Version,
+			"method", "automatic-file-watch",
+			"apiCallNeeded", false)
+		h.emitHotReloadSkippedEvent(cluster, "automatic reload enabled for version "+cluster.Spec.Version)
+		metrics.RecordHotReloadSuccess(cluster.Name, cluster.Namespace, "indexer", "automatic-file-watch", time.Since(startTime).Seconds())
 		return result
 
 	case versions.HotReloadWithAPICall:

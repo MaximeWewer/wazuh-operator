@@ -604,9 +604,9 @@ type HotReloadConfig struct {
 	// +kubebuilder:default=true
 	Enabled *bool `json:"enabled,omitempty"`
 
-	// ForceAPIReload forces the operator to call the reload certificates API
-	// even for versions that support automatic reload (OpenSearch >= 2.19)
-	// This can be useful if automatic file-based detection doesn't work reliably
+	// ForceAPIReload forces the operator to call the reload certificates API.
+	// Ignored on versions that reload certificates automatically (Wazuh >= 4.12,
+	// OpenSearch >= 2.19): they do not expose that API.
 	// +optional
 	// +kubebuilder:default=false
 	ForceAPIReload bool `json:"forceAPIReload,omitempty"`

@@ -123,7 +123,7 @@ Certificate hot reload allows updating certificates without pod restarts.
 tls:
   hotReload:
     enabled: true # Enable hot reload
-    forceAPIReload: false # Force API reload even for newer versions
+    forceAPIReload: false # Force the reload API; ignored on Wazuh >= 4.12 (automatic reload, no API)
 ```
 
 > **RBAC Note:** API-based hot reload (Wazuh 4.9.x-4.11.x) requires `pods/exec` permission on the operator ClusterRole. This is included in the default operator RBAC configuration (`config/rbac/role.yaml`).

@@ -117,7 +117,7 @@ The main CRD for deploying a complete Wazuh stack (Manager, Indexer, Dashboard).
 | Field            | Type | Required | Default | Description       |
 | ---------------- | ---- | -------- | ------- | ----------------- |
 | `enabled`        | bool | No       | `true`  | Enable hot reload |
-| `forceAPIReload` | bool | No       | `false` | Force API reload  |
+| `forceAPIReload` | bool | No       | `false` | Force the reload certificates API; ignored on Wazuh >= 4.12 (OpenSearch 2.19+), which reloads automatically and has no such API |
 
 ### MonitoringConfig
 

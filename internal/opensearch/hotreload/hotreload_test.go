@@ -725,3 +725,26 @@ func TestGetHotReloadConfigString(t *testing.T) {
 		})
 	}
 }
+
+// TestTriggerHotReloadIgnoresForceAPIReloadOnAutomaticVersions asserts forceAPIReload makes
+// no API call on a version that reloads certificates automatically: OpenSearch 2.19+
+// exposes no reload certificates API ("no handler found for uri"), so the call could only
+// fail and turn a working hot reload into an indexer restart.
+func TestTriggerHotReloadIgnoresForceAPIReloadOnAutomaticVersions(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = wazuhv1.AddToScheme(scheme)
+	_ = corev1.AddToScheme(scheme)
+	enabled := true
+	cluster := &wazuhv1.WazuhCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "c", Namespace: "ns"},
+		Spec: wazuhv1.WazuhClusterSpec{
+			Version: "4.14.8",
+			TLS:     &wazuhv1.TLSConfig{HotReload: &wazuhv1.HotReloadConfig{Enabled: &enabled, ForceAPIReload: true}},
+		},
+	}
+	h := NewHotReloader(fake.NewClientBuilder().WithScheme(scheme).Build())
+	result := h.TriggerHotReload(context.Background(), cluster)
+	if !result.Supported || result.APICallMade || result.RequiresAPICall || result.Error != nil {
+		t.Errorf("TriggerHotReload = %+v, want an automatic reload without API call", result)
+	}
+}
