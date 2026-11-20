@@ -333,6 +333,15 @@ status:
         replicas: 2
 ```
 
+## Removing a NodePool
+
+Removing a pool from `spec.indexer.nodePools` does not delete its nodes right away: their data is moved to the remaining pools first.
+
+1. Preflight: the cluster must be green, the remaining data nodes must hold all the data within 80% of their `storageSize`, and offer enough data nodes for every index's replicas. While a check fails, the pool keeps running, nothing is moved, and a `NodePoolRemovalBlocked` warning event says why.
+2. The pool's nodes are excluded from shard allocation, and its cluster_manager nodes from voting (`NodePoolDraining` event). A `NodePoolDrainStalled` warning is raised when shards are left and none is moving (disk watermarks, allocation filters).
+3. Once they hold no shard and the cluster is green, the StatefulSet is scaled down (`NodePoolDrained`).
+4. Once its pods are gone, the StatefulSet, headless Service and ConfigMap are deleted and the exclusions lifted (`NodePoolDeleted`). The PVCs are kept: delete them when their data is no longer needed.
+
 ## Migrating Between Simple and Advanced Mode
 
 Switching `spec.indexer` between `replicas` and `nodePools` migrates the running cluster in place, in either direction, without downtime and without a snapshot: the new nodes join the existing OpenSearch cluster and OpenSearch moves the shards to them.
