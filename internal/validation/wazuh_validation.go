@@ -55,7 +55,8 @@ func ValidateWazuhCluster(cluster *wazuhv1.WazuhCluster) field.ErrorList {
 
 	// Validate Indexer if inline mode is used
 	if cluster.Spec.Indexer != nil {
-		if cluster.Spec.Indexer.Replicas < 1 {
+		// Replicas applies to the simple mode; unset means DefaultIndexerReplicas.
+		if cluster.Spec.Indexer.Replicas < 0 {
 			allErrs = append(allErrs, field.Invalid(specPath.Child("indexer").Child("replicas"),
 				cluster.Spec.Indexer.Replicas, "indexer replicas must be at least 1"))
 		}

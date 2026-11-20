@@ -235,8 +235,9 @@ type WazuhIndexerClusterSpec struct {
 	// Number of indexer replicas (simple mode)
 	// Mutually exclusive with NodePools - cannot use both
 	// In simple mode, all nodes have all roles (cluster_manager, data, ingest)
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:default=3
+	// Unset means DefaultIndexerReplicas (3) in simple mode: a CRD default would also be
+	// injected next to nodePools and break advanced mode.
+	// +kubebuilder:validation:Minimum=0
 	Replicas int32 `json:"replicas,omitempty"`
 
 	// NodePools defines multiple node groups with different roles/configs (advanced mode)
@@ -1361,9 +1362,30 @@ func (s *WazuhIndexerClusterSpec) IsAdvancedMode() bool {
 	return len(s.NodePools) > 0
 }
 
-// IsSimpleMode returns true if the indexer is using simple replicas configuration
+// IsSimpleMode returns true if the indexer is using simple replicas configuration (no
+// nodePools), whether or not replicas is set (see EffectiveReplicas).
 func (s *WazuhIndexerClusterSpec) IsSimpleMode() bool {
-	return s.Replicas > 0 && len(s.NodePools) == 0
+	return len(s.NodePools) == 0
+}
+
+// DefaultIndexerReplicas is the indexer node count of the simple mode when replicas is
+// unset. The CRD does not default it (a default would also be injected next to
+// nodePools), and the mutating webhook that does is optional.
+const DefaultIndexerReplicas int32 = 3
+
+// EffectiveReplicas returns the indexer node count of the simple mode: replicas, or
+// DefaultIndexerReplicas when it is unset. Returns 0 in advanced mode (see nodePools).
+func (s *WazuhIndexerClusterSpec) EffectiveReplicas() int32 {
+	if s == nil {
+		return DefaultIndexerReplicas
+	}
+	if s.IsAdvancedMode() {
+		return 0
+	}
+	if s.Replicas > 0 {
+		return s.Replicas
+	}
+	return DefaultIndexerReplicas
 }
 
 // GetTotalReplicas returns total node count across all pools or simple replicas
@@ -1375,7 +1397,7 @@ func (s *WazuhIndexerClusterSpec) GetTotalReplicas() int32 {
 		}
 		return total
 	}
-	return s.Replicas
+	return s.EffectiveReplicas()
 }
 
 // IsHA returns true if the indexer cluster has enough nodes for high availability (3+)

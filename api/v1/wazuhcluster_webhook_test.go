@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -111,5 +112,29 @@ func TestVolumeClaimsChangeWarnings(t *testing.T) {
 	// unchanged -> no warning
 	if w := volumeClaimsChangeWarnings(old, old, "master"); len(w) != 0 {
 		t.Errorf("expected no warning for unchanged claims, got %v", w)
+	}
+}
+
+func TestDefaultIndexerReplicas(t *testing.T) {
+	d := &WazuhClusterCustomDefaulter{}
+
+	simple := &WazuhCluster{Spec: WazuhClusterSpec{Indexer: &WazuhIndexerClusterSpec{}}}
+	if err := d.Default(context.Background(), simple); err != nil {
+		t.Fatal(err)
+	}
+	if simple.Spec.Indexer.Replicas != 3 {
+		t.Errorf("simple mode: replicas = %d, want 3", simple.Spec.Indexer.Replicas)
+	}
+
+	// A stale replicas (e.g. a former CRD default) must not break advanced mode.
+	advanced := &WazuhCluster{Spec: WazuhClusterSpec{Indexer: &WazuhIndexerClusterSpec{
+		Replicas:  3,
+		NodePools: []IndexerNodePoolSpec{{Name: "hot", Replicas: 3}, {Name: "warm", Replicas: 2}},
+	}}}
+	if err := d.Default(context.Background(), advanced); err != nil {
+		t.Fatal(err)
+	}
+	if advanced.Spec.Indexer.Replicas != 0 {
+		t.Errorf("advanced mode: replicas = %d, want 0", advanced.Spec.Indexer.Replicas)
 	}
 }

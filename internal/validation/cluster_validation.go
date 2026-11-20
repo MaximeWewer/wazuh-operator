@@ -56,8 +56,11 @@ func ValidateIndexerSpec(spec *wazuhv1.WazuhIndexerClusterSpec) field.ErrorList 
 
 	specPath := field.NewPath("indexer")
 
-	// Validate replicas
-	if spec.Replicas < 1 {
+	// Replicas applies to the simple mode; unset means DefaultIndexerReplicas.
+	if spec.IsAdvancedMode() {
+		return allErrs
+	}
+	if spec.Replicas < 0 {
 		allErrs = append(allErrs, field.Invalid(specPath.Child("replicas"), spec.Replicas, "indexer replicas must be at least 1"))
 	}
 

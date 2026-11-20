@@ -179,7 +179,8 @@ func TestShouldCreateIndexerPDB(t *testing.T) {
 			expectedCreate: false,
 		},
 		{
-			name: "simple mode with 0 replicas - should NOT create PDB",
+			// Unset replicas means the default 3 nodes (the CRD does not default it).
+			name: "simple mode with unset replicas - should create PDB for the default 3 nodes",
 			cluster: &v1.WazuhCluster{
 				Spec: v1.WazuhClusterSpec{
 					Indexer: &v1.WazuhIndexerClusterSpec{
@@ -187,7 +188,7 @@ func TestShouldCreateIndexerPDB(t *testing.T) {
 					},
 				},
 			},
-			expectedCreate: false,
+			expectedCreate: true,
 		},
 		{
 			name: "advanced mode with multiple nodePools (total 5 replicas) - should create PDB",

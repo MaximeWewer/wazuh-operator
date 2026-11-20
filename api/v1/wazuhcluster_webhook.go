@@ -61,9 +61,14 @@ func (d *WazuhClusterCustomDefaulter) Default(_ context.Context, cluster *WazuhC
 		cluster.Spec.TLS.Enabled = &enabled
 	}
 
-	// Default indexer replicas in simple mode
-	if cluster.Spec.Indexer != nil && !cluster.Spec.Indexer.IsAdvancedMode() && cluster.Spec.Indexer.Replicas == 0 {
-		cluster.Spec.Indexer.Replicas = 3
+	// Default indexer replicas in simple mode; in advanced mode replicas is
+	// meaningless and would fail the replicas/nodePools exclusivity check.
+	if cluster.Spec.Indexer != nil {
+		if cluster.Spec.Indexer.IsAdvancedMode() {
+			cluster.Spec.Indexer.Replicas = 0
+		} else if cluster.Spec.Indexer.Replicas == 0 {
+			cluster.Spec.Indexer.Replicas = DefaultIndexerReplicas
+		}
 	}
 
 	// Default dashboard replicas
@@ -375,10 +380,10 @@ func validateIndexerSpec(spec *WazuhIndexerClusterSpec) ([]string, admission.War
 
 	// Simple mode validation
 	if spec.IsSimpleMode() {
-		if spec.Replicas < 1 {
+		if spec.Replicas < 0 {
 			errors = append(errors, "spec.indexer.replicas: must be at least 1")
 		}
-		if spec.Replicas < 3 {
+		if spec.EffectiveReplicas() < 3 {
 			warnings = append(warnings, "indexer has fewer than 3 replicas; consider 3+ for high availability")
 		}
 	}

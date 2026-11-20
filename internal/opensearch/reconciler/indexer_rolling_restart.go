@@ -89,7 +89,7 @@ func (r *IndexerReconciler) OrchestrateRollingRestart(ctx context.Context, clust
 
 	metrics.SetDrainPhase(cluster.Name, cluster.Namespace, "indexer", metrics.PhaseToValue(constants.DrainPhaseDraining))
 
-	desiredNodes := int(cluster.Spec.Indexer.Replicas)
+	desiredNodes := int(cluster.Spec.Indexer.GetTotalReplicas())
 	healthChecker := NewIndexerHealthChecker(r.osClient, desiredNodes)
 
 	orchestrator := rolling.NewOrchestrator(r.Client)

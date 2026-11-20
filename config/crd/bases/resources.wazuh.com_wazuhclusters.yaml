@@ -22283,13 +22283,14 @@ spec:
                         type: integer
                     type: object
                   replicas:
-                    default: 3
                     description: |-
                       Number of indexer replicas (simple mode)
                       Mutually exclusive with NodePools - cannot use both
                       In simple mode, all nodes have all roles (cluster_manager, data, ingest)
+                      Unset means DefaultIndexerReplicas (3) in simple mode: a CRD default would also be
+                      injected next to nodePools and break advanced mode.
                     format: int32
-                    minimum: 1
+                    minimum: 0
                     type: integer
                   repositoryPlugins:
                     description: |-

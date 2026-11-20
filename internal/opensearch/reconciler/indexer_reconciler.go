@@ -513,10 +513,7 @@ func (r *IndexerReconciler) generateIndexerCertificates(ctx context.Context, clu
 // reconcileConfigMap reconciles the indexer ConfigMap
 func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
 	// Determine replicas
-	replicas := int32(1)
-	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Replicas > 0 {
-		replicas = cluster.Spec.Indexer.Replicas
-	}
+	replicas := cluster.Spec.Indexer.EffectiveReplicas()
 
 	// Build DN options from WazuhCluster TLS config
 	// Note: CommonName is not included as it's auto-generated per certificate type
@@ -755,9 +752,7 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 	}
 
 	if cluster.Spec.Indexer != nil {
-		if cluster.Spec.Indexer.Replicas > 0 {
-			stsBuilder.WithReplicas(cluster.Spec.Indexer.Replicas)
-		}
+		stsBuilder.WithReplicas(cluster.Spec.Indexer.EffectiveReplicas())
 		if cluster.Spec.Indexer.Resources != nil {
 			stsBuilder.WithResources(cluster.Spec.Indexer.Resources)
 		}
@@ -897,10 +892,7 @@ func (r *IndexerReconciler) reconcileStatefulSetWithCertHash(ctx context.Context
 	}
 
 	// Check if replicas changed
-	var desiredReplicas int32
-	if cluster.Spec.Indexer != nil {
-		desiredReplicas = cluster.Spec.Indexer.Replicas
-	}
+	desiredReplicas := cluster.Spec.Indexer.EffectiveReplicas()
 	if found.Spec.Replicas != nil && *found.Spec.Replicas != desiredReplicas {
 		log.Info("Updating Indexer StatefulSet due to replica count change",
 			"name", sts.Name,
@@ -1075,9 +1067,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 	imagePullSecrets := cluster.Spec.ImagePullSecrets
 
 	if cluster.Spec.Indexer != nil {
-		if cluster.Spec.Indexer.Replicas > 0 {
-			replicas = cluster.Spec.Indexer.Replicas
-		}
+		replicas = cluster.Spec.Indexer.EffectiveReplicas()
 		resources = cluster.Spec.Indexer.Resources
 		if cluster.Spec.Indexer.StorageSize != "" {
 			storageSize = cluster.Spec.Indexer.StorageSize
@@ -1207,9 +1197,7 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 	}
 
 	if cluster.Spec.Indexer != nil {
-		if cluster.Spec.Indexer.Replicas > 0 {
-			stsBuilder.WithReplicas(replicas)
-		}
+		stsBuilder.WithReplicas(replicas)
 		if resources != nil {
 			stsBuilder.WithResources(resources)
 		}
@@ -1533,10 +1521,7 @@ func (r *IndexerReconciler) GetStatus(ctx context.Context, cluster *wazuhv1.Wazu
 	}
 
 	// Get desired replicas from the spec
-	desiredReplicas := int32(0)
-	if cluster.Spec.Indexer != nil {
-		desiredReplicas = cluster.Spec.Indexer.Replicas
-	}
+	desiredReplicas := cluster.Spec.Indexer.GetTotalReplicas()
 
 	// Record OpenSearch node metrics
 	metrics.SetOpenSearchNodes(cluster.Name, cluster.Namespace, "ready", int(sts.Status.ReadyReplicas))
