@@ -485,22 +485,23 @@ func (h *HotReloader) getPodsForCertType(cluster *wazuhv1.WazuhCluster, certType
 	return pods, nil
 }
 
-// buildPodURL builds the HTTPS URL for a given pod
+// buildPodURL builds the HTTPS URL for a given pod, through the headless Service that gives
+// it its DNS name: the indexer pod's own (per nodePool in advanced mode), or the manager
+// pod's StatefulSet headless Service (<cluster>-manager-master|worker-headless).
 func (h *HotReloader) buildPodURL(cluster *wazuhv1.WazuhCluster, podName string) string {
-	// Determine the service type based on pod name
-	// Uses dns.PodFQDN for proper cluster domain support
-	if strings.Contains(podName, "-indexer-") {
-		headlessService := fmt.Sprintf("%s-indexer-headless", cluster.Name)
-		return fmt.Sprintf("https://%s:%d",
-			dns.PodFQDN(podName, headlessService, cluster.Namespace), constants.PortIndexerREST)
-	}
 	if strings.Contains(podName, "-manager-") {
-		headlessService := fmt.Sprintf("%s-manager-headless", cluster.Name)
+		// A StatefulSet pod is <statefulset>-<ordinal>.
+		sts := podName[:strings.LastIndex(podName, "-")]
 		return fmt.Sprintf("https://%s:%d",
-			dns.PodFQDN(podName, headlessService, cluster.Namespace), constants.PortManagerAPI)
+			dns.PodFQDN(podName, sts+"-headless", cluster.Namespace), constants.PortManagerAPI)
 	}
-	// Default to indexer pattern
-	headlessService := fmt.Sprintf("%s-indexer-headless", cluster.Name)
+	headlessService := constants.IndexerHeadlessName(cluster.Name)
+	for _, pod := range topology.IndexerPods(cluster) {
+		if pod.Name == podName {
+			headlessService = pod.Service
+			break
+		}
+	}
 	return fmt.Sprintf("https://%s:%d",
 		dns.PodFQDN(podName, headlessService, cluster.Namespace), constants.PortIndexerREST)
 }

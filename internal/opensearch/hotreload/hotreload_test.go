@@ -355,39 +355,36 @@ func TestBuildPodURL(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = wazuhv1.AddToScheme(scheme)
 
-	cluster := &wazuhv1.WazuhCluster{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster",
-			Namespace: "default",
-		},
+	simple := &wazuhv1.WazuhCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cluster", Namespace: "default"},
+	}
+	pools := &wazuhv1.WazuhCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-cluster", Namespace: "default"},
+		Spec: wazuhv1.WazuhClusterSpec{Indexer: &wazuhv1.WazuhIndexerClusterSpec{NodePools: []wazuhv1.IndexerNodePoolSpec{
+			{Name: "hot", Replicas: 3}, {Name: "warm", Replicas: 2},
+		}}},
 	}
 
-	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-	h := &HotReloader{
-		Client: fakeClient,
-	}
+	h := &HotReloader{Client: fake.NewClientBuilder().WithScheme(scheme).Build()}
 
 	tests := []struct {
+		cluster  *wazuhv1.WazuhCluster
 		podName  string
 		expected string
 	}{
-		{
-			podName:  "test-cluster-indexer-0",
-			expected: "https://test-cluster-indexer-0.test-cluster-indexer-headless.default.svc.cluster.local:9200",
-		},
-		{
-			podName:  "test-cluster-manager-master-0",
-			expected: "https://test-cluster-manager-master-0.test-cluster-manager-headless.default.svc.cluster.local:55000",
-		},
-		{
-			podName:  "test-cluster-manager-workers-1",
-			expected: "https://test-cluster-manager-workers-1.test-cluster-manager-headless.default.svc.cluster.local:55000",
-		},
+		{simple, "test-cluster-indexer-0",
+			"https://test-cluster-indexer-0.test-cluster-indexer-headless.default.svc.cluster.local:9200"},
+		{pools, "test-cluster-indexer-warm-1",
+			"https://test-cluster-indexer-warm-1.test-cluster-indexer-warm-headless.default.svc.cluster.local:9200"},
+		{simple, "test-cluster-manager-master-0",
+			"https://test-cluster-manager-master-0.test-cluster-manager-master-headless.default.svc.cluster.local:55000"},
+		{simple, "test-cluster-manager-worker-1",
+			"https://test-cluster-manager-worker-1.test-cluster-manager-worker-headless.default.svc.cluster.local:55000"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.podName, func(t *testing.T) {
-			got := h.buildPodURL(cluster, tt.podName)
+			got := h.buildPodURL(tt.cluster, tt.podName)
 			if got != tt.expected {
 				t.Errorf("buildPodURL(%s) = %s, want %s", tt.podName, got, tt.expected)
 			}
