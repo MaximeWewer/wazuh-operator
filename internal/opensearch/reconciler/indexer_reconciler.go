@@ -505,11 +505,11 @@ func (r *IndexerReconciler) generateIndexerCertificates(ctx context.Context, clu
 	}, nil
 }
 
-// reconcileConfigMap reconciles the indexer ConfigMap
-func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
-	// Determine replicas
-	replicas := cluster.Spec.Indexer.EffectiveReplicas()
-
+// securityDNs returns the plugins.security authcz.admin_dn and nodes_dn of the cluster's
+// indexer nodes, "" for the defaults: the subjects of the actual admin and node
+// certificates, else the DN options of spec.tls.certConfig. Shared by the simple mode and
+// the nodePools, whose nodes use the same certificates and must accept each other.
+func (r *IndexerReconciler) securityDNs(ctx context.Context, cluster *wazuhv1.WazuhCluster) (adminDN, nodesDN string) {
 	// Build DN options from WazuhCluster TLS config
 	// Note: CommonName is not included as it's auto-generated per certificate type
 	var dnOpts *certificates.DNOptions
@@ -537,6 +537,21 @@ func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *waz
 	if optsFromCert, err := r.dnOptionsFromAdminCertSecret(ctx, cluster.Name, cluster.Namespace); err == nil && optsFromCert != nil {
 		adminDNOpts = optsFromCert
 	}
+	if adminDNOpts != nil {
+		adminDN = certificates.AdminDN(*adminDNOpts)
+	}
+	if nodesDNOpts != nil {
+		nodesDN = certificates.NodesDN(*nodesDNOpts)
+	}
+	return adminDN, nodesDN
+}
+
+// reconcileConfigMap reconciles the indexer ConfigMap
+func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	// Determine replicas
+	replicas := cluster.Spec.Indexer.EffectiveReplicas()
+
+	adminDN, nodesDN := r.securityDNs(ctx, cluster)
 
 	// Build opensearch.yml content (version-aware configuration with per-certificate DNs)
 	cfg := config.DefaultOpenSearchConfig(cluster.Name, cluster.Namespace)
@@ -545,11 +560,11 @@ func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *waz
 		cfg.WithWazuhVersion(cluster.Spec.Version)
 		cfg.CertPath = constants.IndexerCertsDir(cluster.Spec.Version)
 	}
-	if adminDNOpts != nil {
-		cfg.AdminDN = certificates.AdminDN(*adminDNOpts)
+	if adminDN != "" {
+		cfg.AdminDN = adminDN
 	}
-	if nodesDNOpts != nil {
-		cfg.NodesDN = certificates.NodesDN(*nodesDNOpts)
+	if nodesDN != "" {
+		cfg.NodesDN = nodesDN
 	}
 
 	// When an OpenSearchAuthConfig enables Kerberos for this cluster, inject the three static
@@ -2991,6 +3006,8 @@ func (r *IndexerReconciler) reconcileNodePoolConfigMap(
 		InitialMasterNodes: initialMasterNodes,
 		WazuhVersion:       cluster.Spec.Version,
 	}
+	// The same DNs as the simple mode: every indexer node presents the same certificates.
+	params.AdminDN, params.NodesDN = r.securityDNs(ctx, cluster)
 
 	// When Kerberos auth is enabled for this cluster, inject the three static opensearch.yml
 	// settings (relative *_filepath values under <config>/kerberos).

@@ -317,6 +317,10 @@ type NodePoolConfigParams struct {
 	DiscoverySeedHosts []string
 	InitialMasterNodes []string
 	WazuhVersion       string
+	// AdminDN and NodesDN override plugins.security.authcz.admin_dn and nodes_dn when set
+	// (the subjects of the cluster's certificates, as in simple mode).
+	AdminDN string
+	NodesDN string
 	// CustomSettings are extra plugins.security.* (or other) opensearch.yml keys injected
 	// verbatim, e.g. the static Kerberos settings when Kerberos auth is enabled.
 	CustomSettings map[string]string
@@ -349,6 +353,13 @@ func BuildNodePoolConfig(params NodePoolConfigParams) string {
 	if params.WazuhVersion != "" {
 		config.WithWazuhVersion(params.WazuhVersion)
 		config.CertPath = constants.IndexerCertsDir(params.WazuhVersion)
+	}
+
+	if params.AdminDN != "" {
+		config.AdminDN = params.AdminDN
+	}
+	if params.NodesDN != "" {
+		config.NodesDN = params.NodesDN
 	}
 
 	// Inject any extra opensearch.yml settings (e.g. static Kerberos settings)
