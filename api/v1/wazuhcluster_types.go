@@ -1078,6 +1078,11 @@ type WazuhClusterStatus struct {
 	// +optional
 	VolumeExpansion *VolumeExpansionStatus `json:"volumeExpansion,omitempty"`
 
+	// IndexerMigration tracks a live migration of the indexer between the simple mode and
+	// the nodePools, in either direction, started by switching spec.indexer between them.
+	// +optional
+	IndexerMigration *IndexerMigrationStatus `json:"indexerMigration,omitempty"`
+
 	// Drain tracks drain operation status for scale-down operations
 	// +optional
 	Drain *DrainStatus `json:"drain,omitempty"`
@@ -1460,4 +1465,64 @@ func (s *WazuhIndexerClusterSpec) GetNodePoolByName(name string) *IndexerNodePoo
 		}
 	}
 	return nil
+}
+
+// IndexerTopology names an indexer topology mode.
+// +kubebuilder:validation:Enum=simple;nodePools
+type IndexerTopology string
+
+const (
+	// IndexerTopologySimple is one StatefulSet of all-role nodes (spec.indexer.replicas).
+	IndexerTopologySimple IndexerTopology = "simple"
+	// IndexerTopologyNodePools is one StatefulSet per spec.indexer.nodePools entry.
+	IndexerTopologyNodePools IndexerTopology = "nodePools"
+)
+
+// IndexerMigrationPhase is a step of an indexer topology migration.
+// +kubebuilder:validation:Enum=Blocked;Joining;TransferringClusterManager;Draining;Removing;Completed
+type IndexerMigrationPhase string
+
+const (
+	// IndexerMigrationBlocked: a preflight check fails; nothing has been changed for it.
+	IndexerMigrationBlocked IndexerMigrationPhase = "Blocked"
+	// IndexerMigrationJoining: the target nodes are created and join the existing cluster.
+	IndexerMigrationJoining IndexerMigrationPhase = "Joining"
+	// IndexerMigrationTransferringClusterManager: the source cluster-manager nodes leave the
+	// voting configuration, so a target node becomes the elected cluster manager.
+	IndexerMigrationTransferringClusterManager IndexerMigrationPhase = "TransferringClusterManager"
+	// IndexerMigrationDraining: the source nodes are excluded from shard allocation and
+	// their shards relocate to the target nodes.
+	IndexerMigrationDraining IndexerMigrationPhase = "Draining"
+	// IndexerMigrationRemoving: the drained source StatefulSets are scaled down and deleted.
+	IndexerMigrationRemoving IndexerMigrationPhase = "Removing"
+	// IndexerMigrationCompleted: only the target topology remains.
+	IndexerMigrationCompleted IndexerMigrationPhase = "Completed"
+)
+
+// IndexerMigrationStatus is the state of a live indexer topology migration.
+type IndexerMigrationStatus struct {
+	// From is the topology being replaced.
+	From IndexerTopology `json:"from"`
+	// To is the topology of spec.indexer.
+	To IndexerTopology `json:"to"`
+	// Phase is the current step.
+	Phase IndexerMigrationPhase `json:"phase"`
+	// Message explains the phase: the failed preflight checks while Blocked, the progress
+	// otherwise.
+	// +optional
+	Message string `json:"message,omitempty"`
+	// SourceNodes are the indexer pods (OpenSearch nodes) of the topology being replaced.
+	// +optional
+	SourceNodes []string `json:"sourceNodes,omitempty"`
+	// StartTime is when the migration started.
+	// +optional
+	StartTime *metav1.Time `json:"startTime,omitempty"`
+	// LastTransitionTime is when the phase last changed.
+	// +optional
+	LastTransitionTime *metav1.Time `json:"lastTransitionTime,omitempty"`
+}
+
+// Active reports whether a migration is under way (not completed).
+func (m *IndexerMigrationStatus) Active() bool {
+	return m != nil && m.Phase != IndexerMigrationCompleted
 }

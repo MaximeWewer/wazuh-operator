@@ -39843,6 +39843,57 @@ spec:
                     - advanced
                     type: string
                 type: object
+              indexerMigration:
+                description: |-
+                  IndexerMigration tracks a live migration of the indexer between the simple mode and
+                  the nodePools, in either direction, started by switching spec.indexer between them.
+                properties:
+                  from:
+                    description: From is the topology being replaced.
+                    enum:
+                    - simple
+                    - nodePools
+                    type: string
+                  lastTransitionTime:
+                    description: LastTransitionTime is when the phase last changed.
+                    format: date-time
+                    type: string
+                  message:
+                    description: |-
+                      Message explains the phase: the failed preflight checks while Blocked, the progress
+                      otherwise.
+                    type: string
+                  phase:
+                    description: Phase is the current step.
+                    enum:
+                    - Blocked
+                    - Joining
+                    - TransferringClusterManager
+                    - Draining
+                    - Removing
+                    - Completed
+                    type: string
+                  sourceNodes:
+                    description: SourceNodes are the indexer pods (OpenSearch nodes)
+                      of the topology being replaced.
+                    items:
+                      type: string
+                    type: array
+                  startTime:
+                    description: StartTime is when the migration started.
+                    format: date-time
+                    type: string
+                  to:
+                    description: To is the topology of spec.indexer.
+                    enum:
+                    - simple
+                    - nodePools
+                    type: string
+                required:
+                - from
+                - phase
+                - to
+                type: object
               lastUpdateTime:
                 description: Last update time
                 format: date-time

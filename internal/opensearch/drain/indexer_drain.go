@@ -20,8 +20,8 @@ package drain
 import (
 	"context"
 	"fmt"
-	"strings"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"

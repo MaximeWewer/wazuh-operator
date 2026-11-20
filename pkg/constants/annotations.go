@@ -93,6 +93,12 @@ const (
 	// container) that change the template without any CR change.
 	AnnotationPodTemplateHash = "wazuh.com/pod-template-hash"
 
+	// AnnotationIndexerJoinExistingCluster marks the opensearch.yml ConfigMap of indexer
+	// nodes a topology migration created next to a running cluster: they join it (no
+	// cluster.initial_master_nodes, the shared headless Service as seed host) and keep that
+	// configuration once the migration ends, so it does not change and restart them.
+	AnnotationIndexerJoinExistingCluster = "wazuh.com/indexer-join-existing-cluster"
+
 	// AnnotationConfigHash stores the hash of ConfigMap/Secret content for pod restart detection
 	AnnotationConfigHash = "wazuh.com/config-hash"
 

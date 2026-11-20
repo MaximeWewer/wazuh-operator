@@ -333,15 +333,65 @@ status:
         replicas: 2
 ```
 
-## Migration Considerations
+## Migrating Between Simple and Advanced Mode
 
-**Important**: Transitioning between simple and advanced mode is not supported. If you need to change modes:
+Switching `spec.indexer` between `replicas` and `nodePools` migrates the running cluster in place, in either direction, without downtime and without a snapshot: the new nodes join the existing OpenSearch cluster and OpenSearch moves the shards to them.
 
-1. Back up your data
-2. Create a new cluster with the desired topology
-3. Restore data to the new cluster
-4. Update applications to point to the new cluster
-5. Decommission the old cluster
+```yaml
+# Before: simple mode
+spec:
+  indexer:
+    replicas: 1
+    storageSize: 50Gi
+
+# After: replace replicas by nodePools
+spec:
+  indexer:
+    nodePools:
+      - name: hot
+        replicas: 3
+        roles: [cluster_manager, data, ingest]
+        storageSize: 100Gi
+```
+
+The operator then runs these phases, reported in `status.indexerMigration` (and as events on the WazuhCluster):
+
+| Phase | What happens |
+|-------|--------------|
+| `Blocked` | Preflight checks run; **nothing is changed** while one fails. The failures are in `status.indexerMigration.message` and a `IndexerMigrationBlocked` warning event, and are checked again every 30 seconds |
+| `Joining` | The new StatefulSets are created. Their nodes join the running cluster: they have no `cluster.initial_master_nodes` and use the cluster-wide headless Service as seed host |
+| `TransferringClusterManager` | The old cluster_manager nodes are excluded from voting (`_cluster/voting_config_exclusions`), so a new node is elected and the quorum survives their removal |
+| `Draining` | The old nodes are excluded from shard allocation (`cluster.routing.allocation.exclude._name`) and their shards relocate to the new nodes |
+| `Removing` | Once the old nodes hold no shard and the cluster is green, their StatefulSets are scaled down |
+| `Completed` | The old StatefulSets (and old nodePool Services/ConfigMaps) are deleted and the exclusions lifted |
+
+```bash
+kubectl get wazuhcluster <name> -o jsonpath='{.status.indexerMigration}' | jq
+kubectl get events --field-selector involvedObject.name=<name> | grep IndexerMigration
+```
+
+### Preflight checks
+
+The migration starts only when all of these pass:
+
+- The old StatefulSets have all their pods ready, and every running indexer pod belongs to the cluster the operator reaches (nodes that bootstrapped a separate cluster are refused).
+- The cluster is green, with no relocating, initializing or unassigned shard.
+- The new topology declares at least one data node and one cluster_manager node.
+- **Disk**: all the data, replicas included, fits within 80% of the new data nodes' `storageSize` (below OpenSearch's default 85% low disk watermark), and the largest shard fits on one new data node.
+- Every index's `number_of_replicas` (indices without `auto_expand_replicas`) can be placed: replicas + 1 ≤ new data nodes.
+- No index has an `index.routing.allocation.require` or `include` filter, which the new nodes may not match and which would stop the drain.
+- No voting configuration exclusion and no `cluster.routing.allocation.exclude._name` is set, and `cluster.routing.allocation.enable` allows allocation.
+
+### Rolling back
+
+Switching `spec.indexer` back during a migration reverses it: the exclusions are lifted, and a migration back to the declared topology starts (with its own preflight checks). Data is never removed before it has been moved: until `Removing`, the old nodes still hold every shard they have not handed over.
+
+### After the migration
+
+- The volumes (PVCs) of the removed nodes are kept. Delete them once their data is no longer needed.
+- Existing indices are spread over all the data nodes. To place them on `hot`/`warm` pools, set node attributes on the pools and an ISM policy that sets `index.routing.allocation.require.<attribute>` (see [Shard Allocation Awareness](#shard-allocation-awareness)).
+- The nodes created by the migration keep their "join" configuration (ConfigMap annotation `wazuh.com/indexer-join-existing-cluster`), so the end of the migration does not restart them.
+- During the migration the indexer certificate covers the pods of both topologies.
 
 ## Troubleshooting
 

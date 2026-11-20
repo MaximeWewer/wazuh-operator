@@ -83,6 +83,8 @@ type IndexerReconciler struct {
 	drainer *drain.IndexerDrainerImpl
 	// osClient is the OpenSearch API client for drain operations
 	osClient *api.Client
+	// fixedOSClient, when set (tests), is used instead of a client from the factory.
+	fixedOSClient *api.Client
 }
 
 // NewIndexerReconciler creates a new IndexerReconciler
@@ -505,11 +507,11 @@ func (r *IndexerReconciler) generateIndexerCertificates(ctx context.Context, clu
 	}, nil
 }
 
-// securityDNs returns the plugins.security authcz.admin_dn and nodes_dn of the cluster's
+// securityDNS returns the plugins.security authcz.admin_dn and nodes_dn of the cluster's
 // indexer nodes, "" for the defaults: the subjects of the actual admin and node
 // certificates, else the DN options of spec.tls.certConfig. Shared by the simple mode and
 // the nodePools, whose nodes use the same certificates and must accept each other.
-func (r *IndexerReconciler) securityDNs(ctx context.Context, cluster *wazuhv1.WazuhCluster) (adminDN, nodesDN string) {
+func (r *IndexerReconciler) securityDNS(ctx context.Context, cluster *wazuhv1.WazuhCluster) (adminDN, nodesDN string) {
 	// Build DN options from WazuhCluster TLS config
 	// Note: CommonName is not included as it's auto-generated per certificate type
 	var dnOpts *certificates.DNOptions
@@ -551,11 +553,15 @@ func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *waz
 	// Determine replicas
 	replicas := cluster.Spec.Indexer.EffectiveReplicas()
 
-	adminDN, nodesDN := r.securityDNs(ctx, cluster)
+	adminDN, nodesDN := r.securityDNS(ctx, cluster)
 
 	// Build opensearch.yml content (version-aware configuration with per-certificate DNs)
 	cfg := config.DefaultOpenSearchConfig(cluster.Name, cluster.Namespace)
 	cfg.WithReplicas(replicas)
+	join := r.joinsExistingCluster(ctx, cluster, wazuhv1.IndexerTopologySimple, constants.IndexerConfigName(cluster.Name))
+	if join {
+		cfg.DiscoverySeedHosts, cfg.InitialMasterNodes = joinDiscovery(cluster, cfg.DiscoverySeedHosts), nil
+	}
 	if cluster.Spec.Version != "" {
 		cfg.WithWazuhVersion(cluster.Spec.Version)
 		cfg.CertPath = constants.IndexerCertsDir(cluster.Spec.Version)
@@ -581,6 +587,9 @@ func (r *IndexerReconciler) reconcileConfigMap(ctx context.Context, cluster *waz
 	configBuilder := configmaps.NewIndexerConfigMapBuilder(cluster.Name, cluster.Namespace)
 	configBuilder.WithOpenSearchYML(opensearchYML)
 	configMap := configBuilder.Build()
+	if join {
+		markJoinsExistingCluster(configMap)
+	}
 
 	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {
 		return fmt.Errorf("failed to set controller reference for indexer configmap: %w", err)
@@ -1019,6 +1028,13 @@ func (r *IndexerReconciler) ReconcileNonBlocking(ctx context.Context, cluster *w
 	// Reconcile Secrets
 	if err := r.reconcileSecrets(ctx, cluster); err != nil {
 		return IndexerReconcileResult{Error: fmt.Errorf("failed to reconcile indexer secrets: %w", err)}
+	}
+
+	// A topology migration blocked by its preflight checks leaves the running indexer as it
+	// is: the declared topology is not created next to it.
+	if m := cluster.Status.IndexerMigration; m.Active() && m.Phase == wazuhv1.IndexerMigrationBlocked {
+		log.Info("Indexer topology migration blocked, leaving the indexer resources as they are", "reason", m.Message)
+		return IndexerReconcileResult{}
 	}
 
 	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.IsAdvancedMode() {
@@ -1890,6 +1906,10 @@ func (r *IndexerReconciler) verifyDrainComplete(ctx context.Context, cluster *wa
 
 // ensureOpenSearchClient creates or reuses an OpenSearch client
 func (r *IndexerReconciler) ensureOpenSearchClient(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	if r.fixedOSClient != nil {
+		r.osClient = r.fixedOSClient
+		return nil
+	}
 	factory := r.getClientFactory()
 	newClient, err := factory.GetClientForCluster(ctx, cluster)
 	if err != nil {
@@ -3007,7 +3027,12 @@ func (r *IndexerReconciler) reconcileNodePoolConfigMap(
 		WazuhVersion:       cluster.Spec.Version,
 	}
 	// The same DNs as the simple mode: every indexer node presents the same certificates.
-	params.AdminDN, params.NodesDN = r.securityDNs(ctx, cluster)
+	params.AdminDN, params.NodesDN = r.securityDNS(ctx, cluster)
+	join := r.joinsExistingCluster(ctx, cluster, wazuhv1.IndexerTopologyNodePools,
+		constants.IndexerNodePoolConfigName(cluster.Name, pool.Name))
+	if join {
+		params.DiscoverySeedHosts, params.InitialMasterNodes = joinDiscovery(cluster, discoveryHosts), nil
+	}
 
 	// When Kerberos auth is enabled for this cluster, inject the three static opensearch.yml
 	// settings (relative *_filepath values under <config>/kerberos).
@@ -3031,6 +3056,9 @@ func (r *IndexerReconciler) reconcileNodePoolConfigMap(
 		configBuilder.WithVersion(cluster.Spec.Version)
 	}
 	configMap := configBuilder.Build()
+	if join {
+		markJoinsExistingCluster(configMap)
+	}
 
 	// Set controller reference
 	if err := controllerutil.SetControllerReference(cluster, configMap, r.Scheme); err != nil {

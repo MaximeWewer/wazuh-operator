@@ -104,10 +104,9 @@ func (v *WazuhClusterCustomValidator) ValidateUpdate(_ context.Context, oldClust
 	}
 
 	// Validate update-specific rules
-	updateWarnings, updateErr := v.validateUpdate(oldCluster, newCluster)
-	warnings = append(warnings, updateWarnings...)
+	warnings = append(warnings, v.validateUpdate(oldCluster, newCluster)...)
 
-	return warnings, updateErr
+	return warnings, nil
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type.
@@ -180,18 +179,16 @@ func (v *WazuhClusterCustomValidator) validateInlineMode(cluster *WazuhCluster) 
 	return errors, warnings
 }
 
-// validateUpdate validates update-specific rules
-func (v *WazuhClusterCustomValidator) validateUpdate(oldCluster, newCluster *WazuhCluster) (admission.Warnings, error) {
+// validateUpdate returns the warnings of update-specific rules
+func (v *WazuhClusterCustomValidator) validateUpdate(oldCluster, newCluster *WazuhCluster) admission.Warnings {
 	var warnings admission.Warnings
 
-	// Prevent indexer topology mode transition (simple <-> advanced)
-	if oldCluster.Spec.Indexer != nil && newCluster.Spec.Indexer != nil {
-		if oldCluster.Spec.Indexer.IsSimpleMode() && newCluster.Spec.Indexer.IsAdvancedMode() {
-			return warnings, fmt.Errorf("spec.indexer: cannot transition from simple mode to advanced mode; create a new cluster for the desired topology")
-		}
-		if oldCluster.Spec.Indexer.IsAdvancedMode() && newCluster.Spec.Indexer.IsSimpleMode() {
-			return warnings, fmt.Errorf("spec.indexer: cannot transition from advanced mode to simple mode; create a new cluster for the desired topology")
-		}
+	// Switching the indexer topology (simple <-> nodePools) starts a live migration.
+	if oldCluster.Spec.Indexer != nil && newCluster.Spec.Indexer != nil &&
+		oldCluster.Spec.Indexer.IsAdvancedMode() != newCluster.Spec.Indexer.IsAdvancedMode() {
+		warnings = append(warnings, "spec.indexer: switching between replicas and nodePools migrates the indexer live: "+
+			"the new nodes join the cluster, take its shards over, then the old nodes are removed (their volumes are kept). "+
+			"Nothing changes until the preflight checks pass (green cluster, enough disk on the new data nodes): follow status.indexerMigration")
 	}
 
 	// Warn about scale-down operations
@@ -209,7 +206,7 @@ func (v *WazuhClusterCustomValidator) validateUpdate(oldCluster, newCluster *Waz
 		warnings = append(warnings, volumeClaimsChangeWarnings(oldCluster.Spec.Manager.Workers.VolumeClaims, newCluster.Spec.Manager.Workers.VolumeClaims, "workers")...)
 	}
 
-	return warnings, nil
+	return warnings
 }
 
 // volumeClaimsChangeWarnings warns about per-path PVC layout changes that recreate the

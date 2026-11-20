@@ -23,6 +23,8 @@ package topology
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -52,9 +54,48 @@ func (p IndexerPod) FQDN(namespace string) string {
 	return dns.PodFQDN(p.Name, p.Service, namespace)
 }
 
-// IndexerPods returns the indexer pods the cluster spec declares, in StatefulSet order:
-// the simple-mode pods, or each nodePool's pods in declaration order.
+// IndexerPods returns the indexer pods of the cluster, in StatefulSet order: the pods the
+// spec declares (the simple-mode pods, or each nodePool's pods in declaration order), then
+// during a topology migration the pods of the topology being replaced
+// (status.indexerMigration.sourceNodes). While the migration is blocked by its preflight
+// checks, the declared pods are not created: only the source pods are returned.
 func IndexerPods(cluster *wazuhv1.WazuhCluster) []IndexerPod {
+	m := cluster.Status.IndexerMigration
+	if !m.Active() {
+		return DeclaredPods(cluster)
+	}
+	source := migrationSourcePods(cluster.Name, m)
+	if m.Phase == wazuhv1.IndexerMigrationBlocked {
+		return source
+	}
+	return append(DeclaredPods(cluster), source...)
+}
+
+// migrationSourcePods returns the pods of the topology a migration replaces.
+func migrationSourcePods(clusterName string, m *wazuhv1.IndexerMigrationStatus) []IndexerPod {
+	pods := make([]IndexerPod, 0, len(m.SourceNodes))
+	for _, name := range m.SourceNodes {
+		sts, ordinalStr, ok := strings.CutLast(name, "-")
+		ordinal, err := strconv.ParseInt(ordinalStr, 10, 32)
+		if !ok || err != nil {
+			continue
+		}
+		pod := IndexerPod{Name: name, Ordinal: int32(ordinal)}
+		if m.From == wazuhv1.IndexerTopologyNodePools {
+			pod.Pool = strings.TrimPrefix(sts, constants.IndexerName(clusterName)+"-")
+			pod.Service = constants.IndexerNodePoolHeadlessName(clusterName, pod.Pool)
+		} else {
+			pod.Service = constants.IndexerHeadlessName(clusterName)
+			pod.ClusterManager = true
+		}
+		pods = append(pods, pod)
+	}
+	return pods
+}
+
+// DeclaredPods returns the indexer pods the cluster spec declares, without the pods of a
+// topology being migrated away from.
+func DeclaredPods(cluster *wazuhv1.WazuhCluster) []IndexerPod {
 	spec := cluster.Spec.Indexer
 	if spec == nil || !spec.IsAdvancedMode() {
 		return simplePods(cluster.Name, spec.EffectiveReplicas())

@@ -73,3 +73,38 @@ func TestMain(m *testing.M) {
 	}
 	os.Exit(m.Run())
 }
+
+// TestIndexerPodsDuringMigration asserts a topology migration lists the pods of both
+// topologies (certificate SANs, hot reload targets), and only the running source pods while
+// the migration is blocked and the declared pods are not created.
+func TestIndexerPodsDuringMigration(t *testing.T) {
+	names := func(pods []IndexerPod) []string {
+		var n []string
+		for _, p := range pods {
+			n = append(n, p.Name+"@"+p.Service)
+		}
+		return n
+	}
+	cluster := &wazuhv1.WazuhCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "c", Namespace: "ns"},
+		Spec:       wazuhv1.WazuhClusterSpec{Indexer: &wazuhv1.WazuhIndexerClusterSpec{Replicas: 1}},
+		Status: wazuhv1.WazuhClusterStatus{IndexerMigration: &wazuhv1.IndexerMigrationStatus{
+			From: wazuhv1.IndexerTopologyNodePools, To: wazuhv1.IndexerTopologySimple,
+			Phase: wazuhv1.IndexerMigrationDraining, SourceNodes: []string{"c-indexer-hot-data-0", "c-indexer-hot-data-1"},
+		}},
+	}
+	want := []string{"c-indexer-0@c-indexer-headless", "c-indexer-hot-data-0@c-indexer-hot-data-headless", "c-indexer-hot-data-1@c-indexer-hot-data-headless"}
+	if got := names(IndexerPods(cluster)); !reflect.DeepEqual(got, want) {
+		t.Errorf("migrating pods = %v, want %v", got, want)
+	}
+
+	cluster.Status.IndexerMigration.Phase = wazuhv1.IndexerMigrationBlocked
+	if got := names(IndexerPods(cluster)); !reflect.DeepEqual(got, want[1:]) {
+		t.Errorf("blocked migration pods = %v, want the source pods %v", got, want[1:])
+	}
+
+	cluster.Status.IndexerMigration.Phase = wazuhv1.IndexerMigrationCompleted
+	if got := names(IndexerPods(cluster)); !reflect.DeepEqual(got, want[:1]) {
+		t.Errorf("completed migration pods = %v, want the declared pods %v", got, want[:1])
+	}
+}

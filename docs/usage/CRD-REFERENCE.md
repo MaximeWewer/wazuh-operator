@@ -2360,11 +2360,26 @@ All CRDs include these status fields:
 
 ### WazuhCluster Additional Status Fields
 
-The WazuhCluster CRD includes additional status fields for volume expansion tracking:
+The WazuhCluster CRD includes additional status fields for volume expansion and indexer topology migration tracking:
 
-| Field             | Type                                            | Description                        |
-| ----------------- | ----------------------------------------------- | ---------------------------------- |
-| `volumeExpansion` | [VolumeExpansionStatus](#volumeexpansionstatus) | Storage expansion progress tracker |
+| Field              | Type                                              | Description                                     |
+| ------------------ | ------------------------------------------------- | ----------------------------------------------- |
+| `volumeExpansion`  | [VolumeExpansionStatus](#volumeexpansionstatus)   | Storage expansion progress tracker              |
+| `indexerMigration` | [IndexerMigrationStatus](#indexermigrationstatus) | Live simple mode <-> nodePools migration state |
+
+#### IndexerMigrationStatus
+
+Set when `spec.indexer` switches between `replicas` and `nodePools` (see [Advanced Indexer Topology](features/advanced-indexer-topology.md#migrating-between-simple-and-advanced-mode)):
+
+| Field                | Type     | Description                                                                                          |
+| -------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
+| `from`               | string   | Topology being replaced: `simple` or `nodePools`                                                     |
+| `to`                 | string   | Topology declared by `spec.indexer`                                                                  |
+| `phase`              | string   | `Blocked`, `Joining`, `TransferringClusterManager`, `Draining`, `Removing`, `Completed`              |
+| `message`            | string   | Failed preflight checks while `Blocked`, progress otherwise                                          |
+| `sourceNodes`        | []string | Indexer pods (OpenSearch nodes) being replaced                                                       |
+| `startTime`          | Time     | When the migration started                                                                           |
+| `lastTransitionTime` | Time     | When the phase last changed                                                                          |
 
 #### VolumeExpansionStatus
 

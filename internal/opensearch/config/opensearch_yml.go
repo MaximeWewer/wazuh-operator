@@ -222,9 +222,13 @@ func (c *OpenSearchConfig) Build() string {
 		fmt.Fprintf(&sb, "  - %s\n", host)
 	}
 
-	sb.WriteString("\ncluster.initial_master_nodes:\n")
-	for _, node := range c.InitialMasterNodes {
-		fmt.Fprintf(&sb, "  - %s\n", node)
+	// A node joining an existing cluster has no bootstrap list: given one, nodes that find
+	// each other before the cluster could bootstrap a second, empty cluster.
+	if len(c.InitialMasterNodes) > 0 {
+		sb.WriteString("\ncluster.initial_master_nodes:\n")
+		for _, node := range c.InitialMasterNodes {
+			fmt.Fprintf(&sb, "  - %s\n", node)
+		}
 	}
 	sb.WriteString("\n")
 

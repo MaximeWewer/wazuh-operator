@@ -335,6 +335,20 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			fmt.Sprintf("Indexer cluster has only %d node(s). Minimum 3 nodes recommended for high availability and proper quorum", totalReplicas))
 	}
 
+	// 0. Indexer topology migration (simple mode <-> nodePools), before the certificates:
+	// their SANs and the hot reload cover the pods of both topologies while it runs.
+	var migration opensearchreconciler.MigrationResult
+	if cluster.Spec.Indexer != nil {
+		var migrationErr error
+		migration, migrationErr = r.IndexerReconciler.ReconcileTopologyMigration(ctx, cluster)
+		if migrationErr != nil {
+			log.Error(migrationErr, "Failed to reconcile the indexer topology migration")
+		}
+		if err := r.updateIndexerMigrationStatus(ctx, cluster); err != nil {
+			log.Error(err, "Failed to persist the indexer topology migration status")
+		}
+	}
+
 	// Delegate reconciliation to helper reconcilers
 	// 1. Reconcile certificates using CertificateReconciler for full lifecycle management
 	// Use ReconcileWithHashes to get certificate hashes for triggering pod restarts
@@ -438,7 +452,11 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			}
 		}
 	}
-	indexerResult := r.IndexerReconciler.ReconcileNonBlocking(ctx, cluster, indexerCertHash)
+	// A blocked topology migration leaves the indexer as it is (status.indexerMigration says why).
+	var indexerResult opensearchreconciler.IndexerReconcileResult
+	if !migration.SkipIndexer {
+		indexerResult = r.IndexerReconciler.ReconcileNonBlocking(ctx, cluster, indexerCertHash)
+	}
 	if indexerResult.Error != nil {
 		log.Error(indexerResult.Error, "Failed to reconcile Indexer")
 		r.persistProgressingFailure(ctx, cluster, "IndexerFailed", indexerResult.Error.Error())
@@ -693,6 +711,9 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Determine requeue interval based on state
 	requeueInterval := r.determineRequeueInterval(hasPendingRollouts, hasRollingRestart)
+	if migration.RequeueAfter > 0 && migration.RequeueAfter < requeueInterval {
+		requeueInterval = migration.RequeueAfter
+	}
 	log.V(1).Info("Reconciliation complete",
 		"requeueAfter", requeueInterval,
 		"hasPendingRollouts", hasPendingRollouts,
@@ -1947,6 +1968,22 @@ func (r *WazuhClusterReconciler) updateDrainStatus(ctx context.Context, cluster 
 		}
 
 		return nil
+	})
+}
+
+// updateIndexerMigrationStatus persists status.indexerMigration (the status update at the
+// end of the reconcile only writes the component statuses).
+func (r *WazuhClusterReconciler) updateIndexerMigrationStatus(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	return utils.RetryOnConflict(ctx, func() error {
+		latest := &wazuhv1.WazuhCluster{}
+		if err := r.Get(ctx, types.NamespacedName{Name: cluster.Name, Namespace: cluster.Namespace}, latest); err != nil {
+			return err
+		}
+		if apiequality.Semantic.DeepEqual(latest.Status.IndexerMigration, cluster.Status.IndexerMigration) {
+			return nil
+		}
+		latest.Status.IndexerMigration = cluster.Status.IndexerMigration
+		return r.Status().Update(ctx, latest)
 	})
 }
 
