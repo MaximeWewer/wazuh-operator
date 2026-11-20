@@ -20,7 +20,7 @@ The Wazuh Operator is a Kubernetes operator built using the Kubebuilder framewor
 ### Build & Deployment
 
 - **Build Tool**: Make
-- **Container**: Multi-stage Docker (golang:1.26-alpine → distroless/static:nonroot)
+- **Container**: Multi-stage Docker (golang:1.27-alpine → distroless/static:nonroot)
 - **Package Manager**: Helm (charts published to GHCR)
 - **Code Generation**: controller-gen v0.20.0
 

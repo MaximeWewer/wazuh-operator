@@ -8,7 +8,7 @@ The Wazuh Operator is a Kubernetes operator built with Go and Kubebuilder, follo
 
 | Category                     | Technology                       | Version                  | Justification                                                                                               |
 | ---------------------------- | -------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| **Core Language**            | Go                               | 1.26                   | Primary language for Kubernetes operators, native support for concurrency and efficient resource management |
+| **Core Language**            | Go                               | 1.27                   | Primary language for Kubernetes operators, native support for concurrency and efficient resource management |
 | **Operator Framework**       | Kubebuilder                      | controller-tools v0.20.0 | Industry-standard framework for building Kubernetes operators with code generation and scaffolding          |
 | **Controller Runtime**       | controller-runtime               | v0.23.1                  | Core library for building Kubernetes controllers with reconciliation loops and caching                      |
 | **Kubernetes Client**        | client-go                        | v0.35.1                  | Official Kubernetes Go client for API interactions                                                          |
@@ -25,7 +25,7 @@ The Wazuh Operator is a Kubernetes operator built with Go and Kubebuilder, follo
 | **Tracing**                  | OpenTelemetry                    | v1.40.0                  | Distributed tracing with OTLP gRPC exporter                                                                 |
 | **HTTP Instrumentation**     | otelhttp                         | v0.65.0                  | Automatic HTTP client tracing                                                                               |
 | **Build Tool**               | Make                             | N/A                      | Build automation and developer workflow orchestration                                                       |
-| **Container Base (Builder)** | golang:1.26-alpine               | Latest                   | Lightweight Alpine Linux with Go for building                                                               |
+| **Container Base (Builder)** | golang:1.27-alpine               | Latest                   | Lightweight Alpine Linux with Go for building                                                               |
 | **Container Base (Runtime)** | gcr.io/distroless/static:nonroot | Latest                   | Minimal, secure container image with no shell or package manager                                            |
 
 ## Architecture Pattern
@@ -105,7 +105,7 @@ make test       # Run unit tests
 ### Container Build
 
 - **Multi-stage Docker build**:
-  - Stage 1: golang:1.26-alpine for building (with go mod caching)
+  - Stage 1: golang:1.27-alpine for building (with go mod caching)
   - Stage 2: distroless/static:nonroot for runtime (minimal attack surface)
 - **Binary optimizations**: CGO disabled, stripped symbols (-ldflags="-s -w"), trimmed paths
 
