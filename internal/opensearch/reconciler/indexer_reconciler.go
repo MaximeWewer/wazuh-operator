@@ -58,6 +58,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/config"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/drain"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/security"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/topology"
 	affinityutil "github.com/MaximeWewer/wazuh-operator/internal/shared/affinity"
 	drainstate "github.com/MaximeWewer/wazuh-operator/internal/shared/drain"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/patch"
@@ -1608,25 +1609,28 @@ type DrainCheckResult struct {
 
 // CheckScaleDownDrain checks if an indexer scale-down requires drain and handles it
 // Returns true if scale-down should proceed, false if waiting for drain
-func (r *IndexerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *wazuhv1.WazuhCluster, desiredReplicas int32) (*DrainCheckResult, error) {
+func (r *IndexerReconciler) CheckScaleDownDrain(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*DrainCheckResult, error) {
 	log := logf.FromContext(ctx)
 	result := &DrainCheckResult{}
 
-	// Get the current StatefulSet
-	sts := &appsv1.StatefulSet{}
-	stsName := fmt.Sprintf("%s-indexer", cluster.Name)
-	if err := r.Get(ctx, types.NamespacedName{Name: stsName, Namespace: cluster.Namespace}, sts); err != nil {
-		if errors.IsNotFound(err) {
-			// No StatefulSet yet, no drain needed
-			return result, nil
-		}
-		return nil, fmt.Errorf("failed to get indexer StatefulSet: %w", err)
+	// In advanced mode each nodePool drains its own scale-down, with its roles and the
+	// cluster-manager quorum in mind (see checkNodePoolScaleDownDrain): a second drain of
+	// the same pod from here would share and corrupt its drain status.
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.IsAdvancedMode() {
+		return result, nil
 	}
 
-	// Detect scale-down
-	scaleInfo := drainstate.DetectStatefulSetScaleDown(sts, desiredReplicas)
-	if !scaleInfo.Detected {
+	// Find the simple-mode StatefulSet being scaled down.
+	scaleDown, err := topology.FindScaleDown(ctx, r.Client, cluster)
+	if err != nil {
+		return nil, err
+	}
+	if scaleDown == nil {
 		// No scale-down detected
+		return result, nil
+	}
+	scaleInfo := drainstate.DetectStatefulSetScaleDown(scaleDown.StatefulSet, scaleDown.Desired)
+	if !scaleInfo.Detected {
 		return result, nil
 	}
 

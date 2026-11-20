@@ -56,6 +56,7 @@ import (
 	"github.com/MaximeWewer/wazuh-operator/internal/monitoring"
 	networkingreconciler "github.com/MaximeWewer/wazuh-operator/internal/networking/reconciler"
 	opensearchreconciler "github.com/MaximeWewer/wazuh-operator/internal/opensearch/reconciler"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/topology"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/validation"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/rolling"
 	"github.com/MaximeWewer/wazuh-operator/internal/shared/storage"
@@ -386,12 +387,7 @@ func (r *WazuhClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// 3. Check for indexer scale-down and handle drain if needed
 	if cluster.Spec.Indexer != nil {
-		desiredReplicas := cluster.Spec.Indexer.Replicas
-		if desiredReplicas == 0 {
-			desiredReplicas = 3 // Default
-		}
-
-		drainResult, err := r.IndexerReconciler.CheckScaleDownDrain(ctx, cluster, desiredReplicas)
+		drainResult, err := r.IndexerReconciler.CheckScaleDownDrain(ctx, cluster)
 		if err != nil {
 			log.Error(err, "Failed to check indexer scale-down drain")
 			// Don't fail reconciliation, proceed without drain
@@ -1975,17 +1971,12 @@ func (r *WazuhClusterReconciler) evaluateDryRun(ctx context.Context, cluster *wa
 		}
 
 		if targetNode == "" {
-			// Try to determine from spec/status
-			var desiredReplicas int32 = 3
-			if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Replicas > 0 {
-				desiredReplicas = cluster.Spec.Indexer.Replicas
-			}
-			var currentReplicas int32
-			if cluster.Status.Indexer != nil {
-				currentReplicas = cluster.Status.Indexer.Replicas
-			}
-			if desiredReplicas < currentReplicas {
-				targetNode = fmt.Sprintf("%s-indexer-%d", cluster.Name, currentReplicas-1)
+			// The pod the next scale-down removes, in simple mode or in a nodePool
+			scaleDown, err := topology.FindScaleDown(ctx, r.Client, cluster)
+			if err != nil {
+				log.Error(err, "Failed to find the indexer scale-down target")
+			} else if scaleDown != nil {
+				targetNode = scaleDown.TargetPod
 			}
 		}
 

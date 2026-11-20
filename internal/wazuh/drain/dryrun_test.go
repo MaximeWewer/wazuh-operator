@@ -22,7 +22,10 @@ import (
 	"testing"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
@@ -321,70 +324,49 @@ func TestDryRunEvaluator_EvaluateAll_OneNotFeasible(t *testing.T) {
 }
 
 func TestDryRunEvaluator_GetTargetIndexerNode(t *testing.T) {
-	evaluator := &DryRunEvaluatorImpl{
-		log: getTestLogger(),
+	sts := func(name string, replicas int32) *appsv1.StatefulSet {
+		return &appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "ns"}, Spec: appsv1.StatefulSetSpec{Replicas: &replicas}}
+	}
+	pools := func(hot, warm int32) *v1.WazuhIndexerClusterSpec {
+		return &v1.WazuhIndexerClusterSpec{NodePools: []v1.IndexerNodePoolSpec{{Name: "hot", Replicas: hot}, {Name: "warm", Replicas: warm}}}
 	}
 
 	tests := []struct {
 		name           string
-		cluster        *v1.WazuhCluster
+		indexer        *v1.WazuhIndexerClusterSpec
+		drainTarget    string
+		statefulSets   []*appsv1.StatefulSet
 		expectedTarget string
 	}{
-		{
-			name: "target from drain status",
-			cluster: &v1.WazuhCluster{
-				ObjectMeta: metav1.ObjectMeta{Name: "test"},
-				Status: v1.WazuhClusterStatus{
-					Drain: &v1.DrainStatus{
-						Indexer: &v1.ComponentDrainStatus{
-							TargetPod: "test-indexer-2",
-						},
-					},
-				},
-			},
-			expectedTarget: "test-indexer-2",
-		},
-		{
-			name: "no scale-down detected",
-			cluster: &v1.WazuhCluster{
-				ObjectMeta: metav1.ObjectMeta{Name: "test"},
-				Spec: v1.WazuhClusterSpec{
-					Indexer: &v1.WazuhIndexerClusterSpec{
-						Replicas: 3,
-					},
-				},
-				Status: v1.WazuhClusterStatus{
-					Indexer: &v1.ComponentStatus{
-						Replicas: 3,
-					},
-				},
-			},
-			expectedTarget: "",
-		},
-		{
-			name: "scale-down detected",
-			cluster: &v1.WazuhCluster{
-				ObjectMeta: metav1.ObjectMeta{Name: "test"},
-				Spec: v1.WazuhClusterSpec{
-					Indexer: &v1.WazuhIndexerClusterSpec{
-						Replicas: 2,
-					},
-				},
-				Status: v1.WazuhClusterStatus{
-					Indexer: &v1.ComponentStatus{
-						Replicas: 3,
-					},
-				},
-			},
-			expectedTarget: "test-indexer-2",
-		},
+		{name: "target from drain status", drainTarget: "test-indexer-2", expectedTarget: "test-indexer-2"},
+		{name: "no scale-down detected", indexer: &v1.WazuhIndexerClusterSpec{Replicas: 3},
+			statefulSets: []*appsv1.StatefulSet{sts("test-indexer", 3)}},
+		{name: "scale-down detected", indexer: &v1.WazuhIndexerClusterSpec{Replicas: 2},
+			statefulSets: []*appsv1.StatefulSet{sts("test-indexer", 3)}, expectedTarget: "test-indexer-2"},
+		{name: "unset replicas means the default 3", indexer: &v1.WazuhIndexerClusterSpec{},
+			statefulSets: []*appsv1.StatefulSet{sts("test-indexer", 4)}, expectedTarget: "test-indexer-3"},
+		{name: "nodePool scale-down targets the pool's last pod", indexer: pools(2, 1),
+			statefulSets: []*appsv1.StatefulSet{sts("test-indexer-hot", 2), sts("test-indexer-warm", 2)}, expectedTarget: "test-indexer-warm-1"},
+		{name: "nodePools unchanged", indexer: pools(2, 2),
+			statefulSets: []*appsv1.StatefulSet{sts("test-indexer-hot", 2), sts("test-indexer-warm", 2)}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			target := evaluator.getTargetIndexerNode(tt.cluster)
+			scheme := runtime.NewScheme()
+			_ = appsv1.AddToScheme(scheme)
+			b := fake.NewClientBuilder().WithScheme(scheme)
+			for _, s := range tt.statefulSets {
+				b = b.WithObjects(s)
+			}
+			evaluator := &DryRunEvaluatorImpl{log: getTestLogger(), client: b.Build()}
+			cluster := &v1.WazuhCluster{ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "ns"}, Spec: v1.WazuhClusterSpec{Indexer: tt.indexer}}
+			if tt.drainTarget != "" {
+				cluster.Status.Drain = &v1.DrainStatus{Indexer: &v1.ComponentDrainStatus{TargetPod: tt.drainTarget}}
+			}
+			target := evaluator.getTargetIndexerNode(context.Background(), cluster)
 			if target != tt.expectedTarget {
-				t.Errorf("expected target %s, got %s", tt.expectedTarget, target)
+				t.Errorf("expected target %q, got %q", tt.expectedTarget, target)
 			}
 		})
 	}

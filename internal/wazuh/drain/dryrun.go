@@ -30,6 +30,7 @@ import (
 
 	v1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/topology"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 )
 
@@ -230,7 +231,7 @@ func (e *DryRunEvaluatorImpl) EvaluateAll(ctx context.Context, cluster *v1.Wazuh
 			name: constants.DrainComponentIndexer,
 			evaluate: func() (*v1.DryRunResult, error) {
 				// Get target node for indexer (highest index pod that would be removed)
-				targetNode := e.getTargetIndexerNode(cluster)
+				targetNode := e.getTargetIndexerNode(ctx, cluster)
 				if targetNode == "" {
 					return &v1.DryRunResult{
 						Feasible:    true,
@@ -312,7 +313,7 @@ func (e *DryRunEvaluatorImpl) EvaluateAll(ctx context.Context, cluster *v1.Wazuh
 }
 
 // getTargetIndexerNode determines the target node for indexer evaluation
-func (e *DryRunEvaluatorImpl) getTargetIndexerNode(cluster *v1.WazuhCluster) string {
+func (e *DryRunEvaluatorImpl) getTargetIndexerNode(ctx context.Context, cluster *v1.WazuhCluster) string {
 	// If drain status has a target pod, use it
 	if cluster.Status.Drain != nil && cluster.Status.Drain.Indexer != nil {
 		if cluster.Status.Drain.Indexer.TargetPod != "" {
@@ -320,22 +321,15 @@ func (e *DryRunEvaluatorImpl) getTargetIndexerNode(cluster *v1.WazuhCluster) str
 		}
 	}
 
-	// Otherwise, calculate based on spec vs status replicas
-	var desiredReplicas int32 = 3 // Default
-	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Replicas > 0 {
-		desiredReplicas = cluster.Spec.Indexer.Replicas
+	// Otherwise, the pod the next scale-down removes, in simple mode or in a nodePool
+	scaleDown, err := topology.FindScaleDown(ctx, e.client, cluster)
+	if err != nil {
+		e.log.Error(err, "Failed to find the indexer scale-down target")
+		return ""
 	}
-
-	var currentReplicas int32
-	if cluster.Status.Indexer != nil {
-		currentReplicas = cluster.Status.Indexer.Replicas
+	if scaleDown != nil {
+		return scaleDown.TargetPod
 	}
-
-	if desiredReplicas < currentReplicas {
-		// Scale down detected - target is highest index pod
-		return fmt.Sprintf("%s-indexer-%d", cluster.Name, currentReplicas-1)
-	}
-
 	return ""
 }
 
