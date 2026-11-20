@@ -20,6 +20,7 @@ package drain
 import (
 	"context"
 	"fmt"
+	"strings"
 	"slices"
 	"time"
 
@@ -530,12 +531,11 @@ func (d *IndexerDrainerImpl) StartNodePoolDrain(ctx context.Context, nodeNames [
 
 	d.log.Info("Initial shard count for nodePool drain", "totalShards", totalShards, "nodes", len(nodeNames))
 
-	// Set allocation exclusion for all target nodes
-	// OpenSearch supports comma-separated node names in cluster.routing.allocation.exclude._name
-	for _, nodeName := range nodeNames {
-		if err := d.client.SetAllocationExclusion(ctx, nodeName); err != nil {
-			return fmt.Errorf("failed to set allocation exclusion for %s: %w", nodeName, err)
-		}
+	// Exclude every target node in one setting: cluster.routing.allocation.exclude._name
+	// takes a comma-separated list, and each update replaces the previous value, so one
+	// call per node would leave only the last node excluded.
+	if err := d.client.SetAllocationExclusion(ctx, strings.Join(nodeNames, ",")); err != nil {
+		return fmt.Errorf("failed to set allocation exclusion for %v: %w", nodeNames, err)
 	}
 
 	d.log.Info("Allocation exclusion set for nodePool nodes, shards will begin relocating",

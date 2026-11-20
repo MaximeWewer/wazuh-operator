@@ -17,6 +17,12 @@ limitations under the License.
 package drain
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -514,5 +520,40 @@ func TestDryRunResult(t *testing.T) {
 				t.Errorf("expected %d blockers, got %d: %v", tt.expectBlockers, len(result.Blockers), result.Blockers)
 			}
 		})
+	}
+}
+
+// TestStartNodePoolDrainExcludesEveryNode asserts all the drained nodes are excluded from
+// allocation in one setting: each update of cluster.routing.allocation.exclude._name
+// replaces the previous one, so one call per node left only the last node excluded and
+// the shards of the others never moved.
+func TestStartNodePoolDrainExcludesEveryNode(t *testing.T) {
+	var excluded []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && r.URL.Path == "/_cluster/settings":
+			var body struct {
+				Transient map[string]any `json:"transient"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			excluded = append(excluded, fmt.Sprint(body.Transient["cluster.routing.allocation.exclude._name"]))
+			_, _ = w.Write([]byte(`{"acknowledged":true}`))
+		case strings.HasPrefix(r.URL.Path, "/_cat/shards"):
+			_, _ = w.Write([]byte(`[]`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	client, err := api.NewClient(api.ClientConfig{BaseURL: srv.URL, Insecure: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := NewIndexerDrainer(client, logr.Discard(), nil)
+	if err := d.StartNodePoolDrain(context.Background(), []string{"c-indexer-warm-1", "c-indexer-warm-2"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(excluded) != 1 || excluded[0] != "c-indexer-warm-1,c-indexer-warm-2" {
+		t.Errorf("allocation exclusions set = %q, want one setting excluding both nodes", excluded)
 	}
 }

@@ -102,8 +102,9 @@ func (c *Client) IsClusterGreen(ctx context.Context) (bool, error) {
 	return health.Status == constants.OpenSearchHealthGreen, nil
 }
 
-// SetAllocationExclusion sets a node exclusion for shard allocation
-// This causes OpenSearch to relocate all shards away from the specified node
+// SetAllocationExclusion sets the nodes excluded from shard allocation (one name, or a
+// comma-separated list), replacing any previous exclusion. OpenSearch relocates all shards
+// away from them.
 func (c *Client) SetAllocationExclusion(ctx context.Context, nodeName string) error {
 	settings := ClusterSettingsUpdate{
 		Transient: map[string]any{
