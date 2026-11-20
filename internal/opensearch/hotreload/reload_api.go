@@ -28,8 +28,8 @@ import (
 
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/topology"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
-	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
 )
 
 // callReloadCertificatesAPIPerPod calls the OpenSearch API to reload certificates on each pod individually
@@ -54,26 +54,24 @@ func (h *HotReloader) callReloadCertificatesAPIPerPod(ctx context.Context, clust
 		return
 	}
 
-	// Determine number of indexer replicas
-	replicas := int32(1)
-	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Replicas > 0 {
-		replicas = cluster.Spec.Indexer.Replicas
+	// The indexer pods, in simple mode or per nodePool.
+	pods := topology.IndexerPods(cluster)
+	if len(pods) == 0 {
+		result.Error = fmt.Errorf("cluster %s declares no indexer pod", cluster.Name)
+		return
 	}
-	result.TotalPods = int(replicas)
-	result.PodResults = make([]PodReloadResult, 0, replicas)
+	result.TotalPods = len(pods)
+	result.PodResults = make([]PodReloadResult, 0, len(pods))
 
 	log.Info("Starting per-pod certificate hot reload",
 		"cluster", cluster.Name,
 		"namespace", cluster.Namespace,
-		"totalPods", replicas)
+		"totalPods", len(pods))
 
 	// First, wait for certificate propagation on the first pod
 	// This ensures kubelet has synced the new certificates to the mounted secrets
 	// before we attempt to connect with mTLS
-	firstPodName := fmt.Sprintf("%s-indexer-0", cluster.Name)
-	firstHeadlessService := fmt.Sprintf("%s-indexer-headless", cluster.Name)
-	firstPodURL := fmt.Sprintf("https://%s:%d",
-		dns.PodFQDN(firstPodName, firstHeadlessService, cluster.Namespace), constants.PortIndexerREST)
+	firstPodURL := fmt.Sprintf("https://%s:%d", pods[0].FQDN(cluster.Namespace), constants.PortIndexerREST)
 
 	// Use configured timeout or default
 	propagationTimeout := h.PropagationTimeout
@@ -104,11 +102,9 @@ func (h *HotReloader) callReloadCertificatesAPIPerPod(ctx context.Context, clust
 
 	// Iterate over each pod using the headless service FQDN pattern
 	var errors []string
-	for i := range replicas {
-		podName := fmt.Sprintf("%s-indexer-%d", cluster.Name, i)
-		headlessService := fmt.Sprintf("%s-indexer-headless", cluster.Name)
-		podURL := fmt.Sprintf("https://%s:%d",
-			dns.PodFQDN(podName, headlessService, cluster.Namespace), constants.PortIndexerREST)
+	for _, pod := range pods {
+		podName := pod.Name
+		podURL := fmt.Sprintf("https://%s:%d", pod.FQDN(cluster.Namespace), constants.PortIndexerREST)
 
 		podResult := PodReloadResult{
 			PodName: podName,
@@ -167,7 +163,7 @@ func (h *HotReloader) callReloadCertificatesAPIPerPod(ctx context.Context, clust
 	// Set overall error if any pods failed
 	if len(errors) > 0 {
 		result.Error = fmt.Errorf("certificate reload failed on %d/%d pods: %s",
-			len(errors), replicas, strings.Join(errors, "; "))
+			len(errors), len(pods), strings.Join(errors, "; "))
 	}
 
 	log.Info("Completed per-pod certificate hot reload",

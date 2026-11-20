@@ -33,6 +33,7 @@ import (
 	wazuhv1 "github.com/MaximeWewer/wazuh-operator/api/v1"
 	"github.com/MaximeWewer/wazuh-operator/internal/metrics"
 	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/api"
+	"github.com/MaximeWewer/wazuh-operator/internal/opensearch/topology"
 	"github.com/MaximeWewer/wazuh-operator/internal/utils"
 	"github.com/MaximeWewer/wazuh-operator/pkg/constants"
 	"github.com/MaximeWewer/wazuh-operator/pkg/dns"
@@ -450,13 +451,9 @@ func (h *HotReloader) getPodsForCertType(cluster *wazuhv1.WazuhCluster, certType
 
 	switch certType {
 	case constants.CertTypeNode:
-		// Node certs are used by indexer pods
-		replicas := int32(1)
-		if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.Replicas > 0 {
-			replicas = cluster.Spec.Indexer.Replicas
-		}
-		for i := range replicas {
-			pods = append(pods, fmt.Sprintf("%s-indexer-%d", cluster.Name, i))
+		// Node certs are used by the indexer pods, in simple mode or per nodePool
+		for _, pod := range topology.IndexerPods(cluster) {
+			pods = append(pods, pod.Name)
 		}
 
 	case constants.CertTypeAdmin:
