@@ -1011,6 +1011,10 @@ func (r *IndexerReconciler) ReconcileNonBlocking(ctx context.Context, cluster *w
 		return IndexerReconcileResult{Error: fmt.Errorf("failed to reconcile indexer secrets: %w", err)}
 	}
 
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.IsAdvancedMode() {
+		return r.reconcileAdvancedModeNonBlocking(ctx, cluster)
+	}
+
 	// Reconcile ConfigMap
 	if err := r.reconcileConfigMap(ctx, cluster); err != nil {
 		return IndexerReconcileResult{Error: fmt.Errorf("failed to reconcile indexer configmap: %w", err)}
@@ -1035,6 +1039,60 @@ func (r *IndexerReconciler) ReconcileNonBlocking(ctx context.Context, cluster *w
 
 	log.Info("Indexer reconciliation completed (non-blocking)", "hasPendingRollout", pendingRollout != nil)
 	return IndexerReconcileResult{PendingRollout: pendingRollout}
+}
+
+// reconcileAdvancedModeNonBlocking reconciles the indexer in advanced topology mode: one
+// StatefulSet, ConfigMap and headless Service per nodePool, behind the cluster-wide indexer
+// Services the dashboard and filebeat connect to (their selector covers every pool's pods).
+// The simple-mode StatefulSet is not reconciled: an empty one an earlier operator created
+// next to the pools is deleted.
+func (r *IndexerReconciler) reconcileAdvancedModeNonBlocking(ctx context.Context, cluster *wazuhv1.WazuhCluster) IndexerReconcileResult {
+	log := logf.FromContext(ctx)
+	log.Info("Reconciling indexer in advanced topology mode", "nodePools", len(cluster.Spec.Indexer.NodePools))
+
+	if err := r.reconcileServices(ctx, cluster); err != nil {
+		return IndexerReconcileResult{Error: fmt.Errorf("failed to reconcile indexer services: %w", err)}
+	}
+	if err := r.deleteEmptySimpleModeStatefulSet(ctx, cluster); err != nil {
+		log.Error(err, "Failed to delete the empty simple-mode indexer StatefulSet")
+	}
+	if err := r.reconcileAdvancedMode(ctx, cluster); err != nil {
+		return IndexerReconcileResult{Error: err}
+	}
+	if err := r.reconcileIndexerPDB(ctx, cluster); err != nil {
+		return IndexerReconcileResult{Error: fmt.Errorf("failed to reconcile indexer PDB: %w", err)}
+	}
+	if err := r.reconcileSecurityInitJob(ctx, cluster); err != nil {
+		// Log warning but don't fail - security init will be retried
+		log.Error(err, "Failed to reconcile security init job, will retry")
+	}
+	r.CollectOpenSearchMetrics(ctx, cluster)
+
+	log.Info("Indexer reconciliation completed (non-blocking, advanced mode)")
+	return IndexerReconcileResult{}
+}
+
+// deleteEmptySimpleModeStatefulSet deletes the simple-mode indexer StatefulSet of a cluster
+// in advanced mode when it runs no pod (earlier operators created one next to the pools). A
+// StatefulSet with pods is left alone: its volumes hold data.
+func (r *IndexerReconciler) deleteEmptySimpleModeStatefulSet(ctx context.Context, cluster *wazuhv1.WazuhCluster) error {
+	sts := &appsv1.StatefulSet{}
+	if err := r.Get(ctx, types.NamespacedName{Name: constants.IndexerName(cluster.Name), Namespace: cluster.Namespace}, sts); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+	if (sts.Spec.Replicas != nil && *sts.Spec.Replicas > 0) || sts.Status.Replicas > 0 {
+		logf.FromContext(ctx).Info("Simple-mode indexer StatefulSet still runs pods next to the nodePools, leaving it",
+			"statefulSet", sts.Name, "replicas", sts.Status.Replicas)
+		return nil
+	}
+	if err := r.Delete(ctx, sts); err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	logf.FromContext(ctx).Info("Deleted the empty simple-mode indexer StatefulSet", "statefulSet", sts.Name)
+	return nil
 }
 
 // reconcileStatefulSetNonBlocking reconciles the indexer StatefulSet without blocking on rollout
@@ -1510,6 +1568,9 @@ func (r *IndexerReconciler) reconcileStatefulSetNonBlocking(ctx context.Context,
 
 // GetStatus gets the indexer status
 func (r *IndexerReconciler) GetStatus(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*wazuhv1.ComponentStatus, error) {
+	if cluster.Spec.Indexer != nil && cluster.Spec.Indexer.IsAdvancedMode() {
+		return r.getNodePoolsStatus(ctx, cluster)
+	}
 	sts := &appsv1.StatefulSet{}
 	name := fmt.Sprintf("%s-indexer", cluster.Name)
 
@@ -2835,6 +2896,9 @@ func (r *IndexerReconciler) reconcileAdvancedMode(ctx context.Context, cluster *
 	log := logf.FromContext(ctx)
 
 	// Initialize nodePool statuses if needed
+	if cluster.Status.Indexer == nil {
+		cluster.Status.Indexer = &wazuhv1.ComponentStatus{}
+	}
 	if cluster.Status.Indexer.NodePoolStatuses == nil {
 		cluster.Status.Indexer.NodePoolStatuses = make(map[string]wazuhv1.NodePoolStatus)
 	}
@@ -3894,4 +3958,33 @@ func (r *IndexerReconciler) reconcileHPA(ctx context.Context, cluster *wazuhv1.W
 	}
 
 	return nil
+}
+
+// getNodePoolsStatus sums the status of every nodePool StatefulSet. Returns nil while none
+// exists yet. The phase is the least advanced of the pools'.
+func (r *IndexerReconciler) getNodePoolsStatus(ctx context.Context, cluster *wazuhv1.WazuhCluster) (*wazuhv1.ComponentStatus, error) {
+	status := &wazuhv1.ComponentStatus{DesiredReplicas: cluster.Spec.Indexer.GetTotalReplicas(), Phase: wazuhv1.ComponentStatusPhaseReady}
+	found := false
+	for _, pool := range cluster.Spec.Indexer.NodePools {
+		sts := &appsv1.StatefulSet{}
+		if err := r.Get(ctx, types.NamespacedName{Name: constants.IndexerNodePoolName(cluster.Name, pool.Name), Namespace: cluster.Namespace}, sts); err != nil {
+			if errors.IsNotFound(err) {
+				status.Phase = wazuhv1.ComponentStatusPhaseStarting
+				continue
+			}
+			return nil, err
+		}
+		found = true
+		status.Replicas += sts.Status.Replicas
+		status.ReadyReplicas += sts.Status.ReadyReplicas
+		if phase := getStatefulSetPhase(sts); phase != wazuhv1.ComponentStatusPhaseReady {
+			status.Phase = phase
+		}
+	}
+	if !found {
+		return nil, nil
+	}
+	metrics.SetOpenSearchNodes(cluster.Name, cluster.Namespace, "ready", int(status.ReadyReplicas))
+	metrics.SetOpenSearchNodes(cluster.Name, cluster.Namespace, "total", int(status.Replicas))
+	return status, nil
 }
