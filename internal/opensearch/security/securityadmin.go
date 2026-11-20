@@ -21,9 +21,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"sort"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -67,17 +67,9 @@ func (e *SecurityAdminExecutor) ApplySecurityConfig(ctx context.Context, cluster
 		return fmt.Errorf("empty security config content for cluster %s/%s", namespace, clusterName)
 	}
 
-	// Target the first indexer pod
-	podName := fmt.Sprintf("%s-indexer-0", clusterName)
-
-	// Verify pod exists and is running
-	pod := &corev1.Pod{}
-	if err := e.k8sClient.Get(ctx, types.NamespacedName{Name: podName, Namespace: namespace}, pod); err != nil {
-		return fmt.Errorf("failed to get indexer pod %s: %w", podName, err)
-	}
-
-	if pod.Status.Phase != corev1.PodRunning {
-		return fmt.Errorf("indexer pod %s is not running (phase: %s)", podName, pod.Status.Phase)
+	podName, err := e.securityAdminPod(ctx, clusterName, namespace)
+	if err != nil {
+		return err
 	}
 
 	// Build the securityadmin.sh command (pushes the rendered config inline)
@@ -107,17 +99,9 @@ func (e *SecurityAdminExecutor) ApplySecurityConfig(ctx context.Context, cluster
 func (e *SecurityAdminExecutor) ApplyInternalUsers(ctx context.Context, clusterName, namespace, wazuhVersion, expectedInternalUsers string) error {
 	log := logf.FromContext(ctx).WithValues("cluster", clusterName, "namespace", namespace)
 
-	// Target the first indexer pod
-	podName := fmt.Sprintf("%s-indexer-0", clusterName)
-
-	// Verify pod exists and is running
-	pod := &corev1.Pod{}
-	if err := e.k8sClient.Get(ctx, types.NamespacedName{Name: podName, Namespace: namespace}, pod); err != nil {
-		return fmt.Errorf("failed to get indexer pod %s: %w", podName, err)
-	}
-
-	if pod.Status.Phase != corev1.PodRunning {
-		return fmt.Errorf("indexer pod %s is not running (phase: %s)", podName, pod.Status.Phase)
+	podName, err := e.securityAdminPod(ctx, clusterName, namespace)
+	if err != nil {
+		return err
 	}
 
 	// Build the securityadmin.sh command targeting internal_users.yml.
@@ -260,4 +244,41 @@ func (e *SecurityAdminExecutor) execInPod(ctx context.Context, namespace, podNam
 	})
 
 	return stdout.String(), stderr.String(), err
+}
+
+// securityAdminPod returns the indexer pod securityadmin.sh runs in: a running one,
+// ready ones first, then by name. Any node applies the security configuration to the
+// whole cluster, and every indexer pod mounts the admin certificate, in simple mode
+// (<cluster>-indexer-N) as in advanced mode (<cluster>-indexer-<pool>-N).
+func (e *SecurityAdminExecutor) securityAdminPod(ctx context.Context, clusterName, namespace string) (string, error) {
+	pods := &corev1.PodList{}
+	if err := e.k8sClient.List(ctx, pods, client.InNamespace(namespace),
+		client.MatchingLabels(constants.SelectorLabels(clusterName, constants.ComponentIndexer))); err != nil {
+		return "", fmt.Errorf("failed to list the indexer pods of %s/%s: %w", namespace, clusterName, err)
+	}
+	var running []corev1.Pod
+	for _, p := range pods.Items {
+		if p.Status.Phase == corev1.PodRunning && p.DeletionTimestamp == nil {
+			running = append(running, p)
+		}
+	}
+	if len(running) == 0 {
+		return "", fmt.Errorf("no running indexer pod for cluster %s/%s", namespace, clusterName)
+	}
+	sort.Slice(running, func(i, j int) bool {
+		if ri, rj := podReady(&running[i]), podReady(&running[j]); ri != rj {
+			return ri
+		}
+		return running[i].Name < running[j].Name
+	})
+	return running[0].Name, nil
+}
+
+func podReady(p *corev1.Pod) bool {
+	for _, c := range p.Status.Conditions {
+		if c.Type == corev1.PodReady {
+			return c.Status == corev1.ConditionTrue
+		}
+	}
+	return false
 }
